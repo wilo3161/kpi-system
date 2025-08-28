@@ -68,7 +68,7 @@ st.markdown("""
     .metric-value { 
         font-size: 2.8em !important; 
         font-weight: bold; 
-        color: #2c3e50;
+        color: black;
         line-height: 1.2;
     }
     .worker-card {
