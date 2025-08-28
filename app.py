@@ -87,7 +87,7 @@ st.markdown("""
     .worker-header { 
         font-size: 1.3em; 
         margin-bottom: 10px; 
-        color: #000000;
+        color: white;
         font-weight: bold;
     }
     .worker-metric { 
@@ -107,7 +107,7 @@ st.markdown("""
         border-left: 5px solid #3498db;
         padding-left: 10px;
         margin: 20px 0;
-        color: white;
+        color: black;
         font-size: 1.8em;
     }
     .comment-container {
@@ -231,7 +231,7 @@ st.markdown("""
     }
     .team-header {
         font-size: 1.5em;
-        color: #2c3e50;
+        color: white;
         margin-bottom: 15px;
         padding-bottom: 10px;
         border-bottom: 2px solid #3498db;
