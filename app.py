@@ -547,39 +547,23 @@ def restaurar_backup(backup_path: str) -> bool:
 
 # Funciones de autenticación
 def verificar_password() -> bool:
-    """Verifica la contraseña del usuario"""
+    """Verifica la contraseña del usuario de forma directa."""
     if 'password_correct' not in st.session_state:
         st.session_state.password_correct = False
-    
+
     if not st.session_state.password_correct:
         st.markdown("<div class='password-container'>", unsafe_allow_html=True)
         st.markdown("<h2 style='text-align: center; color: black;'>🔐 Acceso Restringido</h2>", unsafe_allow_html=True)
         password = st.text_input("Ingrese la contraseña:", type="password", key="password_input")
-        
-        if password:
-            # Verificar contraseña usando hash
-            password_hash = hashlib.sha256(password.encode()).hexdigest()
-            try:
-                if 'db_manager' not in st.session_state:
-                    st.markdown("<div class='error-box'>❌ Error de conexión a la base de datos</div>", unsafe_allow_html=True)
-                    return False
-                
-                response = st.session_state.db_manager.supabase.table('users').select('*').eq('password_hash', password_hash).execute()
-                user_data = response.data
-                
-                if user_data:
-                    user = user_data[0]
-                    st.session_state.password_correct = True
-                    st.session_state.user = user['username']
-                    st.session_state.role = user['role']
-                    st.markdown("<div class='success-box'>✅ Contraseña correcta</div>", unsafe_allow_html=True)
-                    time.sleep(1)
-                    st.rerun()
-                else:
-                    st.markdown("<div class='error-box'>❌ Contraseña incorrecta</div>", unsafe_allow_html=True)
-            except Exception as e:
-                logger.error(f"Error en verificación de contraseña: {e}")
-                st.markdown("<div class='error-box'>❌ Error del sistema</div>", unsafe_allow_html=True)
+
+        if password == "Wilo3161":
+            st.session_state.password_correct = True
+            st.session_state.user = 'admin'
+            st.session_state.role = 'admin'
+            st.rerun()
+        elif password:
+            st.markdown("<div class='error-box'>❌ Contraseña incorrecta</div>", unsafe_allow_html=True)
+
         st.markdown("</div>", unsafe_allow_html=True)
         return False
     return True
