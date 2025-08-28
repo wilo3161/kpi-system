@@ -34,8 +34,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Configuración de Supabase
-supabase_url = os.environ.get("SUPABASE_URL")
-supabase_key = os.environ.get("SUPABASE_KEY")
+supabase_url = os.environ.get("https://nsgdyqoqzlcyyameccqn.supabase.co")
+supabase_key = os.environ.get("process.env.SUPABASE_KEY")
 supabase: Client = create_client(supabase_url, supabase_key)
 
 # Reemplaza la clase DatabaseManager con esta versión adaptada para Supabase
