@@ -1362,7 +1362,7 @@ def crear_reporte_pdf(df: pd.DataFrame, fecha_inicio: str, fecha_fin: str) -> by
         elements.append(Spacer(1, 12))
         
         # Información del período
-        periodo_text = f"Período: {fecha_inicio} a {fecha_fin}"
+        periodo_text = f"Período: {fecha_inicio} to {fecha_fin}"
         periodo = Paragraph(periodo_text, styles['Normal'])
         elements.append(periodo)
         elements.append(Spacer(1, 12))
@@ -1755,6 +1755,9 @@ def mostrar_administracion():
                 backup_path = backups[backup_options.index(backup_seleccionado)]
                 if restaurar_backup(str(backup_path)):
                     st.markdown("<div class='success-box'>✅ Backup restaurado correctamente. La página se recargará.</div>", unsafe_allow_html=True)
+                    # Limpiar el caché de datos históricos
+                    if 'historico_data' in st.session_state:
+                        del st.session_state['historico_data']
                     time.sleep(2)
                     st.rerun()
                 else:
@@ -1787,7 +1790,7 @@ def mostrar_administracion():
                 with st.form("form_nuevo_usuario"):
                     nuevo_usuario = st.text_input("Nombre de usuario:")
                     nueva_contrasena = st.text_input("Contraseña:", type="password")
-                    rol_usuario = st.selectbox("Rol:", options=["user", "admin"])
+                    rol_usuario = st.selectbox("Rol:", options=["user", 'admin'])
                     
                     submitted = st.form_submit_button("Agregar Usuario")
                     
