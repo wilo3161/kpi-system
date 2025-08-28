@@ -26,6 +26,61 @@ from contextlib import contextmanager
 import logging
 from typing import Dict, List, Optional, Tuple, Any, Union
 warnings.filterwarnings('ignore')
+import os
+from supabase import create_client, Client
+from dotenv import load_dotenv
+
+# Cargar variables de entorno
+load_dotenv()
+
+# Configuración de Supabase
+supabase_url = os.environ.get("SUPABASE_URL")
+supabase_key = os.environ.get("SUPABASE_KEY")
+supabase: Client = create_client(supabase_url, supabase_key)
+
+# Reemplaza la clase DatabaseManager con esta versión adaptada para Supabase
+class DatabaseManager:
+    _instance = None
+    
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super(DatabaseManager, cls).__new__(cls)
+            cls._instance._initialize()
+        return cls._instance
+    
+    def _initialize(self):
+        self.supabase = supabase
+    
+    @contextmanager
+    def get_connection(self):
+        """Context manager para compatibilidad con el código existente"""
+        try:
+            yield self
+        except Exception as e:
+            logger.error(f"Error de base de datos: {e}")
+            raise
+    
+    def setup_database(self):
+        """Configura la base de datos (las tablas ya fueron creadas en Supabase)"""
+        logger.info("Base de datos Supabase configurada correctamente")
+    
+    # Deberás adaptar todas las funciones de acceso a datos para usar Supabase
+    # Por ejemplo, para obtener_trabajadores():
+    def obtener_trabajadores(self):
+        """Obtiene la lista de trabajadores desde Supabase"""
+        try:
+            response = self.supabase.table('trabajadores').select('*').eq('activo', True).execute()
+            df = pd.DataFrame(response.data)
+            return df
+        except Exception as e:
+            logger.error(f"Error al obtener trabajadores: {e}")
+            # Si hay error, devolver lista por defecto
+            return pd.DataFrame({
+                'nombre': ["Andrés Yépez", "Josué Imbacuán", "Luis Perugachi", "Diana García", 
+                          "Simón Vera", "Jhonny Guadalupe", "Victor Montenegro", "Fernando Quishpe"],
+                'equipo': ["Transferencias", "Transferencias", "Transferencias", "Arreglo", 
+                          "Guías", "Ventas", "Ventas", "Ventas"]
+            })
 
 # Configuración de logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
