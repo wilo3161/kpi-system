@@ -8,6 +8,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from datetime import datetime, timedelta, date
 import time
+import sqlite3
 import json
 import os
 import hashlib
@@ -34,27 +35,6 @@ import tempfile
 import base64
 warnings.filterwarnings('ignore')
 
-# Importaciones para Supabase
-from supabase import create_client, Client
-import os
-from dotenv import load_dotenv
-
-# Cargar variables de entorno
-load_dotenv()
-
-# Configuración de Supabase - CORREGIDA
-supabase_url = os.environ.get("SUPABASE_URL", "https://nsgdyqoqzlcyyameccqn.supabase.co")
-supabase_key = os.environ.get("SUPABASE_KEY")  # Esta debe configurarse en las variables de entorno
-
-if not supabase_key:
-    st.error("❌ Error: No se encontró la clave de API de Supabase. Por favor, configura la variable de entorno SUPABASE_KEY.")
-else:
-    try:
-        supabase: Client = create_client(supabase_url, supabase_key)
-        st.success("✅ Conexión a Supabase establecida correctamente")
-    except Exception as e:
-        st.error(f"❌ Error al conectar con Supabase: {str(e)}")
-
 # Configuración de logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -70,10 +50,10 @@ st.set_page_config(
 # CSS personalizado mejorado
 st.markdown("""
 <style>
-    .main { background-color: #0e1117; }
-    .stApp { background-color: #0e1117; }
+    .main { background-color: darkblack; }
+    .stApp { background-color: darkblack; }
     .kpi-card {
-        background: #1f2735;
+        background: darkblue;
         border-radius: 12px;
         box-shadow: 0 4px 12px rgba(0,0,0,0.08);
         padding: 18px;
@@ -118,7 +98,7 @@ st.markdown("""
     .trend-up { color: #27ae60; }
     .trend-down { color: #e74c3c; }
     .header-title { 
-        color: white;
+        color: #000000;
         font-weight: 800;
         font-size: 2.5em;
         margin-bottom: 20px;
@@ -127,7 +107,7 @@ st.markdown("""
         border-left: 5px solid #3498db;
         padding-left: 10px;
         margin: 20px 0;
-        color: white;
+        color: #000000;
         font-size: 1.8em;
     }
     .comment-container {
@@ -277,7 +257,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Clase DatabaseManager para Supabase
+# Clase Singleton para manejo de base de datos
 class DatabaseManager:
     _instance = None
     
@@ -288,71 +268,120 @@ class DatabaseManager:
         return cls._instance
     
     def _initialize(self):
-        self.supabase = supabase
+        self.conn = None
         self.setup_database()
     
     @contextmanager
     def get_connection(self):
-        """Context manager para compatibilidad con el código existente"""
+        """Context manager para manejar conexiones a la base de datos"""
         try:
-            yield self
-        except Exception as e:
+            if self.conn is None:
+                self.conn = sqlite3.connect('kpi_data.db', check_same_thread=False)
+                self.conn.row_factory = sqlite3.Row
+            yield self.conn
+        except sqlite3.Error as e:
             logger.error(f"Error de base de datos: {e}")
             raise
+        finally:
+            # No cerramos la conexión para mantenerla en el estado de la sesión
+            pass
     
     def setup_database(self):
-        """Configura la base de datos en Supabase"""
+        """Configura la base de datos SQLite"""
         try:
-            # Verificar y crear tablas si no existen
-            tables = ['daily_kpis', 'config', 'users', 'trabajadores']
-            
-            for table in tables:
+            with self.get_connection() as conn:
+                c = conn.cursor()
+                
+                # Crear tabla de datos diarios
+                c.execute('''
+                CREATE TABLE IF NOT EXISTS daily_kpis (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    fecha TEXT NOT NULL,
+                    nombre TEXT NOT NULL,
+                    actividad TEXT NOT NULL,
+                    cantidad REAL NOT NULL,
+                    meta REAL NOT NULL,
+                    eficiencia REAL NOT NULL,
+                    productividad REAL NOT NULL,
+                    comentario TEXT,
+                    meta_mensual REAL,
+                    horas_trabajo REAL,
+                    equipo TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(fecha, nombre)
+                )
+                ''')
+                
+                # Verificar si la columna 'equipo' existe y agregarla si no existe
                 try:
-                    # Intentar seleccionar para verificar si la tabla existe
-                    self.supabase.table(table).select("count", count="exact").limit(1).execute()
-                except Exception as e:
-                    logger.warning(f"La tabla {table} podría no existir: {e}")
-            
-            # Insertar usuario admin por defecto si no existe
-            password_hash = hashlib.sha256("Wilo3161".encode()).hexdigest()
-            
-            try:
-                self.supabase.table('users').select('*').eq('username', 'admin').execute()
-            except:
-                # Insertar usuario admin si no existe
-                self.supabase.table('users').insert({
-                    'username': 'admin',
-                    'password_hash': password_hash,
-                    'role': 'admin'
-                }).execute()
-            
-            # Insertar trabajadores por defecto si no existen
-            trabajadores_default = [
-                {"nombre": "Andrés Yépez", "equipo": "Transferencias"},
-                {"nombre": "Josué Imbacuán", "equipo": "Transferencias"},
-                {"nombre": "Luis Perugachi", "equipo": "Transferencias"},
-                {"nombre": "Diana García", "equipo": "Arreglo"},
-                {"nombre": "Simón Vera", "equipo": "Guías"},
-                {"nombre": "Jhonny Guadalupe", "equipo": "Ventas"},
-                {"nombre": "Victor Montenegro", "equipo": "Ventas"},
-                {"nombre": "Fernando Quishpe", "equipo": "Ventas"}
-            ]
-            
-            for trabajador in trabajadores_default:
-                try:
-                    self.supabase.table('trabajadores').insert(trabajador).execute()
-                except Exception as e:
-                    # El trabajador probablemente ya existe
-                    logger.debug(f"Trabajador {trabajador['nombre']} ya existe: {e}")
-            
-            logger.info("Base de datos Supabase configurada correctamente")
-            
-        except Exception as e:
+                    c.execute("SELECT equipo FROM daily_kpis LIMIT 1")
+                except sqlite3.OperationalError:
+                    c.execute('ALTER TABLE daily_kpis ADD COLUMN equipo TEXT')
+                
+                # Crear tabla de configuración
+                c.execute('''
+                CREATE TABLE IF NOT EXISTS config (
+                    key TEXT PRIMARY KEY,
+                    value TEXT
+                )
+                ''')
+                
+                # Crear tabla de usuarios
+                c.execute('''
+                CREATE TABLE IF NOT EXISTS users (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    username TEXT UNIQUE NOT NULL,
+                    password_hash TEXT NOT NULL,
+                    role TEXT DEFAULT 'user',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+                ''')
+                
+                # Crear tabla de trabajadores
+                c.execute('''
+                CREATE TABLE IF NOT EXISTS trabajadores (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    nombre TEXT UNIQUE NOT NULL,
+                    equipo TEXT NOT NULL,
+                    activo BOOLEAN DEFAULT 1,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+                ''')
+                
+                # Insertar usuario admin por defecto si no existe
+                password_hash = hashlib.sha256("Wilo3161".encode()).hexdigest()
+                c.execute('''
+                INSERT OR IGNORE INTO users (username, password_hash, role)
+                VALUES (?, ?, ?)
+                ''', ('admin', password_hash, 'admin'))
+                
+                # Insertar trabajadores por defecto si no existen
+                trabajadores_default = [
+                    ("Andrés Yépez", "Transferencias"),
+                    ("Josué Imbacuán", "Transferencias"),
+                    ("Luis Perugachi", "Transferencias"),
+                    ("Diana García", "Arreglo"),
+                    ("Simón Vera", "Guías"),
+                    ("Jhonny Guadalupe", "Ventas"),
+                    ("Victor Montenegro", "Ventas"),
+                    ("Fernando Quishpe", "Ventas")
+                ]
+                
+                for nombre, equipo in trabajadores_default:
+                    c.execute('''
+                    INSERT OR IGNORE INTO trabajadores (nombre, equipo)
+                    VALUES (?, ?)
+                    ''', (nombre, equipo))
+                
+                conn.commit()
+                logger.info("Base de datos configurada correctamente")
+                
+        except sqlite3.Error as e:
             logger.error(f"Error al configurar la base de datos: {e}")
             raise
 
 # Inicializar el gestor de base de datos
-if 'db_manager' not in st.session_state and supabase_key:
+if 'db_manager' not in st.session_state:
     st.session_state.db_manager = DatabaseManager()
 
 # Funciones de utilidad
@@ -397,21 +426,13 @@ def productividad_hora(cantidad: float, horas_trabajo: float) -> float:
     """Calcula la productividad por hora"""
     return cantidad / horas_trabajo if horas_trabajo > 0 else 0
 
-# Funciones de acceso a datos para Supabase
+# Funciones de acceso a datos
 def obtener_trabajadores() -> pd.DataFrame:
-    """Obtiene la lista de trabajadores desde Supabase"""
+    """Obtiene la lista de trabajadores desde la base de datos"""
     try:
-        if 'db_manager' not in st.session_state:
-            return pd.DataFrame({
-                'nombre': ["Andrés Yépez", "Josué Imbacuán", "Luis Perugachi", "Diana García", 
-                          "Simón Vera", "Jhonny Guadalupe", "Victor Montenegro", "Fernando Quishpe"],
-                'equipo': ["Transferencias", "Transferencias", "Transferencias", "Arreglo", 
-                          "Guías", "Ventas", "Ventas", "Ventas"]
-            })
-            
-        response = st.session_state.db_manager.supabase.table('trabajadores').select('*').eq('activo', True).execute()
-        df = pd.DataFrame(response.data)
-        return df
+        with st.session_state.db_manager.get_connection() as conn:
+            df = pd.read_sql_query('SELECT nombre, equipo FROM trabajadores WHERE activo = 1 ORDER BY equipo, nombre', conn)
+            return df
     except Exception as e:
         logger.error(f"Error al obtener trabajadores: {e}")
         # Si hay error, devolver lista por defecto
@@ -423,67 +444,88 @@ def obtener_trabajadores() -> pd.DataFrame:
         })
 
 def obtener_equipos() -> List[str]:
-    """Obtiene la lista de equipos desde Supabase"""
+    """Obtiene la lista de equipos desde la base de datos"""
     try:
-        if 'db_manager' not in st.session_state:
-            return ["Transferencias", "Arreglo", "Distribución", "Guías", "Ventas"]
-            
-        response = st.session_state.db_manager.supabase.table('trabajadores').select('equipo').eq('activo', True).execute()
-        df = pd.DataFrame(response.data)
-        return df['equipo'].unique().tolist()
+        with st.session_state.db_manager.get_connection() as conn:
+            df = pd.read_sql_query('SELECT DISTINCT equipo FROM trabajadores WHERE activo = 1 ORDER BY equipo', conn)
+            return df['equipo'].tolist()
     except Exception as e:
         logger.error(f"Error al obtener equipos: {e}")
         return ["Transferencias", "Arreglo", "Distribución", "Guías", "Ventas"]
 
 def guardar_datos_db(fecha: str, datos: Dict[str, Dict]) -> bool:
-    """Guarda los datos en Supabase"""
+    """Guarda los datos en la base de datos SQLite"""
     try:
-        if 'db_manager' not in st.session_state:
-            return False
+        with st.session_state.db_manager.get_connection() as conn:
+            c = conn.cursor()
             
-        for nombre, info in datos.items():
-            # Validar datos antes de guardar
-            if not all([
-                validar_fecha(fecha),
-                validar_numero_positivo(info.get("cantidad", 0)),
-                validar_numero_positivo(info.get("meta", 0)),
-                validar_numero_positivo(info.get("horas_trabajo", 0))
-            ]):
-                logger.warning(f"Datos inválidos para {nombre}, omitiendo guardado")
-                continue
+            for nombre, info in datos.items():
+                # Validar datos antes de guardar
+                if not all([
+                    validar_fecha(fecha),
+                    validar_numero_positivo(info.get("cantidad", 0)),
+                    validar_numero_positivo(info.get("meta", 0)),
+                    validar_numero_positivo(info.get("horas_trabajo", 0))
+                ]):
+                    logger.warning(f"Datos inválidos para {nombre}, omitiendo guardado")
+                    continue
+                
+                # Verificar si ya existe un registro para esta fecha y trabajador
+                c.execute('SELECT id FROM daily_kpis WHERE fecha = ? AND nombre = ?', (fecha, nombre))
+                existing = c.fetchone()
+                
+                if existing:
+                    # Actualizar registro existente
+                    c.execute('''
+                    UPDATE daily_kpis 
+                    SET actividad=?, cantidad=?, meta=?, eficiencia=?, 
+                        productividad=?, comentario=?, meta_mensual=?, horas_trabajo=?, equipo=?
+                    WHERE fecha=? AND nombre=?
+                    ''', (
+                        info.get("actividad", ""),
+                        info.get("cantidad", 0),
+                        info.get("meta", 0),
+                        info.get("eficiencia", 0),
+                        info.get("productividad", 0),
+                        info.get("comentario", ""),
+                        info.get("meta_mensual", 0),
+                        info.get("horas_trabajo", 0),
+                        info.get("equipo", ""),
+                        fecha,
+                        nombre
+                    ))
+                else:
+                    # Insertar nuevo registro
+                    c.execute('''
+                    INSERT INTO daily_kpis 
+                    (fecha, nombre, actividad, cantidad, meta, eficiencia, productividad, comentario, meta_mensual, horas_trabajo, equipo)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ''', (
+                        fecha,
+                        nombre,
+                        info.get("actividad", ""),
+                        info.get("cantidad", 0),
+                        info.get("meta", 0),
+                        info.get("eficiencia", 0),
+                        info.get("productividad", 0),
+                        info.get("comentario", ""),
+                        info.get("meta_mensual", 0),
+                        info.get("horas_trabajo", 0),
+                        info.get("equipo", "")
+                    ))
             
-            # Verificar si ya existe un registro para esta fecha y trabajador
-            response = st.session_state.db_manager.supabase.table('daily_kpis').select('*').eq('fecha', fecha).eq('nombre', nombre).execute()
-            existing = response.data
+            conn.commit()
             
-            data_to_save = {
-                "fecha": fecha,
-                "nombre": nombre,
-                "actividad": info.get("actividad", ""),
-                "cantidad": info.get("cantidad", 0),
-                "meta": info.get("meta", 0),
-                "eficiencia": info.get("eficiencia", 0),
-                "productividad": info.get("productividad", 0),
-                "comentario": info.get("comentario", ""),
-                "meta_mensual": info.get("meta_mensual", 0),
-                "horas_trabajo": info.get("horas_trabajo", 0),
-                "equipo": info.get("equipo", "")
-            }
+            # Crear backup después de guardar
+            crear_backup()
             
-            if existing:
-                # Actualizar registro existente
-                st.session_state.db_manager.supabase.table('daily_kpis').update(data_to_save).eq('fecha', fecha).eq('nombre', nombre).execute()
-            else:
-                # Insertar nuevo registro
-                st.session_state.db_manager.supabase.table('daily_kpis').insert(data_to_save).execute()
-        
-        # Limpiar caché de datos históricos
-        if 'historico_data' in st.session_state:
-            del st.session_state['historico_data']
+            # Limpiar caché de datos históricos
+            if 'historico_data' in st.session_state:
+                del st.session_state['historico_data']
+                
+            logger.info(f"Datos guardados correctamente para la fecha {fecha}")
+            return True
             
-        logger.info(f"Datos guardados correctamente para la fecha {fecha}")
-        return True
-        
     except Exception as e:
         logger.error(f"Error al guardar datos: {e}")
         return False
@@ -491,33 +533,43 @@ def guardar_datos_db(fecha: str, datos: Dict[str, Dict]) -> bool:
 def cargar_historico_db(fecha_inicio: Optional[str] = None, 
                        fecha_fin: Optional[str] = None, 
                        trabajador: Optional[str] = None) -> pd.DataFrame:
-    """Carga datos históricos desde Supabase"""
+    """Carga datos históricos desde la base de datos"""
     try:
-        if 'db_manager' not in st.session_state:
-            return pd.DataFrame()
+        with st.session_state.db_manager.get_connection() as conn:
+            query = '''
+            SELECT fecha, nombre, actividad, cantidad, meta, eficiencia, productividad, 
+                   comentario, meta_mensual, horas_trabajo, equipo
+            FROM daily_kpis
+            WHERE 1=1
+            '''
+            params = []
             
-        query = st.session_state.db_manager.supabase.table('daily_kpis').select('*')
-        
-        if fecha_inicio:
-            query = query.gte('fecha', fecha_inicio)
-        if fecha_fin:
-            query = query.lte('fecha', fecha_fin)
-        if trabajador:
-            query = query.eq('nombre', trabajador)
-        
-        response = query.execute()
-        df = pd.DataFrame(response.data)
-        
-        if not df.empty:
-            # Convertir fecha a datetime
-            df['fecha'] = pd.to_datetime(df['fecha'])
+            if fecha_inicio:
+                query += ' AND fecha >= ?'
+                params.append(fecha_inicio)
             
-            # Calcular columnas adicionales
-            df['cumplimiento_meta'] = np.where(df['cantidad'] >= df['meta'], 'Sí', 'No')
-            df['diferencia_meta'] = df['cantidad'] - df['meta']
+            if fecha_fin:
+                query += ' AND fecha <= ?'
+                params.append(fecha_fin)
             
-        return df
-        
+            if trabajador:
+                query += ' AND nombre = ?'
+                params.append(trabajador)
+            
+            query += ' ORDER BY fecha DESC, nombre'
+            
+            df = pd.read_sql_query(query, conn, params=params)
+            
+            if not df.empty:
+                # Convertir fecha a datetime
+                df['fecha'] = pd.to_datetime(df['fecha'])
+                
+                # Calcular columnas adicionales
+                df['cumplimiento_meta'] = np.where(df['cantidad'] >= df['meta'], 'Sí', 'No')
+                df['diferencia_meta'] = df['cantidad'] - df['meta']
+                
+            return df
+            
     except Exception as e:
         logger.error(f"Error al cargar datos históricos: {e}")
         return pd.DataFrame()
@@ -525,9 +577,26 @@ def cargar_historico_db(fecha_inicio: Optional[str] = None,
 def crear_backup() -> bool:
     """Crea una copia de seguridad de la base de datos"""
     try:
-        # En Supabase, los backups se manejan desde la interfaz web
-        # Esta función es solo para compatibilidad
-        logger.info("En Supabase, los backups se gestionan desde el panel de control")
+        # Crear directorio de backups si no existe
+        Path("backups").mkdir(exist_ok=True)
+        
+        # Nombre del archivo de backup con fecha y hora
+        backup_name = f"backups/kpi_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db"
+        
+        # Copiar la base de datos
+        with open('kpi_data.db', 'rb') as original:
+            with open(backup_name, 'wb') as backup:
+                backup.write(original.read())
+                
+        # Mantener solo los últimos 7 backups
+        backups = sorted(Path("backups").glob("kpi_backup_*.db"), key=os.path.getmtime)
+        for old_backup in backups[:-7]:
+            try:
+                old_backup.unlink()
+            except Exception as e:
+                logger.warning(f"No se pudo eliminar el backup antiguo {old_backup}: {e}")
+                
+        logger.info(f"Backup creado: {backup_name}")
         return True
         
     except Exception as e:
@@ -537,8 +606,24 @@ def crear_backup() -> bool:
 def restaurar_backup(backup_path: str) -> bool:
     """Restaura la base de datos desde un backup"""
     try:
-        # En Supabase, la restauración se maneja desde la interfaz web
-        logger.info("En Supabase, la restauración se gestiona desde el panel de control")
+        # Cerrar conexión actual si existe
+        if hasattr(st.session_state.db_manager, 'conn') and st.session_state.db_manager.conn:
+            st.session_state.db_manager.conn.close()
+            st.session_state.db_manager.conn = None
+        
+        # Copiar el backup sobre la base de datos actual
+        with open(backup_path, 'rb') as backup:
+            with open('kpi_data.db', 'wb') as original:
+                original.write(backup.read())
+        
+        # Reestablecer conexión
+        st.session_state.db_manager = DatabaseManager()
+        
+        # Limpiar datos en caché
+        if 'historico_data' in st.session_state:
+            del st.session_state['historico_data']
+            
+        logger.info(f"Backup restaurado desde: {backup_path}")
         return True
         
     except Exception as e:
@@ -587,8 +672,8 @@ def crear_grafico_interactivo(data: pd.DataFrame, x: str, y: str, title: str,
         fig.update_layout(
             plot_bgcolor='rgba(0,0,0,0)',
             paper_bgcolor='rgba(0,0,0,0)',
-            font=dict(color="#d6dfe9"),
-            title_font_color="white"
+            font=dict(color="#2c3e50"),
+            title_font_color="#2c3e50"
         )
         
         return fig
@@ -745,73 +830,73 @@ def mostrar_gestion_trabajadores():
     st.markdown("<h1 class='header-title'>👥 Gestión de Trabajadores</h1>", unsafe_allow_html=True)
     
     try:
-        if 'db_manager' not in st.session_state:
-            st.error("No hay conexión a la base de datos")
-            return
+        with st.session_state.db_manager.get_connection() as conn:
+            c = conn.cursor()
             
-        # Obtener lista actual de trabajadores
-        response = st.session_state.db_manager.supabase.table('trabajadores').select('*').order('equipo').order('nombre').execute()
-        trabajadores = response.data
-        
-        st.markdown("<h2 class='section-title'>Trabajadores Actuales</h2>", unsafe_allow_html=True)
-        
-        if trabajadores:
-            df_trabajadores = pd.DataFrame(trabajadores)
-            st.dataframe(df_trabajadores, use_container_width=True)
-        else:
-            st.info("No hay trabajadores registrados.")
-        
-        st.markdown("<h2 class='section-title'>Agregar Nuevo Trabajador</h2>", unsafe_allow_html=True)
-        
-        with st.form("form_nuevo_trabajador"):
-            col1, col2 = st.columns(2)
+            # Obtener lista actual de trabajadores
+            c.execute('SELECT nombre, equipo, activo FROM trabajadores ORDER BY equipo, nombre')
+            trabajadores = c.fetchall()
             
-            with col1:
-                nuevo_nombre = st.text_input("Nombre del trabajador:")
+            st.markdown("<h2 class='section-title'>Trabajadores Actuales</h2>", unsafe_allow_html=True)
             
-            with col2:
-                equipos = obtener_equipos()
-                nuevo_equipo = st.selectbox("Equipo:", options=equipos)
-            
-            submitted = st.form_submit_button("Agregar Trabajador")
-            
-            if submitted:
-                if nuevo_nombre:
-                    try:
-                        st.session_state.db_manager.supabase.table('trabajadores').insert({
-                            'nombre': nuevo_nombre,
-                            'equipo': nuevo_equipo
-                        }).execute()
-                        
-                        st.markdown("<div class='success-box'>✅ Trabajador agregado correctamente.</div>", unsafe_allow_html=True)
-                        st.rerun()
-                    except Exception as e:
-                        logger.error(f"Error al agregar trabajador: {e}")
-                        st.markdown("<div class='error-box'>❌ Error al agregar trabajador.</div>", unsafe_allow_html=True)
-                else:
-                    st.markdown("<div class='error-box'>❌ Debe ingresar un nombre.</div>", unsafe_allow_html=True)
-        
-        st.markdown("<h2 class='section-title'>Eliminar Trabajador</h2>", unsafe_allow_html=True)
-        
-        if trabajadores:
-            trabajadores_activos = [t['nombre'] for t in trabajadores if t.get('activo', True)]
-            
-            if trabajadores_activos:
-                trabajador_eliminar = st.selectbox("Selecciona un trabajador para eliminar:", options=trabajadores_activos)
-                
-                if st.button("Eliminar Trabajador"):
-                    try:
-                        st.session_state.db_manager.supabase.table('trabajadores').update({'activo': False}).eq('nombre', trabajador_eliminar).execute()
-                        st.markdown("<div class='success-box'>✅ Trabajador eliminado correctamente.</div>", unsafe_allow_html=True)
-                        st.rerun()
-                    except Exception as e:
-                        logger.error(f"Error al eliminar trabajador: {e}")
-                        st.markdown("<div class='error-box'>❌ Error al eliminar trabajador.</div>", unsafe_allow_html=True)
+            if trabajadores:
+                df_trabajadores = pd.DataFrame(trabajadores, columns=['Nombre', 'Equipo', 'Activo'])
+                st.dataframe(df_trabajadores, use_container_width=True)
             else:
-                st.info("No hay trabajadores activos para eliminar.")
-        else:
-            st.info("No hay trabajadores registrados.")
+                st.info("No hay trabajadores registrados.")
             
+            st.markdown("<h2 class='section-title'>Agregar Nuevo Trabajador</h2>", unsafe_allow_html=True)
+            
+            with st.form("form_nuevo_trabajador"):
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    nuevo_nombre = st.text_input("Nombre del trabajador:")
+                
+                with col2:
+                    equipos = obtener_equipos()
+                    nuevo_equipo = st.selectbox("Equipo:", options=equipos)
+                
+                submitted = st.form_submit_button("Agregar Trabajador")
+                
+                if submitted:
+                    if nuevo_nombre:
+                        try:
+                            c.execute('INSERT INTO trabajadores (nombre, equipo) VALUES (?, ?)', 
+                                     (nuevo_nombre, nuevo_equipo))
+                            conn.commit()
+                            st.markdown("<div class='success-box'>✅ Trabajador agregado correctamente.</div>", unsafe_allow_html=True)
+                            st.rerun()
+                        except sqlite3.IntegrityError:
+                            st.markdown("<div class='error-box'>❌ El trabajador ya existe.</div>", unsafe_allow_html=True)
+                        except Exception as e:
+                            logger.error(f"Error al agregar trabajador: {e}")
+                            st.markdown("<div class='error-box'>❌ Error al agregar trabajador.</div>", unsafe_allow_html=True)
+                    else:
+                        st.markdown("<div class='error-box'>❌ Debe ingresar un nombre.</div>", unsafe_allow_html=True)
+            
+            st.markdown("<h2 class='section-title'>Eliminar Trabajador</h2>", unsafe_allow_html=True)
+            
+            if trabajadores:
+                trabajadores_activos = [t[0] for t in trabajadores if t[2]]
+                
+                if trabajadores_activos:
+                    trabajador_eliminar = st.selectbox("Selecciona un trabajador para eliminar:", options=trabajadores_activos)
+                    
+                    if st.button("Eliminar Trabajador"):
+                        try:
+                            c.execute('UPDATE trabajadores SET activo = 0 WHERE nombre = ?', (trabajador_eliminar,))
+                            conn.commit()
+                            st.markdown("<div class='success-box'>✅ Trabajador eliminado correctamente.</div>", unsafe_allow_html=True)
+                            st.rerun()
+                        except Exception as e:
+                            logger.error(f"Error al eliminar trabajador: {e}")
+                            st.markdown("<div class='error-box'>❌ Error al eliminar trabajador.</div>", unsafe_allow_html=True)
+                else:
+                    st.info("No hay trabajadores activos para eliminar.")
+            else:
+                st.info("No hay trabajadores registrados.")
+                
     except Exception as e:
         logger.error(f"Error en gestión de trabajadores: {e}")
         st.markdown("<div class='error-box'>❌ Error del sistema al gestionar trabajadores.</div>", unsafe_allow_html=True)
@@ -1012,7 +1097,7 @@ def mostrar_dashboard():
         st.markdown(f"<div class='warning-box'>⚠️ No hay datos disponibles para la fecha {fecha_seleccionada}.</div>", unsafe_allow_html=True)
         return
     
-    st.markdown(f"<p style='color: white; font-size: 1.1em;'>Datos para la fecha: {fecha_seleccionada}</p>", unsafe_allow_html=True)
+    st.markdown(f"<p style='color: #2c3e50; font-size: 1.1em;'>Datos para la fecha: {fecha_seleccionada}</p>", unsafe_allow_html=True)
     
     st.markdown("<h2 class='section-title'>📈 KPIs Globales</h2>", unsafe_allow_html=True)
     
@@ -1212,8 +1297,17 @@ def exportar_excel(df: pd.DataFrame) -> bytes:
     """Exporta el DataFrame a un archivo Excel en memoria"""
     try:
         output = io.BytesIO()
+        
+        # Crear una copia del DataFrame para evitar modificar el original
+        df_export = df.copy()
+        
+        # Convertir columnas de fecha a string para evitar problemas con Excel
+        for col in df_export.columns:
+            if pd.api.types.is_datetime64_any_dtype(df_export[col]):
+                df_export[col] = df_export[col].dt.strftime('%Y-%m-%d %H:%M:%S')
+        
         with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-            df.to_excel(writer, sheet_name='Datos_KPIs', index=False)
+            df_export.to_excel(writer, sheet_name='Datos_KPIs', index=False)
             
             # Formato adicional para mejorar el Excel
             workbook = writer.book
@@ -1230,12 +1324,12 @@ def exportar_excel(df: pd.DataFrame) -> bytes:
             })
             
             # Aplicar formato a encabezados
-            for col_num, value in enumerate(df.columns.values):
+            for col_num, value in enumerate(df_export.columns.values):
                 worksheet.write(0, col_num, value, header_format)
             
             # Autoajustar columnas
-            for i, col in enumerate(df.columns):
-                max_len = max(df[col].astype(str).map(len).max(), len(col)) + 2
+            for i, col in enumerate(df_export.columns):
+                max_len = max(df_export[col].astype(str).map(len).max(), len(col)) + 2
                 worksheet.set_column(i, i, max_len)
         
         processed_data = output.getvalue()
@@ -1426,7 +1520,7 @@ def mostrar_analisis_historico():
                 st.markdown("<div class='error-box'>❌ Error al exportar a Excel.</div>", unsafe_allow_html=True)
     
     with col2:
-        # Botón para exportar to PDF
+        # Botón para exportar a PDF
         if st.button("📄 Exportar a PDF", use_container_width=True):
             try:
                 with st.spinner("Generando reporte PDF..."):
@@ -1604,7 +1698,7 @@ def mostrar_analisis_historico():
                     yaxis_title='Eficiencia Promedio (%)',
                     plot_bgcolor='rgba(0,0,0,0)',
                     paper_bgcolor='rgba(0,0,0,0)',
-                    font=dict(color="white")
+                    font=dict(color="#2c3e50")
                 )
                 
                 st.plotly_chart(fig, use_container_width=True)
@@ -1637,61 +1731,82 @@ def mostrar_administracion():
                     st.markdown("<div class='error-box'>❌ Error al crear backup.</div>", unsafe_allow_html=True)
         
         with col2:
-            st.info("En Supabase, los backups se gestionan desde el panel de control de Supabase.")
+            # Listar backups disponibles
+            backups = sorted(Path("backups").glob("kpi_backup_*.db"), key=os.path.getmtime, reverse=True)
+            
+            if backups:
+                st.markdown("**Backups disponibles:**")
+                for backup in backups[:5]:  # Mostrar solo los 5 más recientes
+                    st.text(f"{backup.name} ({time.strftime('%Y-%m-%d %H:%M', time.gmtime(backup.stat().st_mtime))})")
+            else:
+                st.info("No hay backups disponibles.")
     
     with tab2:
         st.markdown("<h3>📥 Restaurar desde Backup</h3>", unsafe_allow_html=True)
-        st.info("En Supabase, la restauración de backups se gestiona desde el panel de control de Supabase.")
+        
+        # Listar backups disponibles
+        backups = sorted(Path("backups").glob("kpi_backup_*.db"), key=os.path.getmtime, reverse=True)
+        
+        if backups:
+            backup_options = [f"{b.name} ({time.strftime('%Y-%m-%d %H:%M', time.gmtime(b.stat().st_mtime))})" for b in backups]
+            backup_seleccionado = st.selectbox("Selecciona un backup para restaurar:", options=backup_options)
+            
+            if st.button("🔄 Restaurar Backup Seleccionado"):
+                backup_path = backups[backup_options.index(backup_seleccionado)]
+                if restaurar_backup(str(backup_path)):
+                    st.markdown("<div class='success-box'>✅ Backup restaurado correctamente. La página se recargará.</div>", unsafe_allow_html=True)
+                    time.sleep(2)
+                    st.rerun()
+                else:
+                    st.markdown("<div class='error-box'>❌ Error al restaurar backup.</div>", unsafe_allow_html=True)
+        else:
+            st.info("No hay backups disponibles para restaurar.")
     
     with tab3:
         st.markdown("<h3>👥 Gestión de Usuarios</h3>", unsafe_allow_html=True)
         
         try:
-            if 'db_manager' not in st.session_state:
-                st.error("No hay conexión a la base de datos")
-                return
+            with st.session_state.db_manager.get_connection() as conn:
+                c = conn.cursor()
                 
-            # Mostrar usuarios existentes
-            response = st.session_state.db_manager.supabase.table('users').select('*').execute()
-            users = response.data
-            
-            if users:
-                st.markdown("**Usuarios existentes:**")
-                for user in users:
-                    st.text(f"{user['username']} ({user['role']}) - Creado: {user.get('created_at', 'N/A')}")
-            else:
-                st.info("No hay usuarios registrados.")
-            
-            # Formulario para agregar usuario
-            st.markdown("---")
-            st.markdown("<h4>➕ Agregar Nuevo Usuario</h4>", unsafe_allow_html=True)
-            
-            with st.form("form_nuevo_usuario"):
-                nuevo_usuario = st.text_input("Nombre de usuario:")
-                nueva_contrasena = st.text_input("Contraseña:", type="password")
-                rol_usuario = st.selectbox("Rol:", options=["user", "admin"])
+                # Mostrar usuarios existentes
+                c.execute('SELECT username, role, created_at FROM users')
+                users = c.fetchall()
                 
-                submitted = st.form_submit_button("Agregar Usuario")
+                if users:
+                    st.markdown("**Usuarios existentes:**")
+                    for user in users:
+                        st.text(f"{user[0]} ({user[1]}) - Creado: {user[2]}")
+                else:
+                    st.info("No hay usuarios registrados.")
                 
-                if submitted:
-                    if nuevo_usuario and nueva_contrasena:
-                        # Verificar si el usuario ya existe
-                        response = st.session_state.db_manager.supabase.table('users').select('*').eq('username', nuevo_usuario).execute()
-                        if response.data:
-                            st.markdown("<div class='error-box'>❌ El usuario ya existe.</div>", unsafe_allow_html=True)
+                # Formulario para agregar usuario
+                st.markdown("---")
+                st.markdown("<h4>➕ Agregar Nuevo Usuario</h4>", unsafe_allow_html=True)
+                
+                with st.form("form_nuevo_usuario"):
+                    nuevo_usuario = st.text_input("Nombre de usuario:")
+                    nueva_contrasena = st.text_input("Contraseña:", type="password")
+                    rol_usuario = st.selectbox("Rol:", options=["user", "admin"])
+                    
+                    submitted = st.form_submit_button("Agregar Usuario")
+                    
+                    if submitted:
+                        if nuevo_usuario and nueva_contrasena:
+                            # Verificar si el usuario ya existe
+                            c.execute('SELECT id FROM users WHERE username = ?', (nuevo_usuario,))
+                            if c.fetchone():
+                                st.markdown("<div class='error-box'>❌ El usuario ya existe.</div>", unsafe_allow_html=True)
+                            else:
+                                # Hashear contraseña y guardar usuario
+                                password_hash = hashlib.sha256(nueva_contrasena.encode()).hexdigest()
+                                c.execute('INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)', 
+                                         (nuevo_usuario, password_hash, rol_usuario))
+                                conn.commit()
+                                st.markdown("<div class='success-box'>✅ Usuario agregado correctamente.</div>", unsafe_allow_html=True)
+                                st.rerun()
                         else:
-                            # Hashear contraseña y guardar usuario
-                            password_hash = hashlib.sha256(nueva_contrasena.encode()).hexdigest()
-                            st.session_state.db_manager.supabase.table('users').insert({
-                                'username': nuevo_usuario,
-                                'password_hash': password_hash,
-                                'role': rol_usuario
-                            }).execute()
-                            
-                            st.markdown("<div class='success-box'>✅ Usuario agregado correctamente.</div>", unsafe_allow_html=True)
-                            st.rerun()
-                    else:
-                        st.markdown("<div class='error-box'>❌ Debe completar todos los campos.</div>", unsafe_allow_html=True)
+                            st.markdown("<div class='error-box'>❌ Debe completar todos los campos.</div>", unsafe_allow_html=True)
         except Exception as e:
             logger.error(f"Error en gestión de usuarios: {e}")
             st.markdown("<div class='error-box'>❌ Error del sistema al gestionar usuarios.</div>", unsafe_allow_html=True)
@@ -1705,49 +1820,20 @@ def mostrar_administracion():
         
         if st.button("💾 Guardar Configuración"):
             try:
-                if 'db_manager' not in st.session_state:
-                    st.error("No hay conexión a la base de datos")
-                    return
-                    
-                st.session_state.db_manager.supabase.table('config').upsert({
-                    'key': 'mostrar_graficos',
-                    'value': str(mostrar_graficos)
-                }).execute()
-                
-                st.session_state.db_manager.supabase.table('config').upsert({
-                    'key': 'actualizacion_automatica',
-                    'value': str(actualizacion_automatica)
-                }).execute()
-                
-                st.markdown("<div class='success-box'>✅ Configuración guardada correctamente.</div>", unsafe_allow_html=True)
+                with st.session_state.db_manager.get_connection() as conn:
+                    c = conn.cursor()
+                    c.execute('INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)', 
+                             ('mostrar_graficos', str(mostrar_graficos)))
+                    c.execute('INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)', 
+                             ('actualizacion_automatica', str(actualizacion_automatica)))
+                    conn.commit()
+                    st.markdown("<div class='success-box'>✅ Configuración guardada correctamente.</div>", unsafe_allow_html=True)
             except Exception as e:
                 logger.error(f"Error al guardar configuración: {e}")
                 st.markdown("<div class='error-box'>❌ Error al guardar configuración.</div>", unsafe_allow_html=True)
 
 def main():
     """Función principal de la aplicación"""
-    # Verificar si Supabase está configurado
-    if not supabase_key:
-        st.error("""
-        ❌ Error de configuración de Supabase:
-        
-        Por favor, configura las variables de entorno:
-        
-        1. Ve a [Streamlit Cloud](https://share.streamlit.io/)
-        2. Selecciona tu app
-        3. Haz clic en 'Settings' (⚙️)
-        4. Ve a la sección 'Secrets'
-        5. Agrega las siguientes variables:
-        
-        ```toml
-        SUPABASE_URL = "https://nsgdyqoqzlcyyameccqn.supabase.co"
-        SUPABASE_KEY = "tu-clave-api-de-supabase"
-        ```
-        
-        6. Haz clic en 'Save' y reinicia la app
-        """)
-        return
-        
     st.sidebar.title("🔧 Menú de Navegación")
     
     # Mostrar información del usuario si está logueado
