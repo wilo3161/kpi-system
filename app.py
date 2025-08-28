@@ -50,10 +50,10 @@ st.set_page_config(
 # CSS personalizado mejorado
 st.markdown("""
 <style>
-    .main { background-color: darkblack; }
-    .stApp { background-color: darkblack; }
+    .main { background-color: black; }
+    .stApp { background-color: black; }
     .kpi-card {
-        background: darkblue;
+        background: darkturquoise;
         border-radius: 12px;
         box-shadow: 0 4px 12px rgba(0,0,0,0.08);
         padding: 18px;
