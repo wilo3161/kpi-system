@@ -98,7 +98,7 @@ st.markdown("""
     .trend-up { color: #27ae60; }
     .trend-down { color: #e74c3c; }
     .header-title { 
-        color: #000000;
+        color: white;
         font-weight: 800;
         font-size: 2.5em;
         margin-bottom: 20px;
@@ -107,7 +107,7 @@ st.markdown("""
         border-left: 5px solid #3498db;
         padding-left: 10px;
         margin: 20px 0;
-        color: #000000;
+        color: white;
         font-size: 1.8em;
     }
     .comment-container {
