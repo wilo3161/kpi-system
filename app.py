@@ -231,7 +231,7 @@ st.markdown("""
     }
     .team-header {
         font-size: 1.5em;
-        color: white;
+        color: black;
         margin-bottom: 15px;
         padding-bottom: 10px;
         border-bottom: 2px solid #3498db;
