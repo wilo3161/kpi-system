@@ -198,7 +198,7 @@ st.markdown("""
     }
     .prediction-card {
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
+        color: black;
         border-radius: 12px;
         padding: 20px;
         margin: 10px 0;
