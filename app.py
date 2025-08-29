@@ -26,13 +26,18 @@ from contextlib import contextmanager
 import logging
 from typing import Dict, List, Optional, Tuple, Any, Union
 import io
-from reportlab.lib.pagesizes import letter
+from reportlab.lib.pagesizes import letter, A4
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image
-from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
 from reportlab.lib.units import inch
 import tempfile
 import base64
+import xlsxwriter
+from openpyxl import Workbook
+from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+from openpyxl.utils.dataframe import dataframe_to_rows
+import traceback
 warnings.filterwarnings('ignore')
 
 # Configuración de logging
@@ -47,7 +52,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# CSS personalizado mejorado
+# CSS personalizado mejorado (sin cambios)
 st.markdown("""
 <style>
     .main { background-color: black; }
@@ -276,12 +281,22 @@ class DatabaseManager:
         """Context manager para manejar conexiones a la base de datos"""
         try:
             if self.conn is None:
-                self.conn = sqlite3.connect('kpi_data.db', check_same_thread=False)
+                self.conn = sqlite3.connect('kpi_data.db', check_same_thread=False, timeout=30)
                 self.conn.row_factory = sqlite3.Row
+                # Habilitar foreign keys
+                self.conn.execute("PRAGMA foreign_keys = ON")
             yield self.conn
         except sqlite3.Error as e:
             logger.error(f"Error de base de datos: {e}")
-            raise
+            # Intentar reconectar
+            try:
+                self.conn = sqlite3.connect('kpi_data.db', check_same_thread=False, timeout=30)
+                self.conn.row_factory = sqlite3.Row
+                self.conn.execute("PRAGMA foreign_keys = ON")
+                yield self.conn
+            except sqlite3.Error as e2:
+                logger.error(f"Error de reconexión a base de datos: {e2}")
+                raise
         finally:
             # No cerramos la conexión para mantenerla en el estado de la sesión
             pass
@@ -378,7 +393,26 @@ class DatabaseManager:
                 
         except sqlite3.Error as e:
             logger.error(f"Error al configurar la base de datos: {e}")
-            raise
+            # Crear directorio de backups si no existe
+            Path("backups").mkdir(exist_ok=True)
+            # Crear backup de la base de datos corrupta
+            corrupt_backup = f"backups/corrupt_db_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db"
+            try:
+                if os.path.exists('kpi_data.db'):
+                    os.rename('kpi_data.db', corrupt_backup)
+                    logger.info(f"Base de datos corrupta movida a: {corrupt_backup}")
+            except Exception as rename_error:
+                logger.error(f"No se pudo mover la base de datos corrupta: {rename_error}")
+            
+            # Intentar recrear la base de datos
+            try:
+                self.conn = None
+                if os.path.exists('kpi_data.db'):
+                    os.remove('kpi_data.db')
+                self._initialize()
+            except Exception as recreate_error:
+                logger.error(f"Error al recrear la base de datos: {recreate_error}")
+                raise
 
 # Inicializar el gestor de base de datos
 if 'db_manager' not in st.session_state:
@@ -567,6 +601,9 @@ def cargar_historico_db(fecha_inicio: Optional[str] = None,
                 # Calcular columnas adicionales
                 df['cumplimiento_meta'] = np.where(df['cantidad'] >= df['meta'], 'Sí', 'No')
                 df['diferencia_meta'] = df['cantidad'] - df['meta']
+                df['semana'] = df['fecha'].dt.isocalendar().week
+                df['mes'] = df['fecha'].dt.month
+                df['año'] = df['fecha'].dt.year
                 
             return df
             
@@ -610,6 +647,11 @@ def restaurar_backup(backup_path: str) -> bool:
         if hasattr(st.session_state.db_manager, 'conn') and st.session_state.db_manager.conn:
             st.session_state.db_manager.conn.close()
             st.session_state.db_manager.conn = None
+        
+        # Verificar que el backup existe
+        if not os.path.exists(backup_path):
+            logger.error(f"El archivo de backup no existe: {backup_path}")
+            return False
         
         # Copiar el backup sobre la base de datos actual
         with open(backup_path, 'rb') as backup:
@@ -823,6 +865,243 @@ def calcular_estadisticas_avanzadas(df: pd.DataFrame, columna: str) -> Dict[str,
     except Exception as e:
         logger.error(f"Error al calcular estadísticas: {e}")
         return {}
+
+# Funciones de exportación mejoradas
+def exportar_excel(df: pd.DataFrame) -> bytes:
+    """Exporta el DataFrame a un archivo Excel en memoria con formato mejorado"""
+    try:
+        # Crear un libro de trabajo en memoria
+        output = io.BytesIO()
+        
+        # Usar openpyxl para mejor control del formato
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Datos_KPIs"
+        
+        # Crear una copia del DataFrame para evitar modificar el original
+        df_export = df.copy()
+        
+        # Convertir columnas de fecha a string para evitar problemas con Excel
+        for col in df_export.columns:
+            if pd.api.types.is_datetime64_any_dtype(df_export[col]):
+                df_export[col] = df_export[col].dt.strftime('%Y-%m-%d %H:%M:%S')
+        
+        # Escribir los datos
+        for r in dataframe_to_rows(df_export, index=False, header=True):
+            ws.append(r)
+        
+        # Aplicar formato a los encabezados
+        header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
+        header_font = Font(bold=True, color="FFFFFF")
+        header_alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        
+        for cell in ws[1]:
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = header_alignment
+        
+        # Ajustar el ancho de las columnas
+        for column in ws.columns:
+            max_length = 0
+            column_letter = column[0].column_letter
+            for cell in column:
+                try:
+                    if len(str(cell.value)) > max_length:
+                        max_length = len(str(cell.value))
+                except:
+                    pass
+            adjusted_width = min(max_length + 2, 50)
+            ws.column_dimensions[column_letter].width = adjusted_width
+        
+        # Añadir filtros a los encabezados
+        ws.auto_filter.ref = ws.dimensions
+        
+        # Guardar el libro de trabajo en el buffer
+        wb.save(output)
+        output.seek(0)
+        
+        return output.getvalue()
+    except Exception as e:
+        logger.error(f"Error al exportar a Excel: {e}")
+        # Intentar con un método alternativo si falla
+        try:
+            output = io.BytesIO()
+            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                df.to_excel(writer, sheet_name='Datos_KPIs', index=False)
+            return output.getvalue()
+        except Exception as e2:
+            logger.error(f"Error alternativo al exportar a Excel: {e2}")
+            raise
+
+def plot_to_base64(fig):
+    """Convierte un gráfico Plotly a base64 para incrustar en PDF"""
+    try:
+        # Convertir figura a imagen en memoria
+        img_bytes = fig.to_image(format="png", width=800, height=600, scale=2)
+        return base64.b64encode(img_bytes).decode('utf-8')
+    except Exception as e:
+        logger.error(f"Error al convertir gráfico a base64: {e}")
+        return None
+
+def crear_reporte_pdf(df: pd.DataFrame, fecha_inicio: str, fecha_fin: str) -> bytes:
+    """Crea un reporte PDF con los datos y gráficas"""
+    try:
+        buffer = io.BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=A4)
+        styles = getSampleStyleSheet()
+        
+        # Crear estilos personalizados
+        title_style = ParagraphStyle(
+            'CustomTitle',
+            parent=styles['Title'],
+            fontSize=16,
+            spaceAfter=30,
+        )
+        
+        heading_style = ParagraphStyle(
+            'CustomHeading',
+            parent=styles['Heading2'],
+            fontSize=14,
+            spaceAfter=12,
+        )
+        
+        elements = []
+        
+        # Título del reporte
+        title = Paragraph("Reporte de KPIs - Fashion Club", title_style)
+        elements.append(title)
+        elements.append(Spacer(1, 12))
+        
+        # Información del período
+        periodo_text = f"Período: {fecha_inicio} a {fecha_fin}"
+        periodo = Paragraph(periodo_text, styles['Normal'])
+        elements.append(periodo)
+        elements.append(Spacer(1, 12))
+        
+        # Resumen estadístico
+        resumen_text = "Resumen Estadístico"
+        resumen_title = Paragraph(resumen_text, heading_style)
+        elements.append(resumen_title)
+        
+        # Crear tabla de resumen simplificada
+        resumen_data = df.groupby('nombre').agg({
+            'cantidad': ['count', 'mean', 'sum'],
+            'eficiencia': ['mean'],
+            'productividad': ['mean'],
+        }).round(2)
+        
+        # Aplanar las columnas multiindex
+        resumen_data.columns = ['_'.join(col).strip() for col in resumen_data.columns.values]
+        resumen_data.reset_index(inplace=True)
+        
+        # Renombrar columnas para mejor legibilidad
+        column_names = {
+            'nombre': 'Trabajador',
+            'cantidad_count': 'Días',
+            'cantidad_mean': 'Promedio Diario',
+            'cantidad_sum': 'Total',
+            'eficiencia_mean': 'Eficiencia Promedio',
+            'productividad_mean': 'Productividad Promedio'
+        }
+        resumen_data.rename(columns=column_names, inplace=True)
+        
+        # Convertir DataFrame a lista para la tabla
+        table_data = [list(resumen_data.columns)]
+        for _, row in resumen_data.iterrows():
+            table_data.append(list(row))
+        
+        # Crear tabla
+        table = Table(table_data, repeatRows=1)
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#4472C4')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 9),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor('#f2f2f2')),
+            ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 1), (-1, -1), 8),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.black)
+        ]))
+        elements.append(table)
+        elements.append(Spacer(1, 12))
+        
+        # Gráficas
+        try:
+            # Crear gráfica de eficiencia por día
+            df_eficiencia_dia = df.groupby('fecha')['eficiencia'].mean().reset_index()
+            
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(
+                x=df_eficiencia_dia['fecha'], 
+                y=df_eficiencia_dia['eficiencia'],
+                mode='lines+markers',
+                name='Eficiencia Promedio',
+                line=dict(color='#3498db', width=2)
+            ))
+            fig.add_hline(y=100, line_dash="dash", line_color="red", annotation_text="Meta")
+            fig.update_layout(
+                title='Evolución de la Eficiencia Promedio',
+                xaxis_title='Fecha',
+                yaxis_title='Eficiencia (%)',
+                width=600,
+                height=400,
+                showlegend=True
+            )
+            
+            # Convertir gráfico a base64
+            img_data = plot_to_base64(fig)
+            if img_data:
+                # Guardar imagen temporalmente
+                with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmpfile:
+                    tmpfile.write(base64.b64decode(img_data))
+                    img_path = tmpfile.name
+                
+                try:
+                    # Agregar gráfica al PDF
+                    img = Image(img_path, width=6*inch, height=4*inch)
+                    elements.append(Spacer(1, 12))
+                    elements.append(Paragraph("Evolución de la Eficiencia Promedio", heading_style))
+                    elements.append(img)
+                finally:
+                    # Limpiar archivo temporal
+                    try:
+                        os.unlink(img_path)
+                    except:
+                        pass
+        except Exception as e:
+            logger.error(f"Error al crear gráfica para PDF: {e}")
+            error_msg = Paragraph(f"Error al generar gráfica: {str(e)}", styles['Normal'])
+            elements.append(error_msg)
+        
+        # Construir PDF
+        doc.build(elements)
+        pdf_bytes = buffer.getvalue()
+        buffer.close()
+        
+        return pdf_bytes
+    except Exception as e:
+        logger.error(f"Error al crear reporte PDF: {e}")
+        # Devolver un PDF de error si falla la generación
+        try:
+            buffer = io.BytesIO()
+            doc = SimpleDocTemplate(buffer, pagesize=letter)
+            styles = getSampleStyleSheet()
+            elements = []
+            
+            title = Paragraph("Error al generar reporte", styles['Title'])
+            elements.append(title)
+            elements.append(Spacer(1, 12))
+            
+            error_msg = Paragraph(f"Se produjo un error al generar el reporte PDF: {str(e)}", styles['Normal'])
+            elements.append(error_msg)
+            
+            doc.build(elements)
+            return buffer.getvalue()
+        except:
+            # Si todo falla, devolver bytes vacíos
+            return b''
 
 # Funciones principales de la aplicación
 def mostrar_gestion_trabajadores():
@@ -1293,171 +1572,6 @@ def mostrar_dashboard():
                     </div>
                     """, unsafe_allow_html=True)
 
-def exportar_excel(df: pd.DataFrame) -> bytes:
-    """Exporta el DataFrame a un archivo Excel en memoria"""
-    try:
-        output = io.BytesIO()
-        
-        # Crear una copia del DataFrame para evitar modificar el original
-        df_export = df.copy()
-        
-        # Convertir columnas de fecha a string para evitar problemas con Excel
-        for col in df_export.columns:
-            if pd.api.types.is_datetime64_any_dtype(df_export[col]):
-                df_export[col] = df_export[col].dt.strftime('%Y-%m-%d %H:%M:%S')
-        
-        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-            df_export.to_excel(writer, sheet_name='Datos_KPIs', index=False)
-            
-            # Formato adicional para mejorar el Excel
-            workbook = writer.book
-            worksheet = writer.sheets['Datos_KPIs']
-            
-            # Formato para encabezados
-            header_format = workbook.add_format({
-                'bold': True,
-                'text_wrap': True,
-                'valign': 'top',
-                'fg_color': '#4472C4',
-                'font_color': 'white',
-                'border': 1
-            })
-            
-            # Aplicar formato a encabezados
-            for col_num, value in enumerate(df_export.columns.values):
-                worksheet.write(0, col_num, value, header_format)
-            
-            # Autoajustar columnas
-            for i, col in enumerate(df_export.columns):
-                max_len = max(df_export[col].astype(str).map(len).max(), len(col)) + 2
-                worksheet.set_column(i, i, max_len)
-        
-        processed_data = output.getvalue()
-        return processed_data
-    except Exception as e:
-        logger.error(f"Error al exportar a Excel: {e}")
-        raise
-
-def plot_to_base64(fig):
-    """Convierte un gráfico Plotly a base64 para incrustar en PDF"""
-    try:
-        # Convertir figura a imagen en memoria
-        img_bytes = fig.to_image(format="png", width=800, height=600, scale=2)
-        return base64.b64encode(img_bytes).decode('utf-8')
-    except Exception as e:
-        logger.error(f"Error al convertir gráfico a base64: {e}")
-        return None
-
-def crear_reporte_pdf(df: pd.DataFrame, fecha_inicio: str, fecha_fin: str) -> bytes:
-    """Crea un reporte PDF con los datos y gráficas"""
-    try:
-        buffer = io.BytesIO()
-        doc = SimpleDocTemplate(buffer, pagesize=letter)
-        styles = getSampleStyleSheet()
-        elements = []
-        
-        # Título del reporte
-        title = Paragraph("Reporte de KPIs - Fashion Club", styles['Title'])
-        elements.append(title)
-        elements.append(Spacer(1, 12))
-        
-        # Información del período
-        periodo_text = f"Período: {fecha_inicio} to {fecha_fin}"
-        periodo = Paragraph(periodo_text, styles['Normal'])
-        elements.append(periodo)
-        elements.append(Spacer(1, 12))
-        
-        # Resumen estadístico
-        resumen_text = "Resumen Estadístico"
-        resumen_title = Paragraph(resumen_text, styles['Heading2'])
-        elements.append(resumen_title)
-        
-        # Crear tabla de resumen
-        resumen_data = df.groupby('nombre').agg({
-            'cantidad': ['count', 'mean', 'sum', 'max', 'min'],
-            'eficiencia': ['mean', 'max', 'min'],
-            'productividad': ['mean', 'max', 'min'],
-            'horas_trabajo': ['sum', 'mean']
-        }).round(2)
-        
-        # Aplanar las columnas multiindex
-        resumen_data.columns = ['_'.join(col).strip() for col in resumen_data.columns.values]
-        resumen_data.reset_index(inplace=True)
-        
-        # Convertir DataFrame a lista para la tabla
-        table_data = [list(resumen_data.columns)]
-        for _, row in resumen_data.iterrows():
-            table_data.append(list(row))
-        
-        # Crear tabla
-        table = Table(table_data)
-        table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, 0), 10),
-            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
-            ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
-            ('FONTSIZE', (0, 1), (-1, -1), 8),
-            ('GRID', (0, 0), (-1, -1), 1, colors.black)
-        ]))
-        elements.append(table)
-        elements.append(Spacer(1, 12))
-        
-        # Gráficas
-        try:
-            # Crear gráfica de eficiencia por día
-            df_eficiencia_dia = df.groupby('fecha')['eficiencia'].mean().reset_index()
-            
-            fig = go.Figure()
-            fig.add_trace(go.Scatter(
-                x=df_eficiencia_dia['fecha'], 
-                y=df_eficiencia_dia['eficiencia'],
-                mode='lines+markers',
-                name='Eficiencia Promedio'
-            ))
-            fig.add_hline(y=100, line_dash="dash", line_color="red", annotation_text="Meta")
-            fig.update_layout(
-                title='Evolución de la Eficiencia Promedio',
-                xaxis_title='Fecha',
-                yaxis_title='Eficiencia (%)',
-                width=800,
-                height=600
-            )
-            
-            # Convertir gráfico a base64
-            img_data = plot_to_base64(fig)
-            if img_data:
-                # Guardar imagen temporalmente
-                with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmpfile:
-                    tmpfile.write(base64.b64decode(img_data))
-                    img_path = tmpfile.name
-                
-                # Agregar gráfica al PDF
-                img = Image(img_path, width=6*inch, height=4*inch)
-                elements.append(Spacer(1, 12))
-                elements.append(Paragraph("Evolución de la Eficiencia Promedio", styles['Heading3']))
-                elements.append(img)
-                
-                # Limpiar archivo temporal
-                os.unlink(img_path)
-        except Exception as e:
-            logger.error(f"Error al crear gráfica para PDF: {e}")
-            error_msg = Paragraph(f"Error al generar gráfica: {str(e)}", styles['Normal'])
-            elements.append(error_msg)
-        
-        # Construir PDF
-        doc.build(elements)
-        pdf_bytes = buffer.getvalue()
-        buffer.close()
-        
-        return pdf_bytes
-    except Exception as e:
-        logger.error(f"Error al crear reporte PDF: {e}")
-        raise
-
 def mostrar_analisis_historico():
     """Muestra el análisis histórico de KPIs"""
     st.markdown("<h1 class='header-title'>📈 Análisis Histórico de KPIs</h1>", unsafe_allow_html=True)
@@ -1507,14 +1621,15 @@ def mostrar_analisis_historico():
         # Botón para exportar a Excel
         if st.button("💾 Exportar a Excel", use_container_width=True):
             try:
-                excel_data = exportar_excel(df_filtrado)
-                st.download_button(
-                    label="⬇️ Descargar archivo Excel",
-                    data=excel_data,
-                    file_name=f"kpis_historico_{fecha_inicio}_a_{fecha_fin}.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    use_container_width=True
-                )
+                with st.spinner("Generando archivo Excel..."):
+                    excel_data = exportar_excel(df_filtrado)
+                    st.download_button(
+                        label="⬇️ Descargar archivo Excel",
+                        data=excel_data,
+                        file_name=f"kpis_historico_{fecha_inicio}_a_{fecha_fin}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        use_container_width=True
+                    )
             except Exception as e:
                 logger.error(f"Error al exportar a Excel: {e}")
                 st.markdown("<div class='error-box'>❌ Error al exportar a Excel.</div>", unsafe_allow_html=True)
