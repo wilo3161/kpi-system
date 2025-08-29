@@ -98,7 +98,7 @@ st.markdown("""
     .trend-up { color: #27ae60; }
     .trend-down { color: #e74c3c; }
     .header-title { 
-        color: white;
+        color: black;
         font-weight: 800;
         font-size: 2.5em;
         margin-bottom: 20px;
