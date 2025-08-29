@@ -87,7 +87,7 @@ st.markdown("""
     .worker-header { 
         font-size: 1.3em; 
         margin-bottom: 10px; 
-        color: white;
+        color: black;
         font-weight: bold;
     }
     .worker-metric { 
