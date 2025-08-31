@@ -67,7 +67,7 @@ st.markdown("""
 <style>
     /* Colores corporativos de Aeropostale */
     :root {
-        --primary-color: #e60012;
+        --primary-color: navy;
         --secondary-color: #000000;
         --accent-color: #333333;
         --background-dark: #121212;
