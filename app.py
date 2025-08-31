@@ -206,7 +206,7 @@ st.markdown("""
     
     /* Botones */
     .stButton>button {
-        background: linear-gradient(135deg, var(--primary-color), #b3000e);
+        background: linear-gradient(135deg, var(--primary-color), navy);
         color: white;
         border: none;
         padding: 10px 20px;
