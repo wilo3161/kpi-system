@@ -84,7 +84,7 @@ st.set_page_config(
 st.markdown("""
 <style>
     .main { background-color: white; }
-    .stApp { background-color: black; }
+    .stApp { background-color: white; }
     .kpi-card {
         background: white;
         border-radius: 12px;
@@ -105,7 +105,7 @@ st.markdown("""
         line-height: 1.2;
     }
     .worker-card {
-        background: darkturquoise;
+        background: white;
         border-radius: 10px;
         padding: 15px;
         color: #2c3e50;
@@ -395,7 +395,8 @@ def verificar_permisos(permiso: str) -> bool:
     
     try:
         response = supabase.from_('kpi_users').select('role').eq('email', st.session_state.user).execute()
-        if response.
+        # CORRECCIÓN: Verificar si hay datos en la respuesta
+        if response and response.data:
             role = response.data[0]['role']
             # Definir permisos según el rol
             permisos = {
@@ -453,7 +454,8 @@ def obtener_trabajadores() -> pd.DataFrame:
     
     try:
         response = supabase.from_('kpi_trabajadores').select('nombre, equipo').eq('activo', True).order('equipo,nombre', desc=False).execute()
-        if response.
+        # CORRECCIÓN: Verificar si hay datos en la respuesta
+        if response and response.data:
             df = pd.DataFrame(response.data)
             # Asegurar que Luis Perugachi esté en el equipo de Distribución
             if 'Luis Perugachi' in df['nombre'].values:
@@ -481,7 +483,8 @@ def obtener_equipos() -> List[str]:
     
     try:
         response = supabase.from_('kpi_trabajadores').select('equipo', distinct=True).eq('activo', True).order('equipo', desc=False).execute()
-        if response.
+        # CORRECCIÓN: Verificar si hay datos en la respuesta
+        if response and response.data:
             equipos = [item['equipo'] for item in response.data]
             # Asegurar que "Distribución" esté en la lista
             if "Distribución" not in equipos:
@@ -572,7 +575,8 @@ def cargar_historico_db(fecha_inicio: Optional[str] = None,
         
         response = query.execute()
         
-        if response.
+        # CORRECCIÓN: Verificar si hay datos en la respuesta
+        if response and response.data:
             df = pd.DataFrame(response.data)
             if not df.empty:
                 # Convertir fecha a datetime
@@ -710,7 +714,8 @@ def obtener_tiendas() -> pd.DataFrame:
     
     try:
         response = supabase.from_('guide_stores').select('*').execute()
-        if response.
+        # CORRECCIÓN: Verificar si hay datos en la respuesta
+        if response and response.data:
             return pd.DataFrame(response.data)
         else:
             logger.warning("No se encontraron tiendas en Supabase")
@@ -736,7 +741,8 @@ def obtener_remitentes() -> pd.DataFrame:
     
     try:
         response = supabase.from_('guide_senders').select('*').execute()
-        if response.
+        # CORRECCIÓN: Verificar si hay datos en la respuesta
+        if response and response.data:
             return pd.DataFrame(response.data)
         else:
             logger.warning("No se encontraron remitentes en Supabase")
@@ -761,7 +767,8 @@ def guardar_guia(store_name: str, brand: str, url: str, sender_name: str) -> boo
         user_id = None
         if 'user' in st.session_state:
             user_response = supabase.from_('kpi_users').select('id').eq('email', st.session_state.user).execute()
-            if user_response.
+            # CORRECCIÓN: Verificar si hay datos en la respuesta
+            if user_response and user_response.data:
                 user_id = user_response.data[0]['id']
         
         # Insertar nueva guía
@@ -777,7 +784,8 @@ def guardar_guia(store_name: str, brand: str, url: str, sender_name: str) -> boo
         
         response = supabase.from_('guide_logs').insert(data).execute()
         
-        if response.
+        # CORRECCIÓN: Verificar si la inserción fue exitosa
+        if response and response.data:
             logger.info(f"Guía guardada correctamente para {store_name}")
             return True
         else:
@@ -800,7 +808,8 @@ def obtener_historial_guias() -> pd.DataFrame:
         
         if 'user' in st.session_state and not verificar_permisos('all'):
             user_response = supabase.from_('kpi_users').select('id').eq('email', st.session_state.user).execute()
-            if user_response.
+            # CORRECCIÓN: Verificar si hay datos en la respuesta
+            if user_response and user_response.data:
                 user_id = user_response.data[0]['id']
                 query = query.eq('user_id', user_id)
         
@@ -808,7 +817,8 @@ def obtener_historial_guias() -> pd.DataFrame:
         
         response = query.execute()
         
-        if response.
+        # CORRECCIÓN: Verificar si hay datos en la respuesta
+        if response and response.data:
             df = pd.DataFrame(response.data)
             if not df.empty:
                 # Convertir fecha a datetime
@@ -938,12 +948,12 @@ def autenticar_usuario(email: str, password: str) -> bool:
         # Buscar usuario por email
         response = supabase.from_('kpi_users').select('*').eq('email', email).execute()
         
-        if response.
-            if response.
-                # Verificar contraseña
-                hashed_password = hash_password(password)
-                if response.data[0]['password'] == hashed_password:
-                    return True
+        # CORRECCIÓN: Verificar si hay datos en la respuesta
+        if response and response.data:
+            # Verificar contraseña
+            hashed_password = hash_password(password)
+            if response.data[0]['password'] == hashed_password:
+                return True
         return False
     except Exception as e:
         logger.error(f"Error al autenticar usuario: {e}", exc_info=True)
@@ -959,7 +969,8 @@ def registrar_usuario(email: str, password: str) -> bool:
         # Verificar si el email ya existe
         response = supabase.from_('kpi_users').select('id').eq('email', email).execute()
         
-        if response. and response.
+        # CORRECCIÓN: Verificar si hay datos en la respuesta
+        if response and response.data:
             return False  # El email ya existe
         
         # Insertar nuevo usuario
@@ -973,7 +984,8 @@ def registrar_usuario(email: str, password: str) -> bool:
         
         response = supabase.from_('kpi_users').insert(data).execute()
         
-        if response.:
+        # CORRECCIÓN: Verificar si la inserción fue exitosa
+        if response and response.data:
             return True
         return False
     except Exception as e:
@@ -1262,7 +1274,7 @@ def crear_reporte_pdf(df: pd.DataFrame, fecha_inicio: str, fecha_fin: str) -> by
                 )
                 # Convertir gráfico a base64
                 img_data = plot_to_base64(fig)
-                if img_
+                if img_data:
                     # Guardar imagen temporalmente
                     with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmpfile:
                         tmpfile.write(base64.b64decode(img_data))
@@ -1293,7 +1305,7 @@ def crear_reporte_pdf(df: pd.DataFrame, fecha_inicio: str, fecha_fin: str) -> by
                 fig.update_layout(width=800, height=600)
                 # Convertir gráfico a base64
                 img_data = plot_to_base64(fig)
-                if img_
+                if img_data:
                     # Guardar imagen temporalmente
                     with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmpfile:
                         tmpfile.write(base64.b64decode(img_data))
@@ -1336,7 +1348,7 @@ def crear_reporte_pdf(df: pd.DataFrame, fecha_inicio: str, fecha_fin: str) -> by
                 )
                 # Convertir gráfico a base64
                 img_data = plot_to_base64(fig)
-                if img_
+                if img_data:
                     # Guardar imagen temporalmente
                     with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmpfile:
                         tmpfile.write(base64.b64decode(img_data))
@@ -2026,7 +2038,11 @@ def mostrar_gestion_trabajadores_kpis():
     try:
         # Obtener lista actual de trabajadores
         response = supabase.from_('kpi_trabajadores').select('*').order('equipo,nombre', desc=False).execute()
-        trabajadores = response.data if response.data else []
+        # CORRECCIÓN: Verificar si hay datos en la respuesta
+        if response and response.data:
+            trabajadores = response.data
+        else:
+            trabajadores = []
         
         # Asegurar que Luis Perugachi esté en el equipo de Distribución
         if any(trab['nombre'] == 'Luis Perugachi' for trab in trabajadores):
@@ -2055,7 +2071,8 @@ def mostrar_gestion_trabajadores_kpis():
                     try:
                         # Verificar si el trabajador ya existe
                         response = supabase.from_('kpi_trabajadores').select('*').eq('nombre', nuevo_nombre).execute()
-                        if response.
+                        # CORRECCIÓN: Verificar si hay datos en la respuesta
+                        if response and response.data:
                             st.markdown("<div class='error-box'>❌ El trabajador ya existe.</div>", unsafe_allow_html=True)
                         else:
                             # Insertar nuevo trabajador
@@ -2368,15 +2385,15 @@ def mostrar_gestion_tiendas():
                 try:
                     # Verificar si la tienda ya existe
                     response = supabase.from_('guide_stores').select('*').eq('name', nombre_tienda).execute()
-                    if response.
-                        if response.
-                            st.markdown("<div class='error-box'>❌ La tienda ya existe.</div>", unsafe_allow_html=True)
-                        else:
-                            # Insertar nueva tienda
-                            supabase.from_('guide_stores').insert({'name': nombre_tienda}).execute()
-                            st.markdown("<div class='success-box'>✅ Tienda agregada correctamente.</div>", unsafe_allow_html=True)
-                            time.sleep(1)
-                            st.rerun()
+                    # CORRECCIÓN: Verificar si hay datos en la respuesta
+                    if response and response.data:
+                        st.markdown("<div class='error-box'>❌ La tienda ya existe.</div>", unsafe_allow_html=True)
+                    else:
+                        # Insertar nueva tienda
+                        supabase.from_('guide_stores').insert({'name': nombre_tienda}).execute()
+                        st.markdown("<div class='success-box'>✅ Tienda agregada correctamente.</div>", unsafe_allow_html=True)
+                        time.sleep(1)
+                        st.rerun()
                 except Exception as e:
                     logger.error(f"Error al agregar tienda: {e}", exc_info=True)
                     st.markdown("<div class='error-box'>❌ Error al agregar tienda.</div>", unsafe_allow_html=True)
@@ -2420,19 +2437,19 @@ def mostrar_gestion_remitentes():
                 try:
                     # Verificar si el remitente ya existe
                     response = supabase.from_('guide_senders').select('*').eq('name', nombre).execute()
-                    if response.
-                        if response.
-                            st.markdown("<div class='error-box'>❌ El remitente ya existe.</div>", unsafe_allow_html=True)
-                        else:
-                            # Insertar nuevo remitente
-                            supabase.from_('guide_senders').insert({
-                                'name': nombre,
-                                'address': direccion,
-                                'phone': telefono
-                            }).execute()
-                            st.markdown("<div class='success-box'>✅ Remitente agregado correctamente.</div>", unsafe_allow_html=True)
-                            time.sleep(1)
-                            st.rerun()
+                    # CORRECCIÓN: Verificar si hay datos en la respuesta
+                    if response and response.data:
+                        st.markdown("<div class='error-box'>❌ El remitente ya existe.</div>", unsafe_allow_html=True)
+                    else:
+                        # Insertar nuevo remitente
+                        supabase.from_('guide_senders').insert({
+                            'name': nombre,
+                            'address': direccion,
+                            'phone': telefono
+                        }).execute()
+                        st.markdown("<div class='success-box'>✅ Remitente agregado correctamente.</div>", unsafe_allow_html=True)
+                        time.sleep(1)
+                        st.rerun()
                 except Exception as e:
                     logger.error(f"Error al agregar remitente: {e}", exc_info=True)
                     st.markdown("<div class='error-box'>❌ Error al agregar remitente.</div>", unsafe_allow_html=True)
@@ -2487,7 +2504,8 @@ def main():
         if supabase:
             try:
                 response = supabase.from_('kpi_users').select('role').eq('email', st.session_state.user).execute()
-                if response.
+                # CORRECCIÓN: Verificar si hay datos en la respuesta
+                if response and response.data:
                     role = response.data[0]['role'] if response.data else "usuario"
                     st.sidebar.markdown(f"**Rol:** {role.capitalize()}")
             except:
@@ -2502,10 +2520,10 @@ def main():
     # Opciones del menú según los permisos
     menu_options = ["Dashboard KPIs", "Análisis Histórico", "Ingreso de Datos", "Gestión de Trabajadores"]
     
-    if verificar_permisos('create_guides') or verificar_permisos('all'):
+    if supabase and verificar_permisos('create_guides') or verificar_permisos('all'):
         menu_options.extend(["Generar Guías", "Historial de Guías"])
     
-    if verificar_permisos('all'):
+    if supabase and verificar_permisos('all'):
         menu_options.extend(["Gestión de Tiendas", "Gestión de Remitentes"])
     
     menu_options.append("Ayuda y Contacto")
