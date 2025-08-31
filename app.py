@@ -16,6 +16,8 @@ from fpdf import FPDF
 import base64
 import io
 import tempfile
+# Importación CORREGIDA de Any y otros tipos
+from typing import Dict, List, Optional, Tuple, Any, Union
 
 # Configuración de logging
 logging.basicConfig(
@@ -60,7 +62,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# CSS profesional mejorado
+# CSS profesional mejorado - CORREGIDO
 st.markdown("""
 <style>
     /* Colores corporativos de Aeropostale */
@@ -413,6 +415,31 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+# ================================
+# Funciones de utilidad compartidas
+# ================================
+
+def validar_fecha(fecha: str) -> bool:
+    """Valida que una fecha tenga el formato correcto"""
+    try:
+        datetime.strptime(fecha, "%Y-%m-%d")
+        return True
+    except ValueError:
+        return False
+
+def validar_numero_positivo(valor: Any) -> bool:
+    """Valida que un valor sea un número positivo"""
+    try:
+        num = float(valor)
+        return num >= 0
+    except (ValueError, TypeError):
+        return False
+
+def hash_password(pw: str) -> str:
+    """Genera un hash SHA256 para una contraseña."""
+    return hashlib.sha256(pw.encode()).hexdigest()
+
+# ... resto del código ...
 # ================================
 # Funciones de utilidad compartidas
 # ================================
