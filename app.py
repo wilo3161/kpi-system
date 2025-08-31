@@ -946,7 +946,7 @@ def solicitar_autenticacion():
     st.markdown("""
     <div class="password-container animate-fade-in">
         <div class="logo-container">
-            <div class="aeropostale-logo">AEROPORTALE</div>
+            <div class="aeropostale-logo">AEROPOSTALE</div>
             <div class="aeropostale-subtitle">Sistema de Gestión de KPIs</div>
         </div>
         <h2 class="password-title">🔐 Acceso Restringido</h2>
@@ -2113,7 +2113,7 @@ def main():
     # Mostrar logo y título en el sidebar
     st.sidebar.markdown("""
     <div class='sidebar-title'>
-        <div class='aeropostale-logo'>AEROPORTALE</div>
+        <div class='aeropostale-logo'>AEROPOSTALE</div>
         <div class='aeropostale-subtitle'>Sistema de Gestión de KPIs</div>
     </div>
     """, unsafe_allow_html=True)
@@ -2158,7 +2158,7 @@ def main():
     # Footer
     st.markdown("""
     <div class="footer">
-        Sistema de KPIs Aeropostale v2.0 | © 2023 Aeropostale. Todos los derechos reservados.<br>
+        Sistema de KPIs Aeropostale v2.0 | © 2025 Aeropostale. Todos los derechos reservados.<br>
         Desarrollado por: <a href="mailto:wilson.perez@aeropostale.com">Wilson Pérez</a>
     </div>
     """, unsafe_allow_html=True)
