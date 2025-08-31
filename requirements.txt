@@ -10,3 +10,4 @@ reportlab
 psycopg2-binary
 python-dotenv
 supabase
+xlsxwriter
