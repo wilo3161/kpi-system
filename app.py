@@ -73,7 +73,7 @@ st.set_page_config(
 # CSS personalizado mejorado
 st.markdown("""
 <style>
-    .main { background-color: black; }
+    .main { background-color: dimgray; }
     .stApp { background-color: black; }
     .kpi-card {
         background: darkturquoise;
