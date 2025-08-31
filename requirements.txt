@@ -12,3 +12,5 @@ python-dotenv
 supabase
 xlsxwriter
 kaleido
+openpyxl
+python-dotenv
