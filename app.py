@@ -76,7 +76,7 @@ st.markdown("""
     .main { background-color: black; }
     .stApp { background-color: black; }
     .kpi-card {
-        background: aqua;
+        background: darkturquoise;
         border-radius: 12px;
         box-shadow: 0 4px 12px rgba(0,0,0,0.08);
         padding: 18px;
