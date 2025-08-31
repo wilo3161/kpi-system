@@ -8,7 +8,6 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from datetime import datetime, timedelta, date
 import time
-import sqlite3
 import json
 import os
 import hashlib
@@ -31,13 +30,37 @@ from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, 
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib import colors
 from reportlab.lib.units import inch
-import tempfile
 import base64
-warnings.filterwarnings('ignore')
+import tempfile
+from supabase import create_client, Client
 
+warnings.filterwarnings('ignore')
 # Configuración de logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+# Configuración de Supabase
+SUPABASE_URL = os.environ.get("SUPABASE_URL")
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
+
+# Inicializar cliente de Supabase
+@st.cache_resource
+def init_supabase() -> Client:
+    """Inicializa y cachea el cliente de Supabase."""
+    if SUPABASE_URL and SUPABASE_KEY:
+        try:
+            return create_client(SUPABASE_URL, SUPABASE_KEY)
+        except Exception as e:
+            logger.error(f"Error al inicializar Supabase: {e}")
+            st.error("Error al conectar con la base de datos. Verifique las variables de entorno.")
+            return None
+    else:
+        logger.error("Faltan las variables de entorno SUPABASE_URL o SUPABASE_KEY")
+        st.error("Faltan las variables de entorno SUPABASE_URL o SUPABASE_KEY")
+        return None
+
+# Inicializar cliente de Supabase
+supabase = init_supabase()
 
 # Configuración de página
 st.set_page_config(
@@ -257,133 +280,6 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Clase Singleton para manejo de base de datos
-class DatabaseManager:
-    _instance = None
-    
-    def __new__(cls):
-        if cls._instance is None:
-            cls._instance = super(DatabaseManager, cls).__new__(cls)
-            cls._instance._initialize()
-        return cls._instance
-    
-    def _initialize(self):
-        self.conn = None
-        self.setup_database()
-    
-    @contextmanager
-    def get_connection(self):
-        """Context manager para manejar conexiones a la base de datos"""
-        try:
-            if self.conn is None:
-                self.conn = sqlite3.connect('kpi_data.db', check_same_thread=False)
-                self.conn.row_factory = sqlite3.Row
-            yield self.conn
-        except sqlite3.Error as e:
-            logger.error(f"Error de base de datos: {e}")
-            raise
-        finally:
-            # No cerramos la conexión para mantenerla en el estado de la sesión
-            pass
-    
-    def setup_database(self):
-        """Configura la base de datos SQLite"""
-        try:
-            with self.get_connection() as conn:
-                c = conn.cursor()
-                
-                # Crear tabla de datos diarios
-                c.execute('''
-                CREATE TABLE IF NOT EXISTS daily_kpis (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    fecha TEXT NOT NULL,
-                    nombre TEXT NOT NULL,
-                    actividad TEXT NOT NULL,
-                    cantidad REAL NOT NULL,
-                    meta REAL NOT NULL,
-                    eficiencia REAL NOT NULL,
-                    productividad REAL NOT NULL,
-                    comentario TEXT,
-                    meta_mensual REAL,
-                    horas_trabajo REAL,
-                    equipo TEXT,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    UNIQUE(fecha, nombre)
-                )
-                ''')
-                
-                # Verificar si la columna 'equipo' existe y agregarla si no existe
-                try:
-                    c.execute("SELECT equipo FROM daily_kpis LIMIT 1")
-                except sqlite3.OperationalError:
-                    c.execute('ALTER TABLE daily_kpis ADD COLUMN equipo TEXT')
-                
-                # Crear tabla de configuración
-                c.execute('''
-                CREATE TABLE IF NOT EXISTS config (
-                    key TEXT PRIMARY KEY,
-                    value TEXT
-                )
-                ''')
-                
-                # Crear tabla de usuarios
-                c.execute('''
-                CREATE TABLE IF NOT EXISTS users (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    username TEXT UNIQUE NOT NULL,
-                    password_hash TEXT NOT NULL,
-                    role TEXT DEFAULT 'user',
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-                ''')
-                
-                # Crear tabla de trabajadores
-                c.execute('''
-                CREATE TABLE IF NOT EXISTS trabajadores (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    nombre TEXT UNIQUE NOT NULL,
-                    equipo TEXT NOT NULL,
-                    activo BOOLEAN DEFAULT 1,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-                ''')
-                
-                # Insertar usuario admin por defecto si no existe
-                password_hash = hashlib.sha256("Wilo3161".encode()).hexdigest()
-                c.execute('''
-                INSERT OR IGNORE INTO users (username, password_hash, role)
-                VALUES (?, ?, ?)
-                ''', ('admin', password_hash, 'admin'))
-                
-                # Insertar trabajadores por defecto si no existen
-                trabajadores_default = [
-                    ("Andrés Yépez", "Transferencias"),
-                    ("Josué Imbacuán", "Transferencias"),
-                    ("Luis Perugachi", "Transferencias"),
-                    ("Diana García", "Arreglo"),
-                    ("Simón Vera", "Guías"),
-                    ("Jhonny Guadalupe", "Ventas"),
-                    ("Victor Montenegro", "Ventas"),
-                    ("Fernando Quishpe", "Ventas")
-                ]
-                
-                for nombre, equipo in trabajadores_default:
-                    c.execute('''
-                    INSERT OR IGNORE INTO trabajadores (nombre, equipo)
-                    VALUES (?, ?)
-                    ''', (nombre, equipo))
-                
-                conn.commit()
-                logger.info("Base de datos configurada correctamente")
-                
-        except sqlite3.Error as e:
-            logger.error(f"Error al configurar la base de datos: {e}")
-            raise
-
-# Inicializar el gestor de base de datos
-if 'db_manager' not in st.session_state:
-    st.session_state.db_manager = DatabaseManager()
-
 # Funciones de utilidad
 def validar_fecha(fecha: str) -> bool:
     """Valida que una fecha tenga el formato correcto"""
@@ -426,15 +322,29 @@ def productividad_hora(cantidad: float, horas_trabajo: float) -> float:
     """Calcula la productividad por hora"""
     return cantidad / horas_trabajo if horas_trabajo > 0 else 0
 
-# Funciones de acceso a datos
+# Funciones de acceso a datos (ahora usando Supabase)
 def obtener_trabajadores() -> pd.DataFrame:
-    """Obtiene la lista de trabajadores desde la base de datos"""
+    """Obtiene la lista de trabajadores desde Supabase"""
+    if supabase is None:
+        logger.error("Cliente de Supabase no inicializado")
+        # Si hay error, devolver lista por defecto
+        return pd.DataFrame({
+            'nombre': ["Andrés Yépez", "Josué Imbacuán", "Luis Perugachi", "Diana García", 
+                      "Simón Vera", "Jhonny Guadalupe", "Victor Montenegro", "Fernando Quishpe"],
+            'equipo': ["Transferencias", "Transferencias", "Transferencias", "Arreglo", 
+                      "Guías", "Ventas", "Ventas", "Ventas"]
+        })
+    
     try:
-        with st.session_state.db_manager.get_connection() as conn:
-            df = pd.read_sql_query('SELECT nombre, equipo FROM trabajadores WHERE activo = 1 ORDER BY equipo, nombre', conn)
+        response = supabase.from_('trabajadores').select('nombre, equipo').eq('activo', True).order('equipo,nombre', desc=False).execute()
+        if response.data:
+            df = pd.DataFrame(response.data)
             return df
+        else:
+            logger.warning("No se encontraron trabajadores en Supabase")
+            return pd.DataFrame(columns=['nombre', 'equipo'])
     except Exception as e:
-        logger.error(f"Error al obtener trabajadores: {e}")
+        logger.error(f"Error al obtener trabajadores de Supabase: {e}")
         # Si hay error, devolver lista por defecto
         return pd.DataFrame({
             'nombre': ["Andrés Yépez", "Josué Imbacuán", "Luis Perugachi", "Diana García", 
@@ -444,224 +354,132 @@ def obtener_trabajadores() -> pd.DataFrame:
         })
 
 def obtener_equipos() -> List[str]:
-    """Obtiene la lista de equipos desde la base de datos"""
+    """Obtiene la lista de equipos desde Supabase"""
+    if supabase is None:
+        logger.error("Cliente de Supabase no inicializado")
+        return ["Transferencias", "Arreglo", "Distribución", "Guías", "Ventas"]
+    
     try:
-        with st.session_state.db_manager.get_connection() as conn:
-            df = pd.read_sql_query('SELECT DISTINCT equipo FROM trabajadores WHERE activo = 1 ORDER BY equipo', conn)
-            return df['equipo'].tolist()
+        response = supabase.from_('trabajadores').select('equipo', distinct=True).eq('activo', True).order('equipo', desc=False).execute()
+        if response.data:
+            return [item['equipo'] for item in response.data]
+        else:
+            logger.warning("No se encontraron equipos en Supabase")
+            return []
     except Exception as e:
-        logger.error(f"Error al obtener equipos: {e}")
+        logger.error(f"Error al obtener equipos de Supabase: {e}")
         return ["Transferencias", "Arreglo", "Distribución", "Guías", "Ventas"]
 
 def guardar_datos_db(fecha: str, datos: Dict[str, Dict]) -> bool:
-    """Guarda los datos en la base de datos SQLite"""
+    """Guarda los datos en la tabla de Supabase"""
+    if supabase is None:
+        logger.error("Cliente de Supabase no inicializado")
+        return False
+    
     try:
-        with st.session_state.db_manager.get_connection() as conn:
-            c = conn.cursor()
-            
-            for nombre, info in datos.items():
-                # Validar datos antes de guardar
-                if not all([
-                    validar_fecha(fecha),
-                    validar_numero_positivo(info.get("cantidad", 0)),
-                    validar_numero_positivo(info.get("meta", 0)),
-                    validar_numero_positivo(info.get("horas_trabajo", 0))
-                ]):
-                    logger.warning(f"Datos inválidos para {nombre}, omitiendo guardado")
-                    continue
+        registros = []
+        for nombre, info in datos.items():
+            # Validar datos antes de guardar
+            if not all([
+                validar_fecha(fecha),
+                validar_numero_positivo(info.get("cantidad", 0)),
+                validar_numero_positivo(info.get("meta", 0)),
+                validar_numero_positivo(info.get("horas_trabajo", 0))
+            ]):
+                logger.warning(f"Datos inválidos para {nombre}, omitiendo guardado")
+                continue
                 
-                # Verificar si ya existe un registro para esta fecha y trabajador
-                c.execute('SELECT id FROM daily_kpis WHERE fecha = ? AND nombre = ?', (fecha, nombre))
-                existing = c.fetchone()
-                
-                if existing:
-                    # Actualizar registro existente
-                    c.execute('''
-                    UPDATE daily_kpis 
-                    SET actividad=?, cantidad=?, meta=?, eficiencia=?, 
-                        productividad=?, comentario=?, meta_mensual=?, horas_trabajo=?, equipo=?
-                    WHERE fecha=? AND nombre=?
-                    ''', (
-                        info.get("actividad", ""),
-                        info.get("cantidad", 0),
-                        info.get("meta", 0),
-                        info.get("eficiencia", 0),
-                        info.get("productividad", 0),
-                        info.get("comentario", ""),
-                        info.get("meta_mensual", 0),
-                        info.get("horas_trabajo", 0),
-                        info.get("equipo", ""),
-                        fecha,
-                        nombre
-                    ))
-                else:
-                    # Insertar nuevo registro
-                    c.execute('''
-                    INSERT INTO daily_kpis 
-                    (fecha, nombre, actividad, cantidad, meta, eficiencia, productividad, comentario, meta_mensual, horas_trabajo, equipo)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ''', (
-                        fecha,
-                        nombre,
-                        info.get("actividad", ""),
-                        info.get("cantidad", 0),
-                        info.get("meta", 0),
-                        info.get("eficiencia", 0),
-                        info.get("productividad", 0),
-                        info.get("comentario", ""),
-                        info.get("meta_mensual", 0),
-                        info.get("horas_trabajo", 0),
-                        info.get("equipo", "")
-                    ))
-            
-            conn.commit()
-            
-            # Crear backup después de guardar
-            crear_backup()
+            registro = {
+                "fecha": fecha,
+                "nombre": nombre,
+                "actividad": info.get("actividad", ""),
+                "cantidad": float(info.get("cantidad", 0)),
+                "meta": float(info.get("meta", 0)),
+                "eficiencia": float(info.get("eficiencia", 0)),
+                "productividad": float(info.get("productividad", 0)),
+                "comentario": info.get("comentario", ""),
+                "meta_mensual": float(info.get("meta_mensual", 0)),
+                "horas_trabajo": float(info.get("horas_trabajo", 0)),
+                "equipo": info.get("equipo", "")
+            }
+            registros.append(registro)
+        
+        if registros:
+            # Usar upsert para insertar o actualizar
+            response = supabase.from_('daily_kpis').upsert(registros, on_conflict="fecha,nombre").execute()
             
             # Limpiar caché de datos históricos
             if 'historico_data' in st.session_state:
                 del st.session_state['historico_data']
                 
-            logger.info(f"Datos guardados correctamente para la fecha {fecha}")
+            logger.info(f"Datos guardados correctamente en Supabase para la fecha {fecha}")
             return True
-            
+        else:
+            logger.warning("No hay registros válidos para guardar")
+            return False
     except Exception as e:
-        logger.error(f"Error al guardar datos: {e}")
+        logger.error(f"Error al guardar datos en Supabase: {e}")
         return False
 
 def cargar_historico_db(fecha_inicio: Optional[str] = None, 
                        fecha_fin: Optional[str] = None, 
                        trabajador: Optional[str] = None) -> pd.DataFrame:
-    """Carga datos históricos desde la base de datos"""
+    """Carga datos históricos desde Supabase"""
+    if supabase is None:
+        logger.error("Cliente de Supabase no inicializado")
+        return pd.DataFrame()
+    
     try:
-        with st.session_state.db_manager.get_connection() as conn:
-            query = '''
-            SELECT fecha, nombre, actividad, cantidad, meta, eficiencia, productividad, 
-                   comentario, meta_mensual, horas_trabajo, equipo
-            FROM daily_kpis
-            WHERE 1=1
-            '''
-            params = []
+        query = supabase.from_('daily_kpis').select('*')
+        
+        if fecha_inicio:
+            query = query.gte('fecha', fecha_inicio)
+        if fecha_fin:
+            query = query.lte('fecha', fecha_fin)
+        if trabajador:
+            query = query.eq('nombre', trabajador)
             
-            if fecha_inicio:
-                query += ' AND fecha >= ?'
-                params.append(fecha_inicio)
-            
-            if fecha_fin:
-                query += ' AND fecha <= ?'
-                params.append(fecha_fin)
-            
-            if trabajador:
-                query += ' AND nombre = ?'
-                params.append(trabajador)
-            
-            query += ' ORDER BY fecha DESC, nombre'
-            
-            df = pd.read_sql_query(query, conn, params=params)
-            
+        query = query.order('fecha', desc=True)
+        
+        response = query.execute()
+        
+        if response.data:
+            df = pd.DataFrame(response.data)
             if not df.empty:
                 # Convertir fecha a datetime
                 df['fecha'] = pd.to_datetime(df['fecha'])
-                
                 # Calcular columnas adicionales
                 df['cumplimiento_meta'] = np.where(df['cantidad'] >= df['meta'], 'Sí', 'No')
                 df['diferencia_meta'] = df['cantidad'] - df['meta']
-                
             return df
-            
+        else:
+            logger.info("No se encontraron datos históricos en Supabase")
+            return pd.DataFrame()
     except Exception as e:
-        logger.error(f"Error al cargar datos históricos: {e}")
+        logger.error(f"Error al cargar datos históricos de Supabase: {e}")
         return pd.DataFrame()
-
-def crear_backup() -> bool:
-    """Crea una copia de seguridad de la base de datos"""
-    try:
-        # Crear directorio de backups si no existe
-        Path("backups").mkdir(exist_ok=True)
-        
-        # Nombre del archivo de backup con fecha y hora
-        backup_name = f"backups/kpi_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db"
-        
-        # Copiar la base de datos
-        with open('kpi_data.db', 'rb') as original:
-            with open(backup_name, 'wb') as backup:
-                backup.write(original.read())
-                
-        # Mantener solo los últimos 7 backups
-        backups = sorted(Path("backups").glob("kpi_backup_*.db"), key=os.path.getmtime)
-        for old_backup in backups[:-7]:
-            try:
-                old_backup.unlink()
-            except Exception as e:
-                logger.warning(f"No se pudo eliminar el backup antiguo {old_backup}: {e}")
-                
-        logger.info(f"Backup creado: {backup_name}")
-        return True
-        
-    except Exception as e:
-        logger.error(f"Error al crear backup: {e}")
-        return False
-
-def restaurar_backup(backup_path: str) -> bool:
-    """Restaura la base de datos desde un backup"""
-    try:
-        # Cerrar conexión actual si existe
-        if hasattr(st.session_state.db_manager, 'conn') and st.session_state.db_manager.conn:
-            st.session_state.db_manager.conn.close()
-            st.session_state.db_manager.conn = None
-        
-        # Copiar el backup sobre la base de datos actual
-        with open(backup_path, 'rb') as backup:
-            with open('kpi_data.db', 'wb') as original:
-                original.write(backup.read())
-        
-        # Reestablecer conexión
-        st.session_state.db_manager = DatabaseManager()
-        
-        # Limpiar datos en caché
-        if 'historico_data' in st.session_state:
-            del st.session_state['historico_data']
-            
-        logger.info(f"Backup restaurado desde: {backup_path}")
-        return True
-        
-    except Exception as e:
-        logger.error(f"Error al restaurar backup: {e}")
-        return False
 
 # Funciones de autenticación
 def verificar_password() -> bool:
     """Verifica la contraseña del usuario"""
     if 'password_correct' not in st.session_state:
         st.session_state.password_correct = False
-    
     if not st.session_state.password_correct:
         st.markdown("<div class='password-container'>", unsafe_allow_html=True)
         st.markdown("<h2 style='text-align: center; color: black;'>🔐 Acceso Restringido</h2>", unsafe_allow_html=True)
         password = st.text_input("Ingrese la contraseña:", type="password", key="password_input")
-        
         if password:
-            # Verificar contraseña usando hash
-            password_hash = hashlib.sha256(password.encode()).hexdigest()
-            try:
-                with st.session_state.db_manager.get_connection() as conn:
-                    c = conn.cursor()
-                    c.execute('SELECT username, role FROM users WHERE password_hash = ?', (password_hash,))
-                    user = c.fetchone()
-                    
-                    if user:
-                        st.session_state.password_correct = True
-                        st.session_state.user = user[0]
-                        st.session_state.role = user[1]
-                        st.markdown("<div class='success-box'>✅ Contraseña correcta</div>", unsafe_allow_html=True)
-                        time.sleep(1)
-                        st.rerun()
-                    else:
-                        st.markdown("<div class='error-box'>❌ Contraseña incorrecta</div>", unsafe_allow_html=True)
-            except Exception as e:
-                logger.error(f"Error en verificación de contraseña: {e}")
-                st.markdown("<div class='error-box'>❌ Error del sistema</div>", unsafe_allow_html=True)
+            # Verificar contraseña usando una variable de entorno
+            admin_password = os.environ.get("ADMIN_PASSWORD", "Wilo3161")
+            if password == admin_password:
+                st.session_state.password_correct = True
+                st.session_state.user = "admin"
+                st.session_state.role = "admin"
+                st.markdown("<div class='success-box'>✅ Contraseña correcta</div>", unsafe_allow_html=True)
+                time.sleep(1)
+                st.rerun()
+            else:
+                st.markdown("<div class='error-box'>❌ Contraseña incorrecta</div>", unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
         return False
     return True
@@ -681,14 +499,12 @@ def crear_grafico_interactivo(data: pd.DataFrame, x: str, y: str, title: str,
             fig = px.box(data, x=x, y=y, title=title, labels={x: xlabel, y: ylabel})
         else:
             fig = px.bar(data, x=x, y=y, title=title, labels={x: xlabel, y: ylabel})
-        
         fig.update_layout(
             plot_bgcolor='rgba(0,0,0,0)',
             paper_bgcolor='rgba(0,0,0,0)',
             font=dict(color="#2c3e50"),
             title_font_color="#2c3e50"
         )
-        
         return fig
     except Exception as e:
         logger.error(f"Error al crear gráfico: {e}")
@@ -719,12 +535,10 @@ def crear_grafico_frasco(porcentaje: float, titulo: str) -> go.Figure:
                 }
             }
         ))
-        
         fig.update_layout(
             height=300,
             margin=dict(l=20, r=20, t=50, b=20)
         )
-        
         return fig
     except Exception as e:
         logger.error(f"Error al crear gráfico de frasco: {e}")
@@ -735,17 +549,14 @@ def analizar_tendencias(df: pd.DataFrame, metric: str) -> Union[Dict[str, Any], 
     """Analiza tendencias en los datos"""
     if df.empty or len(df) < 2:
         return "No hay suficientes datos para analizar tendencias"
-    
     try:
         # Calcular media móvil
         df['media_movil'] = df[metric].rolling(window=7, min_periods=1).mean()
-        
         # Calcular tendencia (regresión lineal simple)
         x = np.arange(len(df))
         y = df[metric].values
         coeficientes = np.polyfit(x, y, 1)
         tendencia = coeficientes[0] * x + coeficientes[1]
-        
         # Determinar dirección de la tendencia
         if coeficientes[0] > 0.5:  # Umbral más alto para evitar fluctuaciones pequeñas
             direccion = "↑ Ascendente significativa"
@@ -757,7 +568,6 @@ def analizar_tendencias(df: pd.DataFrame, metric: str) -> Union[Dict[str, Any], 
             direccion = "↓ Ligeramente descendente"
         else:
             direccion = "→ Estable"
-        
         return {
             'tendencia': tendencia,
             'direccion': direccion,
@@ -772,40 +582,31 @@ def predecir_valores_futuros(df: pd.DataFrame, columna: str, dias: int = 7) -> O
     """Predice valores futuros usando regresión con validación"""
     if len(df) < 5:  # Mínimo de datos para predicción
         return None
-    
     try:
         # Preparar datos
         X = np.arange(len(df)).reshape(-1, 1)
         y = df[columna].values
-        
         # Dividir en train y test para validación
         X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-        
         # Probar múltiples modelos
         modelos = {
             'Lineal': LinearRegression(),
             'Ridge': Ridge(alpha=1.0),
             'RandomForest': RandomForestRegressor(n_estimators=100, random_state=42)
         }
-        
         mejor_modelo = None
         mejor_mae = float('inf')
-        
         for nombre, modelo in modelos.items():
             modelo.fit(X_train, y_train)
             predicciones = modelo.predict(X_test)
             mae = mean_absolute_error(y_test, predicciones)
-            
             if mae < mejor_mae:
                 mejor_mae = mae
                 mejor_modelo = modelo
-        
         # Predecir valores futuros con el mejor modelo
         X_futuro = np.arange(len(df), len(df) + dias).reshape(-1, 1)
         predicciones = mejor_modelo.predict(X_futuro)
-        
         return predicciones
-        
     except Exception as e:
         logger.error(f"Error en predicción: {e}")
         return None
@@ -814,12 +615,10 @@ def calcular_estadisticas_avanzadas(df: pd.DataFrame, columna: str) -> Dict[str,
     """Calcula estadísticas avanzadas para una columna"""
     if df.empty:
         return {}
-    
     try:
         valores = df[columna].dropna()
         if len(valores) == 0:
             return {}
-        
         return {
             'media': np.mean(valores),
             'mediana': np.median(valores),
@@ -842,74 +641,73 @@ def mostrar_gestion_trabajadores():
     """Muestra la interfaz de gestión de trabajadores"""
     st.markdown("<h1 class='header-title'>👥 Gestión de Trabajadores</h1>", unsafe_allow_html=True)
     
+    if supabase is None:
+        st.markdown("<div class='error-box'>❌ Error de conexión a la base de datos. Verifique las variables de entorno.</div>", unsafe_allow_html=True)
+        return
+    
     try:
-        with st.session_state.db_manager.get_connection() as conn:
-            c = conn.cursor()
-            
-            # Obtener lista actual de trabajadores
-            c.execute('SELECT nombre, equipo, activo FROM trabajadores ORDER BY equipo, nombre')
-            trabajadores = c.fetchall()
-            
-            st.markdown("<h2 class='section-title'>Trabajadores Actuales</h2>", unsafe_allow_html=True)
-            
-            if trabajadores:
-                df_trabajadores = pd.DataFrame(trabajadores, columns=['Nombre', 'Equipo', 'Activo'])
-                st.dataframe(df_trabajadores, use_container_width=True)
-            else:
-                st.info("No hay trabajadores registrados.")
-            
-            st.markdown("<h2 class='section-title'>Agregar Nuevo Trabajador</h2>", unsafe_allow_html=True)
-            
-            with st.form("form_nuevo_trabajador"):
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    nuevo_nombre = st.text_input("Nombre del trabajador:")
-                
-                with col2:
-                    equipos = obtener_equipos()
-                    nuevo_equipo = st.selectbox("Equipo:", options=equipos)
-                
-                submitted = st.form_submit_button("Agregar Trabajador")
-                
-                if submitted:
-                    if nuevo_nombre:
-                        try:
-                            c.execute('INSERT INTO trabajadores (nombre, equipo) VALUES (?, ?)', 
-                                     (nuevo_nombre, nuevo_equipo))
-                            conn.commit()
-                            st.markdown("<div class='success-box'>✅ Trabajador agregado correctamente.</div>", unsafe_allow_html=True)
-                            st.rerun()
-                        except sqlite3.IntegrityError:
+        # Obtener lista actual de trabajadores
+        response = supabase.from_('trabajadores').select('*').order('equipo,nombre', desc=False).execute()
+        trabajadores = response.data if response.data else []
+        
+        st.markdown("<h2 class='section-title'>Trabajadores Actuales</h2>", unsafe_allow_html=True)
+        if trabajadores:
+            df_trabajadores = pd.DataFrame(trabajadores)
+            st.dataframe(df_trabajadores[['nombre', 'equipo', 'activo']], use_container_width=True)
+        else:
+            st.info("No hay trabajadores registrados.")
+        
+        st.markdown("<h2 class='section-title'>Agregar Nuevo Trabajador</h2>", unsafe_allow_html=True)
+        with st.form("form_nuevo_trabajador"):
+            col1, col2 = st.columns(2)
+            with col1:
+                nuevo_nombre = st.text_input("Nombre del trabajador:")
+            with col2:
+                equipos = obtener_equipos()
+                nuevo_equipo = st.selectbox("Equipo:", options=equipos)
+            submitted = st.form_submit_button("Agregar Trabajador")
+            if submitted:
+                if nuevo_nombre:
+                    try:
+                        # Verificar si el trabajador ya existe
+                        response = supabase.from_('trabajadores').select('*').eq('nombre', nuevo_nombre).execute()
+                        if response.data:
                             st.markdown("<div class='error-box'>❌ El trabajador ya existe.</div>", unsafe_allow_html=True)
-                        except Exception as e:
-                            logger.error(f"Error al agregar trabajador: {e}")
-                            st.markdown("<div class='error-box'>❌ Error al agregar trabajador.</div>", unsafe_allow_html=True)
-                    else:
-                        st.markdown("<div class='error-box'>❌ Debe ingresar un nombre.</div>", unsafe_allow_html=True)
-            
-            st.markdown("<h2 class='section-title'>Eliminar Trabajador</h2>", unsafe_allow_html=True)
-            
-            if trabajadores:
-                trabajadores_activos = [t[0] for t in trabajadores if t[2]]
-                
-                if trabajadores_activos:
-                    trabajador_eliminar = st.selectbox("Selecciona un trabajador para eliminar:", options=trabajadores_activos)
-                    
-                    if st.button("Eliminar Trabajador"):
-                        try:
-                            c.execute('UPDATE trabajadores SET activo = 0 WHERE nombre = ?', (trabajador_eliminar,))
-                            conn.commit()
-                            st.markdown("<div class='success-box'>✅ Trabajador eliminado correctamente.</div>", unsafe_allow_html=True)
+                        else:
+                            # Insertar nuevo trabajador
+                            supabase.from_('trabajadores').insert({
+                                'nombre': nuevo_nombre, 
+                                'equipo': nuevo_equipo,
+                                'activo': True
+                            }).execute()
+                            st.markdown("<div class='success-box'>✅ Trabajador agregado correctamente.</div>", unsafe_allow_html=True)
+                            time.sleep(1)
                             st.rerun()
-                        except Exception as e:
-                            logger.error(f"Error al eliminar trabajador: {e}")
-                            st.markdown("<div class='error-box'>❌ Error al eliminar trabajador.</div>", unsafe_allow_html=True)
+                    except Exception as e:
+                        logger.error(f"Error al agregar trabajador: {e}")
+                        st.markdown("<div class='error-box'>❌ Error al agregar trabajador.</div>", unsafe_allow_html=True)
                 else:
-                    st.info("No hay trabajadores activos para eliminar.")
+                    st.markdown("<div class='error-box'>❌ Debe ingresar un nombre.</div>", unsafe_allow_html=True)
+        
+        st.markdown("<h2 class='section-title'>Eliminar Trabajador</h2>", unsafe_allow_html=True)
+        if trabajadores:
+            trabajadores_activos = [t['nombre'] for t in trabajadores if t.get('activo', True)]
+            if trabajadores_activos:
+                trabajador_eliminar = st.selectbox("Selecciona un trabajador para eliminar:", options=trabajadores_activos)
+                if st.button("Eliminar Trabajador"):
+                    try:
+                        # Actualizar el estado del trabajador a inactivo
+                        supabase.from_('trabajadores').update({'activo': False}).eq('nombre', trabajador_eliminar).execute()
+                        st.markdown("<div class='success-box'>✅ Trabajador eliminado correctamente.</div>", unsafe_allow_html=True)
+                        time.sleep(1)
+                        st.rerun()
+                    except Exception as e:
+                        logger.error(f"Error al eliminar trabajador: {e}")
+                        st.markdown("<div class='error-box'>❌ Error al eliminar trabajador.</div>", unsafe_allow_html=True)
             else:
-                st.info("No hay trabajadores registrados.")
-                
+                st.info("No hay trabajadores activos para eliminar.")
+        else:
+            st.info("No hay trabajadores registrados.")
     except Exception as e:
         logger.error(f"Error en gestión de trabajadores: {e}")
         st.markdown("<div class='error-box'>❌ Error del sistema al gestionar trabajadores.</div>", unsafe_allow_html=True)
@@ -918,10 +716,17 @@ def ingresar_datos():
     """Muestra la interfaz para ingresar datos de KPIs"""
     st.markdown("<h1 class='header-title'>📥 Ingreso de Datos de KPIs</h1>", unsafe_allow_html=True)
     
-    # Obtener trabajadores desde la base de datos
-    df_trabajadores = obtener_trabajadores()
-    trabajadores_por_equipo = {}
+    if supabase is None:
+        st.markdown("<div class='error-box'>❌ Error de conexión a la base de datos. Verifique las variables de entorno.</div>", unsafe_allow_html=True)
+        return
     
+    # Obtener trabajadores desde Supabase
+    df_trabajadores = obtener_trabajadores()
+    if df_trabajadores.empty:
+        st.markdown("<div class='warning-box'>⚠️ No hay trabajadores registrados. Por favor, registre trabajadores primero.</div>", unsafe_allow_html=True)
+        return
+    
+    trabajadores_por_equipo = {}
     for _, row in df_trabajadores.iterrows():
         equipo = row['equipo']
         if equipo not in trabajadores_por_equipo:
@@ -952,12 +757,9 @@ def ingresar_datos():
         
         for equipo, miembros in trabajadores_por_equipo.items():
             st.markdown(f"<div class='team-section'><div class='team-header'>{equipo}</div></div>", unsafe_allow_html=True)
-            
             for trabajador in miembros:
                 st.subheader(trabajador)
-                
                 col1, col2 = st.columns(2)
-                
                 with col1:
                     if equipo == "Transferencias":
                         cantidad = st.number_input(f"Prendas transferidas por {trabajador}:", min_value=0, value=1800, key=f"{trabajador}_cantidad")
@@ -974,16 +776,13 @@ def ingresar_datos():
                     else:
                         cantidad = st.number_input(f"Cantidad realizada por {trabajador}:", min_value=0, value=100, key=f"{trabajador}_cantidad")
                         meta = st.number_input(f"Meta diaria para {trabajador}:", min_value=0, value=100, key=f"{trabajador}_meta")
-                
                 with col2:
                     horas = st.number_input(f"Horas trabajadas por {trabajador}:", min_value=0.0, value=8.0, key=f"{trabajador}_horas", step=0.5)
                     comentario = st.text_area(f"Comentario para {trabajador}:", key=f"{trabajador}_comentario")
         
         submitted = st.form_submit_button("Calcular KPIs")
-        
         if submitted:
             datos_guardar = {}
-            
             for equipo, miembros in trabajadores_por_equipo.items():
                 for trabajador in miembros:
                     # Obtener valores del formulario
@@ -1020,7 +819,6 @@ def ingresar_datos():
                         meta_mensual = 0
                     
                     productividad = productividad_hora(cantidad, horas)
-                    
                     datos_guardar[trabajador] = {
                         "actividad": actividad, 
                         "cantidad": cantidad, 
@@ -1042,7 +840,6 @@ def ingresar_datos():
             
             # Mostrar resumen
             st.markdown("<h3 class='section-title'>📋 Resumen de KPIs Calculados</h3>", unsafe_allow_html=True)
-            
             for equipo, miembros in trabajadores_por_equipo.items():
                 st.markdown(f"**{equipo}:**")
                 for trabajador in miembros:
@@ -1067,13 +864,16 @@ def mostrar_dashboard():
     """Muestra el dashboard principal con KPIs"""
     st.markdown("<h1 class='header-title'>📊 Dashboard de KPIs Fashion Club</h1>", unsafe_allow_html=True)
     
+    if supabase is None:
+        st.markdown("<div class='error-box'>❌ Error de conexión a la base de datos. Verifique las variables de entorno.</div>", unsafe_allow_html=True)
+        return
+    
     # Cargar datos históricos
     if 'historico_data' not in st.session_state:
         with st.spinner("Cargando datos históricos..."):
             st.session_state.historico_data = cargar_historico_db()
     
     df = st.session_state.historico_data
-    
     if df.empty:
         st.markdown("<div class='warning-box'>⚠️ No hay datos históricos. Por favor, ingresa datos primero.</div>", unsafe_allow_html=True)
         return
@@ -1086,11 +886,9 @@ def mostrar_dashboard():
     if not df.empty and 'fecha' in df.columns:
         # Convertir a fecha y eliminar duplicados
         fechas_disponibles = sorted(df['fecha'].dt.date.unique(), reverse=True)
-        
         if not fechas_disponibles:
             st.markdown("<div class='warning-box'>⚠️ No hay fechas disponibles para mostrar.</div>", unsafe_allow_html=True)
             return
-        
         fecha_seleccionada = st.selectbox(
             "Fecha:",
             options=fechas_disponibles,
@@ -1100,18 +898,15 @@ def mostrar_dashboard():
     else:
         st.markdown("<div class='warning-box'>⚠️ No hay datos disponibles.</div>", unsafe_allow_html=True)
         return
-    
     st.markdown("</div>", unsafe_allow_html=True)
     
     # Filtrar datos por fecha seleccionada
     df_reciente = df[df['fecha'].dt.date == fecha_seleccionada]
-    
     if df_reciente.empty:
         st.markdown(f"<div class='warning-box'>⚠️ No hay datos disponibles para la fecha {fecha_seleccionada}.</div>", unsafe_allow_html=True)
         return
     
     st.markdown(f"<p style='color: #2c3e50; font-size: 1.1em;'>Datos para la fecha: {fecha_seleccionada}</p>", unsafe_allow_html=True)
-    
     st.markdown("<h2 class='section-title'>📈 KPIs Globales</h2>", unsafe_allow_html=True)
     
     # Cálculos globales
@@ -1123,7 +918,6 @@ def mostrar_dashboard():
     productividad_total = total_cantidad / total_horas if total_horas > 0 else 0
     
     kpi1, kpi2, kpi3, kpi4 = st.columns(4)
-    
     with kpi1:
         cumplimiento_meta = (total_cantidad / total_meta * 100) if total_meta > 0 else 0
         st.markdown(f"""
@@ -1169,7 +963,6 @@ def mostrar_dashboard():
     # Filtrar datos del mes actual para transferencias
     df_month = df[(df['fecha'].dt.month == current_month) & 
                   (df['fecha'].dt.year == current_year)]
-    
     df_transferencias_month = df_month[df_month['equipo'] == 'Transferencias']
     
     # Obtener meta mensual de transferencias (usamos el último valor registrado)
@@ -1183,7 +976,6 @@ def mostrar_dashboard():
     cumplimiento_transferencias = (cum_transferencias / meta_mensual_transferencias * 100) if meta_mensual_transferencias > 0 else 0
     
     col1, col2 = st.columns(2)
-    
     with col1:
         st.markdown(f"""
         <div class="kpi-card">
@@ -1214,10 +1006,8 @@ def mostrar_dashboard():
             'Acumulado',
             'line'
         )
-        
         # Añadir línea de meta
         fig.add_hline(y=meta_mensual_transferencias, line_dash="dash", line_color="red", annotation_text="Meta Mensual")
-        
         st.plotly_chart(fig, use_container_width=True)
     else:
         st.info("No hay datos para el gráfico de Transferencias.")
@@ -1226,10 +1016,8 @@ def mostrar_dashboard():
     
     # Obtener lista de equipos
     equipos = df_reciente['equipo'].unique()
-    
     for equipo in equipos:
         df_equipo = df_reciente[df_reciente['equipo'] == equipo]
-        
         st.markdown(f"<div class='team-section'><div class='team-header'>{equipo}</div></div>", unsafe_allow_html=True)
         
         # Calcular KPIs del equipo
@@ -1240,7 +1028,6 @@ def mostrar_dashboard():
         productividad_equipo = total_equipo / horas_equipo if horas_equipo > 0 else 0
         
         col1, col2, col3, col4 = st.columns(4)
-        
         with col1:
             st.markdown(f"""
             <div class="kpi-card">
@@ -1280,7 +1067,6 @@ def mostrar_dashboard():
         # Mostrar trabajadores del equipo
         for _, row in df_equipo.iterrows():
             col1, col2 = st.columns([3, 1])
-            
             with col1:
                 color = "#27ae60" if row['eficiencia'] >= 100 else "#e74c3c"
                 card_content = f"""
@@ -1312,11 +1098,9 @@ def exportar_excel(df: pd.DataFrame) -> bytes:
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
             df.to_excel(writer, sheet_name='Datos_KPIs', index=False)
-            
             # Formato adicional para mejorar el Excel
             workbook = writer.book
             worksheet = writer.sheets['Datos_KPIs']
-            
             # Formato para encabezados
             header_format = workbook.add_format({
                 'bold': True,
@@ -1326,11 +1110,9 @@ def exportar_excel(df: pd.DataFrame) -> bytes:
                 'font_color': 'white',
                 'border': 1
             })
-            
             # Aplicar formato a encabezados
             for col_num, value in enumerate(df.columns.values):
                 worksheet.write(0, col_num, value, header_format)
-            
             # Autoajustar columnas
             for i, col in enumerate(df.columns):
                 max_len = max(df[col].astype(str).map(len).max(), len(col)) + 2
@@ -1414,7 +1196,6 @@ def crear_reporte_pdf(df: pd.DataFrame, fecha_inicio: str, fecha_fin: str) -> by
         try:
             # Crear gráfica de eficiencia por día
             df_eficiencia_dia = df.groupby('fecha')['eficiencia'].mean().reset_index()
-            
             fig = go.Figure()
             fig.add_trace(go.Scatter(
                 x=df_eficiencia_dia['fecha'], 
@@ -1430,7 +1211,6 @@ def crear_reporte_pdf(df: pd.DataFrame, fecha_inicio: str, fecha_fin: str) -> by
                 width=800,
                 height=600
             )
-            
             # Convertir gráfico a base64
             img_data = plot_to_base64(fig)
             if img_data:
@@ -1438,13 +1218,11 @@ def crear_reporte_pdf(df: pd.DataFrame, fecha_inicio: str, fecha_fin: str) -> by
                 with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmpfile:
                     tmpfile.write(base64.b64decode(img_data))
                     img_path = tmpfile.name
-                
                 # Agregar gráfica al PDF
                 img = Image(img_path, width=6*inch, height=4*inch)
                 elements.append(Spacer(1, 12))
                 elements.append(Paragraph("Evolución de la Eficiencia Promedio", styles['Heading3']))
                 elements.append(img)
-                
                 # Limpiar archivo temporal
                 os.unlink(img_path)
         except Exception as e:
@@ -1456,7 +1234,6 @@ def crear_reporte_pdf(df: pd.DataFrame, fecha_inicio: str, fecha_fin: str) -> by
         doc.build(elements)
         pdf_bytes = buffer.getvalue()
         buffer.close()
-        
         return pdf_bytes
     except Exception as e:
         logger.error(f"Error al crear reporte PDF: {e}")
@@ -1466,26 +1243,25 @@ def mostrar_analisis_historico():
     """Muestra el análisis histórico de KPIs"""
     st.markdown("<h1 class='header-title'>📈 Análisis Histórico de KPIs</h1>", unsafe_allow_html=True)
     
+    if supabase is None:
+        st.markdown("<div class='error-box'>❌ Error de conexión a la base de datos. Verifique las variables de entorno.</div>", unsafe_allow_html=True)
+        return
+    
     # Cargar datos históricos
     df = cargar_historico_db()
-    
     if df.empty:
         st.markdown("<div class='warning-box'>⚠️ No hay datos históricos. Por favor, ingresa datos primero.</div>", unsafe_allow_html=True)
         return
     
     df['dia'] = df['fecha'].dt.date
-    
     fecha_min = df['dia'].min()
     fecha_max = df['dia'].max()
     
     col1, col2, col3 = st.columns([1, 1, 2])
-    
     with col1:
         fecha_inicio = st.date_input("Fecha de inicio:", value=fecha_min, min_value=fecha_min, max_value=fecha_max)
-    
     with col2:
         fecha_fin = st.date_input("Fecha de fin:", value=fecha_max, min_value=fecha_min, max_value=fecha_max)
-    
     with col3:
         trabajador = st.selectbox("Filtrar por trabajador:", options=["Todos"] + list(df['nombre'].unique()))
     
@@ -1495,7 +1271,6 @@ def mostrar_analisis_historico():
     
     # Aplicar filtros
     df_filtrado = df[(df['dia'] >= fecha_inicio) & (df['dia'] <= fecha_fin)]
-    
     if trabajador != "Todos":
         df_filtrado = df_filtrado[df_filtrado['nombre'] == trabajador]
     
@@ -1506,7 +1281,6 @@ def mostrar_analisis_historico():
     # Botones de exportación
     st.markdown("<div class='export-buttons'>", unsafe_allow_html=True)
     col1, col2, col3 = st.columns(3)
-    
     with col1:
         # Botón para exportar a Excel
         if st.button("💾 Exportar a Excel", use_container_width=True):
@@ -1554,7 +1328,6 @@ def mostrar_analisis_historico():
     st.markdown("</div>", unsafe_allow_html=True)
     
     st.markdown("<h2 class='section-title'>📋 Resumen Estadístico</h2>", unsafe_allow_html=True)
-    
     # Mostrar resumen estadístico
     st.dataframe(df_filtrado.groupby('nombre').agg({
         'cantidad': ['count', 'mean', 'sum', 'max', 'min'],
@@ -1569,7 +1342,6 @@ def mostrar_analisis_historico():
     
     with tab1:
         df_eficiencia_dia = df_filtrado.groupby('dia')['eficiencia'].mean().reset_index()
-        
         if not df_eficiencia_dia.empty:
             fig = crear_grafico_interactivo(
                 df_eficiencia_dia, 
@@ -1580,10 +1352,8 @@ def mostrar_analisis_historico():
                 'Eficiencia Promedio (%)',
                 'line'
             )
-            
             # Añadir línea de meta
             fig.add_hline(y=100, line_dash="dash", line_color="red", annotation_text="Meta de eficiencia")
-            
             # Analizar tendencia
             tendencia = analizar_tendencias(df_eficiencia_dia, 'eficiencia')
             if isinstance(tendencia, dict):
@@ -1594,9 +1364,7 @@ def mostrar_analisis_historico():
                     name=f'Tendencia ({tendencia["direccion"]})',
                     line=dict(dash='dash', color='orange')
                 ))
-            
             st.plotly_chart(fig, use_container_width=True)
-            
             # Mostrar información de tendencia
             if isinstance(tendencia, dict):
                 st.markdown(f"**Tendencia:** {tendencia['direccion']} (R²: {tendencia['r_cuadrado']:.3f})")
@@ -1605,7 +1373,6 @@ def mostrar_analisis_historico():
     
     with tab2:
         df_produccion = df_filtrado.groupby(['dia', 'actividad'])['cantidad'].sum().reset_index()
-        
         if not df_produccion.empty:
             fig = crear_grafico_interactivo(
                 df_produccion, 
@@ -1616,7 +1383,6 @@ def mostrar_analisis_historico():
                 'Producción Acumulada',
                 'line'
             )
-            
             st.plotly_chart(fig, use_container_width=True)
         else:
             st.info("No hay datos para el gráfico.")
@@ -1632,19 +1398,16 @@ def mostrar_analisis_historico():
                 'Productividad (unidades/hora)',
                 'box'
             )
-            
             st.plotly_chart(fig, use_container_width=True)
         else:
             st.info("No hay datos para el gráfico.")
     
     with tab4:
         st.markdown("<h3>📈 Análisis de Correlación</h3>", unsafe_allow_html=True)
-        
         # Calcular matriz de correlación
         numeric_cols = df_filtrado.select_dtypes(include=[np.number]).columns
         if len(numeric_cols) > 1:
             corr_matrix = df_filtrado[numeric_cols].corr()
-            
             fig = px.imshow(
                 corr_matrix,
                 text_auto=True,
@@ -1652,7 +1415,6 @@ def mostrar_analisis_historico():
                 color_continuous_scale='RdBu_r',
                 title='Matriz de Correlación'
             )
-            
             st.plotly_chart(fig, use_container_width=True)
         else:
             st.info("No hay suficientes datos numéricos para calcular correlaciones.")
@@ -1662,20 +1424,16 @@ def mostrar_analisis_historico():
     
     with tab5:
         st.markdown("<h3>🔮 Predicción de Tendencia</h3>", unsafe_allow_html=True)
-        
         if not df_eficiencia_dia.empty and len(df_eficiencia_dia) > 5:
             # Preparar datos para predicción
             dias_prediccion = 7
             predicciones = predecir_valores_futuros(df_eficiencia_dia, 'eficiencia', dias_prediccion)
-            
             if predicciones is not None:
                 # Crear fechas futuras
                 ultima_fecha = df_eficiencia_dia['dia'].max()
                 fechas_futuras = [ultima_fecha + timedelta(days=i+1) for i in range(dias_prediccion)]
-                
                 # Crear gráfico
                 fig = go.Figure()
-                
                 # Datos históricos
                 fig.add_trace(go.Scatter(
                     x=df_eficiencia_dia['dia'], 
@@ -1683,7 +1441,6 @@ def mostrar_analisis_historico():
                     mode='lines+markers',
                     name='Datos Históricos'
                 ))
-                
                 # Predicciones
                 fig.add_trace(go.Scatter(
                     x=fechas_futuras, 
@@ -1692,10 +1449,8 @@ def mostrar_analisis_historico():
                     name='Predicción',
                     line=dict(dash='dash', color='orange')
                 ))
-                
                 # Línea de meta
                 fig.add_hline(y=100, line_dash="dash", line_color="red", annotation_text="Meta de eficiencia")
-                
                 fig.update_layout(
                     title='Predicción de Eficiencia para los Próximos 7 Días',
                     xaxis_title='Fecha',
@@ -1704,9 +1459,7 @@ def mostrar_analisis_historico():
                     paper_bgcolor='rgba(0,0,0,0)',
                     font=dict(color="#2c3e50")
                 )
-                
                 st.plotly_chart(fig, use_container_width=True)
-                
                 # Mostrar valores de predicción
                 st.markdown("<h4>Valores de Predicción:</h4>", unsafe_allow_html=True)
                 for i, (fecha, pred) in enumerate(zip(fechas_futuras, predicciones)):
@@ -1716,126 +1469,6 @@ def mostrar_analisis_historico():
         else:
             st.info("Se necesitan al menos 5 días de datos para realizar predicciones.")
 
-def mostrar_administracion():
-    """Muestra la interfaz de administración del sistema"""
-    st.markdown("<h1 class='header-title'>⚙️ Administración del Sistema</h1>", unsafe_allow_html=True)
-    
-    tab1, tab2, tab3, tab4 = st.tabs(["Backups", "Restaurar Backup", "Usuarios", "Configuración"])
-    
-    with tab1:
-        st.markdown("<h3>📦 Gestión de Backups</h3>", unsafe_allow_html=True)
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            if st.button("🔄 Crear Backup Ahora"):
-                if crear_backup():
-                    st.markdown("<div class='success-box'>✅ Backup creado correctamente.</div>", unsafe_allow_html=True)
-                else:
-                    st.markdown("<div class='error-box'>❌ Error al crear backup.</div>", unsafe_allow_html=True)
-        
-        with col2:
-            # Listar backups disponibles
-            backups = sorted(Path("backups").glob("kpi_backup_*.db"), key=os.path.getmtime, reverse=True)
-            
-            if backups:
-                st.markdown("**Backups disponibles:**")
-                for backup in backups[:5]:  # Mostrar solo los 5 más recientes
-                    st.text(f"{backup.name} ({time.strftime('%Y-%m-%d %H:%M', time.gmtime(backup.stat().st_mtime))})")
-            else:
-                st.info("No hay backups disponibles.")
-    
-    with tab2:
-        st.markdown("<h3>📥 Restaurar desde Backup</h3>", unsafe_allow_html=True)
-        
-        # Listar backups disponibles
-        backups = sorted(Path("backups").glob("kpi_backup_*.db"), key=os.path.getmtime, reverse=True)
-        
-        if backups:
-            backup_options = [f"{b.name} ({time.strftime('%Y-%m-%d %H:%M', time.gmtime(b.stat().st_mtime))})" for b in backups]
-            backup_seleccionado = st.selectbox("Selecciona un backup para restaurar:", options=backup_options)
-            
-            if st.button("🔄 Restaurar Backup Seleccionado"):
-                backup_path = backups[backup_options.index(backup_seleccionado)]
-                if restaurar_backup(str(backup_path)):
-                    st.markdown("<div class='success-box'>✅ Backup restaurado correctamente. La página se recargará.</div>", unsafe_allow_html=True)
-                    time.sleep(2)
-                    st.rerun()
-                else:
-                    st.markdown("<div class='error-box'>❌ Error al restaurar backup.</div>", unsafe_allow_html=True)
-        else:
-            st.info("No hay backups disponibles para restaurar.")
-    
-    with tab3:
-        st.markdown("<h3>👥 Gestión de Usuarios</h3>", unsafe_allow_html=True)
-        
-        try:
-            with st.session_state.db_manager.get_connection() as conn:
-                c = conn.cursor()
-                
-                # Mostrar usuarios existentes
-                c.execute('SELECT username, role, created_at FROM users')
-                users = c.fetchall()
-                
-                if users:
-                    st.markdown("**Usuarios existentes:**")
-                    for user in users:
-                        st.text(f"{user[0]} ({user[1]}) - Creado: {user[2]}")
-                else:
-                    st.info("No hay usuarios registrados.")
-                
-                # Formulario para agregar usuario
-                st.markdown("---")
-                st.markdown("<h4>➕ Agregar Nuevo Usuario</h4>", unsafe_allow_html=True)
-                
-                with st.form("form_nuevo_usuario"):
-                    nuevo_usuario = st.text_input("Nombre de usuario:")
-                    nueva_contrasena = st.text_input("Contraseña:", type="password")
-                    rol_usuario = st.selectbox("Rol:", options=["user", "admin"])
-                    
-                    submitted = st.form_submit_button("Agregar Usuario")
-                    
-                    if submitted:
-                        if nuevo_usuario and nueva_contrasena:
-                            # Verificar si el usuario ya existe
-                            c.execute('SELECT id FROM users WHERE username = ?', (nuevo_usuario,))
-                            if c.fetchone():
-                                st.markdown("<div class='error-box'>❌ El usuario ya existe.</div>", unsafe_allow_html=True)
-                            else:
-                                # Hashear contraseña y guardar usuario
-                                password_hash = hashlib.sha256(nueva_contrasena.encode()).hexdigest()
-                                c.execute('INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)', 
-                                         (nuevo_usuario, password_hash, rol_usuario))
-                                conn.commit()
-                                st.markdown("<div class='success-box'>✅ Usuario agregado correctamente.</div>", unsafe_allow_html=True)
-                                st.rerun()
-                        else:
-                            st.markdown("<div class='error-box'>❌ Debe completar todos los campos.</div>", unsafe_allow_html=True)
-        except Exception as e:
-            logger.error(f"Error en gestión de usuarios: {e}")
-            st.markdown("<div class='error-box'>❌ Error del sistema al gestionar usuarios.</div>", unsafe_allow_html=True)
-    
-    with tab4:
-        st.markdown("<h3>⚙️ Configuración del Sistema</h3>", unsafe_allow_html=True)
-        
-        st.markdown("**Opciones de visualización:**")
-        mostrar_graficos = st.checkbox("Mostrar gráficos interactivos", value=True)
-        actualizacion_automatica = st.checkbox("Actualización automática de datos", value=True)
-        
-        if st.button("💾 Guardar Configuración"):
-            try:
-                with st.session_state.db_manager.get_connection() as conn:
-                    c = conn.cursor()
-                    c.execute('INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)', 
-                             ('mostrar_graficos', str(mostrar_graficos)))
-                    c.execute('INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)', 
-                             ('actualizacion_automatica', str(actualizacion_automatica)))
-                    conn.commit()
-                    st.markdown("<div class='success-box'>✅ Configuración guardada correctamente.</div>", unsafe_allow_html=True)
-            except Exception as e:
-                logger.error(f"Error al guardar configuración: {e}")
-                st.markdown("<div class='error-box'>❌ Error al guardar configuración.</div>", unsafe_allow_html=True)
-
 def main():
     """Función principal de la aplicación"""
     st.sidebar.title("🔧 Menú de Navegación")
@@ -1844,7 +1477,6 @@ def main():
     if 'user' in st.session_state:
         st.sidebar.markdown(f"**Usuario:** {st.session_state.user}")
         st.sidebar.markdown(f"**Rol:** {st.session_state.role}")
-        
         if st.sidebar.button("🚪 Cerrar Sesión"):
             st.session_state.password_correct = False
             st.session_state.pop('user', None)
@@ -1852,7 +1484,11 @@ def main():
             st.rerun()
     
     opcion = st.sidebar.radio("Selecciona una opción:", 
-                              ["Dashboard de KPIs", "Análisis Histórico", "Ingresar Datos", "Administración", "Gestión de Trabajadores"])
+                              ["Dashboard de KPIs", "Análisis Histórico", "Ingresar Datos", "Gestión de Trabajadores"])
+    
+    if supabase is None:
+        st.markdown("<div class='error-box'>❌ Error de conexión a la base de datos. Verifique las variables de entorno.</div>", unsafe_allow_html=True)
+        return
     
     if opcion == "Dashboard de KPIs":
         mostrar_dashboard()
@@ -1861,16 +1497,9 @@ def main():
     elif opcion == "Ingresar Datos":
         if verificar_password():
             ingresar_datos()
-    elif opcion == "Administración":
-        if verificar_password() and st.session_state.get('role') == 'admin':
-            mostrar_administracion()
-        else:
-            st.markdown("<div class='error-box'>❌ No tiene permisos de administrador.</div>", unsafe_allow_html=True)
     elif opcion == "Gestión de Trabajadores":
-        if verificar_password() and st.session_state.get('role') == 'admin':
+        if verificar_password():
             mostrar_gestion_trabajadores()
-        else:
-            st.markdown("<div class='error-box'>❌ No tiene permisos de administrador.</div>", unsafe_allow_html=True)
 
 if __name__ == "__main__":
     main()
