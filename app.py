@@ -70,7 +70,7 @@ st.markdown("""
         --primary-color: navy;
         --secondary-color: #000000;
         --accent-color: #333333;
-        --background-dark: #f43b2a;
+        --background-dark: ##121212;
         --card-background: #2d30f0;
         --text-color: #ffffff;
         --text-secondary: #b0b0b0;
