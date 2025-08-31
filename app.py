@@ -1,42 +1,21 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
 import plotly.express as px
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta
 import time
-import json
 import os
 import hashlib
-from pathlib import Path
-import warnings
-from scipy import stats
-from sklearn.linear_model import LinearRegression, Ridge
-from sklearn.ensemble import RandomForestRegressor
-from sklearn.preprocessing import PolynomialFeatures, StandardScaler
-from sklearn.pipeline import Pipeline
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import mean_absolute_error, r2_score
-from sklearn.impute import SimpleImputer
-from contextlib import contextmanager
 import logging
-from typing import Dict, List, Optional, Tuple, Any, Union
-import io
-from reportlab.lib.pagesizes import letter
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image
-from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.lib import colors
-from reportlab.lib.units import inch
-import base64
-import tempfile
 from supabase import create_client, Client
 import qrcode
 from PIL import Image
 import fpdf
 from fpdf import FPDF
+import base64
+import io
+import tempfile
 
 # Configuración de logging
 logging.basicConfig(
@@ -52,10 +31,11 @@ logger = logging.getLogger(__name__)
 # Configuración de Supabase
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
+ADMIN_PASSWORD = "Wilo3161"  # Contraseña única sensible a mayúsculas
 
 # Inicializar cliente de Supabase
 @st.cache_resource
-def init_supabase() -> Optional[Client]:
+def init_supabase() -> Client:
     """Inicializa y cachea el cliente de Supabase."""
     if not SUPABASE_URL or not SUPABASE_KEY:
         logger.error("Faltan las variables de entorno SUPABASE_URL o SUPABASE_KEY")
@@ -75,287 +55,360 @@ supabase = init_supabase()
 # Configuración de página
 st.set_page_config(
     layout="wide",
-    page_title="Sistema Integrado - KPIs y Guías de Envío",
-    page_icon="📊",
+    page_title="Sistema de KPIs Aeropostale",
+    page_icon="📦",
     initial_sidebar_state="expanded"
 )
 
-# CSS personalizado mejorado (combinado de ambos sistemas)
+# CSS profesional mejorado
 st.markdown("""
 <style>
-    .main { background-color: white; }
-    .stApp { background-color: black; }
-    .kpi-card {
-        background: white;
-        border-radius: 12px;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.08);
-        padding: 18px;
-        margin: 10px 0;
-        border-left: 4px solid #2c3e50;
+    /* Colores corporativos de Aeropostale */
+    :root {
+        --primary-color: #e60012;
+        --secondary-color: #000000;
+        --accent-color: #333333;
+        --background-dark: #121212;
+        --card-background: #1e1e1e;
+        --text-color: #ffffff;
+        --text-secondary: #b0b0b0;
+        --success-color: #4caf50;
+        --warning-color: #ff9800;
+        --error-color: #f44336;
+    }
+    
+    body {
+        background-color: var(--background-dark);
+        color: var(--text-color);
+        font-family: 'Segoe UI', 'Roboto', sans-serif;
+    }
+    
+    .stApp {
+        background-color: var(--background-dark);
+    }
+    
+    /* Estilos del sidebar */
+    .css-1d391kg {
+        background-color: var(--card-background) !important;
+    }
+    
+    .sidebar-title {
+        font-size: 1.8rem;
+        font-weight: 700;
+        color: var(--primary-color);
+        text-align: center;
+        margin: 20px 0;
+        padding-bottom: 10px;
+        border-bottom: 2px solid var(--primary-color);
+    }
+    
+    .menu-item {
+        padding: 12px 15px;
+        border-radius: 8px;
+        margin: 8px 0;
         transition: all 0.3s ease;
-    }
-    .kpi-card:hover { 
-        box-shadow: 0 6px 16px rgba(0,0,0,0.12); 
-        transform: translateY(-3px); 
-    }
-    .metric-value { 
-        font-size: 2.8em !important; 
-        font-weight: bold; 
-        color: #2c3e50;
-        line-height: 1.2;
-    }
-    .worker-card {
-        background: white;
-        border-radius: 10px;
-        padding: 15px;
-        color: #2c3e50;
-        margin: 8px;
-        min-height: 250px;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.08);
-        border-left: 4px solid #3498db;
         display: flex;
-        flex-direction: column;
-        justify-content: space-between;
+        align-items: center;
     }
-    .worker-header { 
-        font-size: 1.3em; 
-        margin-bottom: 10px; 
-        color: #2c3e50;
+    
+    .menu-item:hover {
+        background-color: rgba(230, 0, 18, 0.1);
+    }
+    
+    .menu-item.active {
+        background-color: var(--primary-color);
+        color: white;
+        font-weight: 600;
+    }
+    
+    .menu-item i {
+        margin-right: 10px;
+        font-size: 1.2rem;
+    }
+    
+    /* Tarjetas y métricas */
+    .kpi-card {
+        background: var(--card-background);
+        border-radius: 12px;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.25);
+        padding: 20px;
+        margin: 15px 0;
+        border-left: 5px solid var(--primary-color);
+        transition: all 0.3s ease;
+        border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    
+    .kpi-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+    }
+    
+    .metric-value {
+        font-size: 2.8em;
         font-weight: bold;
+        color: var(--primary-color);
+        line-height: 1.2;
+        margin: 10px 0;
     }
-    .worker-metric { 
-        font-size: 1.1em; 
-        margin: 5px 0; 
-        color: #2c3e50;
+    
+    .metric-label {
+        color: var(--text-secondary);
+        font-size: 1.1em;
+        margin-bottom: 5px;
     }
-    .trend-up { color: #27ae60; }
-    .trend-down { color: #e74c3c; }
-    .header-title { 
-        color: #2c3e50;
+    
+    .trend-up {
+        color: var(--success-color);
+    }
+    
+    .trend-down {
+        color: var(--error-color);
+    }
+    
+    /* Encabezados y secciones */
+    .header-title {
+        color: var(--text-color);
         font-weight: 800;
         font-size: 2.5em;
         margin-bottom: 20px;
+        position: relative;
+        padding-bottom: 10px;
     }
+    
+    .header-title::after {
+        content: '';
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        width: 60px;
+        height: 4px;
+        background-color: var(--primary-color);
+        border-radius: 2px;
+    }
+    
     .section-title {
-        border-left: 5px solid #3498db;
-        padding-left: 10px;
-        margin: 20px 0;
-        color: #2c3e50;
+        color: var(--text-color);
         font-size: 1.8em;
+        margin: 25px 0 15px;
+        padding-left: 15px;
+        border-left: 4px solid var(--primary-color);
     }
-    .comment-container {
-        margin-top: 15px;
-        padding: 15px;
-        background-color: #f8f9fa;
-        border-radius: 5px;
-        border-left: 3px solid #3498db;
-    }
-    .comment-title {
-        font-weight: bold;
-        margin-bottom: 5px;
-        color: #2c3e50;
-    }
-    .comment-content {
-        font-size: 0.9em;
-        color: #2c3e50;
-    }
-    .metric-label {
-        color: #2c3e50;
-        font-size: 0.9em;
-    }
-    .password-container {
-        background-color: white;
-        padding: 30px;
+    
+    /* Tablas y datos */
+    .data-table {
+        background: var(--card-background);
         border-radius: 10px;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-        max-width: 400px;
-        margin: 100px auto;
+        overflow: hidden;
+        box-shadow: 0 3px 10px rgba(0, 0, 0, 0.15);
     }
-    .stats-container {
-        flex-grow: 1;
-    }
-    .date-selector {
-        background-color: white;
-        padding: 15px;
-        border-radius: 8px;
-        margin-bottom: 20px;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-    }
-    .success-box {
-        background-color: #d4edda;
-        color: #155724;
-        padding: 15px;
-        border-radius: 5px;
-        border-left: 5px solid #28a745;
-        margin: 10px 0;
-    }
-    .error-box {
-        background-color: #f8d7da;
-        color: #721c24;
-        padding: 15px;
-        border-radius: 5px;
-        border-left: 5px solid #dc3545;
-        margin: 10px 0;
-    }
-    .warning-box {
-        background-color: #fff3cd;
-        color: #856404;
-        padding: 15px;
-        border-radius: 5px;
-        border-left: 5px solid #ffc107;
-        margin: 10px 0;
-    }
-    .info-box {
-        background-color: #d1ecf1;
-        color: #0c5460;
-        padding: 15px;
-        border-radius: 5px;
-        border-left: 5px solid #17a2b8;
-        margin: 10px 0;
-    }
+    
+    /* Botones */
     .stButton>button {
-        background-color: #3498db;
+        background: linear-gradient(135deg, var(--primary-color), #b3000e);
         color: white;
         border: none;
         padding: 10px 20px;
-        border-radius: 5px;
+        border-radius: 8px;
         font-weight: bold;
         transition: all 0.3s;
+        box-shadow: 0 4px 10px rgba(230, 0, 18, 0.25);
     }
+    
     .stButton>button:hover {
-        background-color: #2980b9;
-        color: white;
+        transform: translateY(-2px);
+        box-shadow: 0 6px 15px rgba(230, 0, 18, 0.35);
+        background: linear-gradient(135deg, #cc0010, #99000c);
     }
-    .stSelectbox, .stDateInput, .stNumberInput, .stTextArea {
-        margin-bottom: 15px;
+    
+    .stButton>button:active {
+        transform: translateY(0);
     }
-    .prediction-card {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        border-radius: 12px;
-        padding: 20px;
-        margin: 10px 0;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    
+    /* Inputs y formularios */
+    .stTextInput > div > div > input,
+    .stNumberInput > div > div > input,
+    .stTextArea > div > div > textarea {
+        background-color: #2a2a2a !important;
+        color: var(--text-color) !important;
+        border: 1px solid #3a3a3a !important;
+        border-radius: 8px;
+        padding: 10px !important;
     }
-    .jar-progress {
-        background: #f0f0f0;
-        border-radius: 20px;
-        height: 30px;
-        margin: 15px 0;
-        overflow: hidden;
+    
+    .stSelectbox > div > div > div {
+        background-color: #2a2a2a !important;
+        color: var(--text-color) !important;
+        border: 1px solid #3a3a3a !important;
+        border-radius: 8px;
     }
-    .jar-progress-fill {
-        height: 100%;
-        background: linear-gradient(90deg, #4CAF50, #8BC34A);
-        border-radius: 20px;
-        transition: width 0.5s ease;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: white;
-        font-weight: bold;
-    }
-    .team-section {
-        background-color: white;
-        border-radius: 10px;
-        padding: 20px;
-        margin: 20px 0;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.08);
-    }
-    .team-header {
-        font-size: 1.5em;
-        color: #2c3e50;
-        margin-bottom: 15px;
-        padding-bottom: 10px;
-        border-bottom: 2px solid #3498db;
-    }
-    .export-buttons {
-        display: flex;
-        gap: 10px;
-        margin-bottom: 20px;
-    }
-    .export-button {
-        background-color: #3498db;
-        color: white;
-        border: none;
-        padding: 10px 15px;
-        border-radius: 5px;
-        cursor: pointer;
-        font-weight: bold;
-        transition: background-color 0.3s;
-    }
-    .export-button:hover {
-        background-color: #2980b9;
-    }
-    /* Estilos adicionales para el sistema de guías */
-    .guide-header {
-        color: #2c3e50;
-        font-weight: 800;
-        font-size: 2.5em;
-        margin-bottom: 20px;
-        border-bottom: 2px solid #3498db;
-        padding-bottom: 10px;
-    }
-    .guide-section {
-        background-color: white;
-        border-radius: 10px;
-        padding: 20px;
-        margin: 20px 0;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.08);
-    }
-    .guide-card {
-        background: white;
-        border-radius: 10px;
+    
+    /* Mensajes de estado */
+    .success-box {
+        background: linear-gradient(135deg, rgba(76, 175, 80, 0.15), rgba(76, 175, 80, 0.05));
+        color: #8bc34a;
         padding: 15px;
-        color: #2c3e50;
-        margin: 8px;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.08);
-        border-left: 4px solid #e74c3c;
+        border-radius: 10px;
+        border-left: 4px solid #8bc34a;
+        margin: 15px 0;
     }
+    
+    .error-box {
+        background: linear-gradient(135deg, rgba(244, 67, 54, 0.15), rgba(244, 67, 54, 0.05));
+        color: #ff6b6b;
+        padding: 15px;
+        border-radius: 10px;
+        border-left: 4px solid #ff6b6b;
+        margin: 15px 0;
+    }
+    
+    .warning-box {
+        background: linear-gradient(135deg, rgba(255, 152, 0, 0.15), rgba(255, 152, 0, 0.05));
+        color: #ffc107;
+        padding: 15px;
+        border-radius: 10px;
+        border-left: 4px solid #ffc107;
+        margin: 15px 0;
+    }
+    
+    .info-box {
+        background: linear-gradient(135deg, rgba(3, 169, 244, 0.15), rgba(3, 169, 244, 0.05));
+        color: #4fc3f7;
+        padding: 15px;
+        border-radius: 10px;
+        border-left: 4px solid #4fc3f7;
+        margin: 15px 0;
+    }
+    
+    /* Estilos específicos para el sistema de guías */
+    .guide-section {
+        background: var(--card-background);
+        border-radius: 12px;
+        padding: 25px;
+        margin: 20px 0;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+    }
+    
     .qr-preview {
         display: flex;
         justify-content: center;
         align-items: center;
-        background-color: #f8f9fa;
-        border-radius: 8px;
+        background-color: #2a2a2a;
+        border-radius: 10px;
         padding: 20px;
-        margin: 15px 0;
+        margin: 20px 0;
     }
+    
     .guide-metric {
-        font-size: 1.2em;
-        margin: 8px 0;
-        color: #2c3e50;
+        font-size: 1.3em;
+        margin: 12px 0;
+        color: var(--text-color);
+        display: flex;
+        align-items: center;
     }
-    .guide-input {
-        margin-bottom: 15px;
+    
+    .guide-metric strong {
+        color: var(--primary-color);
+        margin-left: 8px;
     }
-    .guide-success {
-        background-color: #d4edda;
-        color: #155724;
-        padding: 10px;
-        border-radius: 5px;
-        margin: 10px 0;
+    
+    .guide-icon {
+        color: var(--primary-color);
+        margin-right: 10px;
+        font-size: 1.5em;
     }
-    .guide-error {
-        background-color: #f8d7da;
-        color: #721c24;
-        padding: 10px;
-        border-radius: 5px;
-        margin: 10px 0;
+    
+    /* Estilos para el sistema de autenticación */
+    .password-container {
+        background: var(--card-background);
+        padding: 35px;
+        border-radius: 15px;
+        max-width: 450px;
+        margin: 80px auto;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        border: 1px solid rgba(230, 0, 18, 0.2);
     }
-    .guide-warning {
-        background-color: #fff3cd;
-        color: #856404;
-        padding: 10px;
-        border-radius: 5px;
-        margin: 10px 0;
+    
+    .password-title {
+        color: var(--primary-color);
+        font-size: 2.2em;
+        text-align: center;
+        margin-bottom: 25px;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: 12px;
     }
-    .guide-info {
-        background-color: #d1ecf1;
-        color: #0c5460;
-        padding: 10px;
-        border-radius: 5px;
-        margin: 10px 0;
+    
+    .password-input {
+        margin-bottom: 25px;
+    }
+    
+    .logo-container {
+        text-align: center;
+        margin-bottom: 30px;
+    }
+    
+    .aeropostale-logo {
+        font-size: 3.5em;
+        font-weight: 800;
+        color: var(--primary-color);
+        text-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+        letter-spacing: -1px;
+    }
+    
+    .aeropostale-subtitle {
+        color: var(--text-secondary);
+        font-size: 1.1em;
+        margin-top: 8px;
+    }
+    
+    /* Animaciones */
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    
+    .animate-fade-in {
+        animation: fadeIn 0.5s ease forwards;
+    }
+    
+    /* Footer */
+    .footer {
+        text-align: center;
+        padding: 20px 0;
+        margin-top: 30px;
+        color: var(--text-secondary);
+        border-top: 1px solid rgba(255, 255, 255, 0.08);
+        font-size: 0.9em;
+    }
+    
+    .footer a {
+        color: var(--primary-color);
+        text-decoration: none;
+    }
+    
+    .footer a:hover {
+        text-decoration: underline;
+    }
+    
+    /* Responsive */
+    @media (max-width: 768px) {
+        .header-title {
+            font-size: 2em;
+        }
+        
+        .section-title {
+            font-size: 1.5em;
+        }
+        
+        .metric-value {
+            font-size: 2.2em;
+        }
+        
+        .password-container {
+            margin: 40px 20px;
+            padding: 25px;
+        }
     }
 </style>
 """, unsafe_allow_html=True)
@@ -380,38 +433,8 @@ def validar_numero_positivo(valor: Any) -> bool:
     except (ValueError, TypeError):
         return False
 
-def hash_password(pw: str) -> str:
-    """Genera un hash SHA256 para una contraseña."""
-    return hashlib.sha256(pw.encode()).hexdigest()
-
-def verificar_permisos(permiso: str) -> bool:
-    """Verifica si el usuario actual tiene un permiso específico"""
-    if 'user' not in st.session_state:
-        return False
-    
-    # Para este ejemplo, asumimos que los roles se almacenan en la tabla de usuarios
-    if supabase is None:
-        return False
-    
-    try:
-        response = supabase.from_('kpi_users').select('role').eq('email', st.session_state.user).execute()
-        # CORRECCIÓN: Verificar si hay datos en la respuesta
-        if response and response.data:
-            role = response.data[0]['role']
-            # Definir permisos según el rol
-            permisos = {
-                'admin': ['all'],
-                'manager': ['view_kpis', 'manage_guides', 'view_reports'],
-                'user': ['view_kpis', 'create_guides']
-            }
-            return permiso in permisos.get(role, []) or 'all' in permisos.get(role, [])
-        return False
-    except Exception as e:
-        logger.error(f"Error al verificar permisos: {e}", exc_info=True)
-        return False
-
 # ================================
-# Funciones de KPIs (adaptadas)
+# Funciones de KPIs
 # ================================
 
 # Funciones de cálculo de KPIs
@@ -453,8 +476,8 @@ def obtener_trabajadores() -> pd.DataFrame:
         })
     
     try:
-        response = supabase.from_('kpi_trabajadores').select('nombre, equipo').eq('activo', True).order('equipo,nombre', desc=False).execute()
-        # CORRECCIÓN: Verificar si hay datos en la respuesta
+        response = supabase.from_('trabajadores').select('nombre, equipo').eq('activo', True).order('equipo,nombre', desc=False).execute()
+        # Verificar si hay datos en la respuesta
         if response and response.data:
             df = pd.DataFrame(response.data)
             # Asegurar que Luis Perugachi esté en el equipo de Distribución
@@ -474,7 +497,7 @@ def obtener_trabajadores() -> pd.DataFrame:
                       "Guías", "Ventas", "Ventas", "Ventas"]
         })
 
-def obtener_equipos() -> List[str]:
+def obtener_equipos() -> list:
     """Obtiene la lista de equipos desde Supabase"""
     if supabase is None:
         logger.error("Cliente de Supabase no inicializado")
@@ -482,8 +505,8 @@ def obtener_equipos() -> List[str]:
         return ["Transferencias", "Distribución", "Arreglo", "Guías", "Ventas"]
     
     try:
-        response = supabase.from_('kpi_trabajadores').select('equipo', distinct=True).eq('activo', True).order('equipo', desc=False).execute()
-        # CORRECCIÓN: Verificar si hay datos en la respuesta
+        response = supabase.from_('trabajadores').select('equipo', distinct=True).eq('activo', True).order('equipo', desc=False).execute()
+        # Verificar si hay datos en la respuesta
         if response and response.data:
             equipos = [item['equipo'] for item in response.data]
             # Asegurar que "Distribución" esté en la lista
@@ -502,7 +525,7 @@ def obtener_equipos() -> List[str]:
         # Incluir "Distribución" en la lista de equipos por defecto
         return ["Transferencias", "Distribución", "Arreglo", "Guías", "Ventas"]
 
-def guardar_datos_db(fecha: str, datos: Dict[str, Dict]) -> bool:
+def guardar_datos_db(fecha: str, datos: dict) -> bool:
     """Guarda los datos en la tabla de Supabase"""
     if supabase is None:
         logger.error("Cliente de Supabase no inicializado")
@@ -538,7 +561,7 @@ def guardar_datos_db(fecha: str, datos: Dict[str, Dict]) -> bool:
         
         if registros:
             # Usar upsert para insertar o actualizar
-            response = supabase.from_('kpi_daily').upsert(registros, on_conflict="fecha,nombre").execute()
+            response = supabase.from_('daily_kpis').upsert(registros, on_conflict="fecha,nombre").execute()
             
             # Limpiar caché de datos históricos
             if 'historico_data' in st.session_state:
@@ -553,16 +576,16 @@ def guardar_datos_db(fecha: str, datos: Dict[str, Dict]) -> bool:
         logger.error(f"Error al guardar datos en Supabase: {e}", exc_info=True)
         return False
 
-def cargar_historico_db(fecha_inicio: Optional[str] = None, 
-                       fecha_fin: Optional[str] = None, 
-                       trabajador: Optional[str] = None) -> pd.DataFrame:
+def cargar_historico_db(fecha_inicio: str = None, 
+                       fecha_fin: str = None, 
+                       trabajador: str = None) -> pd.DataFrame:
     """Carga datos históricos desde Supabase"""
     if supabase is None:
         logger.error("Cliente de Supabase no inicializado")
         return pd.DataFrame()
     
     try:
-        query = supabase.from_('kpi_daily').select('*')
+        query = supabase.from_('daily_kpis').select('*')
         
         if fecha_inicio:
             query = query.gte('fecha', fecha_inicio)
@@ -575,7 +598,7 @@ def cargar_historico_db(fecha_inicio: Optional[str] = None,
         
         response = query.execute()
         
-        # CORRECCIÓN: Verificar si hay datos en la respuesta
+        # Verificar si hay datos en la respuesta
         if response and response.data:
             df = pd.DataFrame(response.data)
             if not df.empty:
@@ -623,12 +646,14 @@ def crear_grafico_interactivo(df: pd.DataFrame, x: str, y: str, title: str,
         fig.update_layout(
             plot_bgcolor='rgba(0,0,0,0)',
             paper_bgcolor='rgba(0,0,0,0)',
-            font=dict(color="#2c3e50"),
-            title_font_color="#2c3e50",
-            xaxis_title_font_color="#2c3e50",
-            yaxis_title_font_color="#2c3e50",
-            xaxis_tickfont_color="#2c3e50",
-            yaxis_tickfont_color="#2c3e50"
+            font=dict(color="#ffffff"),
+            title_font_color="#ffffff",
+            xaxis_title_font_color="#ffffff",
+            yaxis_title_font_color="#ffffff",
+            xaxis_tickfont_color="#ffffff",
+            yaxis_tickfont_color="#ffffff",
+            xaxis=dict(gridcolor='rgba(255,255,255,0.1)'),
+            yaxis=dict(gridcolor='rgba(255,255,255,0.1)')
         )
         return fig
     except Exception as e:
@@ -650,22 +675,22 @@ def crear_grafico_frasco(porcentaje: float, titulo: str) -> go.Figure:
         fig = go.Figure(go.Indicator(
             mode = "gauge+number",
             value = porcentaje,
-            number = {'suffix': '%', 'font': {'size': 36}},
+            number = {'suffix': '%', 'font': {'size': 36, 'color': '#ffffff'}},
             domain = {'x': [0, 1], 'y': [0, 1]},
-            title = {'text': titulo, 'font': {'size': 20}},
+            title = {'text': titulo, 'font': {'size': 20, 'color': '#ffffff'}},
             gauge = {
-                'axis': {'range': [None, 100], 'tickwidth': 1, 'tickcolor': "darkblue"},
-                'bar': {'color': "gold", 'thickness': 0.3},
-                'bgcolor': "white",
+                'axis': {'range': [None, 100], 'tickwidth': 1, 'tickcolor': "white"},
+                'bar': {'color': "#e60012", 'thickness': 0.3},
+                'bgcolor': "#2a2a2a",
                 'borderwidth': 2,
-                'bordercolor': "gray",
+                'bordercolor': "#444444",
                 'steps': [
                     {'range': [0, 50], 'color': "darkred"},
                     {'range': [50, 75], 'color': "darkorange"},
                     {'range': [75, 100], 'color': "forestgreen"}
                 ],
                 'threshold': {
-                    'line': {'color': "red", 'width': 4},
+                    'line': {'color': "white", 'width': 4},
                     'thickness': 0.75,
                     'value': 90
                 }
@@ -683,7 +708,7 @@ def crear_grafico_frasco(porcentaje: float, titulo: str) -> go.Figure:
         return go.Figure()
 
 # ================================
-# Funciones de Guías (adaptadas a Supabase)
+# Funciones de Guías
 # ================================
 
 def generar_numero_seguimiento(record_id: int) -> str:
@@ -714,7 +739,7 @@ def obtener_tiendas() -> pd.DataFrame:
     
     try:
         response = supabase.from_('guide_stores').select('*').execute()
-        # CORRECCIÓN: Verificar si hay datos en la respuesta
+        # Verificar si hay datos en la respuesta
         if response and response.data:
             return pd.DataFrame(response.data)
         else:
@@ -741,7 +766,7 @@ def obtener_remitentes() -> pd.DataFrame:
     
     try:
         response = supabase.from_('guide_senders').select('*').execute()
-        # CORRECCIÓN: Verificar si hay datos en la respuesta
+        # Verificar si hay datos en la respuesta
         if response and response.data:
             return pd.DataFrame(response.data)
         else:
@@ -763,14 +788,6 @@ def guardar_guia(store_name: str, brand: str, url: str, sender_name: str) -> boo
         return False
     
     try:
-        # Obtener ID del usuario actual
-        user_id = None
-        if 'user' in st.session_state:
-            user_response = supabase.from_('kpi_users').select('id').eq('email', st.session_state.user).execute()
-            # CORRECCIÓN: Verificar si hay datos en la respuesta
-            if user_response and user_response.data:
-                user_id = user_response.data[0]['id']
-        
         # Insertar nueva guía
         data = {
             'store_name': store_name,
@@ -778,13 +795,12 @@ def guardar_guia(store_name: str, brand: str, url: str, sender_name: str) -> boo
             'url': url,
             'sender_name': sender_name,
             'status': 'Pending',
-            'created_at': datetime.now().isoformat(),
-            'user_id': user_id
+            'created_at': datetime.now().isoformat()
         }
         
         response = supabase.from_('guide_logs').insert(data).execute()
         
-        # CORRECCIÓN: Verificar si la inserción fue exitosa
+        # Verificar si la inserción fue exitosa
         if response and response.data:
             logger.info(f"Guía guardada correctamente para {store_name}")
             return True
@@ -802,22 +818,12 @@ def obtener_historial_guias() -> pd.DataFrame:
         return pd.DataFrame()
     
     try:
-        # Si el usuario es admin, obtener todas las guías
-        # Si no, obtener solo las del usuario actual
         query = supabase.from_('guide_logs').select('*')
-        
-        if 'user' in st.session_state and not verificar_permisos('all'):
-            user_response = supabase.from_('kpi_users').select('id').eq('email', st.session_state.user).execute()
-            # CORRECCIÓN: Verificar si hay datos en la respuesta
-            if user_response and user_response.data:
-                user_id = user_response.data[0]['id']
-                query = query.eq('user_id', user_id)
-        
         query = query.order('created_at', desc=True)
         
         response = query.execute()
         
-        # CORRECCIÓN: Verificar si hay datos en la respuesta
+        # Verificar si hay datos en la respuesta
         if response and response.data:
             df = pd.DataFrame(response.data)
             if not df.empty:
@@ -899,485 +905,47 @@ def generar_pdf_guia(store_name: str, brand: str, url: str, sender_name: str,
         return b""
 
 # ================================
-# Funciones de autenticación unificadas
+# Sistema de autenticación
 # ================================
 
 def verificar_password() -> bool:
-    """Verifica la contraseña del usuario"""
+    """Verifica si el usuario tiene permisos para realizar acciones críticas"""
     if 'password_correct' not in st.session_state:
         st.session_state.password_correct = False
-    
-    if not st.session_state.password_correct:
-        st.markdown("<div class='password-container'>", unsafe_allow_html=True)
-        st.markdown("<h2 style='text-align: center; color: black;'>🔐 Acceso Restringido</h2>", unsafe_allow_html=True)
-        
-        tab1, tab2 = st.tabs(["Iniciar Sesión", "Registrarse"])
-        
-        with tab1:
-            username = st.text_input("Email:", key="login_email")
-            password = st.text_input("Contraseña:", type="password", key="login_password")
-            if st.button("Iniciar Sesión", key="login_button"):
-                if autenticar_usuario(username, password):
-                    st.session_state.password_correct = True
-                    st.session_state.user = username
-                    st.rerun()
-                else:
-                    st.markdown("<div class='error-box'>❌ Email o contraseña incorrectos</div>", unsafe_allow_html=True)
-        
-        with tab2:
-            new_email = st.text_input("Nuevo Email:", key="register_email")
-            new_password = st.text_input("Nueva Contraseña:", type="password", key="register_password")
-            if st.button("Registrarse", key="register_button"):
-                if registrar_usuario(new_email, new_password):
-                    st.markdown("<div class='success-box'>✅ Registro exitoso. Inicia sesión con tus credenciales.</div>", unsafe_allow_html=True)
-                else:
-                    st.markdown("<div class='error-box'>❌ Error al registrar usuario. El email ya existe.</div>", unsafe_allow_html=True)
-        
-        st.markdown("</div>", unsafe_allow_html=True)
-        return False
-    
-    return True
+    return st.session_state.password_correct
 
-def autenticar_usuario(email: str, password: str) -> bool:
-    """Autentica un usuario contra Supabase"""
-    if supabase is None:
-        logger.error("Cliente de Supabase no inicializado")
-        return False
+def solicitar_autenticacion():
+    """Muestra un formulario de autenticación"""
+    st.markdown("""
+    <div class="password-container animate-fade-in">
+        <div class="logo-container">
+            <div class="aeropostale-logo">AEROPORTALE</div>
+            <div class="aeropostale-subtitle">Sistema de Gestión de KPIs</div>
+        </div>
+        <h2 class="password-title">🔐 Acceso Restringido</h2>
+        <p style="text-align: center; color: var(--text-secondary); margin-bottom: 25px;">
+            Ingrese la contraseña para realizar esta acción
+        </p>
+    """, unsafe_allow_html=True)
     
-    try:
-        # Buscar usuario por email
-        response = supabase.from_('kpi_users').select('*').eq('email', email).execute()
-        
-        # CORRECCIÓN: Verificar si hay datos en la respuesta
-        if response and response.data:
-            # Verificar contraseña
-            hashed_password = hash_password(password)
-            if response.data[0]['password'] == hashed_password:
-                return True
-        return False
-    except Exception as e:
-        logger.error(f"Error al autenticar usuario: {e}", exc_info=True)
-        return False
-
-def registrar_usuario(email: str, password: str) -> bool:
-    """Registra un nuevo usuario en Supabase"""
-    if supabase is None:
-        logger.error("Cliente de Supabase no inicializado")
-        return False
+    password = st.text_input("Contraseña:", type="password", key="auth_password", 
+                            placeholder="Ingrese su contraseña", 
+                            label_visibility="collapsed")
     
-    try:
-        # Verificar si el email ya existe
-        response = supabase.from_('kpi_users').select('id').eq('email', email).execute()
-        
-        # CORRECCIÓN: Verificar si hay datos en la respuesta
-        if response and response.data:
-            return False  # El email ya existe
-        
-        # Insertar nuevo usuario
-        hashed_password = hash_password(password)
-        data = {
-            'email': email,
-            'password': hashed_password,
-            'role': 'user',  # Rol por defecto
-            'created_at': datetime.now().isoformat()
-        }
-        
-        response = supabase.from_('kpi_users').insert(data).execute()
-        
-        # CORRECCIÓN: Verificar si la inserción fue exitosa
-        if response and response.data:
-            return True
-        return False
-    except Exception as e:
-        logger.error(f"Error al registrar usuario: {e}", exc_info=True)
-        return False
-
-# ================================
-# Funciones de análisis (compartidas)
-# ================================
-
-def analizar_tendencias(df: pd.DataFrame, metric: str) -> Union[Dict[str, Any], str]:
-    """Analiza tendencias en los datos"""
-    if df.empty or len(df) < 2:
-        return "No hay suficientes datos para analizar tendencias"
-    try:
-        # Calcular media móvil
-        df = df.sort_values('fecha')
-        df['media_movil'] = df[metric].rolling(window=7, min_periods=1).mean()
-        # Calcular tendencia (regresión lineal simple)
-        x = np.arange(len(df))
-        y = df[metric].values
-        coeficientes = np.polyfit(x, y, 1)
-        tendencia = coeficientes[0] * x + coeficientes[1]
-        # Determinar dirección de la tendencia
-        if coeficientes[0] > 0.5:  # Umbral más alto para evitar fluctuaciones pequeñas
-            direccion = "↑ Ascendente significativa"
-        elif coeficientes[0] > 0:
-            direccion = "↑ Ligeramente ascendente"
-        elif coeficientes[0] < -0.5:
-            direccion = "↓ Descendente significativa"
-        elif coeficientes[0] < 0:
-            direccion = "↓ Ligeramente descendente"
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        submitted = st.button("Ingresar", use_container_width=True)
+    
+    st.markdown("</div>", unsafe_allow_html=True)
+    
+    if submitted:
+        if password == ADMIN_PASSWORD:
+            st.session_state.password_correct = True
+            st.success("✅ Acceso concedido")
+            time.sleep(1)
+            st.rerun()
         else:
-            direccion = "→ Estable"
-        return {
-            'tendencia': tendencia,
-            'direccion': direccion,
-            'pendiente': coeficientes[0],
-            'r_cuadrado': np.corrcoef(x, y)[0, 1]**2
-        }
-    except Exception as e:
-        logger.error(f"Error en análisis de tendencias: {e}", exc_info=True)
-        return "Error al analizar tendencias"
-
-def predecir_valores_futuros(df: pd.DataFrame, columna: str, dias: int = 7) -> Optional[np.ndarray]:
-    """Predice valores futuros usando regresión con validación"""
-    if len(df) < 5:  # Mínimo de datos para predicción
-        return None
-    try:
-        # Preparar datos
-        df = df.sort_values('fecha')
-        X = np.arange(len(df)).reshape(-1, 1)
-        y = df[columna].values
-        # Dividir en train y test para validación
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-        # Probar múltiples modelos
-        modelos = {
-            'Lineal': LinearRegression(),
-            'Ridge': Ridge(alpha=1.0),
-            'RandomForest': RandomForestRegressor(n_estimators=100, random_state=42)
-        }
-        mejor_modelo = None
-        mejor_mae = float('inf')
-        for nombre, modelo in modelos.items():
-            modelo.fit(X_train, y_train)
-            predicciones = modelo.predict(X_test)
-            mae = mean_absolute_error(y_test, predicciones)
-            if mae < mejor_mae:
-                mejor_mae = mae
-                mejor_modelo = modelo
-        # Predecir valores futuros con el mejor modelo
-        X_futuro = np.arange(len(df), len(df) + dias).reshape(-1, 1)
-        predicciones = mejor_modelo.predict(X_futuro)
-        return predicciones
-    except Exception as e:
-        logger.error(f"Error en predicción: {e}", exc_info=True)
-        return None
-
-def calcular_estadisticas_avanzadas(df: pd.DataFrame, columna: str) -> Dict[str, Any]:
-    """Calcula estadísticas avanzadas para una columna"""
-    if df.empty:
-        return {}
-    try:
-        valores = df[columna].dropna()
-        if len(valores) == 0:
-            return {}
-        return {
-            'media': np.mean(valores),
-            'mediana': np.median(valores),
-            'desviacion_estandar': np.std(valores),
-            'percentil_25': np.percentile(valores, 25),
-            'percentil_75': np.percentile(valores, 75),
-            'rango': np.ptp(valores),
-            'asimetria': stats.skew(valores),
-            'curtosis': stats.kurtosis(valores),
-            'count': len(valores),
-            'min': np.min(valores),
-            'max': np.max(valores)
-        }
-    except Exception as e:
-        logger.error(f"Error al calcular estadísticas: {e}", exc_info=True)
-        return {}
-
-# ================================
-# Funciones de exportación (compartidas)
-# ================================
-
-def exportar_excel(df: pd.DataFrame) -> bytes:
-    """Exporta el DataFrame a un archivo Excel en memoria"""
-    try:
-        # Crear una copia del DataFrame para no modificar el original
-        export_df = df.copy()
-        
-        # Asegurar que las fechas estén en formato adecuado
-        if 'fecha' in export_df.columns:
-            export_df['fecha'] = pd.to_datetime(export_df['fecha']).dt.strftime('%Y-%m-%d')
-        
-        # Convertir cualquier columna de fecha a string para evitar problemas
-        for col in export_df.select_dtypes(include=['datetime64']).columns:
-            export_df[col] = export_df[col].dt.strftime('%Y-%m-%d')
-        
-        # Manejar valores NaN y None
-        export_df = export_df.fillna('N/A')
-        
-        # Reordenar columnas para una mejor presentación
-        columnas_ordenadas = [
-            'fecha', 'nombre', 'equipo', 'actividad', 'cantidad', 'meta', 
-            'eficiencia', 'productividad', 'horas_trabajo', 'meta_mensual', 'comentario'
-        ]
-        # Solo incluir las columnas que existen en el DataFrame
-        columnas_finales = [col for col in columnas_ordenadas if col in export_df.columns]
-        export_df = export_df[columnas_finales]
-        
-        output = io.BytesIO()
-        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-            export_df.to_excel(writer, sheet_name='Datos_KPIs', index=False)
-            # Formato adicional para mejorar el Excel
-            workbook = writer.book
-            worksheet = writer.sheets['Datos_KPIs']
-            
-            # Formato para encabezados
-            header_format = workbook.add_format({
-                'bold': True,
-                'text_wrap': True,
-                'valign': 'top',
-                'fg_color': '#4472C4',
-                'font_color': 'white',
-                'border': 1
-            })
-            
-            # Formato para celdas
-            cell_format = workbook.add_format({
-                'border': 1,
-                'align': 'left',
-                'valign': 'vcenter'
-            })
-            
-            # Aplicar formato a encabezados
-            for col_num, value in enumerate(export_df.columns.values):
-                worksheet.write(0, col_num, value, header_format)
-            
-            # Aplicar formato a todas las celdas de datos
-            for row in range(1, len(export_df) + 1):
-                for col in range(len(export_df.columns)):
-                    worksheet.write(row, col, export_df.iloc[row-1, col], cell_format)
-            
-            # Autoajustar columnas
-            for i, col in enumerate(export_df.columns):
-                # Obtener la longitud máxima de los datos en la columna
-                max_len = max((
-                    export_df[col].astype(str).str.len().max(),  # Longitud máxima de los datos
-                    len(str(col))  # Longitud del nombre de la columna
-                )) + 2  # Añadir un poco de espacio extra
-                worksheet.set_column(i, i, max_len)
-        
-        processed_data = output.getvalue()
-        return processed_data
-    except Exception as e:
-        logger.error(f"Error al exportar a Excel: {e}", exc_info=True)
-        st.error(f"Error al exportar a Excel: {str(e)}")
-        raise
-
-def plot_to_base64(fig):
-    """Convierte un gráfico Plotly a base64 para incrustar en PDF"""
-    try:
-        # Intentar convertir figura a imagen en memoria
-        try:
-            img_bytes = fig.to_image(format="png", width=800, height=600, scale=2)
-        except Exception as e:
-            logger.warning(f"Error al convertir gráfico con to_image: {e}. Intentando alternativa...")
-            # Alternativa si kaleido no está disponible
-            img_bytes = fig.to_image(format="png", width=800, height=600, engine='kaleido')
-        
-        if img_bytes is None:
-            logger.error("No se pudo generar la imagen del gráfico")
-            return None
-            
-        return base64.b64encode(img_bytes).decode('utf-8')
-    except Exception as e:
-        logger.error(f"Error crítico al convertir gráfico a base64: {e}", exc_info=True)
-        return None
-
-def crear_reporte_pdf(df: pd.DataFrame, fecha_inicio: str, fecha_fin: str) -> bytes:
-    """Crea un reporte PDF con los datos y gráficas"""
-    try:
-        buffer = io.BytesIO()
-        doc = SimpleDocTemplate(buffer, pagesize=letter)
-        styles = getSampleStyleSheet()
-        elements = []
-        
-        # Título del reporte
-        title = Paragraph("Reporte de KPIs - Fashion Club", styles['Title'])
-        elements.append(title)
-        elements.append(Spacer(1, 12))
-        
-        # Información del período
-        periodo_text = f"Período: {fecha_inicio} a {fecha_fin}"
-        periodo = Paragraph(periodo_text, styles['Normal'])
-        elements.append(periodo)
-        elements.append(Spacer(1, 12))
-        
-        # Resumen estadístico
-        resumen_text = "Resumen Estadístico"
-        resumen_title = Paragraph(resumen_text, styles['Heading2'])
-        elements.append(resumen_title)
-        
-        # Crear tabla de resumen
-        try:
-            resumen_data = df.groupby('nombre').agg({
-                'cantidad': ['count', 'mean', 'sum', 'max', 'min'],
-                'eficiencia': ['mean', 'max', 'min'],
-                'productividad': ['mean', 'max', 'min'],
-                'horas_trabajo': ['sum', 'mean']
-            }).round(2)
-            
-            # Aplanar las columnas multiindex
-            resumen_data.columns = ['_'.join(col).strip() for col in resumen_data.columns.values]
-            resumen_data.reset_index(inplace=True)
-            
-            # Convertir DataFrame a lista para la tabla
-            table_data = [list(resumen_data.columns)]
-            for _, row in resumen_data.iterrows():
-                table_data.append(list(row))
-            
-            # Crear tabla
-            table = Table(table_data)
-            table.setStyle(TableStyle([
-                ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
-                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-                ('FONTSIZE', (0, 0), (-1, 0), 10),
-                ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-                ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
-                ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
-                ('FONTSIZE', (0, 1), (-1, -1), 8),
-                ('GRID', (0, 0), (-1, -1), 1, colors.black)
-            ]))
-            elements.append(table)
-            elements.append(Spacer(1, 12))
-        except Exception as e:
-            logger.error(f"Error al crear tabla de resumen: {e}", exc_info=True)
-            error_msg = Paragraph(f"Error al generar tabla de resumen: {str(e)}", styles['Normal'])
-            elements.append(error_msg)
-            elements.append(Spacer(1, 12))
-        
-        # Gráficas - Ahora con manejo robusto de errores
-        try:
-            # Crear gráfica de eficiencia por día
-            df_eficiencia_dia = df.groupby('fecha')['eficiencia'].mean().reset_index()
-            if not df_eficiencia_dia.empty:
-                fig = go.Figure()
-                fig.add_trace(go.Scatter(
-                    x=df_eficiencia_dia['fecha'], 
-                    y=df_eficiencia_dia['eficiencia'],
-                    mode='lines+markers',
-                    name='Eficiencia Promedio'
-                ))
-                fig.add_hline(y=100, line_dash="dash", line_color="red", annotation_text="Meta")
-                fig.update_layout(
-                    title='Evolución de la Eficiencia Promedio',
-                    xaxis_title='Fecha',
-                    yaxis_title='Eficiencia (%)',
-                    width=800,
-                    height=600
-                )
-                # Convertir gráfico a base64
-                img_data = plot_to_base64(fig)
-                if img_data:
-                    # Guardar imagen temporalmente
-                    with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmpfile:
-                        tmpfile.write(base64.b64decode(img_data))
-                        img_path = tmpfile.name
-                    # Agregar gráfica al PDF
-                    img = Image(img_path, width=6*inch, height=4*inch)
-                    elements.append(Spacer(1, 12))
-                    elements.append(Paragraph("Evolución de la Eficiencia Promedio", styles['Heading3']))
-                    elements.append(img)
-                    # Limpiar archivo temporal
-                    os.unlink(img_path)
-                else:
-                    logger.warning("No se pudo generar la imagen del gráfico de eficiencia")
-                    elements.append(Paragraph("No se pudo generar el gráfico de eficiencia", styles['Normal']))
-            else:
-                elements.append(Paragraph("No hay datos suficientes para el gráfico de eficiencia", styles['Normal']))
-        except Exception as e:
-            logger.error(f"Error al crear gráfica de eficiencia para PDF: {e}", exc_info=True)
-            elements.append(Paragraph(f"Error al generar gráfica de eficiencia: {str(e)}", styles['Normal']))
-        
-        try:
-            # Crear gráfica de productividad por equipo
-            df_productividad_equipo = df.groupby('equipo')['productividad'].mean().reset_index()
-            if not df_productividad_equipo.empty:
-                fig = px.bar(df_productividad_equipo, x='equipo', y='productividad', 
-                            title='Productividad Promedio por Equipo',
-                            labels={'equipo': 'Equipo', 'productividad': 'Productividad (unidades/hora)'})
-                fig.update_layout(width=800, height=600)
-                # Convertir gráfico a base64
-                img_data = plot_to_base64(fig)
-                if img_data:
-                    # Guardar imagen temporalmente
-                    with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmpfile:
-                        tmpfile.write(base64.b64decode(img_data))
-                        img_path = tmpfile.name
-                    # Agregar gráfica al PDF
-                    img = Image(img_path, width=6*inch, height=4*inch)
-                    elements.append(Spacer(1, 12))
-                    elements.append(Paragraph("Productividad por Equipo", styles['Heading3']))
-                    elements.append(img)
-                    # Limpiar archivo temporal
-                    os.unlink(img_path)
-                else:
-                    logger.warning("No se pudo generar la imagen del gráfico de productividad")
-                    elements.append(Paragraph("No se pudo generar el gráfico de productividad", styles['Normal']))
-            else:
-                elements.append(Paragraph("No hay datos suficientes para el gráfico de productividad por equipo", styles['Normal']))
-        except Exception as e:
-            logger.error(f"Error al crear gráfica de productividad para PDF: {e}", exc_info=True)
-            elements.append(Paragraph(f"Error al generar gráfica de productividad: {str(e)}", styles['Normal']))
-        
-        try:
-            # Crear gráfica de cumplimiento de metas
-            df_cumplimiento = df.copy()
-            df_cumplimiento['cumplio_meta'] = df_cumplimiento['eficiencia'] >= 100
-            cumplimiento_por_equipo = df_cumplimiento.groupby('equipo')['cumplio_meta'].mean() * 100
-            
-            if not cumplimiento_por_equipo.empty:
-                fig = go.Figure(data=[go.Bar(
-                    x=cumplimiento_por_equipo.index,
-                    y=cumplimiento_por_equipo.values,
-                    marker_color=['#27ae60' if val >= 80 else '#e74c3c' for val in cumplimiento_por_equipo.values]
-                )])
-                fig.update_layout(
-                    title='Porcentaje de Días que Cumplieron la Meta por Equipo',
-                    xaxis_title='Equipo',
-                    yaxis_title='Porcentaje de Cumplimiento (%)',
-                    yaxis_range=[0, 100],
-                    width=800,
-                    height=600
-                )
-                # Convertir gráfico a base64
-                img_data = plot_to_base64(fig)
-                if img_data:
-                    # Guardar imagen temporalmente
-                    with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmpfile:
-                        tmpfile.write(base64.b64decode(img_data))
-                        img_path = tmpfile.name
-                    # Agregar gráfica al PDF
-                    img = Image(img_path, width=6*inch, height=4*inch)
-                    elements.append(Spacer(1, 12))
-                    elements.append(Paragraph("Cumplimiento de Metas por Equipo", styles['Heading3']))
-                    elements.append(img)
-                    # Limpiar archivo temporal
-                    os.unlink(img_path)
-                else:
-                    logger.warning("No se pudo generar la imagen del gráfico de cumplimiento")
-                    elements.append(Paragraph("No se pudo generar el gráfico de cumplimiento", styles['Normal']))
-            else:
-                elements.append(Paragraph("No hay datos suficientes para el gráfico de cumplimiento de metas", styles['Normal']))
-        except Exception as e:
-            logger.error(f"Error al crear gráfica de cumplimiento para PDF: {e}", exc_info=True)
-            elements.append(Paragraph(f"Error al generar gráfico de cumplimiento: {str(e)}", styles['Normal']))
-        
-        # Construir PDF
-        doc.build(elements)
-        pdf_bytes = buffer.getvalue()
-        buffer.close()
-        return pdf_bytes
-    except Exception as e:
-        logger.error(f"Error crítico al crear reporte PDF: {e}", exc_info=True)
-        st.error(f"Error al crear reporte PDF: {str(e)}")
-        raise
+            st.error("❌ Contraseña incorrecta")
 
 # ================================
 # Componentes de la aplicación
@@ -1385,10 +953,10 @@ def crear_reporte_pdf(df: pd.DataFrame, fecha_inicio: str, fecha_fin: str) -> by
 
 def mostrar_dashboard_kpis():
     """Muestra el dashboard principal con KPIs"""
-    st.markdown("<h1 class='header-title'>📊 Dashboard de KPIs Fashion Club</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 class='header-title animate-fade-in'>📊 Dashboard de KPIs Aeropostale</h1>", unsafe_allow_html=True)
     
     if supabase is None:
-        st.markdown("<div class='error-box'>❌ Error de conexión a la base de datos. Verifique las variables de entorno.</div>", unsafe_allow_html=True)
+        st.markdown("<div class='error-box animate-fade-in'>❌ Error de conexión a la base de datos. Verifique las variables de entorno.</div>", unsafe_allow_html=True)
         return
     
     # Cargar datos históricos
@@ -1398,11 +966,11 @@ def mostrar_dashboard_kpis():
     
     df = st.session_state.historico_data
     if df.empty:
-        st.markdown("<div class='warning-box'>⚠️ No hay datos históricos. Por favor, ingresa datos primero.</div>", unsafe_allow_html=True)
+        st.markdown("<div class='warning-box animate-fade-in'>⚠️ No hay datos históricos. Por favor, ingresa datos primero.</div>", unsafe_allow_html=True)
         return
     
     # Crear selector de fecha
-    st.markdown("<div class='date-selector'>", unsafe_allow_html=True)
+    st.markdown("<div class='date-selector animate-fade-in'>", unsafe_allow_html=True)
     st.markdown("<h3>Selecciona la fecha a visualizar:</h3>", unsafe_allow_html=True)
     
     # Obtener fechas únicas y ordenarlas
@@ -1410,7 +978,7 @@ def mostrar_dashboard_kpis():
         # Convertir a fecha y eliminar duplicados
         fechas_disponibles = sorted(df['fecha'].dt.date.unique(), reverse=True)
         if not fechas_disponibles:
-            st.markdown("<div class='warning-box'>⚠️ No hay fechas disponibles para mostrar.</div>", unsafe_allow_html=True)
+            st.markdown("<div class='warning-box animate-fade-in'>⚠️ No hay fechas disponibles para mostrar.</div>", unsafe_allow_html=True)
             return
         fecha_seleccionada = st.selectbox(
             "Fecha:",
@@ -1419,18 +987,18 @@ def mostrar_dashboard_kpis():
             label_visibility="collapsed"
         )
     else:
-        st.markdown("<div class='warning-box'>⚠️ No hay datos disponibles.</div>", unsafe_allow_html=True)
+        st.markdown("<div class='warning-box animate-fade-in'>⚠️ No hay datos disponibles.</div>", unsafe_allow_html=True)
         return
     st.markdown("</div>", unsafe_allow_html=True)
     
     # Filtrar datos por fecha seleccionada
     df_reciente = df[df['fecha'].dt.date == fecha_seleccionada]
     if df_reciente.empty:
-        st.markdown(f"<div class='warning-box'>⚠️ No hay datos disponibles para la fecha {fecha_seleccionada}.</div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='warning-box animate-fade-in'>⚠️ No hay datos disponibles para la fecha {fecha_seleccionada}.</div>", unsafe_allow_html=True)
         return
     
-    st.markdown(f"<p style='color: #2c3e50; font-size: 1.1em;'>Datos para la fecha: {fecha_seleccionada}</p>", unsafe_allow_html=True)
-    st.markdown("<h2 class='section-title'>📈 KPIs Globales</h2>", unsafe_allow_html=True)
+    st.markdown(f"<p style='color: var(--text-secondary); font-size: 1.1em;'>Datos para la fecha: {fecha_seleccionada}</p>", unsafe_allow_html=True)
+    st.markdown("<h2 class='section-title animate-fade-in'>📈 KPIs Globales</h2>", unsafe_allow_html=True)
     
     # Cálculos globales
     total_cantidad = df_reciente['cantidad'].sum()
@@ -1444,8 +1012,8 @@ def mostrar_dashboard_kpis():
     with kpi1:
         cumplimiento_meta = (total_cantidad / total_meta * 100) if total_meta > 0 else 0
         st.markdown(f"""
-        <div class="kpi-card">
-            <h3>✅ Total Producción</h3>
+        <div class="kpi-card animate-fade-in">
+            <div class="metric-label">✅ Total Producción</div>
             <p class="metric-value">{total_cantidad:,.0f}</p>
             <p>Meta: {total_meta:,.0f} | <span class="{'trend-up' if cumplimiento_meta >= 100 else 'trend-down'}">{cumplimiento_meta:.1f}%</span></p>
         </div>
@@ -1453,8 +1021,8 @@ def mostrar_dashboard_kpis():
     
     with kpi2:
         st.markdown(f"""
-        <div class="kpi-card">
-            <h3>🎯 Eficiencia Promedio</h3>
+        <div class="kpi-card animate-fade-in">
+            <div class="metric-label">🎯 Eficiencia Promedio</div>
             <p class="metric-value">{avg_eficiencia:.1f}%</p>
             <p>Meta: 100% | <span class="{'trend-up' if avg_eficiencia >= 100 else 'trend-down'}">{avg_eficiencia - 100:.1f}%</span></p>
         </div>
@@ -1462,8 +1030,8 @@ def mostrar_dashboard_kpis():
     
     with kpi3:
         st.markdown(f"""
-        <div class="kpi-card">
-            <h3>⚡ Productividad Promedio</h3>
+        <div class="kpi-card animate-fade-in">
+            <div class="metric-label">⚡ Productividad Promedio</div>
             <p class="metric-value">{avg_productividad:.1f}</p>
             <p>unidades/hora</p>
         </div>
@@ -1471,14 +1039,14 @@ def mostrar_dashboard_kpis():
     
     with kpi4:
         st.markdown(f"""
-        <div class="kpi-card">
-            <h3>⏱️ Productividad Total</h3>
+        <div class="kpi-card animate-fade-in">
+            <div class="metric-label">⏱️ Productividad Total</div>
             <p class="metric-value">{productividad_total:.1f}</p>
             <p>unidades/hora ({total_horas:.1f} h)</p>
         </div>
         """, unsafe_allow_html=True)
     
-    st.markdown("<h2 class='section-title'>📅 Cumplimiento de Metas Mensuales (Transferencias)</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 class='section-title animate-fade-in'>📅 Cumplimiento de Metas Mensuales (Transferencias)</h2>", unsafe_allow_html=True)
     
     current_month = fecha_seleccionada.month
     current_year = fecha_seleccionada.year
@@ -1501,8 +1069,8 @@ def mostrar_dashboard_kpis():
     col1, col2 = st.columns(2)
     with col1:
         st.markdown(f"""
-        <div class="kpi-card">
-            <h3>Meta Mensual Transferencias</h3>
+        <div class="kpi-card animate-fade-in">
+            <div class="metric-label">Meta Mensual Transferencias</div>
             <p class="metric-value">{cumplimiento_transferencias:.1f}%</p>
             <p>Acumulado: {cum_transferencias:,.0f} / Meta Mensual: {meta_mensual_transferencias:,.0f}</p>
         </div>
@@ -1511,7 +1079,7 @@ def mostrar_dashboard_kpis():
     with col2:
         # Gráfico de frasco de agua para el cumplimiento
         fig = crear_grafico_frasco(cumplimiento_transferencias, "Cumplimiento Mensual Transferencias")
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
     
     # Gráfico de evolución mensual
     if not df_transferencias_month.empty:
@@ -1530,12 +1098,12 @@ def mostrar_dashboard_kpis():
             'line'
         )
         # Añadir línea de meta
-        fig.add_hline(y=meta_mensual_transferencias, line_dash="dash", line_color="red", annotation_text="Meta Mensual")
-        st.plotly_chart(fig, use_container_width=True)
+        fig.add_hline(y=meta_mensual_transferencias, line_dash="dash", line_color="white", annotation_text="Meta Mensual")
+        st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
     else:
         st.info("No hay datos para el gráfico de Transferencias.")
     
-    st.markdown("<h2 class='section-title'>👥 Rendimiento por Equipos</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 class='section-title animate-fade-in'>👥 Rendimiento por Equipos</h2>", unsafe_allow_html=True)
     
     # Obtener lista de equipos
     equipos = df_reciente['equipo'].unique()
@@ -1547,7 +1115,7 @@ def mostrar_dashboard_kpis():
     
     for equipo in equipos_finales:
         df_equipo = df_reciente[df_reciente['equipo'] == equipo]
-        st.markdown(f"<div class='team-section'><div class='team-header'>{equipo}</div></div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='team-section animate-fade-in'><div class='team-header'>{equipo}</div></div>", unsafe_allow_html=True)
         
         # Calcular KPIs del equipo
         total_equipo = df_equipo['cantidad'].sum()
@@ -1560,7 +1128,7 @@ def mostrar_dashboard_kpis():
         with col1:
             st.markdown(f"""
             <div class="kpi-card">
-                <h3>Producción</h3>
+                <div class="metric-label">Producción</div>
                 <p class="metric-value">{total_equipo:,.0f}</p>
                 <p>Meta: {meta_equipo:,.0f}</p>
             </div>
@@ -1569,7 +1137,7 @@ def mostrar_dashboard_kpis():
         with col2:
             st.markdown(f"""
             <div class="kpi-card">
-                <h3>Eficiencia</h3>
+                <div class="metric-label">Eficiencia</div>
                 <p class="metric-value">{eficiencia_equipo:.1f}%</p>
                 <p>Meta: 100%</p>
             </div>
@@ -1578,7 +1146,7 @@ def mostrar_dashboard_kpis():
         with col3:
             st.markdown(f"""
             <div class="kpi-card">
-                <h3>Productividad</h3>
+                <div class="metric-label">Productividad</div>
                 <p class="metric-value">{productividad_equipo:.1f}</p>
                 <p>unidades/hora</p>
             </div>
@@ -1587,7 +1155,7 @@ def mostrar_dashboard_kpis():
         with col4:
             st.markdown(f"""
             <div class="kpi-card">
-                <h3>Horas</h3>
+                <div class="metric-label">Horas</div>
                 <p class="metric-value">{horas_equipo:.1f}</p>
                 <p>horas trabajadas</p>
             </div>
@@ -1597,7 +1165,7 @@ def mostrar_dashboard_kpis():
         for _, row in df_equipo.iterrows():
             col1, col2 = st.columns([3, 1])
             with col1:
-                color = "#27ae60" if row['eficiencia'] >= 100 else "#e74c3c"
+                color = "#8bc34a" if row['eficiencia'] >= 100 else "#ff6b6b"
                 card_content = f"""
                 <div class="worker-card">
                     <div class="stats-container">
@@ -1623,16 +1191,16 @@ def mostrar_dashboard_kpis():
 
 def mostrar_analisis_historico_kpis():
     """Muestra el análisis histórico de KPIs"""
-    st.markdown("<h1 class='header-title'>📈 Análisis Histórico de KPIs</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 class='header-title animate-fade-in'>📈 Análisis Histórico de KPIs</h1>", unsafe_allow_html=True)
     
     if supabase is None:
-        st.markdown("<div class='error-box'>❌ Error de conexión a la base de datos. Verifique las variables de entorno.</div>", unsafe_allow_html=True)
+        st.markdown("<div class='error-box animate-fade-in'>❌ Error de conexión a la base de datos. Verifique las variables de entorno.</div>", unsafe_allow_html=True)
         return
     
     # Cargar datos históricos
     df = cargar_historico_db()
     if df.empty:
-        st.markdown("<div class='warning-box'>⚠️ No hay datos históricos. Por favor, ingresa datos primero.</div>", unsafe_allow_html=True)
+        st.markdown("<div class='warning-box animate-fade-in'>⚠️ No hay datos históricos. Por favor, ingresa datos primero.</div>", unsafe_allow_html=True)
         return
     
     df['dia'] = df['fecha'].dt.date
@@ -1648,7 +1216,7 @@ def mostrar_analisis_historico_kpis():
         trabajador = st.selectbox("Filtrar por trabajador:", options=["Todos"] + list(df['nombre'].unique()))
     
     if fecha_inicio > fecha_fin:
-        st.markdown("<div class='error-box'>❌ La fecha de inicio no puede ser mayor que la fecha de fin.</div>", unsafe_allow_html=True)
+        st.markdown("<div class='error-box animate-fade-in'>❌ La fecha de inicio no puede ser mayor que la fecha de fin.</div>", unsafe_allow_html=True)
         return
     
     # Aplicar filtros
@@ -1657,17 +1225,78 @@ def mostrar_analisis_historico_kpis():
         df_filtrado = df_filtrado[df_filtrado['nombre'] == trabajador]
     
     if df_filtrado.empty:
-        st.markdown("<div class='warning-box'>⚠️ No hay datos en el rango de fechas seleccionado.</div>", unsafe_allow_html=True)
+        st.markdown("<div class='warning-box animate-fade-in'>⚠️ No hay datos en el rango de fechas seleccionado.</div>", unsafe_allow_html=True)
         return
     
     # Botones de exportación
-    st.markdown("<div class='export-buttons'>", unsafe_allow_html=True)
+    st.markdown("<div class='export-buttons animate-fade-in'>", unsafe_allow_html=True)
     col1, col2, col3 = st.columns(3)
     with col1:
         # Botón para exportar a Excel
         if st.button("💾 Exportar a Excel", use_container_width=True):
             try:
-                excel_data = exportar_excel(df_filtrado)
+                # Crear una copia del DataFrame para no modificar el original
+                export_df = df_filtrado.copy()
+                
+                # Asegurar que las fechas estén en formato adecuado
+                if 'fecha' in export_df.columns:
+                    export_df['fecha'] = pd.to_datetime(export_df['fecha']).dt.strftime('%Y-%m-%d')
+                
+                # Manejar valores NaN y None
+                export_df = export_df.fillna('N/A')
+                
+                # Reordenar columnas para una mejor presentación
+                columnas_ordenadas = [
+                    'fecha', 'nombre', 'equipo', 'actividad', 'cantidad', 'meta', 
+                    'eficiencia', 'productividad', 'horas_trabajo', 'meta_mensual', 'comentario'
+                ]
+                # Solo incluir las columnas que existen en el DataFrame
+                columnas_finales = [col for col in columnas_ordenadas if col in export_df.columns]
+                export_df = export_df[columnas_finales]
+                
+                output = io.BytesIO()
+                with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                    export_df.to_excel(writer, sheet_name='Datos_KPIs', index=False)
+                    # Formato adicional para mejorar el Excel
+                    workbook = writer.book
+                    worksheet = writer.sheets['Datos_KPIs']
+                    
+                    # Formato para encabezados
+                    header_format = workbook.add_format({
+                        'bold': True,
+                        'text_wrap': True,
+                        'valign': 'top',
+                        'fg_color': '#e60012',
+                        'font_color': 'white',
+                        'border': 1
+                    })
+                    
+                    # Formato para celdas
+                    cell_format = workbook.add_format({
+                        'border': 1,
+                        'align': 'left',
+                        'valign': 'vcenter'
+                    })
+                    
+                    # Aplicar formato a encabezados
+                    for col_num, value in enumerate(export_df.columns.values):
+                        worksheet.write(0, col_num, value, header_format)
+                    
+                    # Aplicar formato a todas las celdas de datos
+                    for row in range(1, len(export_df) + 1):
+                        for col in range(len(export_df.columns)):
+                            worksheet.write(row, col, export_df.iloc[row-1, col], cell_format)
+                    
+                    # Autoajustar columnas
+                    for i, col in enumerate(export_df.columns):
+                        # Obtener la longitud máxima de los datos en la columna
+                        max_len = max((
+                            export_df[col].astype(str).str.len().max(),  # Longitud máxima de los datos
+                            len(str(col))  # Longitud del nombre de la columna
+                        )) + 2  # Añadir un poco de espacio extra
+                        worksheet.set_column(i, i, max_len)
+                
+                excel_data = output.getvalue()
                 st.download_button(
                     label="⬇️ Descargar archivo Excel",
                     data=excel_data,
@@ -1677,14 +1306,80 @@ def mostrar_analisis_historico_kpis():
                 )
             except Exception as e:
                 logger.error(f"Error al exportar a Excel: {e}", exc_info=True)
-                st.markdown("<div class='error-box'>❌ Error al exportar a Excel.</div>", unsafe_allow_html=True)
+                st.markdown("<div class='error-box animate-fade-in'>❌ Error al exportar a Excel.</div>", unsafe_allow_html=True)
     
     with col2:
         # Botón para exportar a PDF
         if st.button("📄 Exportar a PDF", use_container_width=True):
             try:
                 with st.spinner("Generando reporte PDF..."):
-                    pdf_data = crear_reporte_pdf(df_filtrado, str(fecha_inicio), str(fecha_fin))
+                    # Crear un PDF en memoria
+                    pdf_buffer = io.BytesIO()
+                    doc = SimpleDocTemplate(pdf_buffer, pagesize=letter)
+                    styles = getSampleStyleSheet()
+                    
+                    # Estilos personalizados
+                    styles.add(ParagraphStyle(name='Header', fontSize=16, alignment=1, spaceAfter=12, textColor='#e60012'))
+                    styles.add(ParagraphStyle(name='Section', fontSize=14, spaceBefore=12, spaceAfter=6, textColor='#e60012'))
+                    styles.add(ParagraphStyle(name='Normal', fontSize=12, spaceAfter=6))
+                    
+                    elements = []
+                    
+                    # Título
+                    title = Paragraph("Reporte de KPIs - Aeropostale", styles['Header'])
+                    elements.append(title)
+                    
+                    # Información del período
+                    periodo = Paragraph(f"Período: {fecha_inicio} a {fecha_fin}", styles['Normal'])
+                    elements.append(periodo)
+                    
+                    # Resumen estadístico
+                    elements.append(Paragraph("Resumen Estadístico", styles['Section']))
+                    
+                    # Crear tabla de resumen
+                    try:
+                        resumen_data = df_filtrado.groupby('nombre').agg({
+                            'cantidad': ['count', 'mean', 'sum', 'max', 'min'],
+                            'eficiencia': ['mean', 'max', 'min'],
+                            'productividad': ['mean', 'max', 'min'],
+                            'horas_trabajo': ['sum', 'mean']
+                        }).round(2)
+                        
+                        # Aplanar las columnas multiindex
+                        resumen_data.columns = ['_'.join(col).strip() for col in resumen_data.columns.values]
+                        resumen_data.reset_index(inplace=True)
+                        
+                        # Convertir DataFrame a lista para la tabla
+                        table_data = [list(resumen_data.columns)]
+                        for _, row in resumen_data.iterrows():
+                            table_data.append(list(row))
+                        
+                        # Crear tabla
+                        table = Table(table_data)
+                        table.setStyle(TableStyle([
+                            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#e60012')),
+                            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                            ('FONTSIZE', (0, 0), (-1, 0), 10),
+                            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+                            ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor('#f0f0f0')),
+                            ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+                            ('FONTSIZE', (0, 1), (-1, -1), 8),
+                            ('GRID', (0, 0), (-1, -1), 1, colors.HexColor('#dddddd'))
+                        ]))
+                        elements.append(table)
+                        elements.append(Spacer(1, 12))
+                    except Exception as e:
+                        logger.error(f"Error al crear tabla de resumen: {e}", exc_info=True)
+                        elements.append(Paragraph(f"Error al generar tabla de resumen: {str(e)}", styles['Normal']))
+                        elements.append(Spacer(1, 12))
+                    
+                    # Construir PDF
+                    doc.build(elements)
+                    pdf_data = pdf_buffer.getvalue()
+                    pdf_buffer.close()
+                    
                     st.download_button(
                         label="⬇️ Descargar reporte PDF",
                         data=pdf_data,
@@ -1694,7 +1389,7 @@ def mostrar_analisis_historico_kpis():
                     )
             except Exception as e:
                 logger.error(f"Error al exportar a PDF: {e}", exc_info=True)
-                st.markdown("<div class='error-box'>❌ Error al exportar a PDF.</div>", unsafe_allow_html=True)
+                st.markdown("<div class='error-box animate-fade-in'>❌ Error al exportar a PDF.</div>", unsafe_allow_html=True)
     
     with col3:
         # Botón para exportar a CSV
@@ -1709,7 +1404,7 @@ def mostrar_analisis_historico_kpis():
     
     st.markdown("</div>", unsafe_allow_html=True)
     
-    st.markdown("<h2 class='section-title'>📋 Resumen Estadístico</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 class='section-title animate-fade-in'>📋 Resumen Estadístico</h2>", unsafe_allow_html=True)
     # Mostrar resumen estadístico
     st.dataframe(df_filtrado.groupby('nombre').agg({
         'cantidad': ['count', 'mean', 'sum', 'max', 'min'],
@@ -1718,7 +1413,7 @@ def mostrar_analisis_historico_kpis():
         'horas_trabajo': ['sum', 'mean']
     }).round(2), use_container_width=True)
     
-    st.markdown("<h2 class='section-title'>📊 Tendencias Históricas</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 class='section-title animate-fade-in'>📊 Tendencias Históricas</h2>", unsafe_allow_html=True)
     
     tab1, tab2, tab3, tab4, tab5 = st.tabs(["Eficiencia por Día", "Producción Acumulada", "Comparativa por Área", "Análisis Detallado", "Predicciones"])
     
@@ -1735,21 +1430,8 @@ def mostrar_analisis_historico_kpis():
                 'line'
             )
             # Añadir línea de meta
-            fig.add_hline(y=100, line_dash="dash", line_color="red", annotation_text="Meta de eficiencia")
-            # Analizar tendencia
-            tendencia = analizar_tendencias(df_eficiencia_dia, 'eficiencia')
-            if isinstance(tendencia, dict):
-                fig.add_trace(go.Scatter(
-                    x=df_eficiencia_dia['dia'], 
-                    y=tendencia['tendencia'], 
-                    mode='lines', 
-                    name=f'Tendencia ({tendencia["direccion"]})',
-                    line=dict(dash='dash', color='orange')
-                ))
-            st.plotly_chart(fig, use_container_width=True)
-            # Mostrar información de tendencia
-            if isinstance(tendencia, dict):
-                st.markdown(f"**Tendencia:** {tendencia['direccion']} (R²: {tendencia['r_cuadrado']:.3f})")
+            fig.add_hline(y=100, line_dash="dash", line_color="white", annotation_text="Meta de eficiencia")
+            st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
         else:
             st.info("No hay datos para el gráfico.")
     
@@ -1765,7 +1447,7 @@ def mostrar_analisis_historico_kpis():
                 'Producción Acumulada',
                 'line'
             )
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
         else:
             st.info("No hay datos para el gráfico.")
     
@@ -1780,7 +1462,7 @@ def mostrar_analisis_historico_kpis():
                 'Productividad (unidades/hora)',
                 'box'
             )
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
         else:
             st.info("No hay datos para el gráfico.")
     
@@ -1797,7 +1479,7 @@ def mostrar_analisis_historico_kpis():
                 color_continuous_scale='RdBu_r',
                 title='Matriz de Correlación'
             )
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
         else:
             st.info("No hay suficientes datos numéricos para calcular correlaciones.")
         
@@ -1807,13 +1489,24 @@ def mostrar_analisis_historico_kpis():
     with tab5:
         st.markdown("<h3>🔮 Predicción de Tendencia</h3>", unsafe_allow_html=True)
         if not df_eficiencia_dia.empty and len(df_eficiencia_dia) > 5:
-            # Preparar datos para predicción
-            dias_prediccion = 7
-            predicciones = predecir_valores_futuros(df_eficiencia_dia, 'eficiencia', dias_prediccion)
-            if predicciones is not None:
+            try:
+                # Preparar datos para predicción
+                dias_prediccion = 7
+                x = np.arange(len(df_eficiencia_dia))
+                y = df_eficiencia_dia['eficiencia'].values
+                
+                # Ajustar modelo
+                model = np.polyfit(x, y, 1)
+                poly = np.poly1d(model)
+                
+                # Predecir valores futuros
+                x_pred = np.arange(len(df_eficiencia_dia), len(df_eficiencia_dia) + dias_prediccion)
+                y_pred = poly(x_pred)
+                
                 # Crear fechas futuras
                 ultima_fecha = df_eficiencia_dia['dia'].max()
                 fechas_futuras = [ultima_fecha + timedelta(days=i+1) for i in range(dias_prediccion)]
+                
                 # Crear gráfico
                 fig = go.Figure()
                 # Datos históricos
@@ -1826,43 +1519,44 @@ def mostrar_analisis_historico_kpis():
                 # Predicciones
                 fig.add_trace(go.Scatter(
                     x=fechas_futuras, 
-                    y=predicciones,
+                    y=y_pred,
                     mode='lines+markers',
                     name='Predicción',
                     line=dict(dash='dash', color='orange')
                 ))
                 # Línea de meta
-                fig.add_hline(y=100, line_dash="dash", line_color="red", annotation_text="Meta de eficiencia")
+                fig.add_hline(y=100, line_dash="dash", line_color="white", annotation_text="Meta de eficiencia")
                 fig.update_layout(
                     title='Predicción de Eficiencia para los Próximos 7 Días',
                     xaxis_title='Fecha',
                     yaxis_title='Eficiencia Promedio (%)',
                     plot_bgcolor='rgba(0,0,0,0)',
                     paper_bgcolor='rgba(0,0,0,0)',
-                    font=dict(color="#2c3e50")
+                    font=dict(color="#ffffff")
                 )
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+                
                 # Mostrar valores de predicción
                 st.markdown("<h4>Valores de Predicción:</h4>", unsafe_allow_html=True)
-                for i, (fecha, pred) in enumerate(zip(fechas_futuras, predicciones)):
+                for i, (fecha, pred) in enumerate(zip(fechas_futuras, y_pred)):
                     st.write(f"{fecha.strftime('%Y-%m-%d')}: {pred:.1f}%")
-            else:
-                st.info("Error al generar predicciones. Verifique los datos.")
+            except Exception as e:
+                st.error(f"Error al generar predicciones: {str(e)}")
         else:
             st.info("Se necesitan al menos 5 días de datos para realizar predicciones.")
 
 def mostrar_ingreso_datos_kpis():
     """Muestra la interfaz para ingresar datos de KPIs"""
-    st.markdown("<h1 class='header-title'>📥 Ingreso de Datos de KPIs</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 class='header-title animate-fade-in'>📥 Ingreso de Datos de KPIs</h1>", unsafe_allow_html=True)
     
     if supabase is None:
-        st.markdown("<div class='error-box'>❌ Error de conexión a la base de datos. Verifique las variables de entorno.</div>", unsafe_allow_html=True)
+        st.markdown("<div class='error-box animate-fade-in'>❌ Error de conexión a la base de datos. Verifique las variables de entorno.</div>", unsafe_allow_html=True)
         return
     
     # Obtener trabajadores desde Supabase
     df_trabajadores = obtener_trabajadores()
     if df_trabajadores.empty:
-        st.markdown("<div class='warning-box'>⚠️ No hay trabajadores registrados. Por favor, registre trabajadores primero.</div>", unsafe_allow_html=True)
+        st.markdown("<div class='warning-box animate-fade-in'>⚠️ No hay trabajadores registrados. Por favor, registre trabajadores primero.</div>", unsafe_allow_html=True)
         return
     
     # Asegurar que Luis Perugachi esté en el equipo de Distribución
@@ -1899,7 +1593,7 @@ def mostrar_ingreso_datos_kpis():
     
     with st.form("form_datos"):
         # Meta mensual única para transferencias
-        st.markdown("<h3 class='section-title'>Meta Mensual de Transferencias</h3>", unsafe_allow_html=True)
+        st.markdown("<h3 class='section-title animate-fade-in'>Meta Mensual de Transferencias</h3>", unsafe_allow_html=True)
         meta_mensual_transferencias = st.number_input("Meta mensual para el equipo de transferencias:", min_value=0, value=150000, key="meta_mensual_transferencias")
         
         # Asegurar que el equipo de Distribución esté presente
@@ -1914,7 +1608,7 @@ def mostrar_ingreso_datos_kpis():
         
         for equipo in equipos_finales:
             miembros = trabajadores_por_equipo[equipo]
-            st.markdown(f"<div class='team-section'><div class='team-header'>{equipo}</div></div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='team-section animate-fade-in'><div class='team-header'>{equipo}</div></div>", unsafe_allow_html=True)
             for trabajador in miembros:
                 st.subheader(trabajador)
                 col1, col2 = st.columns(2)
@@ -1955,7 +1649,7 @@ def mostrar_ingreso_datos_kpis():
                     
                     # Validar datos
                     if not all([validar_numero_positivo(cantidad), validar_numero_positivo(meta), validar_numero_positivo(horas)]):
-                        st.markdown(f"<div class='error-box'>❌ Datos inválidos para {trabajador}. Verifique los valores ingresados.</div>", unsafe_allow_html=True)
+                        st.markdown(f"<div class='error-box animate-fade-in'>❌ Datos inválidos para {trabajador}. Verifique los valores ingresados.</div>", unsafe_allow_html=True)
                         continue
                     
                     # Calcular KPIs según el equipo
@@ -2006,7 +1700,7 @@ def mostrar_ingreso_datos_kpis():
             st.session_state.fecha_guardar = fecha_str
             
             # Mostrar resumen
-            st.markdown("<h3 class='section-title'>📋 Resumen de KPIs Calculados</h3>", unsafe_allow_html=True)
+            st.markdown("<h3 class='section-title animate-fade-in'>📋 Resumen de KPIs Calculados</h3>", unsafe_allow_html=True)
             for equipo, miembros in trabajadores_por_equipo.items():
                 st.markdown(f"**{equipo}:**")
                 for trabajador in miembros:
@@ -2016,29 +1710,29 @@ def mostrar_ingreso_datos_kpis():
     
     # Botón de confirmación fuera del formulario
     if st.session_state.datos_calculados is not None and st.session_state.fecha_guardar is not None:
-        if st.button("✅ Confirmar y Guardar Datos", key="confirmar_guardar"):
+        if st.button("✅ Confirmar y Guardar Datos", key="confirmar_guardar", use_container_width=True):
             if guardar_datos_db(st.session_state.fecha_guardar, st.session_state.datos_calculados):
-                st.markdown("<div class='success-box'>✅ Datos guardados correctamente!</div>", unsafe_allow_html=True)
+                st.markdown("<div class='success-box animate-fade-in'>✅ Datos guardados correctamente!</div>", unsafe_allow_html=True)
                 # Limpiar datos de confirmación
                 st.session_state.datos_calculados = None
                 st.session_state.fecha_guardar = None
                 time.sleep(2)
                 st.rerun()
             else:
-                st.markdown("<div class='error-box'>❌ Error al guardar los datos. Por favor, intente nuevamente.</div>", unsafe_allow_html=True)
+                st.markdown("<div class='error-box animate-fade-in'>❌ Error al guardar los datos. Por favor, intente nuevamente.</div>", unsafe_allow_html=True)
 
 def mostrar_gestion_trabajadores_kpis():
     """Muestra la interfaz de gestión de trabajadores"""
-    st.markdown("<h1 class='header-title'>👥 Gestión de Trabajadores</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 class='header-title animate-fade-in'>👥 Gestión de Trabajadores</h1>", unsafe_allow_html=True)
     
     if supabase is None:
-        st.markdown("<div class='error-box'>❌ Error de conexión a la base de datos. Verifique las variables de entorno.</div>", unsafe_allow_html=True)
+        st.markdown("<div class='error-box animate-fade-in'>❌ Error de conexión a la base de datos. Verifique las variables de entorno.</div>", unsafe_allow_html=True)
         return
     
     try:
         # Obtener lista actual de trabajadores
-        response = supabase.from_('kpi_trabajadores').select('*').order('equipo,nombre', desc=False).execute()
-        # CORRECCIÓN: Verificar si hay datos en la respuesta
+        response = supabase.from_('trabajadores').select('*').order('equipo,nombre', desc=False).execute()
+        # Verificar si hay datos en la respuesta
         if response and response.data:
             trabajadores = response.data
         else:
@@ -2050,14 +1744,14 @@ def mostrar_gestion_trabajadores_kpis():
                 if trab['nombre'] == 'Luis Perugachi':
                     trab['equipo'] = 'Distribución'
         
-        st.markdown("<h2 class='section-title'>Trabajadores Actuales</h2>", unsafe_allow_html=True)
+        st.markdown("<h2 class='section-title animate-fade-in'>Trabajadores Actuales</h2>", unsafe_allow_html=True)
         if trabajadores:
             df_trabajadores = pd.DataFrame(trabajadores)
             st.dataframe(df_trabajadores[['nombre', 'equipo', 'activo']], use_container_width=True)
         else:
             st.info("No hay trabajadores registrados.")
         
-        st.markdown("<h2 class='section-title'>Agregar Nuevo Trabajador</h2>", unsafe_allow_html=True)
+        st.markdown("<h2 class='section-title animate-fade-in'>Agregar Nuevo Trabajador</h2>", unsafe_allow_html=True)
         with st.form("form_nuevo_trabajador"):
             col1, col2 = st.columns(2)
             with col1:
@@ -2070,59 +1764,55 @@ def mostrar_gestion_trabajadores_kpis():
                 if nuevo_nombre:
                     try:
                         # Verificar si el trabajador ya existe
-                        response = supabase.from_('kpi_trabajadores').select('*').eq('nombre', nuevo_nombre).execute()
-                        # CORRECCIÓN: Verificar si hay datos en la respuesta
+                        response = supabase.from_('trabajadores').select('*').eq('nombre', nuevo_nombre).execute()
+                        # Verificar si hay datos en la respuesta
                         if response and response.data:
-                            st.markdown("<div class='error-box'>❌ El trabajador ya existe.</div>", unsafe_allow_html=True)
+                            st.markdown("<div class='error-box animate-fade-in'>❌ El trabajador ya existe.</div>", unsafe_allow_html=True)
                         else:
                             # Insertar nuevo trabajador
-                            supabase.from_('kpi_trabajadores').insert({
+                            supabase.from_('trabajadores').insert({
                                 'nombre': nuevo_nombre, 
                                 'equipo': nuevo_equipo,
                                 'activo': True
                             }).execute()
-                            st.markdown("<div class='success-box'>✅ Trabajador agregado correctamente.</div>", unsafe_allow_html=True)
+                            st.markdown("<div class='success-box animate-fade-in'>✅ Trabajador agregado correctamente.</div>", unsafe_allow_html=True)
                             time.sleep(1)
                             st.rerun()
                     except Exception as e:
                         logger.error(f"Error al agregar trabajador: {e}", exc_info=True)
-                        st.markdown("<div class='error-box'>❌ Error al agregar trabajador.</div>", unsafe_allow_html=True)
+                        st.markdown("<div class='error-box animate-fade-in'>❌ Error al agregar trabajador.</div>", unsafe_allow_html=True)
                 else:
-                    st.markdown("<div class='error-box'>❌ Debe ingresar un nombre.</div>", unsafe_allow_html=True)
+                    st.markdown("<div class='error-box animate-fade-in'>❌ Debe ingresar un nombre.</div>", unsafe_allow_html=True)
         
-        st.markdown("<h2 class='section-title'>Eliminar Trabajador</h2>", unsafe_allow_html=True)
+        st.markdown("<h2 class='section-title animate-fade-in'>Eliminar Trabajador</h2>", unsafe_allow_html=True)
         if trabajadores:
             trabajadores_activos = [t['nombre'] for t in trabajadores if t.get('activo', True)]
             if trabajadores_activos:
                 trabajador_eliminar = st.selectbox("Selecciona un trabajador para eliminar:", options=trabajadores_activos)
-                if st.button("Eliminar Trabajador"):
+                if st.button("Eliminar Trabajador", use_container_width=True):
                     try:
                         # Actualizar el estado del trabajador a inactivo
-                        supabase.from_('kpi_trabajadores').update({'activo': False}).eq('nombre', trabajador_eliminar).execute()
-                        st.markdown("<div class='success-box'>✅ Trabajador eliminado correctamente.</div>", unsafe_allow_html=True)
+                        supabase.from_('trabajadores').update({'activo': False}).eq('nombre', trabajador_eliminar).execute()
+                        st.markdown("<div class='success-box animate-fade-in'>✅ Trabajador eliminado correctamente.</div>", unsafe_allow_html=True)
                         time.sleep(1)
                         st.rerun()
                     except Exception as e:
                         logger.error(f"Error al eliminar trabajador: {e}", exc_info=True)
-                        st.markdown("<div class='error-box'>❌ Error al eliminar trabajador.</div>", unsafe_allow_html=True)
+                        st.markdown("<div class='error-box animate-fade-in'>❌ Error al eliminar trabajador.</div>", unsafe_allow_html=True)
             else:
                 st.info("No hay trabajadores activos para eliminar.")
         else:
             st.info("No hay trabajadores registrados.")
     except Exception as e:
         logger.error(f"Error en gestión de trabajadores: {e}", exc_info=True)
-        st.markdown("<div class='error-box'>❌ Error del sistema al gestionar trabajadores.</div>", unsafe_allow_html=True)
+        st.markdown("<div class='error-box animate-fade-in'>❌ Error del sistema al gestionar trabajadores.</div>", unsafe_allow_html=True)
 
 def mostrar_generacion_guias():
     """Muestra la interfaz para generar guías de envío"""
-    st.markdown("<h1 class='guide-header'>📦 Generación de Guías de Envío</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 class='header-title animate-fade-in'>📦 Generación de Guías de Envío</h1>", unsafe_allow_html=True)
     
     if supabase is None:
-        st.markdown("<div class='error-box'>❌ Error de conexión a la base de datos. Verifique las variables de entorno.</div>", unsafe_allow_html=True)
-        return
-    
-    if not verificar_permisos('create_guides'):
-        st.markdown("<div class='error-box'>❌ No tiene permisos para generar guías.</div>", unsafe_allow_html=True)
+        st.markdown("<div class='error-box animate-fade-in'>❌ Error de conexión a la base de datos. Verifique las variables de entorno.</div>", unsafe_allow_html=True)
         return
     
     # Obtener datos necesarios
@@ -2130,12 +1820,12 @@ def mostrar_generacion_guias():
     remitentes = obtener_remitentes()
     
     if tiendas.empty or remitentes.empty:
-        st.markdown("<div class='warning-box'>⚠️ No hay tiendas o remitentes configurados. Por favor, configure primero.</div>", unsafe_allow_html=True)
+        st.markdown("<div class='warning-box animate-fade-in'>⚠️ No hay tiendas o remitentes configurados. Por favor, configure primero.</div>", unsafe_allow_html=True)
         return
     
     # Formulario para generar guía
-    st.markdown("<div class='guide-section'>", unsafe_allow_html=True)
-    st.markdown("<h2 class='section-title'>Generar Nueva Guía</h2>", unsafe_allow_html=True)
+    st.markdown("<div class='guide-section animate-fade-in'>", unsafe_allow_html=True)
+    st.markdown("<h2 class='section-title animate-fade-in'>Generar Nueva Guía</h2>", unsafe_allow_html=True)
     
     with st.form("form_generar_guia"):
         col1, col2 = st.columns(2)
@@ -2147,14 +1837,14 @@ def mostrar_generacion_guias():
             sender_name = st.selectbox("Remitente:", options=remitentes['name'].tolist(), key="sender_select")
             url = st.text_input("URL del Pedido:", key="url_input")
         
-        submitted = st.form_submit_button("Generar Guía")
+        submitted = st.form_submit_button("Generar Guía", use_container_width=True)
         
         if submitted:
             if not all([store_name, brand, url, sender_name]):
-                st.markdown("<div class='error-box'>❌ Por favor, complete todos los campos.</div>", unsafe_allow_html=True)
+                st.markdown("<div class='error-box animate-fade-in'>❌ Por favor, complete todos los campos.</div>", unsafe_allow_html=True)
                 st.session_state.show_preview = False
             elif not url.startswith(('http://', 'https://')):
-                st.markdown("<div class='error-box'>❌ La URL debe comenzar con http:// o https://</div>", unsafe_allow_html=True)
+                st.markdown("<div class='error-box animate-fade-in'>❌ La URL debe comenzar con http:// o https://</div>", unsafe_allow_html=True)
                 st.session_state.show_preview = False
             else:
                 # Guardar la guía
@@ -2165,28 +1855,28 @@ def mostrar_generacion_guias():
                     st.session_state.remitente_address = remitente_info['address']
                     st.session_state.remitente_phone = remitente_info['phone']
                     st.session_state.tracking_number = generar_numero_seguimiento(1)  # Aquí debería ser el ID real
-                    st.success("✅ Guía generada correctamente. Puede ver la previsualización y exportarla.")
+                    st.markdown("<div class='success-box animate-fade-in'>✅ Guía generada correctamente. Puede ver la previsualización y exportarla.</div>", unsafe_allow_html=True)
                 else:
-                    st.markdown("<div class='error-box'>❌ Error al guardar la guía.</div>", unsafe_allow_html=True)
+                    st.markdown("<div class='error-box animate-fade-in'>❌ Error al guardar la guía.</div>", unsafe_allow_html=True)
                     st.session_state.show_preview = False
     
     st.markdown("</div>", unsafe_allow_html=True)
     
     # Previsualización de la guía
     if st.session_state.get('show_preview', False):
-        st.markdown("<div class='guide-section'>", unsafe_allow_html=True)
-        st.markdown("<h2 class='section-title'>Previsualización de la Guía</h2>", unsafe_allow_html=True)
+        st.markdown("<div class='guide-section animate-fade-in'>", unsafe_allow_html=True)
+        st.markdown("<h2 class='section-title animate-fade-in'>Previsualización de la Guía</h2>", unsafe_allow_html=True)
         
         # Información de la guía
         col1, col2, col3 = st.columns(3)
         with col1:
-            st.markdown(f"<div class='guide-metric'>Tienda: <strong>{st.session_state.get('store_select', '')}</strong></div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='guide-metric'><span class='guide-icon'>🏬</span> <strong>Tienda:</strong> {st.session_state.get('store_select', '')}</div>", unsafe_allow_html=True)
         with col2:
-            st.markdown(f"<div class='guide-metric'>Marca: <strong>{st.session_state.get('brand_select', '')}</strong></div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='guide-metric'><span class='guide-icon'>🏷️</span> <strong>Marca:</strong> {st.session_state.get('brand_select', '')}</div>", unsafe_allow_html=True)
         with col3:
-            st.markdown(f"<div class='guide-metric'>Remitente: <strong>{st.session_state.get('sender_select', '')}</strong></div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='guide-metric'><span class='guide-icon'>📦</span> <strong>Remitente:</strong> {st.session_state.get('sender_select', '')}</div>", unsafe_allow_html=True)
         
-        st.markdown(f"<div class='guide-metric'>URL del Pedido: <a href='{st.session_state.get('url_input', '')}' target='_blank'>{st.session_state.get('url_input', '')}</a></div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='guide-metric'><span class='guide-icon'>🔗</span> <strong>URL del Pedido:</strong> <a href='{st.session_state.get('url_input', '')}' target='_blank'>{st.session_state.get('url_input', '')}</a></div>", unsafe_allow_html=True)
         
         # Código QR
         st.markdown("<h3>Código QR:</h3>", unsafe_allow_html=True)
@@ -2194,7 +1884,7 @@ def mostrar_generacion_guias():
         st.image(qr_img, width=200)
         
         # Botones de exportación
-        st.markdown("<div class='export-buttons'>", unsafe_allow_html=True)
+        st.markdown("<div class='export-buttons animate-fade-in'>", unsafe_allow_html=True)
         col1, col2 = st.columns(2)
         with col1:
             if st.button("📄 Exportar a PDF", use_container_width=True):
@@ -2218,7 +1908,7 @@ def mostrar_generacion_guias():
         with col2:
             if st.button("🖨️ Marcar como Impresa", use_container_width=True):
                 # Aquí iría la lógica para actualizar el estado de la guía
-                st.markdown("<div class='success-box'>✅ Guía marcada como impresa.</div>", unsafe_allow_html=True)
+                st.markdown("<div class='success-box animate-fade-in'>✅ Guía marcada como impresa.</div>", unsafe_allow_html=True)
                 st.session_state.show_preview = False
                 time.sleep(1)
                 st.rerun()
@@ -2228,22 +1918,22 @@ def mostrar_generacion_guias():
 
 def mostrar_historial_guias():
     """Muestra el historial de guías generadas"""
-    st.markdown("<h1 class='guide-header'>🔍 Historial de Guías de Envío</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 class='header-title animate-fade-in'>🔍 Historial de Guías de Envío</h1>", unsafe_allow_html=True)
     
     if supabase is None:
-        st.markdown("<div class='error-box'>❌ Error de conexión a la base de datos. Verifique las variables de entorno.</div>", unsafe_allow_html=True)
+        st.markdown("<div class='error-box animate-fade-in'>❌ Error de conexión a la base de datos. Verifique las variables de entorno.</div>", unsafe_allow_html=True)
         return
     
     # Cargar historial de guías
     df_guias = obtener_historial_guias()
     
     if df_guias.empty:
-        st.markdown("<div class='warning-box'>⚠️ No hay guías generadas.</div>", unsafe_allow_html=True)
+        st.markdown("<div class='warning-box animate-fade-in'>⚠️ No hay guías generadas.</div>", unsafe_allow_html=True)
         return
     
     # Filtros
-    st.markdown("<div class='guide-section'>", unsafe_allow_html=True)
-    st.markdown("<h2 class='section-title'>Filtros</h2>", unsafe_allow_html=True)
+    st.markdown("<div class='guide-section animate-fade-in'>", unsafe_allow_html=True)
+    st.markdown("<h2 class='section-title animate-fade-in'>Filtros</h2>", unsafe_allow_html=True)
     
     col1, col2, col3 = st.columns(3)
     with col1:
@@ -2266,21 +1956,21 @@ def mostrar_historial_guias():
     col1, col2, col3 = st.columns(3)
     with col1:
         total_creados = len(df_guias)
-        st.markdown(f'<div class="kpi-card"><h3>Total de Guías</h3><p class="metric-value">{total_creados}</p></div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="kpi-card animate-fade-in"><div class="metric-label">Total de Guías</div><p class="metric-value">{total_creados}</p></div>', unsafe_allow_html=True)
     
     with col2:
         pendientes = len(df_guias[df_guias['status'] == 'Pending'])
-        st.markdown(f'<div class="kpi-card"><h3>Pendientes</h3><p class="metric-value">{pendientes}</p></div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="kpi-card animate-fade-in"><div class="metric-label">Pendientes</div><p class="metric-value">{pendientes}</p></div>', unsafe_allow_html=True)
     
     with col3:
         impresos = len(df_guias[df_guias['status'] == 'Printed'])
-        st.markdown(f'<div class="kpi-card"><h3>Impresas</h3><p class="metric-value">{impresos}</p></div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="kpi-card animate-fade-in"><div class="metric-label">Impresas</div><p class="metric-value">{impresos}</p></div>', unsafe_allow_html=True)
     
     st.markdown("</div>", unsafe_allow_html=True)
     
     # Mostrar tabla de guías
-    st.markdown("<div class='guide-section'>", unsafe_allow_html=True)
-    st.markdown("<h2 class='section-title'>Guías Generadas</h2>", unsafe_allow_html=True)
+    st.markdown("<div class='guide-section animate-fade-in'>", unsafe_allow_html=True)
+    st.markdown("<h2 class='section-title animate-fade-in'>Guías Generadas</h2>", unsafe_allow_html=True)
     
     # Preparar datos para mostrar
     df_display = df_filtrado.copy()
@@ -2302,7 +1992,7 @@ def mostrar_historial_guias():
     st.dataframe(df_display, use_container_width=True)
     
     # Botones de exportación
-    st.markdown("<div class='export-buttons'>", unsafe_allow_html=True)
+    st.markdown("<div class='export-buttons animate-fade-in'>", unsafe_allow_html=True)
     col1, col2 = st.columns(2)
     with col1:
         # Exportar a Excel
@@ -2336,7 +2026,7 @@ def mostrar_historial_guias():
                 )
             except Exception as e:
                 logger.error(f"Error al exportar historial de guías a Excel: {e}", exc_info=True)
-                st.markdown("<div class='error-box'>❌ Error al exportar a Excel.</div>", unsafe_allow_html=True)
+                st.markdown("<div class='error-box animate-fade-in'>❌ Error al exportar a Excel.</div>", unsafe_allow_html=True)
     
     with col2:
         # Exportar a CSV
@@ -2352,140 +2042,37 @@ def mostrar_historial_guias():
     st.markdown("</div>", unsafe_allow_html=True)
     st.markdown("</div>", unsafe_allow_html=True)
 
-def mostrar_gestion_tiendas():
-    """Muestra la interfaz para gestionar tiendas"""
-    st.markdown("<h1 class='guide-header'>🏬 Gestión de Tiendas</h1>", unsafe_allow_html=True)
-    
-    if supabase is None:
-        st.markdown("<div class='error-box'>❌ Error de conexión a la base de datos. Verifique las variables de entorno.</div>", unsafe_allow_html=True)
-        return
-    
-    if not verificar_permisos('all'):
-        st.markdown("<div class='error-box'>❌ No tiene permisos para gestionar tiendas.</div>", unsafe_allow_html=True)
-        return
-    
-    # Obtener lista de tiendas
-    tiendas = obtener_tiendas()
-    
-    st.markdown("<div class='guide-section'>", unsafe_allow_html=True)
-    st.markdown("<h2 class='section-title'>Tiendas Registradas</h2>", unsafe_allow_html=True)
-    
-    if not tiendas.empty:
-        st.dataframe(tiendas[['name']], use_container_width=True)
-    else:
-        st.info("No hay tiendas registradas.")
-    
-    st.markdown("<h2 class='section-title'>Agregar Nueva Tienda</h2>", unsafe_allow_html=True)
-    with st.form("form_agregar_tienda"):
-        nombre_tienda = st.text_input("Nombre de la tienda:")
-        submitted = st.form_submit_button("Agregar Tienda")
-        
-        if submitted:
-            if nombre_tienda:
-                try:
-                    # Verificar si la tienda ya existe
-                    response = supabase.from_('guide_stores').select('*').eq('name', nombre_tienda).execute()
-                    # CORRECCIÓN: Verificar si hay datos en la respuesta
-                    if response and response.data:
-                        st.markdown("<div class='error-box'>❌ La tienda ya existe.</div>", unsafe_allow_html=True)
-                    else:
-                        # Insertar nueva tienda
-                        supabase.from_('guide_stores').insert({'name': nombre_tienda}).execute()
-                        st.markdown("<div class='success-box'>✅ Tienda agregada correctamente.</div>", unsafe_allow_html=True)
-                        time.sleep(1)
-                        st.rerun()
-                except Exception as e:
-                    logger.error(f"Error al agregar tienda: {e}", exc_info=True)
-                    st.markdown("<div class='error-box'>❌ Error al agregar tienda.</div>", unsafe_allow_html=True)
-            else:
-                st.markdown("<div class='error-box'>❌ Debe ingresar un nombre de tienda.</div>", unsafe_allow_html=True)
-    
-    st.markdown("</div>", unsafe_allow_html=True)
-
-def mostrar_gestion_remitentes():
-    """Muestra la interfaz para gestionar remitentes"""
-    st.markdown("<h1 class='guide-header'>📬 Gestión de Remitentes</h1>", unsafe_allow_html=True)
-    
-    if supabase is None:
-        st.markdown("<div class='error-box'>❌ Error de conexión a la base de datos. Verifique las variables de entorno.</div>", unsafe_allow_html=True)
-        return
-    
-    if not verificar_permisos('all'):
-        st.markdown("<div class='error-box'>❌ No tiene permisos para gestionar remitentes.</div>", unsafe_allow_html=True)
-        return
-    
-    # Obtener lista de remitentes
-    remitentes = obtener_remitentes()
-    
-    st.markdown("<div class='guide-section'>", unsafe_allow_html=True)
-    st.markdown("<h2 class='section-title'>Remitentes Registrados</h2>", unsafe_allow_html=True)
-    
-    if not remitentes.empty:
-        st.dataframe(remitentes[['name', 'address', 'phone']], use_container_width=True)
-    else:
-        st.info("No hay remitentes registrados.")
-    
-    st.markdown("<h2 class='section-title'>Agregar Nuevo Remitente</h2>", unsafe_allow_html=True)
-    with st.form("form_agregar_remitente"):
-        nombre = st.text_input("Nombre del remitente:")
-        direccion = st.text_area("Dirección:")
-        telefono = st.text_input("Teléfono:")
-        submitted = st.form_submit_button("Agregar Remitente")
-        
-        if submitted:
-            if all([nombre, direccion, telefono]):
-                try:
-                    # Verificar si el remitente ya existe
-                    response = supabase.from_('guide_senders').select('*').eq('name', nombre).execute()
-                    # CORRECCIÓN: Verificar si hay datos en la respuesta
-                    if response and response.data:
-                        st.markdown("<div class='error-box'>❌ El remitente ya existe.</div>", unsafe_allow_html=True)
-                    else:
-                        # Insertar nuevo remitente
-                        supabase.from_('guide_senders').insert({
-                            'name': nombre,
-                            'address': direccion,
-                            'phone': telefono
-                        }).execute()
-                        st.markdown("<div class='success-box'>✅ Remitente agregado correctamente.</div>", unsafe_allow_html=True)
-                        time.sleep(1)
-                        st.rerun()
-                except Exception as e:
-                    logger.error(f"Error al agregar remitente: {e}", exc_info=True)
-                    st.markdown("<div class='error-box'>❌ Error al agregar remitente.</div>", unsafe_allow_html=True)
-            else:
-                st.markdown("<div class='error-box'>❌ Debe completar todos los campos.</div>", unsafe_allow_html=True)
-    
-    st.markdown("</div>", unsafe_allow_html=True)
-
 def mostrar_ayuda():
     """Muestra la página de ayuda y contacto"""
-    st.markdown("<h1 class='guide-header'>❓ Ayuda y Contacto</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 class='header-title animate-fade-in'>❓ Ayuda y Contacto</h1>", unsafe_allow_html=True)
     
-    st.markdown("<div class='guide-section'>", unsafe_allow_html=True)
-    st.markdown("<h2 class='section-title'>¿Cómo usar la aplicación?</h2>", unsafe_allow_html=True)
+    st.markdown("<div class='guide-section animate-fade-in'>", unsafe_allow_html=True)
+    st.markdown("<h2 class='section-title animate-fade-in'>¿Cómo usar la aplicación?</h2>", unsafe_allow_html=True)
     
-    st.info("""
-    ### 📝 Guía de uso
-    
-    **Sistema de KPIs:**
-    - **Dashboard de KPIs:** Visualiza el rendimiento diario de los equipos.
-    - **Análisis Histórico:** Analiza tendencias y exporta reportes.
-    - **Ingreso de Datos:** Ingresa los datos diarios de producción.
-    - **Gestión de Trabajadores:** Administra el personal de la empresa.
-    
-    **Sistema de Guías:**
-    - **Generar Guía:** Selecciona la tienda, la empresa (Fashion o Tempo), el remitente y pega la URL del pedido. Haz clic en "Generar Guía".
-    - **Historial de Guías:** Consulta y exporta el historial de guías generadas.
-    - **Gestión de Tiendas:** Administra las tiendas registradas en el sistema.
-    - **Gestión de Remitentes:** Administra los remitentes disponibles para las guías.
-    
-    ### 📞 Soporte Técnico
-    Si tienes algún problema o necesitas asistencia, por favor contacta a:
-    
-    **Ing. Wilson Perez**
-    **Teléfono:** 0993052744
-    """)
+    st.markdown("""
+    <div class="info-box">
+        <h3>📝 Guía de uso</h3>
+        
+        <h4>**Sistema de KPIs:**</h4>
+        <ul>
+            <li><strong>Dashboard de KPIs:</strong> Visualiza el rendimiento diario de los equipos.</li>
+            <li><strong>Análisis Histórico:</strong> Analiza tendencias y exporta reportes.</li>
+            <li><strong>Ingreso de Datos:</strong> Ingresa los datos diarios de producción.</li>
+            <li><strong>Gestión de Trabajadores:</strong> Administra el personal de la empresa.</li>
+        </ul>
+        
+        <h4>**Sistema de Guías:**</h4>
+        <ul>
+            <li><strong>Generar Guía:</strong> Selecciona la tienda, la empresa (Fashion o Tempo), el remitente y pega la URL del pedido. Haz clic en "Generar Guía".</li>
+            <li><strong>Historial de Guías:</strong> Consulta y exporta el historial de guías generadas.</li>
+        </ul>
+        
+        <h3>📞 Soporte Técnico</h3>
+        <p>Si tienes algún problema o necesitas asistencia, por favor contacta a:</p>
+        <p><strong>Ing. Wilson Pérez</strong><br>
+        <strong>Teléfono:</strong> 0993052744</p>
+    </div>
+    """, unsafe_allow_html=True)
     
     st.markdown("</div>", unsafe_allow_html=True)
 
@@ -2495,68 +2082,59 @@ def mostrar_ayuda():
 
 def main():
     """Función principal de la aplicación"""
-    st.sidebar.title("🔧 Menú de Navegación")
     
-    # Mostrar información del usuario si está logueado
-    if 'user' in st.session_state:
-        st.sidebar.markdown(f"**Usuario:** {st.session_state.user}")
-        # Determinar rol
-        if supabase:
-            try:
-                response = supabase.from_('kpi_users').select('role').eq('email', st.session_state.user).execute()
-                # CORRECCIÓN: Verificar si hay datos en la respuesta
-                if response and response.data:
-                    role = response.data[0]['role'] if response.data else "usuario"
-                    st.sidebar.markdown(f"**Rol:** {role.capitalize()}")
-            except:
-                st.sidebar.markdown("**Rol:** usuario")
-        
-        if st.sidebar.button("🚪 Cerrar Sesión"):
-            st.session_state.password_correct = False
-            st.session_state.pop('user', None)
-            st.session_state.pop('role', None)
-            st.rerun()
+    # Mostrar logo y título en el sidebar
+    st.sidebar.markdown("""
+    <div class='sidebar-title'>
+        <div class='aeropostale-logo'>AEROPORTALE</div>
+        <div class='aeropostale-subtitle'>Sistema de Gestión de KPIs</div>
+    </div>
+    """, unsafe_allow_html=True)
     
-    # Opciones del menú según los permisos
-    menu_options = ["Dashboard KPIs", "Análisis Histórico", "Ingreso de Datos", "Gestión de Trabajadores"]
+    # Menú de navegación
+    menu_options = [
+        ("Dashboard KPIs", "📊", mostrar_dashboard_kpis),
+        ("Análisis Histórico", "📈", mostrar_analisis_historico_kpis),
+        ("Ingreso de Datos", "📥", mostrar_ingreso_datos_kpis),
+        ("Gestión de Trabajadores", "👥", mostrar_gestion_trabajadores_kpis),
+        ("Generar Guías", "📦", mostrar_generacion_guias),
+        ("Historial de Guías", "🔍", mostrar_historial_guias),
+        ("Ayuda y Contacto", "❓", mostrar_ayuda)
+    ]
     
-    if supabase and verificar_permisos('create_guides') or verificar_permisos('all'):
-        menu_options.extend(["Generar Guías", "Historial de Guías"])
+    # Mostrar opciones del menú
+    for i, (label, icon, _) in enumerate(menu_options):
+        selected = st.sidebar.button(
+            f"{icon} {label}",
+            key=f"menu_{i}",
+            use_container_width=True
+        )
+        if selected:
+            st.session_state.selected_menu = i
     
-    if supabase and verificar_permisos('all'):
-        menu_options.extend(["Gestión de Tiendas", "Gestión de Remitentes"])
+    # Establecer una opción predeterminada si no hay ninguna seleccionada
+    if 'selected_menu' not in st.session_state:
+        st.session_state.selected_menu = 0
     
-    menu_options.append("Ayuda y Contacto")
+    # Mostrar contenido según la opción seleccionada
+    _, _, func = menu_options[st.session_state.selected_menu]
     
-    opcion = st.sidebar.radio("Selecciona una opción:", menu_options)
+    # Para las opciones que requieren autenticación
+    if st.session_state.selected_menu in [2, 3, 4]:  # Ingreso de Datos, Gestión de Trabajadores, Generar Guías
+        if not verificar_password():
+            solicitar_autenticacion()
+        else:
+            func()
+    else:
+        func()
     
-    if supabase is None:
-        st.markdown("<div class='error-box'>❌ Error de conexión a la base de datos. Verifique las variables de entorno.</div>", unsafe_allow_html=True)
-        return
-    
-    # Verificar autenticación
-    if not verificar_password():
-        return
-    
-    # Navegación
-    if opcion == "Dashboard KPIs":
-        mostrar_dashboard_kpis()
-    elif opcion == "Análisis Histórico":
-        mostrar_analisis_historico_kpis()
-    elif opcion == "Ingreso de Datos":
-        mostrar_ingreso_datos_kpis()
-    elif opcion == "Gestión de Trabajadores":
-        mostrar_gestion_trabajadores_kpis()
-    elif opcion == "Generar Guías":
-        mostrar_generacion_guias()
-    elif opcion == "Historial de Guías":
-        mostrar_historial_guias()
-    elif opcion == "Gestión de Tiendas":
-        mostrar_gestion_tiendas()
-    elif opcion == "Gestión de Remitentes":
-        mostrar_gestion_remitentes()
-    elif opcion == "Ayuda y Contacto":
-        mostrar_ayuda()
+    # Footer
+    st.markdown("""
+    <div class="footer">
+        Sistema de KPIs Aeropostale v2.0 | © 2023 Aeropostale. Todos los derechos reservados.<br>
+        Desarrollado por: <a href="mailto:wilson.perez@aeropostale.com">Wilson Pérez</a>
+    </div>
+    """, unsafe_allow_html=True)
 
 if __name__ == "__main__":
     main()
