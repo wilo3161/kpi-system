@@ -74,7 +74,7 @@ st.set_page_config(
 st.markdown("""
 <style>
     .main { background-color: dimgray; }
-    .stApp { background-color: black; }
+    .stApp { background-color: dimgray; }
     .kpi-card {
         background: darkturquoise;
         border-radius: 12px;
