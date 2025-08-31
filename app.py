@@ -73,10 +73,10 @@ st.set_page_config(
 # CSS personalizado mejorado
 st.markdown("""
 <style>
-    .main { background-color: darkblack; }
-    .stApp { background-color: darkblack; }
+    .main { background-color: white; }
+    .stApp { background-color: white; }
     .kpi-card {
-        background: darkblue;
+        background: white;
         border-radius: 12px;
         box-shadow: 0 4px 12px rgba(0,0,0,0.08);
         padding: 18px;
@@ -110,7 +110,7 @@ st.markdown("""
     .worker-header { 
         font-size: 1.3em; 
         margin-bottom: 10px; 
-        color: #000000;
+        color: #2c3e50;
         font-weight: bold;
     }
     .worker-metric { 
@@ -121,7 +121,7 @@ st.markdown("""
     .trend-up { color: #27ae60; }
     .trend-down { color: #e74c3c; }
     .header-title { 
-        color: #000000;
+        color: #2c3e50;
         font-weight: 800;
         font-size: 2.5em;
         margin-bottom: 20px;
@@ -130,7 +130,7 @@ st.markdown("""
         border-left: 5px solid #3498db;
         padding-left: 10px;
         margin: 20px 0;
-        color: #000000;
+        color: #2c3e50;
         font-size: 1.8em;
     }
     .comment-container {
@@ -327,11 +327,11 @@ def obtener_trabajadores() -> pd.DataFrame:
     """Obtiene la lista de trabajadores desde Supabase"""
     if supabase is None:
         logger.error("Cliente de Supabase no inicializado")
-        # Si hay error, devolver lista por defecto
+        # Si hay error, devolver lista por defecto con Luis Perugachi en Distribución
         return pd.DataFrame({
             'nombre': ["Andrés Yépez", "Josué Imbacuán", "Luis Perugachi", "Diana García", 
                       "Simón Vera", "Jhonny Guadalupe", "Victor Montenegro", "Fernando Quishpe"],
-            'equipo': ["Transferencias", "Transferencias", "Transferencias", "Arreglo", 
+            'equipo': ["Transferencias", "Transferencias", "Distribución", "Arreglo", 
                       "Guías", "Ventas", "Ventas", "Ventas"]
         })
     
@@ -339,17 +339,20 @@ def obtener_trabajadores() -> pd.DataFrame:
         response = supabase.from_('trabajadores').select('nombre, equipo').eq('activo', True).order('equipo,nombre', desc=False).execute()
         if response.data:
             df = pd.DataFrame(response.data)
+            # Asegurar que Luis Perugachi esté en el equipo de Distribución
+            if 'Luis Perugachi' in df['nombre'].values:
+                df.loc[df['nombre'] == 'Luis Perugachi', 'equipo'] = 'Distribución'
             return df
         else:
             logger.warning("No se encontraron trabajadores en Supabase")
             return pd.DataFrame(columns=['nombre', 'equipo'])
     except Exception as e:
         logger.error(f"Error al obtener trabajadores de Supabase: {e}")
-        # Si hay error, devolver lista por defecto
+        # Si hay error, devolver lista por defecto con Luis Perugachi en Distribución
         return pd.DataFrame({
             'nombre': ["Andrés Yépez", "Josué Imbacuán", "Luis Perugachi", "Diana García", 
                       "Simón Vera", "Jhonny Guadalupe", "Victor Montenegro", "Fernando Quishpe"],
-            'equipo': ["Transferencias", "Transferencias", "Transferencias", "Arreglo", 
+            'equipo': ["Transferencias", "Transferencias", "Distribución", "Arreglo", 
                       "Guías", "Ventas", "Ventas", "Ventas"]
         })
 
@@ -357,18 +360,28 @@ def obtener_equipos() -> List[str]:
     """Obtiene la lista de equipos desde Supabase"""
     if supabase is None:
         logger.error("Cliente de Supabase no inicializado")
-        return ["Transferencias", "Arreglo", "Distribución", "Guías", "Ventas"]
+        # Incluir "Distribución" en la lista de equipos por defecto
+        return ["Transferencias", "Distribución", "Arreglo", "Guías", "Ventas"]
     
     try:
         response = supabase.from_('trabajadores').select('equipo', distinct=True).eq('activo', True).order('equipo', desc=False).execute()
         if response.data:
-            return [item['equipo'] for item in response.data]
+            equipos = [item['equipo'] for item in response.data]
+            # Asegurar que "Distribución" esté en la lista
+            if "Distribución" not in equipos:
+                equipos.append("Distribución")
+            # Ordenar los equipos en un orden específico
+            orden_equipos = ["Transferencias", "Distribución", "Arreglo", "Guías", "Ventas"]
+            equipos_ordenados = [eq for eq in orden_equipos if eq in equipos]
+            equipos_restantes = [eq for eq in equipos if eq not in orden_equipos]
+            return equipos_ordenados + equipos_restantes
         else:
             logger.warning("No se encontraron equipos en Supabase")
-            return []
+            return ["Transferencias", "Distribución", "Arreglo", "Guías", "Ventas"]
     except Exception as e:
         logger.error(f"Error al obtener equipos de Supabase: {e}")
-        return ["Transferencias", "Arreglo", "Distribución", "Guías", "Ventas"]
+        # Incluir "Distribución" en la lista de equipos por defecto
+        return ["Transferencias", "Distribución", "Arreglo", "Guías", "Ventas"]
 
 def guardar_datos_db(fecha: str, datos: Dict[str, Dict]) -> bool:
     """Guarda los datos en la tabla de Supabase"""
@@ -485,20 +498,20 @@ def verificar_password() -> bool:
     return True
 
 # Funciones de visualización
-def crear_grafico_interactivo(data: pd.DataFrame, x: str, y: str, title: str, 
+def crear_grafico_interactivo(df: pd.DataFrame, x: str, y: str, title: str, 
                              xlabel: str, ylabel: str, tipo: str = 'bar') -> go.Figure:
     """Crea gráficos interactivos con Plotly"""
     try:
         if tipo == 'bar':
-            fig = px.bar(data, x=x, y=y, title=title, labels={x: xlabel, y: ylabel})
+            fig = px.bar(df, x=x, y=y, title=title, labels={x: xlabel, y: ylabel})
         elif tipo == 'line':
-            fig = px.line(data, x=x, y=y, title=title, labels={x: xlabel, y: ylabel})
+            fig = px.line(df, x=x, y=y, title=title, labels={x: xlabel, y: ylabel})
         elif tipo == 'scatter':
-            fig = px.scatter(data, x=x, y=y, title=title, labels={x: xlabel, y: ylabel})
+            fig = px.scatter(df, x=x, y=y, title=title, labels={x: xlabel, y: ylabel})
         elif tipo == 'box':
-            fig = px.box(data, x=x, y=y, title=title, labels={x: xlabel, y: ylabel})
+            fig = px.box(df, x=x, y=y, title=title, labels={x: xlabel, y: ylabel})
         else:
-            fig = px.bar(data, x=x, y=y, title=title, labels={x: xlabel, y: ylabel})
+            fig = px.bar(df, x=x, y=y, title=title, labels={x: xlabel, y: ylabel})
         fig.update_layout(
             plot_bgcolor='rgba(0,0,0,0)',
             paper_bgcolor='rgba(0,0,0,0)',
@@ -636,6 +649,198 @@ def calcular_estadisticas_avanzadas(df: pd.DataFrame, columna: str) -> Dict[str,
         logger.error(f"Error al calcular estadísticas: {e}")
         return {}
 
+# Nueva función para exportar Excel corregida
+def exportar_excel(df: pd.DataFrame) -> bytes:
+    """Exporta el DataFrame a un archivo Excel en memoria"""
+    try:
+        # Crear una copia del DataFrame para no modificar el original
+        export_df = df.copy()
+        
+        # Asegurar que las fechas estén en formato adecuado
+        if 'fecha' in export_df.columns:
+            export_df['fecha'] = pd.to_datetime(export_df['fecha']).dt.strftime('%Y-%m-%d')
+        
+        # Convertir cualquier columna de fecha a string para evitar problemas
+        for col in export_df.select_dtypes(include=['datetime64']).columns:
+            export_df[col] = export_df[col].dt.strftime('%Y-%m-%d')
+        
+        # Manejar valores NaN y None
+        export_df = export_df.fillna('N/A')
+        
+        # Reordenar columnas para una mejor presentación
+        columnas_ordenadas = [
+            'fecha', 'nombre', 'equipo', 'actividad', 'cantidad', 'meta', 
+            'eficiencia', 'productividad', 'horas_trabajo', 'meta_mensual', 'comentario'
+        ]
+        # Solo incluir las columnas que existen en el DataFrame
+        columnas_finales = [col for col in columnas_ordenadas if col in export_df.columns]
+        export_df = export_df[columnas_finales]
+        
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            export_df.to_excel(writer, sheet_name='Datos_KPIs', index=False)
+            # Formato adicional para mejorar el Excel
+            workbook = writer.book
+            worksheet = writer.sheets['Datos_KPIs']
+            
+            # Formato para encabezados
+            header_format = workbook.add_format({
+                'bold': True,
+                'text_wrap': True,
+                'valign': 'top',
+                'fg_color': '#4472C4',
+                'font_color': 'white',
+                'border': 1
+            })
+            
+            # Formato para celdas
+            cell_format = workbook.add_format({
+                'border': 1,
+                'align': 'left',
+                'valign': 'vcenter'
+            })
+            
+            # Aplicar formato a encabezados
+            for col_num, value in enumerate(export_df.columns.values):
+                worksheet.write(0, col_num, value, header_format)
+            
+            # Aplicar formato a todas las celdas de datos
+            for row in range(1, len(export_df) + 1):
+                for col in range(len(export_df.columns)):
+                    worksheet.write(row, col, export_df.iloc[row-1, col], cell_format)
+            
+            # Autoajustar columnas
+            for i, col in enumerate(export_df.columns):
+                # Obtener la longitud máxima de los datos en la columna
+                max_len = max((
+                    export_df[col].astype(str).str.len().max(),  # Longitud máxima de los datos
+                    len(str(col))  # Longitud del nombre de la columna
+                )) + 2  # Añadir un poco de espacio extra
+                worksheet.set_column(i, i, max_len)
+        
+        processed_data = output.getvalue()
+        return processed_data
+    except Exception as e:
+        logger.error(f"Error al exportar a Excel: {e}")
+        st.error(f"Error al exportar a Excel: {str(e)}")
+        raise
+
+def plot_to_base64(fig):
+    """Convierte un gráfico Plotly a base64 para incrustar en PDF"""
+    try:
+        # Convertir figura a imagen en memoria
+        img_bytes = fig.to_image(format="png", width=800, height=600, scale=2)
+        return base64.b64encode(img_bytes).decode('utf-8')
+    except Exception as e:
+        logger.error(f"Error al convertir gráfico a base64: {e}")
+        return None
+
+def crear_reporte_pdf(df: pd.DataFrame, fecha_inicio: str, fecha_fin: str) -> bytes:
+    """Crea un reporte PDF con los datos y gráficas"""
+    try:
+        buffer = io.BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=letter)
+        styles = getSampleStyleSheet()
+        elements = []
+        
+        # Título del reporte
+        title = Paragraph("Reporte de KPIs - Fashion Club", styles['Title'])
+        elements.append(title)
+        elements.append(Spacer(1, 12))
+        
+        # Información del período
+        periodo_text = f"Período: {fecha_inicio} a {fecha_fin}"
+        periodo = Paragraph(periodo_text, styles['Normal'])
+        elements.append(periodo)
+        elements.append(Spacer(1, 12))
+        
+        # Resumen estadístico
+        resumen_text = "Resumen Estadístico"
+        resumen_title = Paragraph(resumen_text, styles['Heading2'])
+        elements.append(resumen_title)
+        
+        # Crear tabla de resumen
+        resumen_data = df.groupby('nombre').agg({
+            'cantidad': ['count', 'mean', 'sum', 'max', 'min'],
+            'eficiencia': ['mean', 'max', 'min'],
+            'productividad': ['mean', 'max', 'min'],
+            'horas_trabajo': ['sum', 'mean']
+        }).round(2)
+        
+        # Aplanar las columnas multiindex
+        resumen_data.columns = ['_'.join(col).strip() for col in resumen_data.columns.values]
+        resumen_data.reset_index(inplace=True)
+        
+        # Convertir DataFrame a lista para la tabla
+        table_data = [list(resumen_data.columns)]
+        for _, row in resumen_data.iterrows():
+            table_data.append(list(row))
+        
+        # Crear tabla
+        table = Table(table_data)
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 10),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+            ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 1), (-1, -1), 8),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black)
+        ]))
+        elements.append(table)
+        elements.append(Spacer(1, 12))
+        
+        # Gráficas
+        try:
+            # Crear gráfica de eficiencia por día
+            df_eficiencia_dia = df.groupby('fecha')['eficiencia'].mean().reset_index()
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(
+                x=df_eficiencia_dia['fecha'], 
+                y=df_eficiencia_dia['eficiencia'],
+                mode='lines+markers',
+                name='Eficiencia Promedio'
+            ))
+            fig.add_hline(y=100, line_dash="dash", line_color="red", annotation_text="Meta")
+            fig.update_layout(
+                title='Evolución de la Eficiencia Promedio',
+                xaxis_title='Fecha',
+                yaxis_title='Eficiencia (%)',
+                width=800,
+                height=600
+            )
+            # Convertir gráfico a base64
+            img_data = plot_to_base64(fig)
+            if img_data:
+                # Guardar imagen temporalmente
+                with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmpfile:
+                    tmpfile.write(base64.b64decode(img_data))
+                    img_path = tmpfile.name
+                # Agregar gráfica al PDF
+                img = Image(img_path, width=6*inch, height=4*inch)
+                elements.append(Spacer(1, 12))
+                elements.append(Paragraph("Evolución de la Eficiencia Promedio", styles['Heading3']))
+                elements.append(img)
+                # Limpiar archivo temporal
+                os.unlink(img_path)
+        except Exception as e:
+            logger.error(f"Error al crear gráfica para PDF: {e}")
+            error_msg = Paragraph(f"Error al generar gráfica: {str(e)}", styles['Normal'])
+            elements.append(error_msg)
+        
+        # Construir PDF
+        doc.build(elements)
+        pdf_bytes = buffer.getvalue()
+        buffer.close()
+        return pdf_bytes
+    except Exception as e:
+        logger.error(f"Error al crear reporte PDF: {e}")
+        st.error(f"Error al crear reporte PDF: {str(e)}")
+        raise
+
 # Funciones principales de la aplicación
 def mostrar_gestion_trabajadores():
     """Muestra la interfaz de gestión de trabajadores"""
@@ -649,6 +854,12 @@ def mostrar_gestion_trabajadores():
         # Obtener lista actual de trabajadores
         response = supabase.from_('trabajadores').select('*').order('equipo,nombre', desc=False).execute()
         trabajadores = response.data if response.data else []
+        
+        # Asegurar que Luis Perugachi esté en el equipo de Distribución
+        if any(trab['nombre'] == 'Luis Perugachi' for trab in trabajadores):
+            for trab in trabajadores:
+                if trab['nombre'] == 'Luis Perugachi':
+                    trab['equipo'] = 'Distribución'
         
         st.markdown("<h2 class='section-title'>Trabajadores Actuales</h2>", unsafe_allow_html=True)
         if trabajadores:
@@ -726,12 +937,20 @@ def ingresar_datos():
         st.markdown("<div class='warning-box'>⚠️ No hay trabajadores registrados. Por favor, registre trabajadores primero.</div>", unsafe_allow_html=True)
         return
     
+    # Asegurar que Luis Perugachi esté en el equipo de Distribución
+    if 'Luis Perugachi' in df_trabajadores['nombre'].values:
+        df_trabajadores.loc[df_trabajadores['nombre'] == 'Luis Perugachi', 'equipo'] = 'Distribución'
+    
     trabajadores_por_equipo = {}
     for _, row in df_trabajadores.iterrows():
         equipo = row['equipo']
         if equipo not in trabajadores_por_equipo:
             trabajadores_por_equipo[equipo] = []
         trabajadores_por_equipo[equipo].append(row['nombre'])
+    
+    # Si no existe el equipo de Distribución, crearlo
+    if 'Distribución' not in trabajadores_por_equipo:
+        trabajadores_por_equipo['Distribución'] = []
     
     # Selector de fecha
     col_fecha, _ = st.columns([1, 2])
@@ -755,7 +974,18 @@ def ingresar_datos():
         st.markdown("<h3 class='section-title'>Meta Mensual de Transferencias</h3>", unsafe_allow_html=True)
         meta_mensual_transferencias = st.number_input("Meta mensual para el equipo de transferencias:", min_value=0, value=150000, key="meta_mensual_transferencias")
         
-        for equipo, miembros in trabajadores_por_equipo.items():
+        # Asegurar que el equipo de Distribución esté presente
+        if 'Distribución' not in trabajadores_por_equipo:
+            trabajadores_por_equipo['Distribución'] = []
+        
+        # Ordenar los equipos para mostrarlos en un orden específico
+        orden_equipos = ["Transferencias", "Distribución", "Arreglo", "Guías", "Ventas"]
+        equipos_ordenados = [eq for eq in orden_equipos if eq in trabajadores_por_equipo]
+        equipos_restantes = [eq for eq in trabajadores_por_equipo.keys() if eq not in orden_equipos]
+        equipos_finales = equipos_ordenados + equipos_restantes
+        
+        for equipo in equipos_finales:
+            miembros = trabajadores_por_equipo[equipo]
             st.markdown(f"<div class='team-section'><div class='team-header'>{equipo}</div></div>", unsafe_allow_html=True)
             for trabajador in miembros:
                 st.subheader(trabajador)
@@ -764,6 +994,10 @@ def ingresar_datos():
                     if equipo == "Transferencias":
                         cantidad = st.number_input(f"Prendas transferidas por {trabajador}:", min_value=0, value=1800, key=f"{trabajador}_cantidad")
                         meta = st.number_input(f"Meta diaria para {trabajador}:", min_value=0, value=1750, key=f"{trabajador}_meta")
+                    elif equipo == "Distribución":
+                        # Para el equipo de Distribución
+                        cantidad = st.number_input(f"Prendas distribuidas por {trabajador}:", min_value=0, value=1000, key=f"{trabajador}_cantidad")
+                        meta = st.number_input(f"Meta diaria para {trabajador}:", min_value=0, value=1000, key=f"{trabajador}_meta")
                     elif equipo == "Arreglo":
                         cantidad = st.number_input(f"Prendas arregladas por {trabajador}:", min_value=0, value=130, key=f"{trabajador}_cantidad")
                         meta = st.number_input(f"Meta diaria para {trabajador}:", min_value=0, value=150, key=f"{trabajador}_meta")
@@ -801,6 +1035,11 @@ def ingresar_datos():
                         eficiencia = kpi_transferencias(cantidad, meta)
                         actividad = "Transferencias"
                         meta_mensual = meta_mensual_transferencias
+                    elif equipo == "Distribución":
+                        # Para el equipo de Distribución
+                        eficiencia = kpi_distribucion(cantidad, meta)
+                        actividad = "Distribución"
+                        meta_mensual = 0
                     elif equipo == "Arreglo":
                         eficiencia = kpi_arreglos(cantidad, meta)
                         actividad = "Arreglos"
@@ -810,7 +1049,7 @@ def ingresar_datos():
                         actividad = "Guías"
                         meta_mensual = 0
                     elif equipo == "Ventas":
-                        eficiencia = kpi_transferencias(cantidad, meta)  # Reutilizamos la función para ventas
+                        eficiencia = kpi_transferencias(cantidad, meta)
                         actividad = "Ventas"
                         meta_mensual = 0
                     else:
@@ -1016,7 +1255,13 @@ def mostrar_dashboard():
     
     # Obtener lista de equipos
     equipos = df_reciente['equipo'].unique()
-    for equipo in equipos:
+    # Ordenar equipos en un orden específico
+    orden_equipos = ["Transferencias", "Distribución", "Arreglo", "Guías", "Ventas"]
+    equipos_ordenados = [eq for eq in orden_equipos if eq in equipos]
+    equipos_restantes = [eq for eq in equipos if eq not in orden_equipos]
+    equipos_finales = equipos_ordenados + equipos_restantes
+    
+    for equipo in equipos_finales:
         df_equipo = df_reciente[df_reciente['equipo'] == equipo]
         st.markdown(f"<div class='team-section'><div class='team-header'>{equipo}</div></div>", unsafe_allow_html=True)
         
@@ -1091,503 +1336,6 @@ def mostrar_dashboard():
                         <div class="comment-content">{comentario}</div>
                     </div>
                     """, unsafe_allow_html=True)
-
-def exportar_excel(df: pd.DataFrame) -> bytes:
-    """Exporta el DataFrame a un archivo Excel en memoria"""
-    try:
-        # Crear una copia del DataFrame para no modificar el original
-        export_df = df.copy()
-        
-        # Asegurar que las fechas estén en formato adecuado
-        if 'fecha' in export_df.columns:
-            export_df['fecha'] = pd.to_datetime(export_df['fecha']).dt.strftime('%Y-%m-%d')
-        
-        # Convertir cualquier columna de fecha a string para evitar problemas
-        for col in export_df.select_dtypes(include=['datetime64']).columns:
-            export_df[col] = export_df[col].dt.strftime('%Y-%m-%d')
-        
-        # Manejar valores NaN y None
-        export_df = export_df.fillna('N/A')
-        
-        output = io.BytesIO()
-        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-            export_df.to_excel(writer, sheet_name='Datos_KPIs', index=False)
-            # Formato adicional para mejorar el Excel
-            workbook = writer.book
-            worksheet = writer.sheets['Datos_KPIs']
-            
-            # Formato para encabezados
-            header_format = workbook.add_format({
-                'bold': True,
-                'text_wrap': True,
-                'valign': 'top',
-                'fg_color': '#4472C4',
-                'font_color': 'white',
-                'border': 1
-            })
-            
-            # Formato para celdas
-            cell_format = workbook.add_format({
-                'border': 1,
-                'align': 'left',
-                'valign': 'vcenter'
-            })
-            
-            # Aplicar formato a encabezados
-            for col_num, value in enumerate(export_df.columns.values):
-                worksheet.write(0, col_num, value, header_format)
-            
-            # Aplicar formato a todas las celdas de datos
-            for row in range(1, len(export_df) + 1):
-                for col in range(len(export_df.columns)):
-                    worksheet.write(row, col, export_df.iloc[row-1, col], cell_format)
-            
-            # Autoajustar columnas
-            for i, col in enumerate(export_df.columns):
-                # Obtener la longitud máxima de los datos en la columna
-                max_len = max((
-                    export_df[col].astype(str).str.len().max(),  # Longitud máxima de los datos
-                    len(str(col))  # Longitud del nombre de la columna
-                )) + 2  # Añadir un poco de espacio extra
-                worksheet.set_column(i, i, max_len)
-        
-        processed_data = output.getvalue()
-        return processed_data
-    except Exception as e:
-        logger.error(f"Error al exportar a Excel: {e}")
-        raise
-
-# ... (el resto del código permanece igual hasta obtener_trabajadores)
-
-def obtener_trabajadores() -> pd.DataFrame:
-    """Obtiene la lista de trabajadores desde Supabase"""
-    if supabase is None:
-        logger.error("Cliente de Supabase no inicializado")
-        # Si hay error, devolver lista por defecto con Luis Perugachi en Distribución
-        return pd.DataFrame({
-            'nombre': ["Andrés Yépez", "Josué Imbacuán", "Luis Perugachi", "Diana García", 
-                      "Simón Vera", "Jhonny Guadalupe", "Victor Montenegro", "Fernando Quishpe"],
-            'equipo': ["Transferencias", "Transferencias", "Distribución", "Arreglo", 
-                      "Guías", "Ventas", "Ventas", "Ventas"]
-        })
-    
-    try:
-        response = supabase.from_('trabajadores').select('nombre, equipo').eq('activo', True).order('equipo,nombre', desc=False).execute()
-        if response.data:
-            df = pd.DataFrame(response.data)
-            # Asegurar que Luis Perugachi esté en el equipo de Distribución
-            if 'Luis Perugachi' in df['nombre'].values:
-                df.loc[df['nombre'] == 'Luis Perugachi', 'equipo'] = 'Distribución'
-            return df
-        else:
-            logger.warning("No se encontraron trabajadores en Supabase")
-            return pd.DataFrame(columns=['nombre', 'equipo'])
-    except Exception as e:
-        logger.error(f"Error al obtener trabajadores de Supabase: {e}")
-        # Si hay error, devolver lista por defecto con Luis Perugachi en Distribución
-        return pd.DataFrame({
-            'nombre': ["Andrés Yépez", "Josué Imbacuán", "Luis Perugachi", "Diana García", 
-                      "Simón Vera", "Jhonny Guadalupe", "Victor Montenegro", "Fernando Quishpe"],
-            'equipo': ["Transferencias", "Transferencias", "Distribución", "Arreglo", 
-                      "Guías", "Ventas", "Ventas", "Ventas"]
-        })
-
-def obtener_equipos() -> List[str]:
-    """Obtiene la lista de equipos desde Supabase"""
-    if supabase is None:
-        logger.error("Cliente de Supabase no inicializado")
-        # Incluir "Distribución" en la lista de equipos por defecto
-        return ["Transferencias", "Arreglo", "Distribución", "Guías", "Ventas"]
-    
-    try:
-        response = supabase.from_('trabajadores').select('equipo', distinct=True).eq('activo', True).order('equipo', desc=False).execute()
-        if response.data:
-            equipos = [item['equipo'] for item in response.data]
-            # Asegurar que "Distribución" esté en la lista
-            if "Distribución" not in equipos:
-                equipos.append("Distribución")
-            return equipos
-        else:
-            logger.warning("No se encontraron equipos en Supabase")
-            return ["Transferencias", "Arreglo", "Distribución", "Guías", "Ventas"]
-    except Exception as e:
-        logger.error(f"Error al obtener equipos de Supabase: {e}")
-        # Incluir "Distribución" en la lista de equipos por defecto
-        return ["Transferencias", "Arreglo", "Distribución", "Guías", "Ventas"]
-
-# ... (el resto del código permanece igual hasta mostrar_gestion_trabajadores)
-
-def mostrar_gestion_trabajadores():
-    """Muestra la interfaz de gestión de trabajadores"""
-    st.markdown("<h1 class='header-title'>👥 Gestión de Trabajadores</h1>", unsafe_allow_html=True)
-    
-    if supabase is None:
-        st.markdown("<div class='error-box'>❌ Error de conexión a la base de datos. Verifique las variables de entorno.</div>", unsafe_allow_html=True)
-        return
-    
-    try:
-        # Obtener lista actual de trabajadores
-        response = supabase.from_('trabajadores').select('*').order('equipo,nombre', desc=False).execute()
-        trabajadores = response.data if response.data else []
-        
-        # Asegurar que Luis Perugachi esté en el equipo de Distribución
-        if any(trab['nombre'] == 'Luis Perugachi' for trab in trabajadores):
-            for trab in trabajadores:
-                if trab['nombre'] == 'Luis Perugachi':
-                    trab['equipo'] = 'Distribución'
-        
-        st.markdown("<h2 class='section-title'>Trabajadores Actuales</h2>", unsafe_allow_html=True)
-        if trabajadores:
-            df_trabajadores = pd.DataFrame(trabajadores)
-            st.dataframe(df_trabajadores[['nombre', 'equipo', 'activo']], use_container_width=True)
-        else:
-            st.info("No hay trabajadores registrados.")
-        
-        st.markdown("<h2 class='section-title'>Agregar Nuevo Trabajador</h2>", unsafe_allow_html=True)
-        with st.form("form_nuevo_trabajador"):
-            col1, col2 = st.columns(2)
-            with col1:
-                nuevo_nombre = st.text_input("Nombre del trabajador:")
-            with col2:
-                equipos = obtener_equipos()
-                nuevo_equipo = st.selectbox("Equipo:", options=equipos)
-            submitted = st.form_submit_button("Agregar Trabajador")
-            if submitted:
-                if nuevo_nombre:
-                    try:
-                        # Verificar si el trabajador ya existe
-                        response = supabase.from_('trabajadores').select('*').eq('nombre', nuevo_nombre).execute()
-                        if response.data:
-                            st.markdown("<div class='error-box'>❌ El trabajador ya existe.</div>", unsafe_allow_html=True)
-                        else:
-                            # Insertar nuevo trabajador
-                            supabase.from_('trabajadores').insert({
-                                'nombre': nuevo_nombre, 
-                                'equipo': nuevo_equipo,
-                                'activo': True
-                            }).execute()
-                            st.markdown("<div class='success-box'>✅ Trabajador agregado correctamente.</div>", unsafe_allow_html=True)
-                            time.sleep(1)
-                            st.rerun()
-                    except Exception as e:
-                        logger.error(f"Error al agregar trabajador: {e}")
-                        st.markdown("<div class='error-box'>❌ Error al agregar trabajador.</div>", unsafe_allow_html=True)
-                else:
-                    st.markdown("<div class='error-box'>❌ Debe ingresar un nombre.</div>", unsafe_allow_html=True)
-        
-        st.markdown("<h2 class='section-title'>Eliminar Trabajador</h2>", unsafe_allow_html=True)
-        if trabajadores:
-            trabajadores_activos = [t['nombre'] for t in trabajadores if t.get('activo', True)]
-            if trabajadores_activos:
-                trabajador_eliminar = st.selectbox("Selecciona un trabajador para eliminar:", options=trabajadores_activos)
-                if st.button("Eliminar Trabajador"):
-                    try:
-                        # Actualizar el estado del trabajador a inactivo
-                        supabase.from_('trabajadores').update({'activo': False}).eq('nombre', trabajador_eliminar).execute()
-                        st.markdown("<div class='success-box'>✅ Trabajador eliminado correctamente.</div>", unsafe_allow_html=True)
-                        time.sleep(1)
-                        st.rerun()
-                    except Exception as e:
-                        logger.error(f"Error al eliminar trabajador: {e}")
-                        st.markdown("<div class='error-box'>❌ Error al eliminar trabajador.</div>", unsafe_allow_html=True)
-            else:
-                st.info("No hay trabajadores activos para eliminar.")
-        else:
-            st.info("No hay trabajadores registrados.")
-    except Exception as e:
-        logger.error(f"Error en gestión de trabajadores: {e}")
-        st.markdown("<div class='error-box'>❌ Error del sistema al gestionar trabajadores.</div>", unsafe_allow_html=True)
-
-def ingresar_datos():
-    """Muestra la interfaz para ingresar datos de KPIs"""
-    st.markdown("<h1 class='header-title'>📥 Ingreso de Datos de KPIs</h1>", unsafe_allow_html=True)
-    
-    if supabase is None:
-        st.markdown("<div class='error-box'>❌ Error de conexión a la base de datos. Verifique las variables de entorno.</div>", unsafe_allow_html=True)
-        return
-    
-    # Obtener trabajadores desde Supabase
-    df_trabajadores = obtener_trabajadores()
-    if df_trabajadores.empty:
-        st.markdown("<div class='warning-box'>⚠️ No hay trabajadores registrados. Por favor, registre trabajadores primero.</div>", unsafe_allow_html=True)
-        return
-    
-    # Asegurar que Luis Perugachi esté en el equipo de Distribución
-    if 'Luis Perugachi' in df_trabajadores['nombre'].values:
-        df_trabajadores.loc[df_trabajadores['nombre'] == 'Luis Perugachi', 'equipo'] = 'Distribución'
-    
-    trabajadores_por_equipo = {}
-    for _, row in df_trabajadores.iterrows():
-        equipo = row['equipo']
-        if equipo not in trabajadores_por_equipo:
-            trabajadores_por_equipo[equipo] = []
-        trabajadores_por_equipo[equipo].append(row['nombre'])
-    
-    # Si no existe el equipo de Distribución, crearlo
-    if 'Distribución' not in trabajadores_por_equipo:
-        trabajadores_por_equipo['Distribución'] = []
-    
-    # Selector de fecha
-    col_fecha, _ = st.columns([1, 2])
-    with col_fecha:
-        fecha_seleccionada = st.date_input(
-            "Selecciona la fecha:",
-            value=datetime.now(),
-            max_value=datetime.now()
-        )
-    
-    periodo = st.radio("Selecciona el período:", ["Día", "Semana"], horizontal=True)
-    
-    # Inicializar variables de sesión para almacenar datos
-    if 'datos_calculados' not in st.session_state:
-        st.session_state.datos_calculados = None
-    if 'fecha_guardar' not in st.session_state:
-        st.session_state.fecha_guardar = None
-    
-    with st.form("form_datos"):
-        # Meta mensual única para transferencias
-        st.markdown("<h3 class='section-title'>Meta Mensual de Transferencias</h3>", unsafe_allow_html=True)
-        meta_mensual_transferencias = st.number_input("Meta mensual para el equipo de transferencias:", min_value=0, value=150000, key="meta_mensual_transferencias")
-        
-        # Asegurar que el equipo de Distribución esté presente
-        if 'Distribución' not in trabajadores_por_equipo:
-            trabajadores_por_equipo['Distribución'] = []
-        
-        # Ordenar los equipos para mostrarlos en un orden específico
-        orden_equipos = ["Transferencias", "Distribución", "Arreglo", "Guías", "Ventas"]
-        equipos_ordenados = [eq for eq in orden_equipos if eq in trabajadores_por_equipo]
-        equipos_restantes = [eq for eq in trabajadores_por_equipo.keys() if eq not in orden_equipos]
-        equipos_finales = equipos_ordenados + equipos_restantes
-        
-        for equipo in equipos_finales:
-            miembros = trabajadores_por_equipo[equipo]
-            st.markdown(f"<div class='team-section'><div class='team-header'>{equipo}</div></div>", unsafe_allow_html=True)
-            for trabajador in miembros:
-                st.subheader(trabajador)
-                col1, col2 = st.columns(2)
-                with col1:
-                    if equipo == "Transferencias":
-                        cantidad = st.number_input(f"Prendas transferidas por {trabajador}:", min_value=0, value=1800, key=f"{trabajador}_cantidad")
-                        meta = st.number_input(f"Meta diaria para {trabajador}:", min_value=0, value=1750, key=f"{trabajador}_meta")
-                    elif equipo == "Distribución":
-                        # Para el equipo de Distribución
-                        cantidad = st.number_input(f"Prendas distribuidas por {trabajador}:", min_value=0, value=1000, key=f"{trabajador}_cantidad")
-                        meta = st.number_input(f"Meta diaria para {trabajador}:", min_value=0, value=1000, key=f"{trabajador}_meta")
-                    elif equipo == "Arreglo":
-                        cantidad = st.number_input(f"Prendas arregladas por {trabajador}:", min_value=0, value=130, key=f"{trabajador}_cantidad")
-                        meta = st.number_input(f"Meta diaria para {trabajador}:", min_value=0, value=150, key=f"{trabajador}_meta")
-                    elif equipo == "Guías":
-                        cantidad = st.number_input(f"Guías realizadas por {trabajador}:", min_value=0, value=110, key=f"{trabajador}_cantidad")
-                        meta = st.number_input(f"Meta diaria para {trabajador}:", min_value=0, value=120, key=f"{trabajador}_meta")
-                    elif equipo == "Ventas":
-                        cantidad = st.number_input(f"Pedidos preparados por {trabajador}:", min_value=0, value=45, key=f"{trabajador}_cantidad")
-                        meta = st.number_input(f"Meta diaria para {trabajador}:", min_value=0, value=40, key=f"{trabajador}_meta")
-                    else:
-                        cantidad = st.number_input(f"Cantidad realizada por {trabajador}:", min_value=0, value=100, key=f"{trabajador}_cantidad")
-                        meta = st.number_input(f"Meta diaria para {trabajador}:", min_value=0, value=100, key=f"{trabajador}_meta")
-                with col2:
-                    horas = st.number_input(f"Horas trabajadas por {trabajador}:", min_value=0.0, value=8.0, key=f"{trabajador}_horas", step=0.5)
-                    comentario = st.text_area(f"Comentario para {trabajador}:", key=f"{trabajador}_comentario")
-        
-        submitted = st.form_submit_button("Calcular KPIs")
-        if submitted:
-            datos_guardar = {}
-            for equipo, miembros in trabajadores_por_equipo.items():
-                for trabajador in miembros:
-                    # Obtener valores del formulario
-                    cantidad = st.session_state.get(f"{trabajador}_cantidad", 0)
-                    meta = st.session_state.get(f"{trabajador}_meta", 0)
-                    horas = st.session_state.get(f"{trabajador}_horas", 0)
-                    comentario = st.session_state.get(f"{trabajador}_comentario", "")
-                    
-                    # Validar datos
-                    if not all([validar_numero_positivo(cantidad), validar_numero_positivo(meta), validar_numero_positivo(horas)]):
-                        st.markdown(f"<div class='error-box'>❌ Datos inválidos para {trabajador}. Verifique los valores ingresados.</div>", unsafe_allow_html=True)
-                        continue
-                    
-                    # Calcular KPIs según el equipo
-                    if equipo == "Transferencias":
-                        eficiencia = kpi_transferencias(cantidad, meta)
-                        actividad = "Transferencias"
-                        meta_mensual = meta_mensual_transferencias
-                    elif equipo == "Distribución":
-                        # Para el equipo de Distribución
-                        eficiencia = kpi_distribucion(cantidad, meta)  # Aseguramos que usamos la función correcta
-                        actividad = "Distribución"
-                        meta_mensual = 0
-                    elif equipo == "Arreglo":
-                        eficiencia = kpi_arreglos(cantidad, meta)
-                        actividad = "Arreglos"
-                        meta_mensual = 0
-                    elif equipo == "Guías":
-                        eficiencia = kpi_guias(cantidad, meta)
-                        actividad = "Guías"
-                        meta_mensual = 0
-                    elif equipo == "Ventas":
-                        eficiencia = kpi_transferencias(cantidad, meta)  # Reutilizamos la función para ventas
-                        actividad = "Ventas"
-                        meta_mensual = 0
-                    else:
-                        eficiencia = (cantidad / meta * 100) if meta > 0 else 0
-                        actividad = "General"
-                        meta_mensual = 0
-                    
-                    productividad = productividad_hora(cantidad, horas)
-                    datos_guardar[trabajador] = {
-                        "actividad": actividad, 
-                        "cantidad": cantidad, 
-                        "meta": meta, 
-                        "eficiencia": eficiencia, 
-                        "productividad": productividad,
-                        "comentario": comentario, 
-                        "meta_mensual": meta_mensual,
-                        "horas_trabajo": horas,
-                        "equipo": equipo
-                    }
-            
-            # Convertir la fecha seleccionada a string
-            fecha_str = fecha_seleccionada.strftime("%Y-%m-%d")
-            
-            # Almacenar datos en sesión para confirmación posterior
-            st.session_state.datos_calculados = datos_guardar
-            st.session_state.fecha_guardar = fecha_str
-            
-            # Mostrar resumen
-            st.markdown("<h3 class='section-title'>📋 Resumen de KPIs Calculados</h3>", unsafe_allow_html=True)
-            for equipo, miembros in trabajadores_por_equipo.items():
-                st.markdown(f"**{equipo}:**")
-                for trabajador in miembros:
-                    if trabajador in datos_guardar:
-                        datos = datos_guardar[trabajador]
-                        st.markdown(f"- {trabajador}: {datos['cantidad']} unidades ({datos['eficiencia']:.1f}%)")
-    
-    # Botón de confirmación fuera del formulario
-    if st.session_state.datos_calculados is not None and st.session_state.fecha_guardar is not None:
-        if st.button("✅ Confirmar y Guardar Datos", key="confirmar_guardar"):
-            if guardar_datos_db(st.session_state.fecha_guardar, st.session_state.datos_calculados):
-                st.markdown("<div class='success-box'>✅ Datos guardados correctamente!</div>", unsafe_allow_html=True)
-                # Limpiar datos de confirmación
-                st.session_state.datos_calculados = None
-                st.session_state.fecha_guardar = None
-                time.sleep(2)
-                st.rerun()
-            else:
-                st.markdown("<div class='error-box'>❌ Error al guardar los datos. Por favor, intente nuevamente.</div>", unsafe_allow_html=True)
-
-def plot_to_base64(fig):
-    """Convierte un gráfico Plotly a base64 para incrustar en PDF"""
-    try:
-        # Convertir figura a imagen en memoria
-        img_bytes = fig.to_image(format="png", width=800, height=600, scale=2)
-        return base64.b64encode(img_bytes).decode('utf-8')
-    except Exception as e:
-        logger.error(f"Error al convertir gráfico a base64: {e}")
-        return None
-
-def crear_reporte_pdf(df: pd.DataFrame, fecha_inicio: str, fecha_fin: str) -> bytes:
-    """Crea un reporte PDF con los datos y gráficas"""
-    try:
-        buffer = io.BytesIO()
-        doc = SimpleDocTemplate(buffer, pagesize=letter)
-        styles = getSampleStyleSheet()
-        elements = []
-        
-        # Título del reporte
-        title = Paragraph("Reporte de KPIs - Fashion Club", styles['Title'])
-        elements.append(title)
-        elements.append(Spacer(1, 12))
-        
-        # Información del período
-        periodo_text = f"Período: {fecha_inicio} a {fecha_fin}"
-        periodo = Paragraph(periodo_text, styles['Normal'])
-        elements.append(periodo)
-        elements.append(Spacer(1, 12))
-        
-        # Resumen estadístico
-        resumen_text = "Resumen Estadístico"
-        resumen_title = Paragraph(resumen_text, styles['Heading2'])
-        elements.append(resumen_title)
-        
-        # Crear tabla de resumen
-        resumen_data = df.groupby('nombre').agg({
-            'cantidad': ['count', 'mean', 'sum', 'max', 'min'],
-            'eficiencia': ['mean', 'max', 'min'],
-            'productividad': ['mean', 'max', 'min'],
-            'horas_trabajo': ['sum', 'mean']
-        }).round(2)
-        
-        # Aplanar las columnas multiindex
-        resumen_data.columns = ['_'.join(col).strip() for col in resumen_data.columns.values]
-        resumen_data.reset_index(inplace=True)
-        
-        # Convertir DataFrame a lista para la tabla
-        table_data = [list(resumen_data.columns)]
-        for _, row in resumen_data.iterrows():
-            table_data.append(list(row))
-        
-        # Crear tabla
-        table = Table(table_data)
-        table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, 0), 10),
-            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
-            ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
-            ('FONTSIZE', (0, 1), (-1, -1), 8),
-            ('GRID', (0, 0), (-1, -1), 1, colors.black)
-        ]))
-        elements.append(table)
-        elements.append(Spacer(1, 12))
-        
-        # Gráficas
-        try:
-            # Crear gráfica de eficiencia por día
-            df_eficiencia_dia = df.groupby('fecha')['eficiencia'].mean().reset_index()
-            fig = go.Figure()
-            fig.add_trace(go.Scatter(
-                x=df_eficiencia_dia['fecha'], 
-                y=df_eficiencia_dia['eficiencia'],
-                mode='lines+markers',
-                name='Eficiencia Promedio'
-            ))
-            fig.add_hline(y=100, line_dash="dash", line_color="red", annotation_text="Meta")
-            fig.update_layout(
-                title='Evolución de la Eficiencia Promedio',
-                xaxis_title='Fecha',
-                yaxis_title='Eficiencia (%)',
-                width=800,
-                height=600
-            )
-            # Convertir gráfico a base64
-            img_data = plot_to_base64(fig)
-            if img_data:
-                # Guardar imagen temporalmente
-                with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmpfile:
-                    tmpfile.write(base64.b64decode(img_data))
-                    img_path = tmpfile.name
-                # Agregar gráfica al PDF
-                img = Image(img_path, width=6*inch, height=4*inch)
-                elements.append(Spacer(1, 12))
-                elements.append(Paragraph("Evolución de la Eficiencia Promedio", styles['Heading3']))
-                elements.append(img)
-                # Limpiar archivo temporal
-                os.unlink(img_path)
-        except Exception as e:
-            logger.error(f"Error al crear gráfica para PDF: {e}")
-            error_msg = Paragraph(f"Error al generar gráfica: {str(e)}", styles['Normal'])
-            elements.append(error_msg)
-        
-        # Construir PDF
-        doc.build(elements)
-        pdf_bytes = buffer.getvalue()
-        buffer.close()
-        return pdf_bytes
-    except Exception as e:
-        logger.error(f"Error al crear reporte PDF: {e}")
-        raise
 
 def mostrar_analisis_historico():
     """Muestra el análisis histórico de KPIs"""
