@@ -16,6 +16,8 @@ from fpdf import FPDF
 import base64
 import io
 import tempfile
+import re
+import sqlite3
 # Importación CORREGIDA de Any y otros tipos
 from typing import Dict, List, Optional, Tuple, Any, Union
 
@@ -34,6 +36,11 @@ logger = logging.getLogger(__name__)
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 ADMIN_PASSWORD = "Wilo3161"  # Contraseña única sensible a mayúsculas
+
+# Configuración de imágenes
+APP_DIR = os.path.dirname(os.path.abspath(__file__))
+IMAGES_DIR = os.path.join(APP_DIR, "images")
+os.makedirs(IMAGES_DIR, exist_ok=True)
 
 # Inicializar cliente de Supabase
 @st.cache_resource
@@ -58,7 +65,7 @@ supabase = init_supabase()
 st.set_page_config(
     layout="wide",
     page_title="Sistema de KPIs Aeropostale",
-    page_icon="📊",
+    page_icon="📦",
     initial_sidebar_state="expanded"
 )
 
@@ -439,27 +446,6 @@ def hash_password(pw: str) -> str:
     """Genera un hash SHA256 para una contraseña."""
     return hashlib.sha256(pw.encode()).hexdigest()
 
-# ... resto del código ...
-# ================================
-# Funciones de utilidad compartidas
-# ================================
-
-def validar_fecha(fecha: str) -> bool:
-    """Valida que una fecha tenga el formato correcto"""
-    try:
-        datetime.strptime(fecha, "%Y-%m-%d")
-        return True
-    except ValueError:
-        return False
-
-def validar_numero_positivo(valor: Any) -> bool:
-    """Valida que un valor sea un número positivo"""
-    try:
-        num = float(valor)
-        return num >= 0
-    except (ValueError, TypeError):
-        return False
-
 # ================================
 # Funciones de KPIs
 # ================================
@@ -735,7 +721,7 @@ def crear_grafico_frasco(porcentaje: float, titulo: str) -> go.Figure:
         return go.Figure()
 
 # ================================
-# Funciones de Guías
+# Funciones de Guías (NUEVAS)
 # ================================
 
 def generar_numero_seguimiento(record_id: int) -> str:
@@ -930,6 +916,42 @@ def generar_pdf_guia(store_name: str, brand: str, url: str, sender_name: str,
     except Exception as e:
         logger.error(f"Error al generar PDF de guía: {e}", exc_info=True)
         return b""
+
+def get_logo_path(brand: str) -> str:
+    """Devuelve la ruta del logo de la marca."""
+    if brand == "Fashion":
+        return os.path.join(IMAGES_DIR, "Fashion.jpg")
+    elif brand == "Tempo":
+        return os.path.join(IMAGES_DIR, "Tempo.jpg")
+    return None
+
+def pil_image_to_bytes(pil_image: Image.Image) -> bytes:
+    """Convierte un objeto de imagen de PIL a bytes."""
+    buf = io.BytesIO()
+    pil_image.save(buf, format="PNG")
+    return buf.getvalue()
+
+def custom_selectbox(label: str, options: list, key: str, search_placeholder: str = "Buscar...") -> str:
+    """Componente personalizado de selectbox con búsqueda."""
+    if f"{key}_search" not in st.session_state:
+        st.session_state[f"{key}_search"] = ""
+    
+    search_term = st.text_input(f"{label} - {search_placeholder}", 
+                               value=st.session_state[f"{key}_search"], 
+                               key=f"{key}_search_input")
+    
+    st.session_state[f"{key}_search"] = search_term
+    
+    if search_term:
+        filtered_options = [opt for opt in options if search_term.lower() in opt.lower()]
+    else:
+        filtered_options = options
+    
+    if not filtered_options:
+        st.warning("No se encontraron resultados.")
+        return None
+    
+    return st.selectbox(label, filtered_options, key=key)
 
 # ================================
 # Sistema de autenticación
@@ -1269,7 +1291,7 @@ def mostrar_analisis_historico_kpis():
                 if 'fecha' in export_df.columns:
                     export_df['fecha'] = pd.to_datetime(export_df['fecha']).dt.strftime('%Y-%m-%d')
                 
-                # Manejar valores NaN y None
+                # Manejar valores NaN и None
                 export_df = export_df.fillna('N/A')
                 
                 # Reordenar columnas para una mejor presentación
@@ -1807,7 +1829,7 @@ def mostrar_gestion_trabajadores_kpis():
                             st.rerun()
                     except Exception as e:
                         logger.error(f"Error al agregar trabajador: {e}", exc_info=True)
-                        st.markdown("<div class='error-box animate-fade-in'>❌ Error al agregar trabajador.</div>", unsafe_allow_html=True)
+                        st.markdown("<div class='error-box animate-fide-in'>❌ Error al agregar trabajador.</div>", unsafe_allow_html=True)
                 else:
                     st.markdown("<div class='error-box animate-fade-in'>❌ Debe ingresar un nombre.</div>", unsafe_allow_html=True)
         
@@ -1857,12 +1879,12 @@ def mostrar_generacion_guias():
     with st.form("form_generar_guia"):
         col1, col2 = st.columns(2)
         with col1:
-            store_name = st.selectbox("Tienda:", options=tiendas['name'].tolist(), key="store_select")
-            brand = st.radio("Marca:", ["Fashion", "Tempo"], horizontal=True, key="brand_select")
+            store_name = custom_selectbox("Seleccione Tienda", tiendas['name'].tolist(), "store_select", "Buscar tienda...")
+            brand = st.radio("Seleccione Empresa:", ["Fashion", "Tempo"], horizontal=True, key="brand_select")
         
         with col2:
-            sender_name = st.selectbox("Remitente:", options=remitentes['name'].tolist(), key="sender_select")
-            url = st.text_input("URL del Pedido:", key="url_input")
+            sender_name = st.selectbox("Seleccione Remitente:", options=remitentes['name'].tolist(), key="sender_select")
+            url = st.text_input("Ingrese URL del Pedido:", key="url_input", placeholder="https://...")
         
         submitted = st.form_submit_button("Generar Guía", use_container_width=True)
         
@@ -1908,30 +1930,29 @@ def mostrar_generacion_guias():
         # Código QR
         st.markdown("<h3>Código QR:</h3>", unsafe_allow_html=True)
         qr_img = generar_qr_imagen(st.session_state.get('url_input', ''))
-        st.image(qr_img, width=200)
+        st.image(pil_image_to_bytes(qr_img), width=200)
         
         # Botones de exportación
         st.markdown("<div class='export-buttons animate-fade-in'>", unsafe_allow_html=True)
         col1, col2 = st.columns(2)
         with col1:
-            if st.button("📄 Exportar a PDF", use_container_width=True):
-                # Generar PDF
-                pdf_data = generar_pdf_guia(
-                    st.session_state.get('store_select', ''),
-                    st.session_state.get('brand_select', ''),
-                    st.session_state.get('url_input', ''),
-                    st.session_state.get('sender_select', ''),
-                    st.session_state.get('remitente_address', ''),
-                    st.session_state.get('remitente_phone', ''),
-                    st.session_state.get('tracking_number', '')
-                )
-                st.download_button(
-                    label="⬇️ Descargar PDF",
-                    data=pdf_data,
-                    file_name=f"guia_{st.session_state.get('store_select', '')}_{datetime.now().strftime('%Y%m%d')}.pdf",
-                    mime="application/pdf",
-                    use_container_width=True
-                )
+            # Generar PDF
+            pdf_data = generar_pdf_guia(
+                st.session_state.get('store_select', ''),
+                st.session_state.get('brand_select', ''),
+                st.session_state.get('url_input', ''),
+                st.session_state.get('sender_select', ''),
+                st.session_state.get('remitente_address', ''),
+                st.session_state.get('remitente_phone', ''),
+                st.session_state.get('tracking_number', '')
+            )
+            st.download_button(
+                label="📄 Descargar PDF",
+                data=pdf_data,
+                file_name=f"guia_{st.session_state.get('store_select', '')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
+                mime="application/pdf",
+                use_container_width=True
+            )
         with col2:
             if st.button("🖨️ Marcar como Impresa", use_container_width=True):
                 # Aquí iría la lógica para actualizar el estado de la guía
