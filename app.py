@@ -18,6 +18,7 @@ import io
 import tempfile
 import re
 import sqlite3
+import requests
 # Importación CORREGIDA de Any y otros tipos
 from typing import Dict, List, Optional, Tuple, Any, Union
 
@@ -854,7 +855,6 @@ def generar_pdf_guia(store_name: str, brand: str, url: str, sender_name: str,
                     sender_address: str, sender_phone: str, tracking_number: str) -> bytes:
     """Genera un PDF de la guía de envío"""
     try:
-        # Crear un PDF en memoria
         pdf = FPDF()
         pdf.add_page()
         pdf.set_auto_page_break(auto=True, margin=15)
@@ -863,6 +863,18 @@ def generar_pdf_guia(store_name: str, brand: str, url: str, sender_name: str,
         pdf.set_font("Arial", "B", 16)
         pdf.cell(0, 10, "Guía de Envío", ln=True, align="C")
         pdf.ln(10)
+        
+        # Logo de la marca (AGREGADO - se muestra arriba a la izquierda)
+        # En la sección de previsualización, después de mostrar la información básica:
+logo_url = get_logo_path(st.session_state.get('brand_select', ''))
+if logo_url:
+    try:
+        response = requests.get(logo_url)
+        if response.status_code == 200:
+            st.image(response.content, caption=f"Logo de {st.session_state.get('brand_select', '')}", width=200)
+    except Exception as e:
+        logger.error(f"Error al cargar logo: {e}")
+        st.warning(f"Logo no encontrado para {st.session_state.get('brand_select', '')}")
         
         # Información de la tienda
         pdf.set_font("Arial", "B", 12)
@@ -895,8 +907,6 @@ def generar_pdf_guia(store_name: str, brand: str, url: str, sender_name: str,
         
         # Código QR
         qr_img = generar_qr_imagen(url)
-        
-        # Guardar QR en un archivo temporal
         with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as temp_qr:
             qr_img.save(temp_qr.name)
             pdf.image(temp_qr.name, x=70, y=pdf.get_y(), w=70, h=70)
@@ -911,18 +921,20 @@ def generar_pdf_guia(store_name: str, brand: str, url: str, sender_name: str,
         pdf.cell(0, 8, url, ln=True)
         pdf.set_text_color(0, 0, 0)
         
-        # Convertir PDF a bytes
         return pdf.output(dest="S").encode("latin1")
     except Exception as e:
         logger.error(f"Error al generar PDF de guía: {e}", exc_info=True)
         return b""
 
 def get_logo_path(brand: str) -> str:
-    """Devuelve la ruta del logo de la marca."""
+    """Devuelve la URL del logo de la marca desde Supabase Storage."""
+    # Obtén este ID de tu dashboard de Supabase → Settings → General
+    PROJECT_REF = "tu-project-ref-aqui"  # Ejemplo: "xzy123abcdef"
+    
     if brand == "Fashion":
-        return os.path.join(IMAGES_DIR, "Fashion.jpg")
+        return f"https://wilo3161's Project.supabase.co/storage/v1/object/public/images/Fashion.jpg"
     elif brand == "Tempo":
-        return os.path.join(IMAGES_DIR, "Tempo.jpg")
+        return f"https://wilo3161's Project.supabase.co/storage/v1/object/public/images/Tempo.jpg"
     return None
 
 def pil_image_to_bytes(pil_image: Image.Image) -> bytes:
