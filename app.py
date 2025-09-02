@@ -18,7 +18,6 @@ import io
 import tempfile
 import re
 import sqlite3
-# Importación CORREGIDA de Any y otros tipos
 from typing import Dict, List, Optional, Tuple, Any, Union
 
 # Configuración de logging
@@ -69,7 +68,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# CSS profesional mejorado - CORREGIDO
+# CSS profesional mejorado
 st.markdown("""
 <style>
     /* Colores corporativos de Aeropostale */
@@ -628,6 +627,26 @@ def cargar_historico_db(fecha_inicio: str = None,
         logger.error(f"Error al cargar datos históricos de Supabase: {e}", exc_info=True)
         return pd.DataFrame()
 
+def obtener_datos_fecha(fecha: str) -> pd.DataFrame:
+    """Obtiene los datos de una fecha específica desde Supabase"""
+    if supabase is None:
+        logger.error("Cliente de Supabase no inicializado")
+        return pd.DataFrame()
+    
+    try:
+        response = supabase.from_('daily_kpis').select('*').eq('fecha', fecha).execute()
+        
+        # Verificar si hay datos en la respuesta
+        if response and response.data:
+            df = pd.DataFrame(response.data)
+            return df
+        else:
+            logger.info(f"No se encontraron datos para la fecha {fecha}")
+            return pd.DataFrame()
+    except Exception as e:
+        logger.error(f"Error al cargar datos de fecha {fecha} de Supabase: {e}", exc_info=True)
+        return pd.DataFrame()
+
 # Funciones de visualización
 def crear_grafico_interactivo(df: pd.DataFrame, x: str, y: str, title: str, 
                              xlabel: str, ylabel: str, tipo: str = 'bar') -> go.Figure:
@@ -1018,9 +1037,9 @@ def mostrar_dashboard_kpis():
         st.markdown("<div class='warning-box animate-fade-in'>⚠️ No hay datos históricos. Por favor, ingresa datos primero.</div>", unsafe_allow_html=True)
         return
     
-    # Crear selector de fecha
+    # Crear selector de rango de fechas
     st.markdown("<div class='date-selector animate-fade-in'>", unsafe_allow_html=True)
-    st.markdown("<h3>Selecciona la fecha a visualizar:</h3>", unsafe_allow_html=True)
+    st.markdown("<h3>Selecciona el rango de fechas a visualizar:</h3>", unsafe_allow_html=True)
     
     # Obtener fechas únicas y ordenarlas
     if not df.empty and 'fecha' in df.columns:
@@ -1029,32 +1048,47 @@ def mostrar_dashboard_kpis():
         if not fechas_disponibles:
             st.markdown("<div class='warning-box animate-fade-in'>⚠️ No hay fechas disponibles para mostrar.</div>", unsafe_allow_html=True)
             return
-        fecha_seleccionada = st.selectbox(
-            "Fecha:",
-            options=fechas_disponibles,
-            index=0,
-            label_visibility="collapsed"
-        )
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            fecha_inicio = st.date_input(
+                "Fecha de inicio:",
+                value=fechas_disponibles[-1] if fechas_disponibles else datetime.now().date(),
+                min_value=fechas_disponibles[-1] if fechas_disponibles else datetime.now().date(),
+                max_value=fechas_disponibles[0] if fechas_disponibles else datetime.now().date()
+            )
+        with col2:
+            fecha_fin = st.date_input(
+                "Fecha de fin:",
+                value=fechas_disponibles[0] if fechas_disponibles else datetime.now().date(),
+                min_value=fechas_disponibles[-1] if fechas_disponibles else datetime.now().date(),
+                max_value=fechas_disponibles[0] if fechas_disponibles else datetime.now().date()
+            )
     else:
         st.markdown("<div class='warning-box animate-fade-in'>⚠️ No hay datos disponibles.</div>", unsafe_allow_html=True)
         return
     st.markdown("</div>", unsafe_allow_html=True)
     
-    # Filtrar datos por fecha seleccionada
-    df_reciente = df[df['fecha'].dt.date == fecha_seleccionada]
-    if df_reciente.empty:
-        st.markdown(f"<div class='warning-box animate-fade-in'>⚠️ No hay datos disponibles para la fecha {fecha_seleccionada}.</div>", unsafe_allow_html=True)
+    # Validar que la fecha de inicio no sea mayor que la fecha de fin
+    if fecha_inicio > fecha_fin:
+        st.markdown("<div class='error-box animate-fade-in'>❌ La fecha de inicio no puede ser mayor que la fecha de fin.</div>", unsafe_allow_html=True)
         return
     
-    st.markdown(f"<p style='color: var(--text-secondary); font-size: 1.1em;'>Datos para la fecha: {fecha_seleccionada}</p>", unsafe_allow_html=True)
+    # Filtrar datos por rango de fechas seleccionado
+    df_rango = df[(df['fecha'].dt.date >= fecha_inicio) & (df['fecha'].dt.date <= fecha_fin)]
+    if df_rango.empty:
+        st.markdown(f"<div class='warning-box animate-fade-in'>⚠️ No hay datos disponibles para el rango de fechas {fecha_inicio} a {fecha_fin}.</div>", unsafe_allow_html=True)
+        return
+    
+    st.markdown(f"<p style='color: var(--text-secondary); font-size: 1.1em;'>Datos para el rango de fechas: {fecha_inicio} a {fecha_fin}</p>", unsafe_allow_html=True)
     st.markdown("<h2 class='section-title animate-fade-in'>📈 KPIs Globales</h2>", unsafe_allow_html=True)
     
     # Cálculos globales
-    total_cantidad = df_reciente['cantidad'].sum()
-    total_meta = df_reciente['meta'].sum()
-    total_horas = df_reciente['horas_trabajo'].sum()
-    avg_eficiencia = (df_reciente['eficiencia'] * df_reciente['horas_trabajo']).sum() / total_horas if total_horas > 0 else 0
-    avg_productividad = df_reciente['productividad'].mean()
+    total_cantidad = df_rango['cantidad'].sum()
+    total_meta = df_rango['meta'].sum()
+    total_horas = df_rango['horas_trabajo'].sum()
+    avg_eficiencia = (df_rango['eficiencia'] * df_rango['horas_trabajo']).sum() / total_horas if total_horas > 0 else 0
+    avg_productividad = df_rango['productividad'].mean()
     productividad_total = total_cantidad / total_horas if total_horas > 0 else 0
     
     kpi1, kpi2, kpi3, kpi4 = st.columns(4)
@@ -1097,8 +1131,9 @@ def mostrar_dashboard_kpis():
     
     st.markdown("<h2 class='section-title animate-fade-in'>📅 Cumplimiento de Metas Mensuales (Transferencias)</h2>", unsafe_allow_html=True)
     
-    current_month = fecha_seleccionada.month
-    current_year = fecha_seleccionada.year
+    # Obtener el mes y año del rango de fechas
+    current_month = fecha_inicio.month
+    current_year = fecha_inicio.year
     
     # Filtrar datos del mes actual para transferencias
     df_month = df[(df['fecha'].dt.month == current_month) & 
@@ -1155,7 +1190,7 @@ def mostrar_dashboard_kpis():
     st.markdown("<h2 class='section-title animate-fade-in'>👥 Rendimiento por Equipos</h2>", unsafe_allow_html=True)
     
     # Obtener lista de equipos
-    equipos = df_reciente['equipo'].unique()
+    equipos = df_rango['equipo'].unique()
     # Ordenar equipos en un orden específico
     orden_equipos = ["Transferencias", "Distribución", "Arreglo", "Guías", "Ventas"]
     equipos_ordenados = [eq for eq in orden_equipos if eq in equipos]
@@ -1163,7 +1198,7 @@ def mostrar_dashboard_kpis():
     equipos_finales = equipos_ordenados + equipos_restantes
     
     for equipo in equipos_finales:
-        df_equipo = df_reciente[df_reciente['equipo'] == equipo]
+        df_equipo = df_rango[df_rango['equipo'] == equipo]
         st.markdown(f"<div class='team-section animate-fade-in'><div class='team-header'>{equipo}</div></div>", unsafe_allow_html=True)
         
         # Calcular KPIs del equipo
@@ -1361,81 +1396,45 @@ def mostrar_analisis_historico_kpis():
         # Botón para exportar a PDF
         if st.button("📄 Exportar a PDF", use_container_width=True):
             try:
-                with st.spinner("Generando reporte PDF..."):
-                    # Crear un PDF en memoria
-                    pdf_buffer = io.BytesIO()
-                    doc = SimpleDocTemplate(pdf_buffer, pagesize=letter)
-                    styles = getSampleStyleSheet()
-                    
-                    # Estilos personalizados
-                    styles.add(ParagraphStyle(name='Header', fontSize=16, alignment=1, spaceAfter=12, textColor='#e60012'))
-                    styles.add(ParagraphStyle(name='Section', fontSize=14, spaceBefore=12, spaceAfter=6, textColor='#e60012'))
-                    styles.add(ParagraphStyle(name='Normal', fontSize=12, spaceAfter=6))
-                    
-                    elements = []
-                    
-                    # Título
-                    title = Paragraph("Reporte de KPIs - Aeropostale", styles['Header'])
-                    elements.append(title)
-                    
-                    # Información del período
-                    periodo = Paragraph(f"Período: {fecha_inicio} a {fecha_fin}", styles['Normal'])
-                    elements.append(periodo)
-                    
-                    # Resumen estadístico
-                    elements.append(Paragraph("Resumen Estadístico", styles['Section']))
-                    
-                    # Crear tabla de resumen
-                    try:
-                        resumen_data = df_filtrado.groupby('nombre').agg({
-                            'cantidad': ['count', 'mean', 'sum', 'max', 'min'],
-                            'eficiencia': ['mean', 'max', 'min'],
-                            'productividad': ['mean', 'max', 'min'],
-                            'horas_trabajo': ['sum', 'mean']
-                        }).round(2)
-                        
-                        # Aplanar las columnas multiindex
-                        resumen_data.columns = ['_'.join(col).strip() for col in resumen_data.columns.values]
-                        resumen_data.reset_index(inplace=True)
-                        
-                        # Convertir DataFrame a lista para la tabla
-                        table_data = [list(resumen_data.columns)]
-                        for _, row in resumen_data.iterrows():
-                            table_data.append(list(row))
-                        
-                        # Crear tabla
-                        table = Table(table_data)
-                        table.setStyle(TableStyle([
-                            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#e60012')),
-                            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-                            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-                            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-                            ('FONTSIZE', (0, 0), (-1, 0), 10),
-                            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-                            ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor('#f0f0f0')),
-                            ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
-                            ('FONTSIZE', (0, 1), (-1, -1), 8),
-                            ('GRID', (0, 0), (-1, -1), 1, colors.HexColor('#dddddd'))
-                        ]))
-                        elements.append(table)
-                        elements.append(Spacer(1, 12))
-                    except Exception as e:
-                        logger.error(f"Error al crear tabla de resumen: {e}", exc_info=True)
-                        elements.append(Paragraph(f"Error al generar tabla de resumen: {str(e)}", styles['Normal']))
-                        elements.append(Spacer(1, 12))
-                    
-                    # Construir PDF
-                    doc.build(elements)
-                    pdf_data = pdf_buffer.getvalue()
-                    pdf_buffer.close()
-                    
-                    st.download_button(
-                        label="⬇️ Descargar reporte PDF",
-                        data=pdf_data,
-                        file_name=f"reporte_kpis_{fecha_inicio}_a_{fecha_fin}.pdf",
-                        mime="application/pdf",
-                        use_container_width=True
-                    )
+                # Crear un PDF simple con los datos
+                pdf = FPDF()
+                pdf.add_page()
+                pdf.set_font("Arial", "B", 16)
+                pdf.cell(0, 10, "Reporte de KPIs - Aeropostale", ln=True, align="C")
+                pdf.ln(10)
+                
+                pdf.set_font("Arial", "", 12)
+                pdf.cell(0, 10, f"Período: {fecha_inicio} a {fecha_fin}", ln=True)
+                pdf.ln(10)
+                
+                # Agregar tabla con los datos
+                pdf.set_font("Arial", "B", 10)
+                columnas = ['Fecha', 'Nombre', 'Equipo', 'Actividad', 'Cantidad', 'Meta', 'Eficiencia']
+                for i, col in enumerate(columnas):
+                    pdf.cell(27, 10, col, border=1)
+                pdf.ln()
+                
+                pdf.set_font("Arial", "", 8)
+                for _, row in df_filtrado.iterrows():
+                    pdf.cell(27, 10, str(row['fecha'].strftime('%Y-%m-%d') if pd.notna(row['fecha']) else ''), border=1)
+                    pdf.cell(27, 10, str(row['nombre'])[:15] if pd.notna(row['nombre']) else '', border=1)
+                    pdf.cell(27, 10, str(row['equipo'])[:10] if pd.notna(row['equipo']) else '', border=1)
+                    pdf.cell(27, 10, str(row['actividad'])[:10] if pd.notna(row['actividad']) else '', border=1)
+                    pdf.cell(27, 10, str(row['cantidad']) if pd.notna(row['cantidad']) else '', border=1)
+                    pdf.cell(27, 10, str(row['meta']) if pd.notna(row['meta']) else '', border=1)
+                    pdf.cell(27, 10, f"{row['eficiencia']:.1f}%" if pd.notna(row['eficiencia']) else '', border=1)
+                    pdf.ln()
+                
+                # Convertir PDF a bytes
+                pdf_data = pdf.output(dest="S").encode("latin1")
+                
+                st.download_button(
+                    label="⬇️ Descargar reporte PDF",
+                    data=pdf_data,
+                    file_name=f"reporte_kpis_{fecha_inicio}_a_{fecha_fin}.pdf",
+                    mime="application/pdf",
+                    use_container_width=True
+                )
             except Exception as e:
                 logger.error(f"Error al exportar a PDF: {e}", exc_info=True)
                 st.markdown("<div class='error-box animate-fade-in'>❌ Error al exportar a PDF.</div>", unsafe_allow_html=True)
@@ -1632,7 +1631,9 @@ def mostrar_ingreso_datos_kpis():
             max_value=datetime.now()
         )
     
-    periodo = st.radio("Selecciona el período:", ["Día", "Semana"], horizontal=True)
+    # Verificar si ya existen datos para esta fecha
+    fecha_str = fecha_seleccionada.strftime("%Y-%m-%d")
+    datos_existentes = obtener_datos_fecha(fecha_str)
     
     # Inicializar variables de sesión para almacenar datos
     if 'datos_calculados' not in st.session_state:
@@ -1640,10 +1641,22 @@ def mostrar_ingreso_datos_kpis():
     if 'fecha_guardar' not in st.session_state:
         st.session_state.fecha_guardar = None
     
+    # Si hay datos existentes, mostrar mensaje
+    if not datos_existentes.empty:
+        st.markdown(f"<div class='info-box animate-fade-in'>ℹ️ Ya existen datos para la fecha {fecha_seleccionada}. Puede editarlos a continuación.</div>", unsafe_allow_html=True)
+    
+    periodo = st.radio("Selecciona el período:", ["Día", "Semana"], horizontal=True)
+    
     with st.form("form_datos"):
         # Meta mensual única para transferencias
         st.markdown("<h3 class='section-title animate-fade-in'>Meta Mensual de Transferencias</h3>", unsafe_allow_html=True)
-        meta_mensual_transferencias = st.number_input("Meta mensual para el equipo de transferencias:", min_value=0, value=150000, key="meta_mensual_transferencias")
+        
+        # Obtener meta mensual existente si hay datos
+        meta_mensual_existente = 150000  # Valor por defecto
+        if not datos_existentes.empty:
+            meta_mensual_existente = datos_existentes['meta_mensual'].iloc[0] if 'meta_mensual' in datos_existentes.columns else 150000
+        
+        meta_mensual_transferencias = st.number_input("Meta mensual para el equipo de transferencias:", min_value=0, value=int(meta_mensual_existente), key="meta_mensual_transferencias")
         
         # Asegurar que el equipo de Distribución esté presente
         if 'Distribución' not in trabajadores_por_equipo:
@@ -1660,30 +1673,69 @@ def mostrar_ingreso_datos_kpis():
             st.markdown(f"<div class='team-section animate-fade-in'><div class='team-header'>{equipo}</div></div>", unsafe_allow_html=True)
             for trabajador in miembros:
                 st.subheader(trabajador)
+                
+                # Obtener datos existentes para este trabajador si existen
+                datos_trabajador = None
+                if not datos_existentes.empty:
+                    datos_trabajador = datos_existentes[datos_existentes['nombre'] == trabajador].iloc[0] if trabajador in datos_existentes['nombre'].values else None
+                
                 col1, col2 = st.columns(2)
                 with col1:
+                    # Establecer valores por defecto basados en datos existentes o valores predeterminados
+                    if datos_trabajador is not None:
+                        cantidad_default = int(datos_trabajador['cantidad']) if pd.notna(datos_trabajador['cantidad']) else 0
+                        meta_default = int(datos_trabajador['meta']) if pd.notna(datos_trabajador['meta']) else 0
+                        comentario_default = datos_trabajador['comentario'] if pd.notna(datos_trabajador['comentario']) else ""
+                    else:
+                        # Valores por defecto según el equipo
+                        if equipo == "Transferencias":
+                            cantidad_default = 1800
+                            meta_default = 1750
+                        elif equipo == "Distribución":
+                            cantidad_default = 1000
+                            meta_default = 1000
+                        elif equipo == "Arreglo":
+                            cantidad_default = 130
+                            meta_default = 150
+                        elif equipo == "Guías":
+                            cantidad_default = 110
+                            meta_default = 120
+                        elif equipo == "Ventas":
+                            cantidad_default = 45
+                            meta_default = 40
+                        else:
+                            cantidad_default = 100
+                            meta_default = 100
+                        comentario_default = ""
+                    
                     if equipo == "Transferencias":
-                        cantidad = st.number_input(f"Prendas transferidas por {trabajador}:", min_value=0, value=1800, key=f"{trabajador}_cantidad")
-                        meta = st.number_input(f"Meta diaria para {trabajador}:", min_value=0, value=1750, key=f"{trabajador}_meta")
+                        cantidad = st.number_input(f"Prendas transferidas por {trabajador}:", min_value=0, value=cantidad_default, key=f"{trabajador}_cantidad")
+                        meta = st.number_input(f"Meta diaria para {trabajador}:", min_value=0, value=meta_default, key=f"{trabajador}_meta")
                     elif equipo == "Distribución":
                         # Para el equipo de Distribución
-                        cantidad = st.number_input(f"Prendas distribuidas por {trabajador}:", min_value=0, value=1000, key=f"{trabajador}_cantidad")
-                        meta = st.number_input(f"Meta diaria para {trabajador}:", min_value=0, value=1000, key=f"{trabajador}_meta")
+                        cantidad = st.number_input(f"Prendas distribuidas por {trabajador}:", min_value=0, value=cantidad_default, key=f"{trabajador}_cantidad")
+                        meta = st.number_input(f"Meta diaria para {trabajador}:", min_value=0, value=meta_default, key=f"{trabajador}_meta")
                     elif equipo == "Arreglo":
-                        cantidad = st.number_input(f"Prendas arregladas por {trabajador}:", min_value=0, value=130, key=f"{trabajador}_cantidad")
-                        meta = st.number_input(f"Meta diaria para {trabajador}:", min_value=0, value=150, key=f"{trabajador}_meta")
+                        cantidad = st.number_input(f"Prendas arregladas por {trabajador}:", min_value=0, value=cantidad_default, key=f"{trabajador}_cantidad")
+                        meta = st.number_input(f"Meta diaria para {trabajador}:", min_value=0, value=meta_default, key=f"{trabajador}_meta")
                     elif equipo == "Guías":
-                        cantidad = st.number_input(f"Guías realizadas por {trabajador}:", min_value=0, value=110, key=f"{trabajador}_cantidad")
-                        meta = st.number_input(f"Meta diaria para {trabajador}:", min_value=0, value=120, key=f"{trabajador}_meta")
+                        cantidad = st.number_input(f"Guías realizadas por {trabajador}:", min_value=0, value=cantidad_default, key=f"{trabajador}_cantidad")
+                        meta = st.number_input(f"Meta diaria para {trabajador}:", min_value=0, value=meta_default, key=f"{trabajador}_meta")
                     elif equipo == "Ventas":
-                        cantidad = st.number_input(f"Pedidos preparados por {trabajador}:", min_value=0, value=45, key=f"{trabajador}_cantidad")
-                        meta = st.number_input(f"Meta diaria para {trabajador}:", min_value=0, value=40, key=f"{trabajador}_meta")
+                        cantidad = st.number_input(f"Pedidos preparados por {trabajador}:", min_value=0, value=cantidad_default, key=f"{trabajador}_cantidad")
+                        meta = st.number_input(f"Meta diaria para {trabajador}:", min_value=0, value=meta_default, key=f"{trabajador}_meta")
                     else:
-                        cantidad = st.number_input(f"Cantidad realizada por {trabajador}:", min_value=0, value=100, key=f"{trabajador}_cantidad")
-                        meta = st.number_input(f"Meta diaria para {trabajador}:", min_value=0, value=100, key=f"{trabajador}_meta")
+                        cantidad = st.number_input(f"Cantidad realizada por {trabajador}:", min_value=0, value=cantidad_default, key=f"{trabajador}_cantidad")
+                        meta = st.number_input(f"Meta diaria para {trabajador}:", min_value=0, value=meta_default, key=f"{trabajador}_meta")
                 with col2:
-                    horas = st.number_input(f"Horas trabajadas por {trabajador}:", min_value=0.0, value=8.0, key=f"{trabajador}_horas", step=0.5)
-                    comentario = st.text_area(f"Comentario para {trabajador}:", key=f"{trabajador}_comentario")
+                    # Obtener horas trabajadas existentes o usar valor por defecto
+                    if datos_trabajador is not None:
+                        horas_default = float(datos_trabajador['horas_trabajo']) if pd.notna(datos_trabajador['horas_trabajo']) else 8.0
+                    else:
+                        horas_default = 8.0
+                    
+                    horas = st.number_input(f"Horas trabajadas por {trabajador}:", min_value=0.0, value=horas_default, key=f"{trabajador}_horas", step=0.5)
+                    comentario = st.text_area(f"Comentario para {trabajador}:", value=comentario_default, key=f"{trabajador}_comentario")
         
         submitted = st.form_submit_button("Calcular KPIs")
         if submitted:
@@ -1740,9 +1792,6 @@ def mostrar_ingreso_datos_kpis():
                         "horas_trabajo": horas,
                         "equipo": equipo
                     }
-            
-            # Convertir la fecha seleccionada a string
-            fecha_str = fecha_seleccionada.strftime("%Y-%m-%d")
             
             # Almacenar datos en sesión para confirmación posterior
             st.session_state.datos_calculados = datos_guardar
