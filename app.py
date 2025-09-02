@@ -1145,7 +1145,7 @@ def mostrar_dashboard_kpis():
         meta_mensual_transferencias = df_transferencias_month['meta_mensual'].iloc[0]
     else:
         # Si no hay datos, usar un valor por defecto
-        meta_mensual_transferencias = 150000
+        meta_mensual_transferencias = 70000
     
     cum_transferencias = df_transferencias_month['cantidad'].sum()
     cumplimiento_transferencias = (cum_transferencias / meta_mensual_transferencias * 100) if meta_mensual_transferencias > 0 else 0
