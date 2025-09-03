@@ -68,7 +68,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# CSS profesional mejorado
+# CSS profesional mejorado (sin cambios)
 st.markdown("""
 <style>
     /* Colores corporativos de Aeropostale */
@@ -441,6 +441,14 @@ def validar_numero_positivo(valor: Any) -> bool:
     except (ValueError, TypeError):
         return False
 
+def validar_distribuciones(valor: Any) -> bool:
+    """Valida que el valor de distribuciones sea positivo y numérico"""
+    try:
+        num = float(valor)
+        return num >= 0 and num <= 10000  # Límite razonable
+    except (ValueError, TypeError):
+        return False
+
 def hash_password(pw: str) -> str:
     """Genera un hash SHA256 para una contraseña."""
     return hashlib.sha256(pw.encode()).hexdigest()
@@ -538,22 +546,29 @@ def obtener_equipos() -> list:
         return ["Transferencias", "Distribución", "Arreglo", "Guías", "Ventas"]
 
 def guardar_datos_db(fecha: str, datos: dict) -> bool:
-    """Guarda los datos en la tabla de Supabase"""
+    """Guarda los datos en la tabla de Supabase con mejor manejo de errores"""
     if supabase is None:
         logger.error("Cliente de Supabase no inicializado")
+        st.error("Error de conexión con la base de datos")
         return False
     
     try:
+        # Validaciones adicionales
+        if not validar_fecha(fecha):
+            logger.error(f"Fecha inválida: {fecha}")
+            st.error("Formato de fecha inválido")
+            return False
+            
         registros = []
         for nombre, info in datos.items():
             # Validar datos antes de guardar
             if not all([
-                validar_fecha(fecha),
                 validar_numero_positivo(info.get("cantidad", 0)),
                 validar_numero_positivo(info.get("meta", 0)),
                 validar_numero_positivo(info.get("horas_trabajo", 0))
             ]):
                 logger.warning(f"Datos inválidos para {nombre}, omitiendo guardado")
+                st.error(f"Datos inválidos para {nombre}")
                 continue
                 
             registro = {
@@ -583,9 +598,11 @@ def guardar_datos_db(fecha: str, datos: dict) -> bool:
             return True
         else:
             logger.warning("No hay registros válidos para guardar")
+            st.error("No hay registros válidos para guardar")
             return False
     except Exception as e:
-        logger.error(f"Error al guardar datos en Supabase: {e}", exc_info=True)
+        logger.error(f"Error crítico al guardar datos: {e}", exc_info=True)
+        st.error("Error crítico al guardar datos. Contacte al administrador.")
         return False
 
 def cargar_historico_db(fecha_inicio: str = None, 
@@ -646,6 +663,178 @@ def obtener_datos_fecha(fecha: str) -> pd.DataFrame:
     except Exception as e:
         logger.error(f"Error al cargar datos de fecha {fecha} de Supabase: {e}", exc_info=True)
         return pd.DataFrame()
+
+# ================================
+# Nuevas funciones para distribuciones y dependencias
+# ================================
+
+def obtener_distribuciones_semana(fecha_inicio_semana: str) -> dict:
+    """Obtiene las distribuciones de la semana actual desde Supabase"""
+    if supabase is None:
+        logger.error("Cliente de Supabase no inicializado")
+        return {'tempo': 0, 'luis': 0}
+    
+    try:
+        # Calcular fecha fin de semana
+        fecha_inicio = datetime.strptime(fecha_inicio_semana, "%Y-%m-%d")
+        fecha_fin = fecha_inicio + timedelta(days=6)
+        fecha_fin_str = fecha_fin.strftime("%Y-%m-%d")
+        
+        # Consultar distribuciones semanales
+        response = supabase.from_('distribuciones_semanales').select('*').eq('semana', fecha_inicio_semana).execute()
+        
+        if response and response.data:
+            distribucion = response.data[0]
+            return {
+                'tempo': distribucion.get('tempo_distribuciones', 0),
+                'luis': distribucion.get('luis_distribuciones', 0)
+            }
+        else:
+            logger.info(f"No se encontraron distribuciones para la semana {fecha_inicio_semana}")
+            return {'tempo': 0, 'luis': 0}
+    except Exception as e:
+        logger.error(f"Error al obtener distribuciones semanales: {e}", exc_info=True)
+        return {'tempo': 0, 'luis': 0}
+
+def guardar_distribuciones_semanales(semana: str, tempo_distribuciones: int, luis_distribuciones: int, meta_semanal: int = 7500) -> bool:
+    """Guarda las distribuciones semanales en Supabase"""
+    if supabase is None:
+        logger.error("Cliente de Supabase no inicializado")
+        return False
+    
+    try:
+        # Validar datos
+        if not all([
+            validar_fecha(semana),
+            validar_distribuciones(tempo_distribuciones),
+            validar_distribuciones(luis_distribuciones),
+            validar_distribuciones(meta_semanal)
+        ]):
+            logger.error("Datos de distribuciones inválidos")
+            return False
+            
+        # Verificar si ya existe registro para esta semana
+        response = supabase.from_('distribuciones_semanales').select('*').eq('semana', semana).execute()
+        
+        if response and response.data:
+            # Actualizar registro existente
+            update_data = {
+                'tempo_distribuciones': tempo_distribuciones,
+                'luis_distribuciones': luis_distribuciones,
+                'meta_semanal': meta_semanal,
+                'updated_at': datetime.now().isoformat()
+            }
+            response = supabase.from_('distribuciones_semanales').update(update_data).eq('semana', semana).execute()
+        else:
+            # Crear nuevo registro
+            insert_data = {
+                'semana': semana,
+                'tempo_distribuciones': tempo_distribuciones,
+                'luis_distribuciones': luis_distribuciones,
+                'meta_semanal': meta_semanal
+            }
+            response = supabase.from_('distribuciones_semanales').insert(insert_data).execute()
+        
+        # Verificar si la operación fue exitosa
+        if response and response.data:
+            logger.info(f"Distribuciones semanales guardadas correctamente para la semana {semana}")
+            return True
+        else:
+            logger.error("No se pudieron guardar las distribuciones semanales")
+            return False
+    except Exception as e:
+        logger.error(f"Error al guardar distribuciones semanales: {e}", exc_info=True)
+        return False
+
+def obtener_dependencias_transferencias() -> pd.DataFrame:
+    """Obtiene las dependencias entre transferidores y proveedores"""
+    if supabase is None:
+        logger.error("Cliente de Supabase no inicializado")
+        # Devolver dependencias por defecto
+        return pd.DataFrame({
+            'transferidor': ['Josué Imbacuán', 'Andrés Yépez'],
+            'proveedor_distribuciones': ['Tempo', 'Luis Perugachi']
+        })
+    
+    try:
+        response = supabase.from_('dependencias_transferencias').select('*').execute()
+        
+        # Verificar si hay datos en la respuesta
+        if response and response.data:
+            return pd.DataFrame(response.data)
+        else:
+            logger.info("No se encontraron dependencias de transferencias")
+            # Crear dependencias por defecto si no existen
+            dependencias_por_defecto = [
+                {'transferidor': 'Josué Imbacuán', 'proveedor_distribuciones': 'Tempo'},
+                {'transferidor': 'Andrés Yépez', 'proveedor_distribuciones': 'Luis Perugachi'}
+            ]
+            for dependencia in dependencias_por_defecto:
+                supabase.from_('dependencias_transferencias').upsert(dependencia).execute()
+            
+            return pd.DataFrame(dependencias_por_defecto)
+    except Exception as e:
+        logger.error(f"Error al obtener dependencias de transferencias: {e}", exc_info=True)
+        return pd.DataFrame({
+            'transferidor': ['Josué Imbacuán', 'Andrés Yépez'],
+            'proveedor_distribuciones': ['Tempo', 'Luis Perugachi']
+        })
+
+def calcular_metas_semanales():
+    """Calcula el progreso semanal y asigna responsabilidades"""
+    # Obtener distribuciones de la semana actual
+    fecha_inicio_semana = datetime.now().date() - timedelta(days=datetime.now().weekday())
+    distribuciones_semana = obtener_distribuciones_semana(fecha_inicio_semana.strftime("%Y-%m-%d"))
+    
+    # Calcular cumplimiento
+    meta_semanal = 7500
+    distribuciones_totales = distribuciones_semana['tempo'] + distribuciones_semana['luis']
+    
+    # Determinar responsabilidades
+    resultado = {
+        'meta_semanal': meta_semanal,
+        'distribuciones_totales': distribuciones_totales,
+        'cumplimiento_porcentaje': (distribuciones_totales / meta_semanal) * 100 if meta_semanal > 0 else 0,
+        'detalles': []
+    }
+    
+    # Verificar abastecimiento de Tempo para Josué
+    if distribuciones_semana['tempo'] < 3750:  # Mitad de la meta semanal
+        resultado['detalles'].append({
+            'transferidor': 'Josué Imbacuán',
+            'proveedor': 'Tempo',
+            'distribuciones_recibidas': distribuciones_semana['tempo'],
+            'distribuciones_requeridas': 3750,
+            'estado': 'INSUFICIENTE'
+        })
+    
+    # Verificar abastecimiento de Luis para Andrés
+    if distribuciones_semana['luis'] < 3750:
+        resultado['detalles'].append({
+            'transferidor': 'Andrés Yépez',
+            'proveedor': 'Luis Perugachi',
+            'distribuciones_recibidas': distribuciones_semana['luis'],
+            'distribuciones_requeridas': 3750,
+            'estado': 'INSUFICIENTE'
+        })
+    
+    return resultado
+
+def verificar_alertas_abastecimiento():
+    """Verifica y muestra alertas de abastecimiento"""
+    resultado = calcular_metas_semanales()
+    alertas = []
+    
+    for detalle in resultado['detalles']:
+        if detalle['estado'] == 'INSUFICIENTE':
+            alertas.append({
+                'tipo': 'ABASTECIMIENTO',
+                'mensaje': f"{detalle['proveedor']} no abasteció suficiente para {detalle['transferidor']}",
+                'gravedad': 'ALTA',
+                'accion': 'Revisar distribuciones de ' + detalle['proveedor']
+            })
+    
+    return alertas
 
 # Funciones de visualización
 def crear_grafico_interactivo(df: pd.DataFrame, x: str, y: str, title: str, 
@@ -1016,6 +1205,124 @@ def solicitar_autenticacion():
             st.error("❌ Contraseña incorrecta")
 
 # ================================
+# Nuevas funciones para mostrar estado de abastecimiento
+# ================================
+
+def mostrar_estado_abastecimiento():
+    """Muestra el estado de abastecimiento para transferencias"""
+    resultado = calcular_metas_semanales()
+    
+    st.markdown("<h2 class='section-title'>📦 Estado de Abastecimiento Semanal</h2>", unsafe_allow_html=True)
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.markdown(f"""
+        <div class="kpi-card animate-fade-in">
+            <div class="metric-label">Meta Semanal</div>
+            <p class="metric-value">{resultado['meta_semanal']:,.0f}</p>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with col2:
+        st.markdown(f"""
+        <div class="kpi-card animate-fade-in">
+            <div class="metric-label">Distribuciones Totales</div>
+            <p class="metric-value">{resultado['distribuciones_totales']:,.0f}</p>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with col3:
+        tendencia = "trend-up" if resultado['cumplimiento_porcentaje'] >= 100 else "trend-down"
+        st.markdown(f"""
+        <div class="kpi-card animate-fade-in">
+            <div class="metric-label">Cumplimiento</div>
+            <p class="metric-value">{resultado['cumplimiento_porcentaje']:.1f}%</p>
+            <p class="{tendencia}">Meta: 100%</p>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    # Mostrar detalles de abastecimiento
+    if resultado['detalles']:
+        st.markdown("<div class='warning-box'>⚠️ Problemas de Abastecimiento Detectados</div>", unsafe_allow_html=True)
+        
+        for detalle in resultado['detalles']:
+            st.markdown(f"""
+            <div class="info-box">
+                <strong>{detalle['transferidor']}</strong> no recibió suficientes distribuciones de <strong>{detalle['proveedor']}</strong><br>
+                - Recibido: {detalle['distribuciones_recibidas']:,.0f}<br>
+                - Requerido: {detalle['distribuciones_requeridas']:,.0f}<br>
+                - Déficit: {detalle['distribuciones_requeridas'] - detalle['distribuciones_recibidas']:,.0f}
+            </div>
+            """, unsafe_allow_html=True)
+    else:
+        st.markdown("<div class='success-box'>✅ Abastecimiento adecuado para cumplir la meta semanal</div>", unsafe_allow_html=True)
+
+def mostrar_gestion_distribuciones():
+    """Muestra la interfaz para gestionar distribuciones semanales"""
+    st.markdown("<h1 class='header-title animate-fade-in'>📊 Gestión de Distribuciones Semanales</h1>", unsafe_allow_html=True)
+    
+    if supabase is None:
+        st.markdown("<div class='error-box animate-fade-in'>❌ Error de conexión a la base de datos. Verifique las variables de entorno.</div>", unsafe_allow_html=True)
+        return
+    
+    # Obtener fecha de inicio de la semana actual
+    fecha_actual = datetime.now().date()
+    fecha_inicio_semana = fecha_actual - timedelta(days=fecha_actual.weekday())
+    fecha_inicio_semana_str = fecha_inicio_semana.strftime("%Y-%m-%d")
+    
+    # Obtener distribuciones existentes si las hay
+    distribuciones_existentes = obtener_distribuciones_semana(fecha_inicio_semana_str)
+    
+    with st.form("form_distribuciones_semanales"):
+        st.markdown("<h3 class='section-title'>Distribuciones de la Semana</h3>", unsafe_allow_html=True)
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            tempo_distribuciones = st.number_input(
+                "Distribuciones de Tempo:", 
+                min_value=0, 
+                value=distribuciones_existentes.get('tempo', 0),
+                key="tempo_distribuciones"
+            )
+        
+        with col2:
+            luis_distribuciones = st.number_input(
+                "Distribuciones de Luis Perugachi:", 
+                min_value=0, 
+                value=distribuciones_existentes.get('luis', 0),
+                key="luis_distribuciones"
+            )
+        
+        meta_semanal = st.number_input(
+            "Meta Semanal:", 
+            min_value=0, 
+            value=7500,
+            key="meta_semanal"
+        )
+        
+        submitted = st.form_submit_button("Guardar Distribuciones", use_container_width=True)
+        
+        if submitted:
+            if guardar_distribuciones_semanales(fecha_inicio_semana_str, tempo_distribuciones, luis_distribuciones, meta_semanal):
+                st.markdown("<div class='success-box animate-fade-in'>✅ Distribuciones guardadas correctamente!</div>", unsafe_allow_html=True)
+                time.sleep(1)
+                st.rerun()
+            else:
+                st.markdown("<div class='error-box animate-fade-in'>❌ Error al guardar las distribuciones.</div>", unsafe_allow_html=True)
+    
+    # Mostrar estado actual de abastecimiento
+    mostrar_estado_abastecimiento()
+    
+    # Mostrar alertas de abastecimiento
+    alertas = verificar_alertas_abastecimiento()
+    if alertas:
+        st.markdown("<h3 class='section-title'>🚨 Alertas de Abastecimiento</h3>", unsafe_allow_html=True)
+        for alerta in alertas:
+            if alerta['gravedad'] == 'ALTA':
+                st.markdown(f"<div class='error-box'>{alerta['mensaje']}<br>Acción: {alerta['accion']}</div>", unsafe_allow_html=True)
+
+# ================================
 # Componentes de la aplicación
 # ================================
 
@@ -1026,6 +1333,13 @@ def mostrar_dashboard_kpis():
     if supabase is None:
         st.markdown("<div class='error-box animate-fade-in'>❌ Error de conexión a la base de datos. Verifique las variables de entorno.</div>", unsafe_allow_html=True)
         return
+    
+    # Mostrar alertas de abastecimiento
+    alertas = verificar_alertas_abastecimiento()
+    if alertas:
+        for alerta in alertas:
+            if alerta['gravedad'] == 'ALTA':
+                st.markdown(f"<div class='error-box'>🚨 {alerta['mensaje']}</div>", unsafe_allow_html=True)
     
     # Cargar datos históricos
     if 'historico_data' not in st.session_state:
@@ -1128,6 +1442,9 @@ def mostrar_dashboard_kpis():
             <p>unidades/hora ({total_horas:.1f} h)</p>
         </div>
         """, unsafe_allow_html=True)
+    
+    # Mostrar estado de abastecimiento
+    mostrar_estado_abastecimiento()
     
     st.markdown("<h2 class='section-title animate-fade-in'>📅 Cumplimiento de Metas Mensuales (Transferencias)</h2>", unsafe_allow_html=True)
     
@@ -2131,7 +2448,7 @@ def mostrar_historial_guias():
         st.download_button(
             label="📊 Descargar CSV",
             data=csv,
-            file_name=f"historial_guias_{fecha_inicio}_a_{fecha_fin}.csv",
+            filehistorial_guias_{fecha_inicio}_a_{fecha_fin}.csv",
             mime="text/csv",
             use_container_width=True
         )
@@ -2156,6 +2473,7 @@ def mostrar_ayuda():
             <li><strong>Análisis Histórico:</strong> Analiza tendencias y exporta reportes.</li>
             <li><strong>Ingreso de Datos:</strong> Ingresa los datos diarios de producción.</li>
             <li><strong>Gestión de Trabajadores:</strong> Administra el personal de la empresa.</li>
+            <li><strong>Gestión de Distribuciones:</strong> Controla las distribuciones semanales y el estado de abastecimiento.</li>
         </ul>
         
         <h4>**Sistema de Guías:**</h4>
@@ -2194,7 +2512,8 @@ def main():
         ("Análisis Histórico", "📈", mostrar_analisis_historico_kpis),
         ("Ingreso de Datos", "📥", mostrar_ingreso_datos_kpis),
         ("Gestión de Trabajadores", "👥", mostrar_gestion_trabajadores_kpis),
-        ("Generar Guías", "📦", mostrar_generacion_guias),
+        ("Gestión de Distribuciones", "📦", mostrar_gestion_distribuciones),
+        ("Generar Guías", "📋", mostrar_generacion_guias),
         ("Historial de Guías", "🔍", mostrar_historial_guias),
         ("Ayuda y Contacto", "❓", mostrar_ayuda)
     ]
@@ -2217,7 +2536,7 @@ def main():
     _, _, func = menu_options[st.session_state.selected_menu]
     
     # Para las opciones que requieren autenticación
-    if st.session_state.selected_menu in [2, 3, 4]:  # Ingreso de Datos, Gestión de Trabajadores, Generar Guías
+    if st.session_state.selected_menu in [2, 3, 4, 5]:  # Ingreso de Datos, Gestión de Trabajadores, Gestión de Distribuciones, Generar Guías
         if not verificar_password():
             solicitar_autenticacion()
         else:
