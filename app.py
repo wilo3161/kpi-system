@@ -19,6 +19,10 @@ import tempfile
 import re
 import sqlite3
 from typing import Dict, List, Optional, Tuple, Any, Union
+import requests
+from io import BytesIO
+from PIL import Image as PILImage
+import os
 
 # Configuración de logging
 logging.basicConfig(
@@ -1027,80 +1031,111 @@ def obtener_historial_guias() -> pd.DataFrame:
         logger.error(f"Error al cargar historial de guías de Supabase: {e}", exc_info=True)
         return pd.DataFrame()
 
-def generar_pdf_guia(store_name: str, brand: str, url: str, sender_name: str, 
-                    sender_address: str, sender_phone: str, tracking_number: str) -> bytes:
-    """Genera un PDF de la guía de envío"""
+def generar_pdf_guia(
+    store_name: str,
+    brand: str,
+    url: str,
+    sender_name: str,
+    sender_address: str,
+    sender_phone: str,
+    tracking_number: str
+) -> bytes:
+    """Genera un PDF de la guía de envío con diseño mejorado y logos desde Supabase."""
     try:
         # Crear un PDF en memoria
         pdf = FPDF()
         pdf.add_page()
-        pdf.set_auto_page_break(auto=True, margin=15)
-        
-        # Título
-        pdf.set_font("Arial", "B", 16)
-        pdf.cell(0, 10, "Guía de Envío", ln=True, align="C")
-        pdf.ln(10)
-        
-        # Información de la tienda
-        pdf.set_font("Arial", "B", 12)
-        pdf.cell(40, 8, "Tienda:")
-        pdf.set_font("Arial", "", 12)
-        pdf.cell(0, 8, store_name, ln=True)
-        
-        # Información de la marca
-        pdf.set_font("Arial", "B", 12)
-        pdf.cell(40, 8, "Marca:")
-        pdf.set_font("Arial", "", 12)
-        pdf.cell(0, 8, brand, ln=True)
-        
-        # Información del remitente
-        pdf.set_font("Arial", "B", 12)
-        pdf.cell(40, 8, "Remitente:")
-        pdf.set_font("Arial", "", 12)
-        pdf.cell(0, 8, f"{sender_name} - {sender_phone}", ln=True)
-        pdf.set_font("Arial", "", 12)
-        pdf.cell(40, 8, "")
-        pdf.multi_cell(0, 8, sender_address)
-        pdf.ln(5)
-        
-        # Número de seguimiento
-        pdf.set_font("Arial", "B", 12)
-        pdf.cell(40, 8, "Número de Seguimiento:")
-        pdf.set_font("Arial", "", 12)
-        pdf.cell(0, 8, tracking_number, ln=True)
-        pdf.ln(5)
-        
-        # Código QR
+        pdf.set_auto_page_break(auto=False, margin=20)
+        pdf.set_font("Arial", "", 10)
+
+        # === 1. REMITENTE (arriba a la izquierda) ===
+        pdf.set_xy(10, 10)
+        pdf.set_font("Arial", "B", 10)
+        pdf.cell(0, 6, "Remitente:", ln=True)
+        pdf.set_font("Arial", "", 10)
+        pdf.set_xy(10, 16)
+        pdf.cell(0, 6, f"{sender_name}", ln=True)
+        pdf.set_xy(10, 22)
+        pdf.multi_cell(80, 6, sender_address)
+        pdf.set_xy(10, pdf.get_y() + 2)
+        pdf.cell(0, 6, f"Tel: {sender_phone}")
+
+        # === 2. DESTINATARIO (arriba a la derecha) ===
+        pdf.set_xy(100, 10)
+        pdf.set_font("Arial", "B", 10)
+        pdf.cell(0, 6, "Destinatario:", ln=True)
+        pdf.set_font("Arial", "", 10)
+        pdf.set_xy(100, 16)
+        pdf.cell(0, 6, f"{store_name}", ln=True)
+        pdf.set_xy(100, 22)
+        pdf.multi_cell(90, 6, "Dirección del destinatario no disponible")
+
+        # Guardar la posición actual del Y después del destinatario
+        y_after_destinatario = pdf.get_y()
+
+        # === 3. LOGO DE LA MARCA (debajo del remitente) ===
+        logo_url = get_logo_url(brand)
+        if logo_url:
+            try:
+                response = requests.get(logo_url)
+                response.raise_for_status()
+                logo_img = PILImage.open(BytesIO(response.content))
+                # Guardar imagen temporalmente
+                temp_logo_path = "/tmp/logo_temp.png"
+                logo_img.save(temp_logo_path)
+                # Insertar logo
+                pdf.image(temp_logo_path, x=10, y=pdf.get_y() + 5, w=50)
+                os.remove(temp_logo_path)  # Limpiar
+                logo_height = 20
+            except Exception as e:
+                logger.warning(f"No se pudo cargar el logo desde {logo_url}: {e}")
+                pdf.set_xy(10, pdf.get_y() + 5)
+                pdf.cell(0, 10, f"[Logo {brand}]")
+                logo_height = 10
+        else:
+            pdf.set_xy(10, pdf.get_y() + 5)
+            pdf.cell(0, 10, "[Sin logo]")
+            logo_height = 10
+
+        # === 4. CÓDIGO QR y NÚMERO DE SEGUIMIENTO (debajo del destinatario) ===
+        # Generar QR
         qr_img = generar_qr_imagen(url)
-        
-        # Guardar QR en un archivo temporal
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as temp_qr:
-            qr_img.save(temp_qr.name)
-            pdf.image(temp_qr.name, x=70, y=pdf.get_y(), w=70, h=70)
-            os.unlink(temp_qr.name)
-        
-        # URL
-        pdf.ln(75)
+        temp_qr_path = "/tmp/qr_temp.png"
+        qr_img.save(temp_qr_path)
+
+        # Posicionar QR a la derecha, debajo del destinatario
+        qr_x = 100
+        qr_y = y_after_destinatario + 10
+        pdf.image(temp_qr_path, x=qr_x, y=qr_y, w=40, h=40)
+        os.remove(temp_qr_path)
+
+        # === 5. NÚMERO DE SEGUIMIENTO debajo del QR ===
+        pdf.set_xy(qr_x, qr_y + 45)
         pdf.set_font("Arial", "B", 12)
-        pdf.cell(40, 8, "URL del Pedido:")
-        pdf.set_font("Arial", "U", 12)
+        pdf.cell(0, 8, f"Guía: {tracking_number}")
+
+        # === 6. URL del pedido (opcional, abajo) ===
+        pdf.set_xy(10, pdf.get_y() + 15)
+        pdf.set_font("Arial", "I", 9)
         pdf.set_text_color(0, 0, 255)
-        pdf.cell(0, 8, url, ln=True)
+        pdf.cell(0, 6, url)
         pdf.set_text_color(0, 0, 0)
-        
+
         # Convertir PDF a bytes
         return pdf.output(dest="S").encode("latin1")
+
     except Exception as e:
         logger.error(f"Error al generar PDF de guía: {e}", exc_info=True)
         return b""
 
-def get_logo_path(brand: str) -> str:
-    """Devuelve la ruta del logo de la marca."""
+def get_logo_url(brand: str) -> str:
+    """Devuelve la URL pública del logo en Supabase según la marca."""
+    base_url = "https://nsgdyqoqzlcyyameccqn.supabase.co/storage/v1/object/public/images"
     if brand == "Fashion":
-        return os.path.join(IMAGES_DIR, "Fashion.jpg")
+        return f"{base_url}/Fashion.jpg"
     elif brand == "Tempo":
-        return os.path.join(IMAGES_DIR, "Tempo.jpg")
-    return None
+        return f"{base_url}/Tempo.jpg"
+    return None  # Si no hay logo
 
 def pil_image_to_bytes(pil_image: Image.Image) -> bytes:
     """Convierte un objeto de imagen de PIL a bytes."""
