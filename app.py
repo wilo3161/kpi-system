@@ -1706,7 +1706,7 @@ def mostrar_analisis_historico_kpis():
     use_container_width=True
 )
 st.markdown("</div>", unsafe_allow_html=True)
-                )
+                
             except Exception as e:
                 logger.error(f"Error al exportar a Excel: {e}", exc_info=True)
                 st.markdown("<div class='error-box animate-fade-in'>❌ Error al exportar a Excel.</div>", unsafe_allow_html=True)
