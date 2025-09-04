@@ -71,353 +71,322 @@ st.set_page_config(
 # CSS profesional mejorado (sin cambios)
 st.markdown("""
 <style>
-    /* Colores corporativos de Aeropostale */
-    :root {
-        --primary-color: navy;
-        --secondary-color: #000000;
-        --accent-color: #333333;
-        --background-dark: #121212;
-        --card-background: #2d30f0;
-        --text-color: white;
-        --text-secondary: #b0b0b0;
-        --success-color: #4caf50;
-        --warning-color: #ff9800;
-        --error-color: #f44336;
+/* Colores corporativos de Aeropostale */
+:root {
+    --primary-color: #e60012; /* Rojo Aeropostale */
+    --secondary-color: #000000;
+    --accent-color: #333333;
+    --background-dark: #121212;
+    --card-background: #1a1a1a;
+    --text-color: #ffffff;
+    --text-secondary: #b0b0b0;
+    --success-color: #4caf50;
+    --warning-color: #ff9800;
+    --error-color: #f44336;
+    --border-radius: 16px;
+    --transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+/* Fondo con textura sutil de puntos */
+body {
+    background-color: var(--background-dark);
+    color: var(--text-color);
+    font-family: 'Segoe UI', 'Roboto', sans-serif;
+    background-image: radial-gradient(circle, rgba(255,255,255,0.03) 1px, transparent 1px);
+    background-size: 20px 20px;
+    margin: 0;
+    padding: 0;
+    overflow-x: hidden;
+}
+
+.stApp {
+    background-color: transparent;
+}
+
+/* Estilos del sidebar */
+.css-1d391kg {
+    background-color: #1a1a1a !important;
+}
+
+/* Estilos específicos para el sistema de guías */
+.guide-section {
+    background: var(--card-background);
+    border-radius: var(--border-radius);
+    padding: 25px;
+    margin: 20px 0;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(230, 0, 18, 0.1);
+    backdrop-filter: blur(8px);
+    transition: var(--transition);
+}
+
+.guide-section:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 15px 40px rgba(230, 0, 18, 0.2);
+}
+
+.qr-preview {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background-color: #2a2a2a;
+    border-radius: 10px;
+    padding: 20px;
+    margin: 20px 0;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.guide-metric {
+    font-size: 1.3em;
+    margin: 12px 0;
+    color: var(--text-color);
+    display: flex;
+    align-items: center;
+}
+
+.guide-metric strong {
+    color: var(--primary-color);
+    margin-left: 8px;
+}
+
+.guide-icon {
+    color: var(--primary-color);
+    margin-right: 10px;
+    font-size: 1.5em;
+}
+
+/* ================================ */
+/* DASHBOARD: KPI CARDS MEJORADAS */
+/* ================================ */
+
+.kpi-card {
+    background: linear-gradient(145deg, #1e1e1e, #161616);
+    border-radius: var(--border-radius);
+    box-shadow: 
+        0 8px 20px rgba(0, 0, 0, 0.3),
+        0 0 15px rgba(230, 0, 18, 0.1) inset;
+    padding: 22px;
+    margin: 15px 0;
+    border-left: 6px solid var(--primary-color);
+    transition: var(--transition);
+    position: relative;
+    overflow: hidden;
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(230, 0, 18, 0.15);
+}
+
+/* Efecto de brillo al pasar el mouse */
+.kpi-card::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.6s;
+    transform: scale(0.8);
+}
+
+.kpi-card:hover::before {
+    opacity: 1;
+    transform: scale(1);
+}
+
+.kpi-card:hover {
+    transform: translateY(-6px) scale(1.02);
+    box-shadow: 
+        0 16px 40px rgba(0, 0, 0, 0.4),
+        0 0 30px rgba(230, 0, 18, 0.25);
+    border-color: var(--primary-color);
+}
+
+.metric-value {
+    font-size: 2.8em;
+    font-weight: bold;
+    color: var(--primary-color);
+    line-height: 1.2;
+    margin: 10px 0;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+}
+
+.metric-label {
+    color: var(--text-secondary);
+    font-size: 1.1em;
+    margin-bottom: 5px;
+    font-weight: 500;
+}
+
+/* Icono decorativo opcional en la tarjeta */
+.kpi-card::after {
+    content: "📊";
+    position: absolute;
+    bottom: 15px;
+    right: 15px;
+    font-size: 1.2em;
+    opacity: 0.3;
+    filter: blur(0.5px);
+}
+
+/* Worker card mejorada */
+.worker-card {
+    background: #1e1e1e;
+    border-radius: 12px;
+    padding: 16px;
+    margin: 10px 0;
+    border: 1px solid rgba(230, 0, 18, 0.1);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    transition: var(--transition);
+}
+
+.worker-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+}
+
+.worker-header {
+    font-weight: bold;
+    color: var(--text-color);
+    margin-bottom: 6px;
+    font-size: 1.1em;
+}
+
+.worker-metric {
+    color: var(--text-secondary);
+    font-size: 0.95em;
+}
+
+.trend-up {
+    color: var(--success-color);
+}
+
+.trend-down {
+    color: var(--error-color);
+}
+
+/* Info, warning, success boxes con iluminación */
+.info-box, .warning-box, .success-box, .error-box {
+    padding: 16px;
+    margin: 15px 0;
+    border-radius: 12px;
+    font-weight: 500;
+    animation: animate-fade-in 0.6s ease-out;
+    border-left: 5px solid var(--primary-color);
+    background: rgba(230, 0, 18, 0.1);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.success-box {
+    border-left-color: var(--success-color);
+    background: rgba(76, 175, 80, 0.1);
+    color: #c8e6c9;
+}
+
+.warning-box {
+    border-left-color: var(--warning-color);
+    background: rgba(255, 152, 0, 0.1);
+    color: #ffe0b2;
+}
+
+.error-box {
+    border-left-color: var(--error-color);
+    background: rgba(244, 67, 54, 0.1);
+    color: #ffcdd2;
+}
+
+/* Animaciones */
+@keyframes animate-fade-in {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
     }
-    
-    body {
-        background-color: var(--background-dark);
-        color: var(--text-color);
-        font-family: 'Segoe UI', 'Roboto', sans-serif;
-    }
-    
-    .stApp {
-        background-color: var(--background-dark);
-    }
-    
-    /* Estilos del sidebar */
-    .css-1d391kg {
-        background-color: var(--card-background) !important;
-    }
-    
-    .sidebar-title {
-        font-size: 1.8rem;
-        font-weight: 700;
-        color: var(--primary-color);
-        text-align: center;
-        margin: 20px 0;
-        padding-bottom: 10px;
-        border-bottom: 2px solid var(--primary-color);
-    }
-    
-    .menu-item {
-        padding: 12px 15px;
-        border-radius: 8px;
-        margin: 8px 0;
-        transition: all 0.3s ease;
-        display: flex;
-        align-items: center;
-    }
-    
-    .menu-item:hover {
-        background-color: rgba(230, 0, 18, 0.1);
-    }
-    
-    .menu-item.active {
-        background-color: var(--primary-color);
-        color: white;
-        font-weight: 600;
-    }
-    
-    .menu-item i {
-        margin-right: 10px;
-        font-size: 1.2rem;
-    }
-    
-    /* Tarjetas y métricas */
-    .kpi-card {
-        background: var(--card-background);
-        border-radius: 12px;
-        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.25);
-        padding: 20px;
-        margin: 15px 0;
-        border-left: 5px solid var(--primary-color);
-        transition: all 0.3s ease;
-        border: 1px solid rgba(255, 255, 255, 0.05);
-    }
-    
-    .kpi-card:hover {
-        transform: translateY(-5px);
-        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
-    }
-    
-    .metric-value {
-        font-size: 2.8em;
-        font-weight: bold;
-        color: var(--primary-color);
-        line-height: 1.2;
-        margin: 10px 0;
-    }
-    
-    .metric-label {
-        color: var(--text-secondary);
-        font-size: 1.1em;
-        margin-bottom: 5px;
-    }
-    
-    .trend-up {
-        color: var(--success-color);
-    }
-    
-    .trend-down {
-        color: var(--error-color);
-    }
-    
-    /* Encabezados y secciones */
-    .header-title {
-        color: var(--text-color);
-        font-weight: 800;
-        font-size: 2.5em;
-        margin-bottom: 20px;
-        position: relative;
-        padding-bottom: 10px;
-    }
-    
-    .header-title::after {
-        content: '';
-        position: absolute;
-        bottom: 0;
-        left: 0;
-        width: 60px;
-        height: 4px;
-        background-color: var(--primary-color);
-        border-radius: 2px;
-    }
-    
-    .section-title {
-        color: var(--text-color);
-        font-size: 1.8em;
-        margin: 25px 0 15px;
-        padding-left: 15px;
-        border-left: 4px solid var(--primary-color);
-    }
-    
-    /* Tablas y datos */
-    .data-table {
-        background: var(--card-background);
-        border-radius: 10px;
-        overflow: hidden;
-        box-shadow: 0 3px 10px rgba(0, 0, 0, 0.15);
-    }
-    
-    /* Botones */
-    .stButton>button {
-        background: linear-gradient(135deg, var(--primary-color), #b3000e);
-        color: white;
-        border: none;
-        padding: 10px 20px;
-        border-radius: 8px;
-        font-weight: bold;
-        transition: all 0.3s;
-        box-shadow: 0 4px 10px rgba(230, 0, 18, 0.25);
-    }
-    
-    .stButton>button:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 6px 15px rgba(230, 0, 18, 0.35);
-        background: linear-gradient(135deg, #cc0010, #99000c);
-    }
-    
-    .stButton>button:active {
+    to {
+        opacity: 1;
         transform: translateY(0);
     }
-    
-    /* Inputs y formularios */
-    .stTextInput > div > div > input,
-    .stNumberInput > div > div > input,
-    .stTextArea > div > div > textarea {
-        background-color: #2a2a2a !important;
-        color: var(--text-color) !important;
-        border: 1px solid #3a3a3a !important;
-        border-radius: 8px;
-        padding: 10px !important;
+}
+
+/* Estilos para el sistema de autenticación */
+.password-container {
+    background: var(--card-background);
+    padding: 35px;
+    border-radius: 15px;
+    max-width: 450px;
+    margin: 80px auto;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(230, 0, 18, 0.2);
+    backdrop-filter: blur(10px);
+}
+
+.password-title {
+    color: var(--primary-color);
+    font-size: 2.2em;
+    text-align: center;
+    margin-bottom: 25px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 12px;
+}
+
+.password-input {
+    margin-bottom: 25px;
+}
+
+.logo-container {
+    text-align: center;
+    margin-bottom: 30px;
+}
+
+.aeropostale-logo {
+    font-size: 3.5em;
+    font-weight: 800;
+    color: var(--primary-color);
+    text-shadow: 0 0 10px rgba(230, 0, 18, 0.5);
+}
+
+/* Footer */
+.footer {
+    text-align: center;
+    margin-top: 40px;
+    color: var(--text-secondary);
+    font-size: 0.9em;
+}
+
+.footer a {
+    color: var(--primary-color);
+    text-decoration: none;
+}
+
+.footer a:hover {
+    text-decoration: underline;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .header-title {
+        font-size: 2em;
     }
-    
-    .stSelectbox > div > div > div {
-        background-color: #2a2a2a !important;
-        color: var(--text-color) !important;
-        border: 1px solid #3a3a3a !important;
-        border-radius: 8px;
-    }
-    
-    /* Mensajes de estado */
-    .success-box {
-        background: linear-gradient(135deg, rgba(76, 175, 80, 0.15), rgba(76, 175, 80, 0.05));
-        color: #8bc34a;
-        padding: 15px;
-        border-radius: 10px;
-        border-left: 4px solid #8bc34a;
-        margin: 15px 0;
-    }
-    
-    .error-box {
-        background: linear-gradient(135deg, rgba(244, 67, 54, 0.15), rgba(244, 67, 54, 0.05));
-        color: #ff6b6b;
-        padding: 15px;
-        border-radius: 10px;
-        border-left: 4px solid #ff6b6b;
-        margin: 15px 0;
-    }
-    
-    .warning-box {
-        background: linear-gradient(135deg, rgba(255, 152, 0, 0.15), rgba(255, 152, 0, 0.05));
-        color: #ffc107;
-        padding: 15px;
-        border-radius: 10px;
-        border-left: 4px solid #ffc107;
-        margin: 15px 0;
-    }
-    
-    .info-box {
-        background: linear-gradient(135deg, rgba(3, 169, 244, 0.15), rgba(3, 169, 244, 0.05));
-        color: #4fc3f7;
-        padding: 15px;
-        border-radius: 10px;
-        border-left: 4px solid #4fc3f7;
-        margin: 15px 0;
-    }
-    
-    /* Estilos específicos para el sistema de guías */
-    .guide-section {
-        background: var(--card-background);
-        border-radius: 12px;
-        padding: 25px;
-        margin: 20px 0;
-        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
-    }
-    
-    .qr-preview {
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        background-color: #2a2a2a;
-        border-radius: 10px;
-        padding: 20px;
-        margin: 20px 0;
-    }
-    
-    .guide-metric {
-        font-size: 1.3em;
-        margin: 12px 0;
-        color: var(--text-color);
-        display: flex;
-        align-items: center;
-    }
-    
-    .guide-metric strong {
-        color: var(--primary-color);
-        margin-left: 8px;
-    }
-    
-    .guide-icon {
-        color: var(--primary-color);
-        margin-right: 10px;
+
+    .section-title {
         font-size: 1.5em;
     }
-    
-    /* Estilos para el sistema de autenticación */
-    .password-container {
-        background: var(--card-background);
-        padding: 35px;
-        border-radius: 15px;
-        max-width: 450px;
-        margin: 80px auto;
-        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
-        border: 1px solid rgba(230, 0, 18, 0.2);
-    }
-    
-    .password-title {
-        color: var(--primary-color);
+
+    .metric-value {
         font-size: 2.2em;
-        text-align: center;
-        margin-bottom: 25px;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        gap: 12px;
     }
-    
-    .password-input {
-        margin-bottom: 25px;
+
+    .password-container {
+        margin: 40px 20px;
+        padding: 25px;
     }
-    
-    .logo-container {
-        text-align: center;
-        margin-bottom: 30px;
+
+    .kpi-card {
+        padding: 18px;
     }
-    
-    .aeropostale-logo {
-        font-size: 3.5em;
-        font-weight: 800;
-        color: var(--primary-color);
-        text-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
-        letter-spacing: -1px;
-    }
-    
-    .aeropostale-subtitle {
-        color: var(--text-secondary);
-        font-size: 1.1em;
-        margin-top: 8px;
-    }
-    
-    /* Animaciones */
-    @keyframes fadeIn {
-        from { opacity: 0; transform: translateY(10px); }
-        to { opacity: 1; transform: translateY(0); }
-    }
-    
-    .animate-fade-in {
-        animation: fadeIn 0.5s ease forwards;
-    }
-    
-    /* Footer */
-    .footer {
-        text-align: center;
-        padding: 20px 0;
-        margin-top: 30px;
-        color: var(--text-secondary);
-        border-top: 1px solid rgba(255, 255, 255, 0.08);
-        font-size: 0.9em;
-    }
-    
-    .footer a {
-        color: var(--primary-color);
-        text-decoration: none;
-    }
-    
-    .footer a:hover {
-        text-decoration: underline;
-    }
-    
-    /* Responsive */
-    @media (max-width: 768px) {
-        .header-title {
-            font-size: 2em;
-        }
-        
-        .section-title {
-            font-size: 1.5em;
-        }
-        
-        .metric-value {
-            font-size: 2.2em;
-        }
-        
-        .password-container {
-            margin: 40px 20px;
-            padding: 25px;
-        }
-    }
+}
 </style>
 """, unsafe_allow_html=True)
 
