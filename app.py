@@ -1699,11 +1699,13 @@ def mostrar_analisis_historico_kpis():
                 
                 excel_data = output.getvalue()
                 st.download_button(
-                    label="⬇️ Descargar archivo Excel",
-                    data=excel_data,
-                    file_name=f"kpis_historico_{fecha_inicio}_a_{fecha_fin}.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    use_container_width=True
+    label="📊 Descargar CSV",
+    data=csv,
+    file_name=f"historial_guias_{fecha_inicio}_a_{fecha_fin}.csv",
+    mime="text/csv",
+    use_container_width=True
+)
+st.markdown("</div>", unsafe_allow_html=True)
                 )
             except Exception as e:
                 logger.error(f"Error al exportar a Excel: {e}", exc_info=True)
@@ -2448,7 +2450,7 @@ def mostrar_historial_guias():
         st.download_button(
             label="📊 Descargar CSV",
             data=csv,
-            filehistorial_guias_{fecha_inicio}_a_{fecha_fin}.csv",
+            file_name=f"historial_guias_{fecha_inicio}_a_{fecha_fin}.csv",
             mime="text/csv",
             use_container_width=True
         )
