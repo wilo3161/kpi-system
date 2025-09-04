@@ -1130,7 +1130,7 @@ def generar_pdf_guia(
 
 def get_logo_url(brand: str) -> str:
     """Devuelve la URL pública del logo en Supabase según la marca."""
-    base_url = "https://nsgdyqoqzlcyyameccqn.supabase.co/storage/v1/object/public/images"
+    base_url = "https://nsgdyqoqzlcyyameccqn.supabase.co/storage/v1/object/sign/images/Fashion.jpg?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV82ZDgyZTdkYS05MDBiLTQ3ODMtYmJmMC1kYTA1NjgyMmY4N2UiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJpbWFnZXMvRmFzaGlvbi5qcGciLCJpYXQiOjE3NTY5NjAxOTEsImV4cCI6MTc4ODQ5NjE5MX0.ki1ZUk3jN8pkiV-LDMU9Tg53rf32pbUs-4UqovY0K2o"
     if brand == "Fashion":
         return f"{base_url}/Fashion.jpg"
     elif brand == "Tempo":
