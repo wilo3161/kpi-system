@@ -64,7 +64,7 @@ supabase = init_supabase()
 st.set_page_config(
     layout="wide",
     page_title="Sistema de KPIs Aeropostale",
-    page_icon="📦",
+    page_icon="📊",
     initial_sidebar_state="expanded"
 )
 
@@ -1938,9 +1938,9 @@ def mostrar_ingreso_datos_kpis():
         st.markdown("<h3 class='section-title animate-fade-in'>Meta Mensual de Transferencias</h3>", unsafe_allow_html=True)
         
         # Obtener meta mensual existente si hay datos
-        meta_mensual_existente = 150000  # Valor por defecto
+        meta_mensual_existente = 70000  # Valor por defecto
         if not datos_existentes.empty:
-            meta_mensual_existente = datos_existentes['meta_mensual'].iloc[0] if 'meta_mensual' in datos_existentes.columns else 150000
+            meta_mensual_existente = datos_existentes['meta_mensual'].iloc[0] if 'meta_mensual' in datos_existentes.columns else 70000
         
         meta_mensual_transferencias = st.number_input("Meta mensual para el equipo de transferencias:", min_value=0, value=int(meta_mensual_existente), key="meta_mensual_transferencias")
         
@@ -1979,16 +1979,16 @@ def mostrar_ingreso_datos_kpis():
                             meta_default = 1750
                         elif equipo == "Distribución":
                             cantidad_default = 1000
-                            meta_default = 1000
+                            meta_default = 1750
                         elif equipo == "Arreglo":
                             cantidad_default = 130
-                            meta_default = 150
+                            meta_default = 1000
                         elif equipo == "Guías":
                             cantidad_default = 110
                             meta_default = 120
                         elif equipo == "Ventas":
-                            cantidad_default = 45
-                            meta_default = 40
+                            cantidad_default = 600
+                            meta_default = 700
                         else:
                             cantidad_default = 100
                             meta_default = 100
