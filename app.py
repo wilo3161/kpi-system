@@ -247,12 +247,12 @@ body {
     font-weight: bold;
     color: var(--text-color);
     margin-bottom: 6px;
-    font-size: 1.1em;
+    font-size: 4.1em;
 }
 
 .worker-metric {
     color: var(--text-secondary);
-    font-size: 0.95em;
+    font-size: 1.95em;
 }
 /* Icono decorativo opcional en la tarjeta */
 .kpi-card::after {
