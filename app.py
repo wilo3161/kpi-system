@@ -431,6 +431,17 @@ def validar_distribuciones(valor: Any) -> bool:
 def hash_password(pw: str) -> str:
     """Genera un hash SHA256 para una contraseña."""
     return hashlib.sha256(pw.encode()).hexdigest()
+    def validar_fecha(fecha: str) -> bool:
+    """Valida que la fecha tenga el formato YYYY-MM-DD"""
+    try:
+        datetime.strptime(fecha, "%Y-%m-%d")
+        return True
+    except ValueError:
+        return False
+
+def validar_distribuciones(valor: int) -> bool:
+    """Valida que el valor de distribuciones sea un entero no negativo"""
+    return isinstance(valor, int) and valor >= 0
 
 # ================================
 # Funciones de KPIs
