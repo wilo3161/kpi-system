@@ -471,7 +471,7 @@ def obtener_trabajadores() -> pd.DataFrame:
     try:
         response = supabase.from_('trabajadores').select('nombre, equipo').eq('activo', True).order('equipo,nombre', desc=False).execute()
         # Verificar si hay datos en la respuesta
-        if response and response.data:
+        if response and hasattr(response, 'data') and response.data:
             df = pd.DataFrame(response.data)
             # Asegurar que Luis Perugachi esté en el equipo de Distribución
             if 'Luis Perugachi' in df['nombre'].values:
@@ -500,7 +500,7 @@ def obtener_equipos() -> list:
     try:
         response = supabase.from_('trabajadores').select('equipo', distinct=True).eq('activo', True).order('equipo', desc=False).execute()
         # Verificar si hay datos en la respuesta
-        if response and response.data:
+        if response and hasattr(response, 'data') and response.data:
             equipos = [item['equipo'] for item in response.data]
             # Asegurar que "Distribución" esté en la lista
             if "Distribución" not in equipos:
@@ -601,7 +601,7 @@ def cargar_historico_db(fecha_inicio: str = None,
         response = query.execute()
         
         # Verificar si hay datos en la respuesta
-        if response and response.data:
+        if response and hasattr(response, 'data') and response.data:
             df = pd.DataFrame(response.data)
             if not df.empty:
                 # Convertir fecha a datetime
@@ -627,7 +627,7 @@ def obtener_datos_fecha(fecha: str) -> pd.DataFrame:
         response = supabase.from_('daily_kpis').select('*').eq('fecha', fecha).execute()
         
         # Verificar si hay datos en la respuesta
-        if response and response.data:
+        if response and hasattr(response, 'data') and response.data:
             df = pd.DataFrame(response.data)
             return df
         else:
@@ -656,7 +656,7 @@ def obtener_distribuciones_semana(fecha_inicio_semana: str) -> dict:
         # Consultar distribuciones semanales
         response = supabase.from_('distribuciones_semanales').select('*').eq('semana', fecha_inicio_semana).execute()
         
-        if response and response.data:
+        if response and hasattr(response, 'data') and response.data:
             distribucion = response.data[0]
             return {
                 'tempo': distribucion.get('tempo_distribuciones', 0),
@@ -689,7 +689,7 @@ def guardar_distribuciones_semanales(semana: str, tempo_distribuciones: int, lui
         # Verificar si ya existe registro para esta semana
         response = supabase.from_('distribuciones_semanales').select('*').eq('semana', semana).execute()
         
-        if response and response.data:
+        if response and hasattr(response, 'data') and response.data:
             # Actualizar registro existente
             update_data = {
                 'tempo_distribuciones': tempo_distribuciones,
@@ -709,11 +709,11 @@ def guardar_distribuciones_semanales(semana: str, tempo_distribuciones: int, lui
             response = supabase.from_('distribuciones_semanales').insert(insert_data).execute()
         
         # Verificar si la operación fue exitosa
-        if response and response.data:
+        if response and not hasattr(response, 'error') or response.error is None:
             logger.info(f"Distribuciones semanales guardadas correctamente para la semana {semana}")
             return True
         else:
-            logger.error("No se pudieron guardar las distribuciones semanales")
+            logger.error(f"No se pudieron guardar las distribuciones semanales: {getattr(response, 'error', 'Error desconocido')}")
             return False
     except Exception as e:
         logger.error(f"Error al guardar distribuciones semanales: {e}", exc_info=True)
@@ -733,7 +733,7 @@ def obtener_dependencias_transferencias() -> pd.DataFrame:
         response = supabase.from_('dependencias_transferencias').select('*').execute()
         
         # Verificar si hay datos en la respuesta
-        if response and response.data:
+        if response and hasattr(response, 'data') and response.data:
             return pd.DataFrame(response.data)
         else:
             logger.info("No se encontraron dependencias de transferencias")
@@ -754,7 +754,7 @@ def obtener_dependencias_transferencias() -> pd.DataFrame:
         })
 
 def calcular_metas_semanales():
-    """Calcula el progreso semanal và asigna responsabilidades"""
+    """Calcula el progreso semanal y asigna responsabilidades"""
     # Obtener distribuciones de la semana actual
     fecha_inicio_semana = datetime.now().date() - timedelta(days=datetime.now().weekday())
     distribuciones_semana = obtener_distribuciones_semana(fecha_inicio_semana.strftime("%Y-%m-%d"))
@@ -894,7 +894,7 @@ def crear_grafico_frasco(porcentaje: float, titulo: str) -> go.Figure:
             height=300,
             margin=dict(l=20, r=20, t=50, b=20),
             paper_bgcolor='rgba(0,0,0,0)',
-            plot_bgcolor='rgba(0,0,0,0)'
+            plot_bgcolor='rgaua(0,0,0,0)'
         )
         return fig
     except Exception as e:
@@ -934,7 +934,7 @@ def obtener_tiendas() -> pd.DataFrame:
     try:
         response = supabase.from_('guide_stores').select('*').execute()
         # Verificar si hay datos en la respuesta
-        if response and response.data:
+        if response and hasattr(response, 'data') and response.data:
             return pd.DataFrame(response.data)
         else:
             logger.warning("No se encontraron tiendas en Supabase")
@@ -961,7 +961,7 @@ def obtener_remitentes() -> pd.DataFrame:
     try:
         response = supabase.from_('guide_senders').select('*').execute()
         # Verificar si hay datos en la respuesta
-        if response and response.data:
+        if response and hasattr(response, 'data') and response.data:
             return pd.DataFrame(response.data)
         else:
             logger.warning("No se encontraron remitentes en Supabase")
@@ -995,11 +995,11 @@ def guardar_guia(store_name: str, brand: str, url: str, sender_name: str) -> boo
         response = supabase.from_('guide_logs').insert(data).execute()
         
         # Verificar si la inserción fue exitosa
-        if response and response.data:
+        if response and not hasattr(response, 'error') or response.error is None:
             logger.info(f"Guía guardada correctamente para {store_name}")
             return True
         else:
-            logger.error("No se pudo guardar la guía en Supabase")
+            logger.error(f"No se pudo guardar la guía en Supabase: {getattr(response, 'error', 'Error desconocido')}")
             return False
     except Exception as e:
         logger.error(f"Error al guardar guía en Supabase: {e}", exc_info=True)
@@ -1018,7 +1018,7 @@ def obtener_historial_guias() -> pd.DataFrame:
         response = query.execute()
         
         # Verificar si hay datos en la respuesta
-        if response and response.data:
+        if response and hasattr(response, 'data') and response.data:
             df = pd.DataFrame(response.data)
             if not df.empty:
                 # Convertir fecha a datetime
@@ -1031,15 +1031,17 @@ def obtener_historial_guias() -> pd.DataFrame:
         logger.error(f"Error al cargar historial de guías de Supabase: {e}", exc_info=True)
         return pd.DataFrame()
 
-def get_logo_url(brand: str) -> Optional[str]:
+def get_logo_url(brand: str) -> str:
     """Devuelve la URL pública del logo en Supabase según la marca."""
-    # URLs públicas de las imágenes en Supabase Storage
-    # Asegúrate de que estas URLs sean accesibles públicamente
-    logos = {
-        "Fashion": "https://nsgdyqoqzlcyyameccqn.supabase.co/storage/v1/object/public/images/Fashion.jpg",
-        "Tempo": "https://nsgdyqoqzlcyyameccqn.supabase.co/storage/v1/object/public/images/Tempo.jpg"
-    }
-    return logos.get(brand)
+    # Reemplaza con la URL base correcta de tu bucket de Supabase Storage
+    base_url = "https://tu-proyecto.supabase.co/storage/v1/object/public/logos"
+    
+    if brand == "Fashion":
+        return f"{base_url}/fashion_logo.png"
+    elif brand == "Tempo":
+        return f"{base_url}/tempo_logo.png"
+    else:
+        return f"{base_url}/default_logo.png"
 
 def generar_pdf_guia(
     store_name: str,
@@ -1055,7 +1057,7 @@ def generar_pdf_guia(
         # Crear un PDF en memoria
         pdf = FPDF()
         pdf.add_page()
-        pdf.set_auto_page_break(auto=False, margin=20)
+        pdf.set_auto_page_break(auto=True, margin=15)
         pdf.set_font("Arial", "", 10)
 
         # === 1. REMITENTE (arriba a la izquierda) ===
@@ -1087,37 +1089,38 @@ def generar_pdf_guia(
         logo_url = get_logo_url(brand)
         if logo_url:
             try:
-                response = requests.get(logo_url)
+                response = requests.get(logo_url, timeout=10)
                 response.raise_for_status()
                 logo_img = PILImage.open(BytesIO(response.content))
+                
                 # Guardar imagen temporalmente
-                temp_logo_path = "/tmp/logo_temp.png"
-                logo_img.save(temp_logo_path)
+                with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as temp_file:
+                    logo_img.save(temp_file.name)
+                    temp_logo_path = temp_file.name
+                
                 # Insertar logo
-                pdf.image(temp_logo_path, x=10, y=pdf.get_y() + 5, w=50)
-                os.remove(temp_logo_path)  # Limpiar
-                logo_height = 20
+                pdf.image(temp_logo_path, x=10, y=pdf.get_y() + 5, w=30)
+                
+                # Eliminar archivo temporal
+                os.unlink(temp_logo_path)
+                
             except Exception as e:
                 logger.warning(f"No se pudo cargar el logo desde {logo_url}: {e}")
                 pdf.set_xy(10, pdf.get_y() + 5)
                 pdf.cell(0, 10, f"[Logo {brand}]")
-                logo_height = 10
-        else:
-            pdf.set_xy(10, pdf.get_y() + 5)
-            pdf.cell(0, 10, "[Sin logo]")
-            logo_height = 10
-
+        
         # === 4. CÓDIGO QR y NÚMERO DE SEGUIMIENTO (debajo del destinatario) ===
         # Generar QR
         qr_img = generar_qr_imagen(url)
-        temp_qr_path = "/tmp/qr_temp.png"
-        qr_img.save(temp_qr_path)
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as temp_file:
+            qr_img.save(temp_file.name)
+            temp_qr_path = temp_file.name
 
         # Posicionar QR a la derecha, debajo del destinatario
         qr_x = 100
         qr_y = y_after_destinatario + 10
         pdf.image(temp_qr_path, x=qr_x, y=qr_y, w=40, h=40)
-        os.remove(temp_qr_path)
+        os.unlink(temp_qr_path)
 
         # === 5. NÚMERO DE SEGUIMIENTO debajo del QR ===
         pdf.set_xy(qr_x, qr_y + 45)
@@ -1747,7 +1750,7 @@ def mostrar_analisis_historico_kpis():
                     pdf.cell(27, 10, f"{row['eficiencia']:.1f}%" if pd.notna(row['eficiencia']) else '', border=1)
                     pdf.ln()
                 
-                # Convertir PDF a bytes
+                # Convertir PDF to bytes
                 pdf_data = pdf.output(dest="S").encode("latin1")
                 
                 st.download_button(
@@ -1901,7 +1904,7 @@ def mostrar_analisis_historico_kpis():
                     xaxis_title='Fecha',
                     yaxis_title='Eficiencia Promedio (%)',
                     plot_bgcolor='rgba(0,0,0,0)',
-                    paper_bgcolor='rgba(0,0,0,0)',
+                    paper_bgcolor='rgaua(0,0,0,0)',
                     font=dict(color="#ffffff")
                 )
                 st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
@@ -1992,7 +1995,7 @@ def mostrar_ingreso_datos_kpis():
         
         for equipo in equipos_finales:
             miembros = trabajadores_por_equipo[equipo]
-            st.markdown(f"<div class='team-section animate-fade-in'><div class='team-header'>{equipo</div></div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='team-section animate-fade-in'><div class='team-header'>{equipo}</div></div>", unsafe_allow_html=True)
             for trabajador in miembros:
                 st.subheader(trabajador)
                 
@@ -2153,7 +2156,7 @@ def mostrar_gestion_trabajadores_kpis():
         # Obtener lista actual de trabajadores
         response = supabase.from_('trabajadores').select('*').order('equipo,nombre', desc=False).execute()
         # Verificar si hay datos en la respuesta
-        if response and response.data:
+        if response and hasattr(response, 'data') and response.data:
             trabajadores = response.data
         else:
             trabajadores = []
@@ -2186,7 +2189,7 @@ def mostrar_gestion_trabajadores_kpis():
                         # Verificar si el trabajador ya existe
                         response = supabase.from_('trabajadores').select('*').eq('nombre', nuevo_nombre).execute()
                         # Verificar si hay datos en la respuesta
-                        if response and response.data:
+                        if response and hasattr(response, 'data') and response.data:
                             st.markdown("<div class='error-box animate-fade-in'>❌ El trabajador ya existe.</div>", unsafe_allow_html=True)
                         else:
                             # Insertar nuevo trabajador
