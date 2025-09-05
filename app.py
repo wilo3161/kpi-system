@@ -236,7 +236,7 @@ body {
 
 /* Worker card mejorada */
 .worker-card {
-    background: #34d058;
+    background: #d01fd3;
     border-radius: 12px;
     padding: 16px;
     margin: 10px 0;
