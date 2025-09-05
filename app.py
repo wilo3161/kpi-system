@@ -164,7 +164,7 @@ body {
 /* ================================ */
 
 .kpi-card {
-    background: linear-gradient(145deg, #e6e6e6, #161616);
+    background: linear-gradient(145deg, #131313, #161616);
     border-radius: var(--border-radius);
     box-shadow: 
         0 8px 20px rgba(0, 0, 0, 0.3),
