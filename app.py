@@ -260,12 +260,12 @@ body {
     font-weight: bold;
     color: var(--text-color);
     margin-bottom: 6px;
-    font-size: 2.1em;
+    font-size: 2.65em;
 }
 
 .worker-metric {
     color: var(--text-secondary);
-    font-size: 1.95em;
+    font-size: 1.3em;
 }
 
 .trend-up {
