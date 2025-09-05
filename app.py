@@ -141,7 +141,7 @@ body {
 }
 
 .guide-metric {
-    font-size: 4.3em;
+    font-size: 2.3em;
     margin: 12px 0;
     color: var(--text-color);
     display: flex;
@@ -195,7 +195,7 @@ body {
 }
 
 .metric-value {
-    font-size: 4.8em;
+    font-size: 2.5em;
     font-weight: bold;
     color: var(--primary-color);
     line-height: 1.2;
@@ -205,7 +205,7 @@ body {
 
 .metric-label {
     color: var(--text-secondary);
-    font-size: 2.1em;
+    font-size: 4.1em;
     margin-bottom: 5px;
     font-weight: 500;
 }
