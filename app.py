@@ -141,7 +141,7 @@ body {
 }
 
 .guide-metric {
-    font-size: 2.3em;
+    font-size: 1.3em;
     margin: 12px 0;
     color: var(--text-color);
     display: flex;
@@ -164,7 +164,7 @@ body {
 /* ================================ */
 
 .kpi-card {
-    background: linear-gradient(145deg, #057dcd, #161616);
+    background: linear-gradient(145deg, #1e1e1e, #161616);
     border-radius: var(--border-radius);
     box-shadow: 
         0 8px 20px rgba(0, 0, 0, 0.3),
@@ -179,6 +179,19 @@ body {
     border: 1px solid rgba(230, 0, 18, 0.15);
 }
 
+/* Efecto de brillo al pasar el mouse */
+.kpi-card::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.6s;
+    transform: scale(0.8);
 }
 
 .kpi-card:hover::before {
@@ -195,17 +208,17 @@ body {
 }
 
 .metric-value {
-    font-size: 2.5em;
+    font-size: 2.8em;
     font-weight: bold;
     color: var(--primary-color);
-    line-height: 1.8;
+    line-height: 1.2;
     margin: 10px 0;
     text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
 }
 
 .metric-label {
     color: var(--text-secondary);
-    font-size: 1.2em;
+    font-size: 1.1em;
     margin-bottom: 5px;
     font-weight: 500;
 }
@@ -223,19 +236,13 @@ body {
 
 /* Worker card mejorada */
 .worker-card {
-        background: linear-gradient(145deg, #0052cc, #161616);
-    border-radius: var(--border-radius);
-    box-shadow: 
-        0 8px 20px rgba(0, 0, 0, 0.3),
-        0 0 15px rgba(230, 0, 18, 0.1) inset;
-    padding: 22px;
-    margin: 15px 0;
-    border-left: 6px solid var(--primary-color);
+    background: #1e1e1e;
+    border-radius: 12px;
+    padding: 16px;
+    margin: 10px 0;
+    border: 1px solid rgba(230, 0, 18, 0.1);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
     transition: var(--transition);
-    position: relative;
-    overflow: hidden;
-    backdrop-filter: blur(10px);
-    border: 1px solid rgba(230, 0, 18, 0.15);
 }
 
 .worker-card:hover {
@@ -247,22 +254,14 @@ body {
     font-weight: bold;
     color: var(--text-color);
     margin-bottom: 6px;
-    font-size: 2.4em;
+    font-size: 1.1em;
 }
 
 .worker-metric {
     color: var(--text-secondary);
-    font-size: 1.2em;
+    font-size: 0.95em;
 }
-/* Icono decorativo opcional en la tarjeta */
-.kpi-card::after {
-    content: "📊";
-    position: absolute;
-    bottom: 15px;
-    right: 15px;
-    font-size: 1.2em;
-    opacity: 0.3;
-    filter: blur(0.5px);
+
 .trend-up {
     color: var(--success-color);
 }
@@ -394,7 +393,6 @@ body {
 }
 </style>
 """, unsafe_allow_html=True)
-
 
 # ================================
 # Funciones de utilidad compartidas
