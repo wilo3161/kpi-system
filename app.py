@@ -405,7 +405,7 @@ body {
 # ================================
 
 def validar_fecha(fecha: str) -> bool:
-    """Valida que la fecha tenga el formato YYYY-MM-DD"""
+    """Valida que una fecha tenga el formato correcto"""
     try:
         datetime.strptime(fecha, "%Y-%m-%d")
         return True
@@ -431,17 +431,6 @@ def validar_distribuciones(valor: Any) -> bool:
 def hash_password(pw: str) -> str:
     """Genera un hash SHA256 para una contraseña."""
     return hashlib.sha256(pw.encode()).hexdigest()
-    def validar_fecha(fecha: str) -> bool:
-    """Valida que la fecha tenga el formato YYYY-MM-DD"""
-    try:
-        datetime.strptime(fecha, "%Y-%m-%d")
-        return True
-    except ValueError:
-        return False
-
-def validar_distribuciones(valor: int) -> bool:
-    """Valida que el valor de distribuciones sea un entero no negativo"""
-    return isinstance(valor, int) and valor >= 0
 
 # ================================
 # Funciones de KPIs
@@ -488,19 +477,8 @@ def obtener_trabajadores() -> pd.DataFrame:
     try:
         response = supabase.from_('trabajadores').select('nombre, equipo').eq('activo', True).order('equipo,nombre', desc=False).execute()
         # Verificar si hay datos en la respuesta
-if hasattr(response, 'error') and response.error:
-    logger.error(f"No se pudieron guardar las distribuciones semanales: {response.error}")
-    return False if hasattr(response, 'error') and response.error:
-            logger.error(f"No se pudieron guardar las distribuciones semanales: {response.error}")
-            return False
-        else:
-            logger.info(f"Distribuciones semanales guardadas correctamente para la semana {semana}")
-            return True
-    except Exception as e:
-        logger.error(f"Error al guardar distribuciones semanales: {e}", exc_info=True)
-else:
-    logger.info(f"Distribuciones semanales guardadas correctamente para la semana {semana}")
-    return True
+        if response and hasattr(response, 'data') and response.data:
+            df = pd.DataFrame(response.data)
             # Asegurar que Luis Perugachi esté en el equipo de Distribución
             if 'Luis Perugachi' in df['nombre'].values:
                 df.loc[df['nombre'] == 'Luis Perugachi', 'equipo'] = 'Distribución'
@@ -705,25 +683,18 @@ def guardar_distribuciones_semanales(semana: str, tempo_distribuciones: int, lui
     
     try:
         # Validar datos
-        if not all([validar_fecha(semana),
-                    validar_distribuciones(tempo_distribuciones),
-                    validar_distribuciones(luis_distribuciones),
-                    validar_distribuciones(meta_semanal)]):
+        if not all([
+            validar_fecha(semana),
+            validar_distribuciones(tempo_distribuciones),
+            validar_distribuciones(luis_distribuciones),
+            validar_distribuciones(meta_semanal)
+        ]):
             logger.error("Datos de distribuciones inválidos")
             return False
             
         # Verificar si ya existe registro para esta semana
         response = supabase.from_('distribuciones_semanales').select('*').eq('semana', semana).execute()
         
-        if response and hasattr(response, 'data') and response.data:
-            # Actualizar registro existente
-            update_data = {
-                'tempo_distribuciones': tempo_distribuciones,
-                'luis_distribuciones': luis_distribuciones,
-                'meta_semanal': meta_semanal,
-                'updated_at': datetime.now().isoformat()
-            }
-    response = supabase.from_('distribuciones_semanales').select('*').eq('semana', semana).execute()
         if response and hasattr(response, 'data') and response.data:
             # Actualizar registro existente
             update_data = {
@@ -1010,13 +981,14 @@ def obtener_remitentes() -> pd.DataFrame:
             'phone': ["0993052744", "0987654321"]
         })
 
-ef guardar_guia(store_name: str, brand: str, url: str, sender_name: str) -> bool:
+def guardar_guia(store_name: str, brand: str, url: str, sender_name: str) -> bool:
     """Guarda una guía en Supabase"""
     if supabase is None:
         logger.error("Cliente de Supabase no inicializado")
         return False
     
     try:
+        # Insertar nueva guía
         data = {
             'store_name': store_name,
             'brand': brand,
@@ -1025,26 +997,19 @@ ef guardar_guia(store_name: str, brand: str, url: str, sender_name: str) -> bool
             'status': 'Pending',
             'created_at': datetime.now().isoformat()
         }
+        
         response = supabase.from_('guide_logs').insert(data).execute()
         
-        # Verificar si la inserción fue exitosa - CORRECCIÓN AQUÍ
-        if hasattr(response, 'error') and response.error:
-            logger.error(f"No se pudo guardar la guía en Supabase: {response.error}")
-            return False
-        else:
+        # Verificar si la inserción fue exitosa
+        if response and not hasattr(response, 'error') or response.error is None:
             logger.info(f"Guía guardada correctamente para {store_name}")
             return True
+        else:
+            logger.error(f"No se pudo guardar la guía en Supabase: {getattr(response, 'error', 'Error desconocido')}")
+            return False
     except Exception as e:
         logger.error(f"Error al guardar guía en Supabase: {e}", exc_info=True)
         return False
-        
-        # Verificar si la inserción fue exitosa
-if hasattr(response, 'error') and response.error:
-    logger.error(f"No se pudo guardar la guía en Supabase: {response.error}")
-    return False
-else:
-    logger.info(f"Guía guardada correctamente para {store_name}")
-    return True
 
 def obtener_historial_guias() -> pd.DataFrame:
     """Obtiene el historial de guías desde Supabase"""
@@ -1072,122 +1037,34 @@ def obtener_historial_guias() -> pd.DataFrame:
         logger.error(f"Error al cargar historial de guías de Supabase: {e}", exc_info=True)
         return pd.DataFrame()
 
-def obtener_url_logo(brand: str) -> str:
-    """Obtiene la URL pública del logo de la marca desde Supabase Storage"""
-    if supabase is None:
-        logger.error("Cliente de Supabase no inicializado")
-        return None
+def get_logo_url(brand: str) -> str:
+    """Devuelve la URL pública del logo en Supabase según la marca."""
+    # Reemplaza con la URL base correcta de tu bucket de Supabase Storage
+    base_url = "https://tu-proyecto.supabase.co/storage/v1/object/public/logos"
     
-    try:
-        # Suponiendo que los logos están en el bucket 'logos'
-        bucket_name = 'logos'
-        file_name = f"{brand.lower()}.jpg"
-        
-        # Obtener la URL pública
-        logo_url = https://supabase.com/dashboard/project/nsgdyqoqzlcyyameccqn/storage/buckets/images
-        return logo_url
-    except Exception as e:
-        logger.error(f"Error al obtener URL del logo para {brand}: {e}", exc_info=True)
-        return None
+    if brand == "Fashion":
+        return f"{base_url}/fashion_logo.png"
+    elif brand == "Tempo":
+        return f"{base_url}/tempo_logo.png"
+    else:
+        return f"{base_url}/default_logo.png"
 
-def generar_pdf_guia(store_name: str, brand: str, url: str, sender_name: str, tracking_number: str) -> FPDF:
-    """Genera un PDF con la guía de envío"""
-    # Crear instancia de FPDF
-    pdf = FPDF()
-    pdf.add_page()
-    
-    # === 1. LOGO DE LA EMPRESA ===
-    logo_url = obtener_url_logo(brand)
-    logo_height = 0
-    
-    if logo_url:
-        try:
-            # Descargar el logo
-            response = requests.get(logo_url)
-            if response.status_code == 200:
-                # Guardar en un archivo temporal
-                with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as temp_file:
-                    temp_file.write(response.content)
-                    temp_logo_path = temp_file.name
-                
-                # Agregar el logo al PDF
-                pdf.image(temp_logo_path, x=10, y=10, w=40)
-                os.unlink(temp_logo_path)
-                logo_height = 20  # Altura del logo para ajustar el texto
-            else:
-                logger.warning(f"No se pudo descargar el logo de {logo_url}")
-        except Exception as e:
-            logger.error(f"Error al procesar el logo: {e}", exc_info=True)
-    
-    # Título (ajustado según si hay logo)
-    pdf.set_font("Arial", "B", 16)
-    pdf.set_xy(10, 10 + logo_height)
-    pdf.cell(0, 10, f"Guía de Envío - {brand}", 0, 1, "C")
-    pdf.ln(15 + logo_height)
-    
-    # === 2. INFORMACIÓN DEL REMITENTE ===
-    pdf.set_font("Arial", "B", 12)
-    pdf.cell(0, 10, "Remitente:", 0, 1)
-    pdf.set_font("Arial", "", 12)
-    
-    # Buscar información del remitente
-    remitentes = obtener_remitentes()
-    remitente_info = remitentes[remitentes['name'] == sender_name].iloc[0]
-    
-    pdf.cell(0, 10, f"{remitente_info['name']}", 0, 1)
-    pdf.cell(0, 10, f"{remitente_info['address']}", 0, 1)
-    pdf.cell(0, 10, f"Tel: {remitente_info['phone']}", 0, 1)
-    pdf.ln(10)
-    
-    # === 3. INFORMACIÓN DEL DESTINATARIO (TIENDA) ===
-    pdf.set_font("Arial", "B", 12)
-    pdf.cell(0, 10, "Destinatario:", 0, 1)
-    pdf.set_font("Arial", "", 12)
-    
-    # Buscar información de la tienda
-    tiendas = obtener_tiendas()
-    tienda_info = tiendas[tiendas['name'] == store_name].iloc[0]
-    
-    pdf.cell(0, 10, f"{tienda_info['name']}", 0, 1)
-    # Suponiendo que hay campos de dirección y teléfono en la tabla de tiendas
-    if 'address' in tiendas.columns:
-        pdf.cell(0, 10, f"{tienda_info['address']}", 0, 1)
-    if 'phone' in tiendas.columns:
-        pdf.cell(0, 10, f"Tel: {tienda_info['phone']}", 0, 1)
-    
-    y_after_destinatario = pdf.get_y()
-    pdf.ln(15)
-    
-    # === 4. CÓDIGO QR y NÚMERO DE SEGUIMIENTO (debajo del destinatario) ===
-    # Generar QR
-    qr_img = generar_qr_imagen(url)
-    with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as temp_file:
-        qr_img.save(temp_file.name)
-        temp_qr_path = temp_file.name
-    
-    # Posicionar QR a la derecha, debajo del destinatario
-    qr_x = 100
-    qr_y = y_after_destinatario + 10
-    pdf.image(temp_qr_path, x=qr_x, y=qr_y, w=40, h=40)
-    os.unlink(temp_qr_path)
-    
-    # === 5. NÚMERO DE SEGUIMIENTO debajo del QR ===
-    pdf.set_xy(qr_x, qr_y + 45)
-    pdf.set_font("Arial", "B", 12)
-    pdf.cell(0, 10, f"Número de Seguimiento:", 0, 1)
-    pdf.set_font("Arial", "", 12)
-    pdf.cell(0, 10, f"{tracking_number}", 0, 1)
-    
-    # === 6. URL DEL PEDIDO ===
-    pdf.set_xy(10, y_after_destinatario + 10)
-    pdf.set_font("Arial", "B", 12)
-    pdf.cell(0, 10, "URL del Pedido:", 0, 1)
-    pdf.set_font("Arial", "I", 10)
-    pdf.cell(0, 10, url, 0, 1)
-    
-    return pdf
-    
-    # El resto del código permanece igual...
+def generar_pdf_guia(
+    store_name: str,
+    brand: str,
+    url: str,
+    sender_name: str,
+    sender_address: str,
+    sender_phone: str,
+    tracking_number: str
+) -> bytes:
+    """Genera un PDF de la guía de envío con diseño mejorado y logos desde Supabase."""
+    try:
+        # Crear un PDF en memoria
+        pdf = FPDF()
+        pdf.add_page()
+        pdf.set_auto_page_break(auto=True, margin=15)
+        pdf.set_font("Arial", "", 10)
 
         # === 1. REMITENTE (arriba a la izquierda) ===
         pdf.set_xy(10, 10)
