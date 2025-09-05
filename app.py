@@ -179,19 +179,6 @@ body {
     border: 1px solid rgba(230, 0, 18, 0.15);
 }
 
-/* Efecto de brillo al pasar el mouse */
-.kpi-card::before {
-    content: '';
-    position: absolute;
-    top: -50%;
-    left: -50%;
-    width: 200%;
-    height: 200%;
-    background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
-    pointer-events: none;
-    opacity: 0;
-    transition: opacity 0.6s;
-    transform: scale(0.8);
 }
 
 .kpi-card:hover::before {
