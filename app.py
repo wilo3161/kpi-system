@@ -265,7 +265,7 @@ body {
 
 .worker-metric {
     color: var(--text-secondary);
-    font-size: 0.95em;
+    font-size: 1.95em;
 }
 
 .trend-up {
