@@ -198,7 +198,7 @@ body {
     font-size: 2.5em;
     font-weight: bold;
     color: var(--primary-color);
-    line-height: 1.2;
+    line-height: 1.8;
     margin: 10px 0;
     text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
 }
