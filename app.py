@@ -236,13 +236,19 @@ body {
 
 /* Worker card mejorada */
 .worker-card {
-    background: #1e1e1e;
-    border-radius: 12px;
-    padding: 16px;
-    margin: 10px 0;
-    border: 1px solid rgba(230, 0, 18, 0.1);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+   background: linear-gradient(145deg, #057dcd, #161616);
+    border-radius: var(--border-radius);
+    box-shadow: 
+        0 8px 20px rgba(0, 0, 0, 0.3),
+        0 0 15px rgba(230, 0, 18, 0.1) inset;
+    padding: 22px;
+    margin: 15px 0;
+    border-left: 6px solid var(--primary-color);
     transition: var(--transition);
+    position: relative;
+    overflow: hidden;
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(230, 0, 18, 0.15);
 }
 
 .worker-card:hover {
