@@ -236,7 +236,7 @@ body {
 
 /* Worker card mejorada */
 .worker-card {
-   background: linear-gradient(145deg, #057dcd, #161616);
+   background: linear-gradient(145deg, #0052cc, #161616);
     border-radius: var(--border-radius);
     box-shadow: 
         0 8px 20px rgba(0, 0, 0, 0.3),
