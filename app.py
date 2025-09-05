@@ -195,7 +195,7 @@ body {
 }
 
 .metric-value {
-    font-size: 2.8em;
+    font-size: 4.8em;
     font-weight: bold;
     color: var(--primary-color);
     line-height: 1.2;
