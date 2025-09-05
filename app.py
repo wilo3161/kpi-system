@@ -395,6 +395,7 @@ body {
 </style>
 """, unsafe_allow_html=True)
 
+
 # ================================
 # Funciones de utilidad compartidas
 # ================================
