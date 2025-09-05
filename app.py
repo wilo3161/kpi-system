@@ -260,7 +260,7 @@ body {
     font-weight: bold;
     color: var(--text-color);
     margin-bottom: 6px;
-    font-size: 1.1em;
+    font-size: 2.1em;
 }
 
 .worker-metric {
