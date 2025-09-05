@@ -205,7 +205,7 @@ body {
 
 .metric-label {
     color: var(--text-secondary);
-    font-size: 4.1em;
+    font-size: 2.2em;
     margin-bottom: 5px;
     font-weight: 500;
 }
