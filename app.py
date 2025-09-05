@@ -405,7 +405,7 @@ body {
 # ================================
 
 def validar_fecha(fecha: str) -> bool:
-    """Valida que una fecha tenga el formato correcto"""
+    """Valida que la fecha tenga el formato YYYY-MM-DD"""
     try:
         datetime.strptime(fecha, "%Y-%m-%d")
         return True
