@@ -267,7 +267,15 @@ body {
     color: var(--text-secondary);
     font-size: 0.95em;
 }
-
+/* Icono decorativo opcional en la tarjeta */
+.kpi-card::after {
+    content: "📊";
+    position: absolute;
+    bottom: 15px;
+    right: 15px;
+    font-size: 1.2em;
+    opacity: 0.3;
+    filter: blur(0.5px);
 .trend-up {
     color: var(--success-color);
 }
