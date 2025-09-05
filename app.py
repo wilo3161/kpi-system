@@ -141,7 +141,7 @@ body {
 }
 
 .guide-metric {
-    font-size: 1.3em;
+    font-size: 4.3em;
     margin: 12px 0;
     color: var(--text-color);
     display: flex;
