@@ -393,7 +393,7 @@ body {
     }
 
     .metric-value {
-        font-size: 2.2em;
+        font-size: 2.5em;
     }
 
     .password-container {
