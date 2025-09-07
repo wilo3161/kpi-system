@@ -1055,12 +1055,12 @@ def obtener_url_logo(brand: str) -> str:
             
         # Extraer el project_ref de la URL
         # Ejemplo: https://nsgdyqoqzlcyyameccqn.supabase.co
-        parts = SUPABASE_URL.split('//')
+        parts = SUPABASE_URL.split('https://supabase.com/dashboard/project/nsgdyqoqzlcyyameccqn')
         if len(parts) < 2:
             logger.error("Formato de SUPABASE_URL incorrecto")
             return None
             
-        domain_parts = parts[1].split('.')
+        domain_parts = parts[1].split('https://supabase.com/dashboard/project/nsgdyqoqzlcyyameccqn')
         if len(domain_parts) < 2:
             logger.error("Formato de SUPABASE_URL incorrecto")
             return None
@@ -1070,7 +1070,7 @@ def obtener_url_logo(brand: str) -> str:
         file_name = f"{brand.lower()}.png"
         
         # Construir la URL pública del logo
-        logo_url = f"https://{project_ref}.supabase.co/storage/v1/object/public/{bucket_name}/{file_name}"
+        logo_url = f"https://supabase.com/dashboard/project/nsgdyqoqzlcyyameccqn/storage/buckets/images"
         return logo_url
     except Exception as e:
         logger.error(f"Error al obtener URL del logo para {brand}: {e}", exc_info=True)
