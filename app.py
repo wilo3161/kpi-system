@@ -1078,18 +1078,25 @@ def obtener_url_logo(brand: str) -> str:
         # Construir la URL pública correcta para Supabase Storage
         logo_url = f"https://{project_ref}.supabase.co/storage/v1/object/public/{bucket_name}/{file_name}"
         
-        # Verificar que la URL sea accesible
-        response = requests.head(logo_url, timeout=5)
-        if response.status_code == 200:
-            logger.info(f"Logo encontrado: {logo_url}")
-            return logo_url
-        else:
-            logger.warning(f"Logo no encontrado en: {logo_url} (status: {response.status_code})")
-            return None
+        return logo_url
             
     except Exception as e:
         logger.error(f"Error al obtener URL del logo para {brand}: {e}", exc_info=True)
         return None
+
+def obtener_logo_imagen(brand: str) -> Image.Image:
+    """Obtiene y devuelve la imagen del logo desde Supabase Storage"""
+    logo_url = obtener_url_logo(brand)
+    if logo_url:
+        try:
+            response = requests.get(logo_url, timeout=10)
+            if response.status_code == 200:
+                return Image.open(BytesIO(response.content))
+            else:
+                logger.warning(f"No se pudo descargar el logo desde {logo_url}. Status: {response.status_code}")
+        except Exception as e:
+            logger.error(f"Error al cargar el logo: {e}")
+    return None
 
 def generar_pdf_guia(store_name: str, brand: str, url: str, sender_name: str, tracking_number: str) -> bytes:
     """Genera un PDF con la guía de envío en el formato exacto de la imagen"""
@@ -1146,42 +1153,33 @@ def generar_pdf_guia(store_name: str, brand: str, url: str, sender_name: str, tr
         
         # === LOGO E INFORMACIÓN ADICIONAL ===
         # Logo - intentar cargar desde Supabase
-        logo_url = obtener_url_logo(brand)
+        logo_img = obtener_logo_imagen(brand)
         current_y = pdf.get_y()
         
-        if logo_url:
+        if logo_img:
             try:
-                logger.info(f"Intentando descargar logo desde: {logo_url}")
-                response = requests.get(logo_url, timeout=10)
-                if response.status_code == 200:
-                    with tempfile.NamedTemporaryFile(delete=False, suffix='.jpg') as temp_file:
-                        temp_file.write(response.content)
-                        temp_logo_path = temp_file.name
-                    
-                    # Insertar logo centrado
-                    pdf.image(temp_logo_path, x=80, y=current_y, w=50)
-                    os.unlink(temp_logo_path)
-                    
-                    # Ajustar la posición Y después del logo
-                    current_y += 55
-                    pdf.set_y(current_y)
-                    logger.info("Logo insertado correctamente en el PDF")
-                else:
-                    logger.warning(f"No se pudo descargar el logo desde {logo_url}. Status: {response.status_code}")
-                    # Insertar texto alternativo
-                    pdf.set_font("Arial", "I", 12)
-                    pdf.cell(0, 10, f"[Logo de {brand}]", 0, 1, "C")
-                    current_y += 10
-                    pdf.set_y(current_y)
+                # Guardar imagen temporalmente
+                with tempfile.NamedTemporaryFile(delete=False, suffix='.jpg') as temp_file:
+                    logo_img.save(temp_file.name, format='JPEG')
+                    temp_logo_path = temp_file.name
+                
+                # Insertar logo centrado
+                pdf.image(temp_logo_path, x=80, y=current_y, w=50)
+                os.unlink(temp_logo_path)
+                
+                # Ajustar la posición Y después del logo
+                current_y += 55
+                pdf.set_y(current_y)
+                logger.info("Logo insertado correctamente en el PDF")
             except Exception as e:
-                logger.error(f"Error al cargar el logo: {e}")
+                logger.error(f"Error al insertar el logo en el PDF: {e}")
                 # Insertar texto alternativo
                 pdf.set_font("Arial", "I", 12)
                 pdf.cell(0, 10, f"[Logo de {brand}]", 0, 1, "C")
                 current_y += 10
                 pdf.set_y(current_y)
         else:
-            # Insertar texto alternativo si no hay URL de logo
+            # Insertar texto alternativo si no hay logo
             pdf.set_font("Arial", "I", 12)
             pdf.cell(0, 10, f"[Logo de {brand}]", 0, 1, "C")
             current_y += 10
@@ -1210,6 +1208,145 @@ def generar_pdf_guia(store_name: str, brand: str, url: str, sender_name: str, tr
     except Exception as e:
         logger.error(f"Error al generar PDF de guía: {e}", exc_info=True)
         return b""
+
+def pil_image_to_bytes(pil_image: Image.Image) -> bytes:
+    """Convierte un objeto de imagen de PIL a bytes."""
+    buf = io.BytesIO()
+    pil_image.save(buf, format="PNG")
+    return buf.getvalue()
+
+# Función para mostrar la generación de guías
+def mostrar_generacion_guias():
+    """Muestra la interfaz para generar guías de envío"""
+    st.markdown("<h1 class='header-title animate-fade-in'>📦 Generación de Guías de Envío</h1>", unsafe_allow_html=True)
+    
+    if supabase is None:
+        st.markdown("<div class='error-box animate-fade-in'>❌ Error de conexión a la base de datos. Verifique las variables de entorno.</div>", unsafe_allow_html=True)
+        return
+    
+    # Obtener datos necesarios
+    tiendas = obtener_tiendas()
+    remitentes = obtener_remitentes()
+    
+    if tiendas.empty or remitentes.empty:
+        st.markdown("<div class='warning-box animate-fade-in'>⚠️ No hay tiendas o remitentes configurados. Por favor, configure primero.</div>", unsafe_allow_html=True)
+        return
+    
+    # Inicializar estado de sesión si no existe
+    if 'show_preview' not in st.session_state:
+        st.session_state.show_preview = False
+    if 'pdf_data' not in st.session_state:
+        st.session_state.pdf_data = None
+    
+    # Formulario para generar guía
+    st.markdown("<div class='guide-section animate-fade-in'>", unsafe_allow_html=True)
+    st.markdown("<h2 class='section-title animate-fade-in'>Generar Nueva Guía</h2>", unsafe_allow_html=True)
+    
+    with st.form("form_generar_guia", clear_on_submit=False):
+        col1, col2 = st.columns(2)
+        with col1:
+            store_name = st.selectbox("Seleccione Tienda", tiendas['name'].tolist(), key="store_select")
+            brand = st.radio("Seleccione Empresa:", ["Fashion", "Tempo"], horizontal=True, key="brand_select")
+        
+        with col2:
+            sender_name = st.selectbox("Seleccione Remitente:", options=remitentes['name'].tolist(), key="sender_select")
+            url = st.text_input("Ingrese URL del Pedido:", key="url_input", placeholder="https://...")
+        
+        # Botón de submit dentro del formulario
+        submitted = st.form_submit_button("Generar Guía", use_container_width=True)
+        
+        if submitted:
+            if not all([store_name, brand, url, sender_name]):
+                st.markdown("<div class='error-box animate-fide-in'>❌ Por favor, complete todos los campos.</div>", unsafe_allow_html=True)
+                st.session_state.show_preview = False
+            elif not url.startswith(('http://', 'https://')):
+                st.markdown("<div class='error-box animate-fade-in'>❌ La URL debe comenzar con http:// or https://</div>", unsafe_allow_html=True)
+                st.session_state.show_preview = False
+            else:
+                # Guardar la guía
+                if guardar_guia(store_name, brand, url, sender_name):
+                    st.session_state.show_preview = True
+                    # Obtener información del remitente
+                    remitente_info = remitentes[remitentes['name'] == sender_name].iloc[0]
+                    st.session_state.remitente_address = remitente_info['address']
+                    st.session_state.remitente_phone = remitente_info['phone']
+                    st.session_state.tracking_number = generar_numero_seguimiento(1)
+                    
+                    # Generar PDF y guardarlo en session state
+                    st.session_state.pdf_data = generar_pdf_guia(
+                        store_name, brand, url, sender_name, st.session_state.tracking_number
+                    )
+                    
+                    st.markdown("<div class='success-box animate-fade-in'>✅ Guía generada correctamente. Puede ver la previsualización y exportarla.</div>", unsafe_allow_html=True)
+                else:
+                    st.markdown("<div class='error-box animate-fade-in'>❌ Error al guardar la guía.</div>", unsafe_allow_html=True)
+                    st.session_state.show_preview = False
+    
+    st.markdown("</div>", unsafe_allow_html=True)
+    
+    # Previsualización de la guía
+    if st.session_state.show_preview:
+        st.markdown("<div class='guide-section animate-fade-in'>", unsafe_allow_html=True)
+        st.markdown("<h2 class='section-title animate-fade-in'>Previsualización de la Guía</h2>", unsafe_allow_html=True)
+        
+        # Información de la guía
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.markdown(f"<div class='guide-metric'><span class='guide-icon'>🏬</span> <strong>Tienda:</strong> {st.session_state.get('store_select', '')}</div>", unsafe_allow_html=True)
+        with col2:
+            st.markdown(f"<div class='guide-metric'><span class='guide-icon'>🏷️</span> <strong>Marca:</strong> {st.session_state.get('brand_select', '')}</div>", unsafe_allow_html=True)
+        with col3:
+            st.markdown(f"<div class='guide-metric'><span class='guide-icon'>📦</span> <strong>Remitente:</strong> {st.session_state.get('sender_select', '')}</div>", unsafe_allow_html=True)
+        
+        st.markdown(f"<div class='guide-metric'><span class='guide-icon'>🔗</span> <strong>URL del Pedido:</strong> <a href='{st.session_state.get('url_input', '')}' target='_blank'>{st.session_state.get('url_input', '')}</a></div>", unsafe_allow_html=True)
+        
+        # Mostrar logo y QR en la previsualización
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # Logo de la marca
+            st.markdown("<h3>Logo de la Marca</h3>", unsafe_allow_html=True)
+            logo_img = obtener_logo_imagen(st.session_state.get('brand_select', ''))
+            if logo_img:
+                logo_bytes = pil_image_to_bytes(logo_img)
+                st.image(logo_bytes, width=150)
+            else:
+                st.warning("Logo no disponible")
+        
+        with col2:
+            # Código QR
+            st.markdown("<h3>Código QR</h3>", unsafe_allow_html=True)
+            qr_img = generar_qr_imagen(st.session_state.get('url_input', ''))
+            qr_bytes = pil_image_to_bytes(qr_img)
+            st.image(qr_bytes, width=150)
+        
+        # Botones de exportación
+        st.markdown("<div class='export-buttons animate-fade-in'>", unsafe_allow_html=True)
+        col1, col2 = st.columns(2)
+        with col1:
+            # Descargar PDF
+            if st.session_state.pdf_data is not None:
+                st.download_button(
+                    label="📄 Descargar PDF",
+                    data=st.session_state.pdf_data,
+                    file_name=f"guia_{st.session_state.get('store_select', '')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
+                    mime="application/pdf",
+                    use_container_width=True,
+                    key="download_pdf_button"
+                )
+        with col2:
+            if st.button("🖨️ Marcar como Impresa", use_container_width=True, key="mark_printed_button"):
+                # Aquí iría la lógica para actualizar el estado de la guía
+                st.markdown("<div class='success-box animate-fade-in'>✅ Guía marcada como impresa.</div>", unsafe_allow_html=True)
+                st.session_state.show_preview = False
+                # Limpiar datos de la sesión
+                if 'pdf_data' in st.session_state:
+                    del st.session_state.pdf_data
+                time.sleep(1)
+                st.rerun()
+        st.markdown("</div>", unsafe_allow_html=True)
+        
+        st.markdown("</div>", unsafe_allow_html=True)
 
 # ================================
 # Sistema de autenticación
