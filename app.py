@@ -1079,6 +1079,18 @@ def obtener_historial_guias() -> pd.DataFrame:
         logger.error(f"Error al cargar historial de guías de Supabase: {e}", exc_info=True)
         return pd.DataFrame()
 
+# ================================
+# FUNCIONES MEJORADAS PARA MANEJO DE IMÁGENES
+# ================================
+
+def verificar_imagen_existe(url: str) -> bool:
+    """Verifica si una imagen existe en la URL proporcionada"""
+    try:
+        response = requests.head(url, timeout=5)
+        return response.status_code == 200
+    except:
+        return False
+
 def obtener_url_logo(brand: str) -> str:
     """Obtiene la URL pública del logo de la marca desde Supabase Storage"""
     if supabase is None:
@@ -1090,13 +1102,30 @@ def obtener_url_logo(brand: str) -> str:
         project_ref = "nsgdyqoqzlcyyameccqn"
         bucket_name = 'images'
         
-        # Los archivos son JPG, no PNG
-        file_name = f"{brand.lower()}.jpg"
+        # Intentar con diferentes extensiones y formatos
+        posibles_nombres = [
+            f"{brand.lower()}.jpg",
+            f"{brand.lower()}.jpeg",
+            f"{brand.lower()}.png",
+            f"{brand.upper()}.JPG",
+            f"{brand.upper()}.JPEG",
+            f"{brand.upper()}.PNG",
+            f"{brand.capitalize()}.jpg",
+            f"{brand.capitalize()}.jpeg",
+            f"{brand.capitalize()}.png"
+        ]
         
-        # Construir la URL pública correcta para Supabase Storage
-        logo_url = f"https://{project_ref}.supabase.co/storage/v1/object/public/{bucket_name}/{file_name}"
+        for file_name in posibles_nombres:
+            # Construir la URL pública correcta para Supabase Storage
+            logo_url = f"https://{project_ref}.supabase.co/storage/v1/object/public/{bucket_name}/{file_name}"
+            
+            # Verificar si la imagen existe
+            if verificar_imagen_existe(logo_url):
+                logger.info(f"Imagen encontrada: {logo_url}")
+                return logo_url
         
-        return logo_url
+        logger.error(f"No se encontró ninguna imagen para la marca {brand}")
+        return None
             
     except Exception as e:
         logger.error(f"Error al obtener URL del logo para {brand}: {e}", exc_info=True)
@@ -1105,16 +1134,23 @@ def obtener_url_logo(brand: str) -> str:
 def obtener_logo_imagen(brand: str) -> Image.Image:
     """Obtiene y devuelve la imagen del logo desde Supabase Storage"""
     logo_url = obtener_url_logo(brand)
-    if logo_url:
-        try:
-            response = requests.get(logo_url, timeout=10)
-            if response.status_code == 200:
-                return Image.open(BytesIO(response.content))
-            else:
-                logger.warning(f"No se pudo descargar el logo desde {logo_url}. Status: {response.status_code}")
-        except Exception as e:
-            logger.error(f"Error al cargar el logo: {e}")
-    return None
+    
+    if not logo_url:
+        logger.error(f"No se pudo obtener URL del logo para {brand}")
+        return None
+        
+    try:
+        logger.info(f"Intentando descargar imagen desde: {logo_url}")
+        response = requests.get(logo_url, timeout=10)
+        
+        if response.status_code == 200:
+            return Image.open(BytesIO(response.content))
+        else:
+            logger.warning(f"No se pudo descargar el logo desde {logo_url}. Status: {response.status_code}")
+            return None
+    except Exception as e:
+        logger.error(f"Error al cargar el logo: {e}")
+        return None
 
 def generar_pdf_guia(store_name: str, brand: str, url: str, sender_name: str, tracking_number: str) -> bytes:
     """Genera un PDF con la guía de envío en el formato exacto de la imagen"""
@@ -1176,9 +1212,15 @@ def generar_pdf_guia(store_name: str, brand: str, url: str, sender_name: str, tr
         
         if logo_img:
             try:
+                # Convertir a RGB si es necesario (para PNG con canal alpha)
+                if logo_img.mode in ('RGBA', 'LA'):
+                    background = Image.new('RGB', logo_img.size, (255, 255, 255))
+                    background.paste(logo_img, mask=logo_img.split()[-1])
+                    logo_img = background
+                
                 # Guardar imagen temporalmente
                 with tempfile.NamedTemporaryFile(delete=False, suffix='.jpg') as temp_file:
-                    logo_img.save(temp_file.name, format='JPEG')
+                    logo_img.save(temp_file.name, format='JPEG', quality=95)
                     temp_logo_path = temp_file.name
                 
                 # Insertar logo centrado
