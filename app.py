@@ -24,7 +24,11 @@ from io import BytesIO
 from PIL import Image as PILImage
 import os
 
-# Configuración de logging
+# ================================
+# CONFIGURACIÓN INICIAL Y LOGGING
+# ================================
+
+# Configuración de logging para registrar eventos y errores
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
@@ -35,17 +39,20 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Configuración de Supabase
-SUPABASE_URL = os.environ.get("SUPABASE_URL")
-SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
+# Configuración de Supabase con las credenciales proporcionadas
+SUPABASE_URL = "https://nsgdyqoqzlcyyameccqn.supabase.co"
+SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5zZ2R5cW9xemxjeXlhbWVjY3FuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTYwMTA3MzksImV4cCI6MjA3MTU4NjczOX0.jA6sem9IMts6aPeYlMsldbtQaEaKAuQaQ1xf03TdWso"
 ADMIN_PASSWORD = "Wilo3161"  # Contraseña única sensible a mayúsculas
 
-# Configuración de imágenes
+# Configuración de directorios para imágenes
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 IMAGES_DIR = os.path.join(APP_DIR, "images")
 os.makedirs(IMAGES_DIR, exist_ok=True)
 
-# Inicializar cliente de Supabase
+# ================================
+# INICIALIZACIÓN DE SUPABASE
+# ================================
+
 @st.cache_resource
 def init_supabase() -> Client:
     """Inicializa y cachea el cliente de Supabase."""
@@ -64,7 +71,7 @@ def init_supabase() -> Client:
 # Inicializar cliente de Supabase
 supabase = init_supabase()
 
-# Configuración de página
+# Configuración de página de Streamlit
 st.set_page_config(
     layout="wide",
     page_title="Sistema de KPIs Aeropostale",
@@ -72,7 +79,11 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# CSS profesional mejorado (sin cambios)
+# ================================
+# ESTILOS CSS PERSONALIZADOS
+# ================================
+
+# CSS profesional mejorado con colores corporativos de Aeropostale
 st.markdown("""
 <style>
 /* Colores corporativos de Aeropostale */
@@ -401,7 +412,7 @@ body {
 """, unsafe_allow_html=True)
 
 # ================================
-# Funciones de utilidad compartidas
+# FUNCIONES DE UTILIDAD COMPARTIDAS
 # ================================
 
 def validar_fecha(fecha: str) -> bool:
@@ -433,7 +444,7 @@ def hash_password(pw: str) -> str:
     return hashlib.sha256(pw.encode()).hexdigest()
 
 # ================================
-# Funciones de KPIs
+# FUNCIONES DE KPIs
 # ================================
 
 # Funciones de cálculo de KPIs
@@ -461,7 +472,10 @@ def productividad_hora(cantidad: float, horas_trabajo: float) -> float:
     """Calcula la productividad por hora"""
     return cantidad / horas_trabajo if horas_trabajo > 0 else 0
 
-# Funciones de acceso a datos (ahora usando Supabase)
+# ================================
+# FUNCIONES DE ACCESO A DATOS (SUPABASE)
+# ================================
+
 def obtener_trabajadores() -> pd.DataFrame:
     """Obtiene la lista de trabajadores desde Supabase"""
     if supabase is None:
@@ -653,7 +667,7 @@ def obtener_datos_fecha(fecha: str) -> pd.DataFrame:
         return pd.DataFrame()
 
 # ================================
-# Nuevas funciones para distribuciones y dependencias
+# NUEVAS FUNCIONES PARA DISTRIBUCIONES Y DEPENDENCIAS
 # ================================
 
 def obtener_distribuciones_semana(fecha_inicio_semana: str) -> dict:
@@ -822,7 +836,10 @@ def verificar_alertas_abastecimiento():
     
     return alertas
 
-# Funciones de visualización
+# ================================
+# FUNCIONES DE VISUALIZACIÓN
+# ================================
+
 def crear_grafico_interactivo(df: pd.DataFrame, x: str, y: str, title: str, 
                              xlabel: str, ylabel: str, tipo: str = 'bar') -> go.Figure:
     """Crea gráficos interactivos con Plotly"""
@@ -915,8 +932,9 @@ def crear_grafico_frasco(porcentaje: float, titulo: str) -> go.Figure:
         return go.Figure()
 
 # ================================
-# Funciones de Guías (NUEVAS) - CORREGIDAS
+# FUNCIONES DE GUIAS (NUEVAS) - CORREGIDAS
 # ================================
+
 def custom_selectbox(label: str, options: list, key: str, search_placeholder: str = "Buscar...") -> str:
     """Componente personalizado de selectbox con búsqueda."""
     if f"{key}_search" not in st.session_state:
@@ -1215,141 +1233,31 @@ def pil_image_to_bytes(pil_image: Image.Image) -> bytes:
     pil_image.save(buf, format="PNG")
     return buf.getvalue()
 
-# Función para mostrar la generación de guías
-def mostrar_generacion_guias():
-    """Muestra la interfaz para generar guías de envío"""
-    st.markdown("<h1 class='header-title animate-fade-in'>📦 Generación de Guías de Envío</h1>", unsafe_allow_html=True)
-    
+# ================================
+# FUNCIÓN PARA ELIMINAR GUÍAS
+# ================================
+
+def eliminar_guia(guia_id: int) -> bool:
+    """Elimina una guía de la base de datos Supabase"""
     if supabase is None:
-        st.markdown("<div class='error-box animate-fade-in'>❌ Error de conexión a la base de datos. Verifique las variables de entorno.</div>", unsafe_allow_html=True)
-        return
+        logger.error("Cliente de Supabase no inicializado")
+        return False
     
-    # Obtener datos necesarios
-    tiendas = obtener_tiendas()
-    remitentes = obtener_remitentes()
-    
-    if tiendas.empty or remitentes.empty:
-        st.markdown("<div class='warning-box animate-fade-in'>⚠️ No hay tiendas o remitentes configurados. Por favor, configure primero.</div>", unsafe_allow_html=True)
-        return
-    
-    # Inicializar estado de sesión si no existe
-    if 'show_preview' not in st.session_state:
-        st.session_state.show_preview = False
-    if 'pdf_data' not in st.session_state:
-        st.session_state.pdf_data = None
-    
-    # Formulario para generar guía
-    st.markdown("<div class='guide-section animate-fade-in'>", unsafe_allow_html=True)
-    st.markdown("<h2 class='section-title animate-fade-in'>Generar Nueva Guía</h2>", unsafe_allow_html=True)
-    
-    with st.form("form_generar_guia", clear_on_submit=False):
-        col1, col2 = st.columns(2)
-        with col1:
-            store_name = st.selectbox("Seleccione Tienda", tiendas['name'].tolist(), key="store_select")
-            brand = st.radio("Seleccione Empresa:", ["Fashion", "Tempo"], horizontal=True, key="brand_select")
+    try:
+        response = supabase.from_('guide_logs').delete().eq('id', guia_id).execute()
         
-        with col2:
-            sender_name = st.selectbox("Seleccione Remitente:", options=remitentes['name'].tolist(), key="sender_select")
-            url = st.text_input("Ingrese URL del Pedido:", key="url_input", placeholder="https://...")
-        
-        # Botón de submit dentro del formulario
-        submitted = st.form_submit_button("Generar Guía", use_container_width=True)
-        
-        if submitted:
-            if not all([store_name, brand, url, sender_name]):
-                st.markdown("<div class='error-box animate-fide-in'>❌ Por favor, complete todos los campos.</div>", unsafe_allow_html=True)
-                st.session_state.show_preview = False
-            elif not url.startswith(('http://', 'https://')):
-                st.markdown("<div class='error-box animate-fade-in'>❌ La URL debe comenzar con http:// or https://</div>", unsafe_allow_html=True)
-                st.session_state.show_preview = False
-            else:
-                # Guardar la guía
-                if guardar_guia(store_name, brand, url, sender_name):
-                    st.session_state.show_preview = True
-                    # Obtener información del remitente
-                    remitente_info = remitentes[remitentes['name'] == sender_name].iloc[0]
-                    st.session_state.remitente_address = remitente_info['address']
-                    st.session_state.remitente_phone = remitente_info['phone']
-                    st.session_state.tracking_number = generar_numero_seguimiento(1)
-                    
-                    # Generar PDF y guardarlo en session state
-                    st.session_state.pdf_data = generar_pdf_guia(
-                        store_name, brand, url, sender_name, st.session_state.tracking_number
-                    )
-                    
-                    st.markdown("<div class='success-box animate-fade-in'>✅ Guía generada correctamente. Puede ver la previsualización y exportarla.</div>", unsafe_allow_html=True)
-                else:
-                    st.markdown("<div class='error-box animate-fade-in'>❌ Error al guardar la guía.</div>", unsafe_allow_html=True)
-                    st.session_state.show_preview = False
-    
-    st.markdown("</div>", unsafe_allow_html=True)
-    
-    # Previsualización de la guía
-    if st.session_state.show_preview:
-        st.markdown("<div class='guide-section animate-fade-in'>", unsafe_allow_html=True)
-        st.markdown("<h2 class='section-title animate-fade-in'>Previsualización de la Guía</h2>", unsafe_allow_html=True)
-        
-        # Información de la guía
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.markdown(f"<div class='guide-metric'><span class='guide-icon'>🏬</span> <strong>Tienda:</strong> {st.session_state.get('store_select', '')}</div>", unsafe_allow_html=True)
-        with col2:
-            st.markdown(f"<div class='guide-metric'><span class='guide-icon'>🏷️</span> <strong>Marca:</strong> {st.session_state.get('brand_select', '')}</div>", unsafe_allow_html=True)
-        with col3:
-            st.markdown(f"<div class='guide-metric'><span class='guide-icon'>📦</span> <strong>Remitente:</strong> {st.session_state.get('sender_select', '')}</div>", unsafe_allow_html=True)
-        
-        st.markdown(f"<div class='guide-metric'><span class='guide-icon'>🔗</span> <strong>URL del Pedido:</strong> <a href='{st.session_state.get('url_input', '')}' target='_blank'>{st.session_state.get('url_input', '')}</a></div>", unsafe_allow_html=True)
-        
-        # Mostrar logo y QR en la previsualización
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            # Logo de la marca
-            st.markdown("<h3>Logo de la Marca</h3>", unsafe_allow_html=True)
-            logo_img = obtener_logo_imagen(st.session_state.get('brand_select', ''))
-            if logo_img:
-                logo_bytes = pil_image_to_bytes(logo_img)
-                st.image(logo_bytes, width=150)
-            else:
-                st.warning("Logo no disponible")
-        
-        with col2:
-            # Código QR
-            st.markdown("<h3>Código QR</h3>", unsafe_allow_html=True)
-            qr_img = generar_qr_imagen(st.session_state.get('url_input', ''))
-            qr_bytes = pil_image_to_bytes(qr_img)
-            st.image(qr_bytes, width=150)
-        
-        # Botones de exportación
-        st.markdown("<div class='export-buttons animate-fade-in'>", unsafe_allow_html=True)
-        col1, col2 = st.columns(2)
-        with col1:
-            # Descargar PDF
-            if st.session_state.pdf_data is not None:
-                st.download_button(
-                    label="📄 Descargar PDF",
-                    data=st.session_state.pdf_data,
-                    file_name=f"guia_{st.session_state.get('store_select', '')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
-                    mime="application/pdf",
-                    use_container_width=True,
-                    key="download_pdf_button"
-                )
-        with col2:
-            if st.button("🖨️ Marcar como Impresa", use_container_width=True, key="mark_printed_button"):
-                # Aquí iría la lógica para actualizar el estado de la guía
-                st.markdown("<div class='success-box animate-fade-in'>✅ Guía marcada como impresa.</div>", unsafe_allow_html=True)
-                st.session_state.show_preview = False
-                # Limpiar datos de la sesión
-                if 'pdf_data' in st.session_state:
-                    del st.session_state.pdf_data
-                time.sleep(1)
-                st.rerun()
-        st.markdown("</div>", unsafe_allow_html=True)
-        
-        st.markdown("</div>", unsafe_allow_html=True)
+        if hasattr(response, 'error') and response.error:
+            logger.error(f"No se pudo eliminar la guía: {response.error}")
+            return False
+        else:
+            logger.info(f"Guía {guia_id} eliminada correctamente")
+            return True
+    except Exception as e:
+        logger.error(f"Error al eliminar guía: {e}", exc_info=True)
+        return False
 
 # ================================
-# Sistema de autenticación
+# SISTEMA DE AUTENTICACIÓN
 # ================================
 
 def verificar_password() -> bool:
@@ -1392,7 +1300,7 @@ def solicitar_autenticacion():
             st.error("❌ Contraseña incorrecta")
 
 # ================================
-# Nuevas funciones para mostrar estado de abastecimiento
+# NUEVAS FUNCIONES PARA MOSTRAR ESTADO DE ABASTECIMIENTO
 # ================================
 
 def mostrar_estado_abastecimiento():
@@ -1510,7 +1418,7 @@ def mostrar_gestion_distribuciones():
                 st.markdown(f"<div class='error-box'>{alerta['mensaje']}<br>Acción: {alerta['accion']}</div>", unsafe_allow_html=True)
 
 # ================================
-# Componentes de la aplicación
+# COMPONENTES DE LA APLICACIÓN
 # ================================
 
 def mostrar_dashboard_kpis():
@@ -2370,6 +2278,7 @@ def mostrar_gestion_trabajadores_kpis():
                         # Verificar si hay datos en la respuesta
                         if response and hasattr(response, 'data') and response.data:
                             st.markdown("<div class='error-box animate-fade-in'>❌ El trabajador ya existe.</div>", unsafe_allow_html=True)
+                            st.session_state.show_preview = False
                         else:
                             # Insertar nuevo trabajador
                             supabase.from_('trabajadores').insert({
@@ -2596,11 +2505,12 @@ def mostrar_historial_guias():
     df_display['created_at'] = df_display['created_at'].dt.strftime('%Y-%m-%d %H:%M')
     
     # Configurar columnas a mostrar
-    columns_to_display = ['store_name', 'brand', 'sender_name', 'status', 'created_at']
+    columns_to_display = ['id', 'store_name', 'brand', 'sender_name', 'status', 'created_at']
     df_display = df_display[columns_to_display]
     
     # Renombrar columnas para mejor presentación
     df_display = df_display.rename(columns={
+        'id': 'ID',
         'store_name': 'Tienda',
         'brand': 'Marca',
         'sender_name': 'Remitente',
@@ -2610,9 +2520,9 @@ def mostrar_historial_guias():
     
     st.dataframe(df_display, use_container_width=True)
     
-    # Botones de exportación
+    # Botones de exportación y eliminación
     st.markdown("<div class='export-buttons animate-fade-in'>", unsafe_allow_html=True)
-    col1, col2 = st.columns(2)
+    col1, col2, col3 = st.columns(3)
     with col1:
         # Exportar a Excel
         if st.button("💾 Exportar a Excel", use_container_width=True):
@@ -2658,6 +2568,31 @@ def mostrar_historial_guias():
             use_container_width=True
         )
     
+    with col3:
+        # Eliminar guías seleccionadas
+        if verificar_password():
+            guias_a_eliminar = st.multiselect("Seleccionar guías para eliminar:", 
+                                             options=df_filtrado['id'].tolist(),
+                                             format_func=lambda x: f"Guía {x}")
+            
+            if st.button("🗑️ Eliminar Guías Seleccionadas", use_container_width=True):
+                if guias_a_eliminar:
+                    eliminaciones_exitosas = 0
+                    for guia_id in guias_a_eliminar:
+                        if eliminar_guia(guia_id):
+                            eliminaciones_exitosas += 1
+                    
+                    if eliminaciones_exitosas > 0:
+                        st.markdown(f"<div class='success-box animate-fade-in'>✅ {eliminaciones_exitosas} guía(s) eliminada(s) correctamente.</div>", unsafe_allow_html=True)
+                        time.sleep(1)
+                        st.rerun()
+                    else:
+                        st.markdown("<div class='error-box animate-fade-in'>❌ Error al eliminar las guías.</div>", unsafe_allow_html=True)
+                else:
+                    st.markdown("<div class='warning-box animate-fade-in'>⚠️ No se seleccionaron guías para eliminar.</div>", unsafe_allow_html=True)
+        else:
+            st.info("🔒 Autenticación requerida para eliminar guías")
+    
     st.markdown("</div>", unsafe_allow_html=True)
     st.markdown("</div>", unsafe_allow_html=True)
 
@@ -2697,7 +2632,7 @@ def mostrar_ayuda():
     st.markdown("</div>", unsafe_allow_html=True)
 
 # ================================
-# Función principal
+# FUNCIÓN PRINCIPAL
 # ================================
 
 def main():
