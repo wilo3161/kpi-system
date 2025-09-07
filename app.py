@@ -2289,11 +2289,17 @@ def mostrar_generacion_guias():
         st.markdown("<div class='warning-box animate-fade-in'>⚠️ No hay tiendas o remitentes configurados. Por favor, configure primero.</div>", unsafe_allow_html=True)
         return
     
+    # Inicializar estado de sesión si no existe
+    if 'show_preview' not in st.session_state:
+        st.session_state.show_preview = False
+    if 'pdf_data' not in st.session_state:
+        st.session_state.pdf_data = None
+    
     # Formulario para generar guía
     st.markdown("<div class='guide-section animate-fade-in'>", unsafe_allow_html=True)
     st.markdown("<h2 class='section-title animate-fade-in'>Generar Nueva Guía</h2>", unsafe_allow_html=True)
     
-    with st.form("form_generar_guia"):
+    with st.form("form_generar_guia", clear_on_submit=False):
         col1, col2 = st.columns(2)
         with col1:
             store_name = custom_selectbox("Seleccione Tienda", tiendas['name'].tolist(), "store_select", "Buscar tienda...")
@@ -2303,7 +2309,7 @@ def mostrar_generacion_guias():
             sender_name = st.selectbox("Seleccione Remitente:", options=remitentes['name'].tolist(), key="sender_select")
             url = st.text_input("Ingrese URL del Pedido:", key="url_input", placeholder="https://...")
         
-        submitted = st.form_submit_button("Generar Guía", use_container_width=True)
+        submitted = st.form_submit_button("Generar Guía", use_container_width=True, key="generate_guide_button")
         
         if submitted:
             if not all([store_name, brand, url, sender_name]):
@@ -2320,7 +2326,13 @@ def mostrar_generacion_guias():
                     remitente_info = remitentes[remitentes['name'] == sender_name].iloc[0]
                     st.session_state.remitente_address = remitente_info['address']
                     st.session_state.remitente_phone = remitente_info['phone']
-                    st.session_state.tracking_number = generar_numero_seguimiento(1)  # Aquí debería ser el ID real
+                    st.session_state.tracking_number = generar_numero_seguimiento(1)
+                    
+                    # Generar PDF y guardarlo en session state
+                    st.session_state.pdf_data = generar_pdf_guia(
+                        store_name, brand, url, sender_name, st.session_state.tracking_number
+                    )
+                    
                     st.markdown("<div class='success-box animate-fade-in'>✅ Guía generada correctamente. Puede ver la previsualización y exportarla.</div>", unsafe_allow_html=True)
                 else:
                     st.markdown("<div class='error-box animate-fade-in'>❌ Error al guardar la guía.</div>", unsafe_allow_html=True)
@@ -2329,7 +2341,7 @@ def mostrar_generacion_guias():
     st.markdown("</div>", unsafe_allow_html=True)
     
     # Previsualización de la guía
-    if st.session_state.get('show_preview', False):
+    if st.session_state.show_preview:
         st.markdown("<div class='guide-section animate-fade-in'>", unsafe_allow_html=True)
         st.markdown("<h2 class='section-title animate-fade-in'>Previsualización de la Guía</h2>", unsafe_allow_html=True)
         
@@ -2353,51 +2365,30 @@ def mostrar_generacion_guias():
         st.markdown("<div class='export-buttons animate-fade-in'>", unsafe_allow_html=True)
         col1, col2 = st.columns(2)
         with col1:
-            # Generar PDF
-            pdf_data = generar_pdf_guia(
-                st.session_state.get('store_select', ''),
-                st.session_state.get('brand_select', ''),
-                st.session_state.get('url_input', ''),
-                st.session_state.get('sender_select', ''),
-                st.session_state.get('tracking_number', '')
-            )
-            st.download_button(
-                label="📄 Descargar PDF",
-                data=pdf_data,  # CORRECCIÓN: Usar pdf_data directamente
-                file_name=f"guia_{st.session_state.get('store_select', '')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
-                mime="application/pdf",
-                use_container_width=True
-            )
+            # Descargar PDF
+            if st.session_state.pdf_data is not None:
+                st.download_button(
+                    label="📄 Descargar PDF",
+                    data=st.session_state.pdf_data,
+                    file_name=f"guia_{st.session_state.get('store_select', '')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
+                    mime="application/pdf",
+                    use_container_width=True,
+                    key="download_pdf_button"  # Clave única para este botón
+                )
         with col2:
-            if st.button("🖨️ Marcar como Impresa", use_container_width=True):
+            if st.button("🖨️ Marcar como Impresa", use_container_width=True, key="mark_printed_button"):
                 # Aquí iría la lógica para actualizar el estado de la guía
                 st.markdown("<div class='success-box animate-fade-in'>✅ Guía marcada como impresa.</div>", unsafe_allow_html=True)
                 st.session_state.show_preview = False
+                # Limpiar datos de la sesión
+                if 'pdf_data' in st.session_state:
+                    del st.session_state.pdf_data
                 time.sleep(1)
                 st.rerun()
         st.markdown("</div>", unsafe_allow_html=True)
-        
+               
               
-        # Botones de exportación
-st.markdown("<div class='export-buttons animate-fade-in'>", unsafe_allow_html=True)
-col1, col2 = st.columns(2)
-with col1:
-    # Generar PDF
-    pdf_data = generar_pdf_guia(
-        st.session_state.get('store_select', ''),
-        st.session_state.get('brand_select', ''),
-        st.session_state.get('url_input', ''),
-        st.session_state.get('sender_select', ''),
-        st.session_state.get('tracking_number', '')
-    )
-    st.download_button(
-        label="📄 Descargar PDF",
-        data=pdf_data,  # Cambiado: usar pdf_data directamente en lugar de pdf_data.output()
-        file_name=f"guia_{st.session_state.get('store_select', '')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
-        mime="application/pdf",
-        use_container_width=True
-    )
-
+        
 def mostrar_historial_guias():
     """Muestra el historial de guías generadas"""
     st.markdown("<h1 class='header-title animate-fade-in'>🔍 Historial de Guías de Envío</h1>", unsafe_allow_html=True)
