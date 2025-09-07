@@ -915,12 +915,12 @@ def crear_grafico_frasco(porcentaje: float, titulo: str) -> go.Figure:
         return go.Figure()
 
 # ================================
-# Funciones de Guías (NUEVAS)
+# Funciones de Guías (NUEVAS) - CORREGIDAS
 # ================================
 
 def generar_numero_seguimiento(record_id: int) -> str:
     """Genera un número de seguimiento único."""
-    return f"9400{str(record_id).zfill(20)}"
+    return f"LC{str(record_id).zfill(8)}"  # Cambiado a formato LC + 8 dígitos
 
 def generar_qr_imagen(url: str) -> Image.Image:
     """Genera y devuelve una imagen del código QR."""
@@ -938,42 +938,42 @@ def obtener_tiendas() -> pd.DataFrame:
     """Obtiene la lista de tiendas desde Supabase"""
     if supabase is None:
         logger.error("Cliente de Supabase no inicializado")
-        # Si hay error, devolver lista por defecto
         return pd.DataFrame({
             'id': [1, 2, 3],
-            'name': ["Tienda Centro", "Tienda Norte", "Tienda Sur"]
+            'name': ["Tienda Centro", "Tienda Norte", "Tienda Sur"],
+            'address': ["Dirección Centro", "Dirección Norte", "Dirección Sur"],
+            'phone': ["0999999991", "0999999992", "0999999993"]
         })
     
     try:
         response = supabase.from_('guide_stores').select('*').execute()
-        # Verificar si hay datos en la respuesta
         if response and hasattr(response, 'data') and response.data:
             return pd.DataFrame(response.data)
         else:
             logger.warning("No se encontraron tiendas en Supabase")
-            return pd.DataFrame(columns=['id', 'name'])
+            return pd.DataFrame(columns=['id', 'name', 'address', 'phone'])
     except Exception as e:
         logger.error(f"Error al obtener tiendas de Supabase: {e}", exc_info=True)
         return pd.DataFrame({
             'id': [1, 2, 3],
-            'name': ["Tienda Centro", "Tienda Norte", "Tienda Sur"]
+            'name': ["Tienda Centro", "Tienda Norte", "Tienda Sur"],
+            'address': ["Dirección Centro", "Dirección Norte", "Dirección Sur"],
+            'phone': ["0999999991", "0999999992", "0999999993"]
         })
 
 def obtener_remitentes() -> pd.DataFrame:
     """Obtiene la lista de remitentes desde Supabase"""
     if supabase is None:
         logger.error("Cliente de Supabase no inicializado")
-        # Si hay error, devolver lista por defecto
         return pd.DataFrame({
             'id': [1, 2],
-            'name': ["Fashion Club", "Tempo"],
-            'address': ["Dirección 1", "Dirección 2"],
+            'name': ["ANDRÉS YÉPEZ", "JOSUÉ IMBACUAN"],
+            'address': ["SAN ROQUE", "SAN ROQUE"],
             'phone': ["0993052744", "0987654321"]
         })
     
     try:
         response = supabase.from_('guide_senders').select('*').execute()
-        # Verificar si hay datos en la respuesta
         if response and hasattr(response, 'data') and response.data:
             return pd.DataFrame(response.data)
         else:
@@ -983,8 +983,8 @@ def obtener_remitentes() -> pd.DataFrame:
         logger.error(f"Error al obtener remitentes de Supabase: {e}", exc_info=True)
         return pd.DataFrame({
             'id': [1, 2],
-            'name': ["Fashion Club", "Tempo"],
-            'address': ["Dirección 1", "Dirección 2"],
+            'name': ["ANDRÉS YÉPEZ", "JOSUÉ IMBACUAN"],
+            'address': ["SAN ROQUE", "SAN ROQUE"],
             'phone': ["0993052744", "0987654321"]
         })
 
@@ -1028,11 +1028,9 @@ def obtener_historial_guias() -> pd.DataFrame:
         
         response = query.execute()
         
-        # Verificar si hay datos en la respuesta
         if response and hasattr(response, 'data') and response.data:
             df = pd.DataFrame(response.data)
             if not df.empty:
-                # Convertir fecha a datetime
                 df['created_at'] = pd.to_datetime(df['created_at'])
             return df
         else:
@@ -1049,126 +1047,135 @@ def obtener_url_logo(brand: str) -> str:
         return None
     
     try:
-        # Suponiendo que los logos están en el bucket 'logos'
+        # Obtener el project ID desde la URL de Supabase
+        project_ref = SUPABASE_URL.split('//')[1].split('.')[0]
         bucket_name = 'logos'
-        file_name = f"{brand.lower()}.jpg"
+        file_name = f"{brand.lower()}.png"
         
-        # Obtener la URL pública
-        logo_url = f"https://nsgdyqoqzlcyyameccqn.supabase.co/storage/v1/object/public/{bucket_name}/{file_name}"
+        # Construir la URL pública del logo
+        logo_url = f"https://{project_ref}.supabase.co/storage/v1/object/public/{bucket_name}/{file_name}"
         return logo_url
     except Exception as e:
         logger.error(f"Error al obtener URL del logo para {brand}: {e}", exc_info=True)
         return None
 
-# Crea una clase de PDF personalizada que hereda de FPDF
-class PDF(FPDF):
-    def __init__(self, orientation='P', unit='mm', format='A4'):
-        super().__init__(orientation, unit, format)
-        self.add_font('Arial', '', 'arial.ttf', uni=True)
-        self.add_font('Arial', 'B', 'arialbd.ttf', uni=True)
-
-    def header(self):
-        # Este método se puede usar para un encabezado estándar, pero en este caso lo manejamos directamente en el método de generación.
-        pass
-
-    def footer(self):
-        # Este método se puede usar para un pie de página estándar, pero en este caso lo manejamos directamente en el método de generación.
-        pass
-
-def generar_guia_pdf(guia_data):
+def generar_pdf_guia(store_name: str, brand: str, url: str, sender_name: str, tracking_number: str) -> bytes:
+    """Genera un PDF con la guía de envío en el formato exacto de la imagen"""
     try:
-        # Crea una instancia de la clase PDF personalizada
-        pdf = PDF()
+        pdf = FPDF()
         pdf.add_page()
-        pdf.set_auto_page_break(auto=False, margin=0)
-
-        # Ubicación y tamaño del logo
-        if os.path.exists('images/aeropostale_logo.png'):
-            pdf.image('images/aeropostale_logo.png', x=10, y=10, w=50)
-
-        # Título de la Guía
-        pdf.set_font('Arial', 'B', 16)
-        pdf.set_xy(80, 20)
-        pdf.cell(0, 10, 'GUÍA DE REMISIÓN', 0, 1, 'C')
-
-        # Datos del cliente
-        pdf.set_font('Arial', '', 10)
-        pdf.set_xy(10, 40)
-        pdf.cell(0, 5, f"Cliente: {guia_data.get('cliente', '')}")
-        pdf.set_xy(10, 45)
-        pdf.cell(0, 5, f"C.I./RUC: {guia_data.get('ci_ruc_cliente', '')}")
-        pdf.set_xy(10, 50)
-        pdf.cell(0, 5, f"Dirección: {guia_data.get('direccion_cliente', '')}")
-        pdf.set_xy(10, 55)
-        pdf.cell(0, 5, f"Teléfono: {guia_data.get('telefono_cliente', '')}")
-
-        # Datos del envío
-        pdf.set_font('Arial', 'B', 12)
-        pdf.set_xy(10, 70)
-        pdf.cell(0, 5, 'Detalles del Envío:')
-        pdf.set_font('Arial', '', 10)
-        pdf.set_xy(10, 75)
-        pdf.cell(0, 5, f"Número de Guía: {guia_data.get('numero_guia', '')}")
-        pdf.set_xy(10, 80)
-        pdf.cell(0, 5, f"Fecha: {guia_data.get('fecha', '')}")
-        pdf.set_xy(10, 85)
-        pdf.cell(0, 5, f"Cantidad de Bultos: {guia_data.get('cantidad_bultos', '')}")
-        pdf.set_xy(10, 90)
-        pdf.cell(0, 5, f"Contenido: {guia_data.get('contenido_paquete', '')}")
-        pdf.set_xy(10, 95)
-        pdf.cell(0, 5, f"Costo: ${guia_data.get('costo_total', 0):.2f}")
-
-        # Datos de la ruta
-        pdf.set_font('Arial', 'B', 12)
-        pdf.set_xy(10, 110)
-        pdf.cell(0, 5, 'Detalles de la Ruta:')
-        pdf.set_font('Arial', '', 10)
-        pdf.set_xy(10, 115)
-        pdf.cell(0, 5, f"Conductor: {guia_data.get('conductor_nombre', '')}")
-        pdf.set_xy(10, 120)
-        pdf.cell(0, 5, f"Vehículo: {guia_data.get('vehiculo_placa', '')}")
-        pdf.set_xy(10, 125)
-        pdf.cell(0, 5, f"Ciudad de Destino: {guia_data.get('ciudad_destino', '')}")
-
-        # Área para firmas
-        pdf.set_font('Arial', 'B', 10)
-        pdf.set_xy(20, 170)
-        pdf.cell(60, 5, "_______________________", 0, 0, 'C')
-        pdf.set_xy(20, 175)
-        pdf.cell(60, 5, "Firma del Cliente", 0, 0, 'C')
-
-        pdf.set_xy(120, 170)
-        pdf.cell(60, 5, "_______________________", 0, 0, 'C')
-        pdf.set_xy(120, 175)
-        pdf.cell(60, 5, "Firma del Conductor", 0, 0, 'C')
-
-        # Genera el código QR
-        qr_data = f"Guía: {guia_data.get('numero_guia', '')}, Cliente: {guia_data.get('cliente', '')}"
-        qr = qrcode.QRCode(
-            version=1,
-            error_correction=qrcode.constants.ERROR_CORRECT_L,
-            box_size=10,
-            border=4,
-        )
-        qr.add_data(qr_data)
-        qr.make(fit=True)
-        img_qr = qr.make_image(fill_color="black", back_color="white")
-
-        # Guarda temporalmente el QR para incrustarlo
-        qr_img_path = tempfile.NamedTemporaryFile(suffix='.png', delete=False).name
-        img_qr.save(qr_img_path)
-
-        # Ubicación y tamaño del código QR
-        pdf.image(qr_img_path, x=150, y=10, w=40)
-        os.unlink(qr_img_path)
-
-        # Guarda el PDF en un buffer de memoria
-        pdf_output = pdf.output(dest='S').encode('latin-1')
-        return pdf_output
-
+        
+        # Configuración inicial
+        pdf.set_margins(10, 10, 10)
+        pdf.set_auto_page_break(True, 15)
+        
+        # === ENCABEZADO: AEROPOSTALE ===
+        pdf.set_font("Arial", "B", 20)
+        pdf.cell(0, 15, "AEROPOSTALE", 0, 1, "C")
+        pdf.line(10, 25, 200, 25)
+        
+        # === SECCIÓN REMITENTE ===
+        pdf.set_font("Arial", "B", 12)
+        pdf.cell(0, 10, "REMITENTE:", 0, 1)
+        
+        remitentes = obtener_remitentes()
+        remitente_info = remitentes[remitentes['name'] == sender_name].iloc[0]
+        
+        pdf.set_font("Arial", "", 12)
+        pdf.multi_cell(0, 8, f"{remitente_info['name']}\n{remitente_info['address']}")
+        
+        # Línea separadora
+        pdf.line(10, pdf.get_y() + 5, 200, pdf.get_y() + 5)
+        pdf.ln(10)
+        
+        # === SECCIÓN DESTINO ===
+        pdf.set_font("Arial", "B", 12)
+        pdf.cell(0, 10, "DESTINO:", 0, 1)
+        
+        pdf.set_font("Arial", "", 12)
+        pdf.cell(0, 8, tracking_number, 0, 1)
+        
+        tiendas = obtener_tiendas()
+        tienda_info = tiendas[tiendas['name'] == store_name].iloc[0]
+        
+        if 'address' in tienda_info:
+            pdf.multi_cell(0, 8, tienda_info['address'])
+        
+        # Línea separadora
+        pdf.line(10, pdf.get_y() + 5, 200, pdf.get_y() + 5)
+        pdf.ln(10)
+        
+        # === SECCIÓN RECEPTOR ===
+        pdf.set_font("Arial", "B", 14)
+        pdf.cell(0, 12, store_name, 0, 1, "C")
+        pdf.ln(5)
+        
+        # === LOGO E INFORMACIÓN ADICIONAL ===
+        # Logo
+        logo_url = obtener_url_logo(brand)
+        if logo_url:
+            try:
+                response = requests.get(logo_url, timeout=10)
+                if response.status_code == 200:
+                    with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as temp_file:
+                        temp_file.write(response.content)
+                        temp_logo_path = temp_file.name
+                    
+                    pdf.image(temp_logo_path, x=80, y=pdf.get_y(), w=50)
+                    os.unlink(temp_logo_path)
+            except Exception as e:
+                logger.warning(f"No se pudo cargar el logo: {e}")
+        
+        # Información de piezas y teléfono
+        pdf.set_y(pdf.get_y() + 55)
+        pdf.set_font("Arial", "", 12)
+        pdf.cell(0, 8, "PIEZAS 1/1", 0, 1, "C")
+        
+        if 'phone' in tienda_info:
+            pdf.cell(0, 8, f"TEL.: {tienda_info['phone']}", 0, 1, "C")
+        
+        # Código QR (opcional, si se necesita)
+        qr_img = generar_qr_imagen(url)
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as temp_file:
+            qr_img.save(temp_file.name)
+            temp_qr_path = temp_file.name
+        
+        pdf.image(temp_qr_path, x=80, y=pdf.get_y() + 5, w=50)
+        os.unlink(temp_qr_path)
+        
+        return pdf.output(dest="S").encode("latin1")
+        
     except Exception as e:
-        logger.error(f"Error al generar el PDF de la guía: {e}")
+        logger.error(f"Error al generar PDF de guía: {e}", exc_info=True)
+        return b""
+
+def pil_image_to_bytes(pil_image: Image.Image) -> bytes:
+    """Convierte un objeto de imagen de PIL a bytes."""
+    buf = io.BytesIO()
+    pil_image.save(buf, format="PNG")
+    return buf.getvalue()
+
+def custom_selectbox(label: str, options: list, key: str, search_placeholder: str = "Buscar...") -> str:
+    """Componente personalizado de selectbox con búsqueda."""
+    if f"{key}_search" not in st.session_state:
+        st.session_state[f"{key}_search"] = ""
+    
+    search_term = st.text_input(f"{label} - {search_placeholder}", 
+                               value=st.session_state[f"{key}_search"], 
+                               key=f"{key}_search_input")
+    
+    st.session_state[f"{key}_search"] = search_term
+    
+    if search_term:
+        filtered_options = [opt for opt in options if search_term.lower() in opt.lower()]
+    else:
+        filtered_options = options
+    
+    if not filtered_options:
+        st.warning("No se encontraron resultados.")
         return None
+    
+    return st.selectbox(label, filtered_options, key=key)
 def pil_image_to_bytes(pil_image: Image.Image) -> bytes:
     """Convierte un objeto de imagen de PIL a bytes."""
     buf = io.BytesIO()
