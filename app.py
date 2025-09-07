@@ -1048,7 +1048,7 @@ def obtener_url_logo(brand: str) -> str:
     
     try:
         # Obtener el project ID desde la URL de Supabase
-        project_ref = https://supabase.com/dashboard/project/nsgdyqoqzlcyyameccqn
+        project_ref = "https://supabase.com/dashboard/project/nsgdyqoqzlcyyameccqn"
         bucket_name = 'images'
         file_name = f"{brand.lower()}.png"
         
