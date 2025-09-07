@@ -920,7 +920,7 @@ def crear_grafico_frasco(porcentaje: float, titulo: str) -> go.Figure:
 
 def generar_numero_seguimiento(record_id: int) -> str:
     """Genera un número de seguimiento único."""
-    return f"LC{str(record_id).zfill(8)}"  # Cambiado a formato LC + 8 dígitos
+    return f"AERO{str(record_id).zfill(8)}"  # Cambiado a formato LC + 8 dígitos
 
 def generar_qr_imagen(url: str) -> Image.Image:
     """Genera y devuelve una imagen del código QR."""
@@ -1048,12 +1048,12 @@ def obtener_url_logo(brand: str) -> str:
     
     try:
         # Obtener el project ID desde la URL de Supabase
-        project_ref = SUPABASE_URL.split('//')[1].split('.')[0]
-        bucket_name = 'logos'
+        project_ref = https://supabase.com/dashboard/project/nsgdyqoqzlcyyameccqn
+        bucket_name = 'images'
         file_name = f"{brand.lower()}.png"
         
         # Construir la URL pública del logo
-        logo_url = f"https://{project_ref}.supabase.co/storage/v1/object/public/{bucket_name}/{file_name}"
+        logo_url = f"https://supabase.com/dashboard/project/nsgdyqoqzlcyyameccqn/storage/buckets/images"
         return logo_url
     except Exception as e:
         logger.error(f"Error al obtener URL del logo para {brand}: {e}", exc_info=True)
@@ -1070,18 +1070,18 @@ def generar_pdf_guia(store_name: str, brand: str, url: str, sender_name: str, tr
         pdf.set_auto_page_break(True, 15)
         
         # === ENCABEZADO: AEROPOSTALE ===
-        pdf.set_font("Arial", "B", 20)
+        pdf.set_font("Arial", "B", 40)
         pdf.cell(0, 15, "AEROPOSTALE", 0, 1, "C")
         pdf.line(10, 25, 200, 25)
         
         # === SECCIÓN REMITENTE ===
-        pdf.set_font("Arial", "B", 12)
+        pdf.set_font("Arial", "B", 14)
         pdf.cell(0, 10, "REMITENTE:", 0, 1)
         
         remitentes = obtener_remitentes()
         remitente_info = remitentes[remitentes['name'] == sender_name].iloc[0]
         
-        pdf.set_font("Arial", "", 12)
+        pdf.set_font("Arial", "", 14)
         pdf.multi_cell(0, 8, f"{remitente_info['name']}\n{remitente_info['address']}")
         
         # Línea separadora
@@ -1089,10 +1089,10 @@ def generar_pdf_guia(store_name: str, brand: str, url: str, sender_name: str, tr
         pdf.ln(10)
         
         # === SECCIÓN DESTINO ===
-        pdf.set_font("Arial", "B", 12)
+        pdf.set_font("Arial", "B", 14)
         pdf.cell(0, 10, "DESTINO:", 0, 1)
         
-        pdf.set_font("Arial", "", 12)
+        pdf.set_font("Arial", "", 14)
         pdf.cell(0, 8, tracking_number, 0, 1)
         
         tiendas = obtener_tiendas()
