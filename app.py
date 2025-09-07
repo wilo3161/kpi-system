@@ -1047,31 +1047,25 @@ def obtener_url_logo(brand: str) -> str:
         return None
     
     try:
-        # Obtener el project ID desde la URL de Supabase
-        # La URL de Supabase tiene el formato: https://<project_ref>.supabase.co
-        if not SUPABASE_URL:
-            logger.error("SUPABASE_URL no está configurada")
-            return None
-            
-        # Extraer el project_ref de la URL
-        # Ejemplo: https://nsgdyqoqzlcyyameccqn.supabase.co
-        parts = SUPABASE_URL.split('https://supabase.com/dashboard/project/nsgdyqoqzlcyyameccqn')
-        if len(parts) < 2:
-            logger.error("Formato de SUPABASE_URL incorrecto")
-            return None
-            
-        domain_parts = parts[1].split('https://supabase.com/dashboard/project/nsgdyqoqzlcyyameccqn')
-        if len(domain_parts) < 2:
-            logger.error("Formato de SUPABASE_URL incorrecto")
-            return None
-            
-        project_ref = domain_parts[0]
+        # Usar el project_ref directamente desde la URL proporcionada
+        project_ref = "nsgdyqoqzlcyyameccqn"
         bucket_name = 'images'
-        file_name = f"{brand.lower()}.png"
         
-        # Construir la URL pública del logo
-        logo_url = f"https://supabase.com/dashboard/project/nsgdyqoqzlcyyameccqn/storage/buckets/images"
-        return logo_url
+        # Los archivos son JPG, no PNG
+        file_name = f"{brand.lower()}.jpg"
+        
+        # Construir la URL pública correcta para Supabase Storage
+        logo_url = f"https://{project_ref}.supabase.co/storage/v1/object/public/{bucket_name}/{file_name}"
+        
+        # Verificar que la URL sea accesible
+        response = requests.head(logo_url, timeout=5)
+        if response.status_code == 200:
+            logger.info(f"Logo encontrado: {logo_url}")
+            return logo_url
+        else:
+            logger.warning(f"Logo no encontrado en: {logo_url} (status: {response.status_code})")
+            return None
+            
     except Exception as e:
         logger.error(f"Error al obtener URL del logo para {brand}: {e}", exc_info=True)
         return None
@@ -1130,14 +1124,16 @@ def generar_pdf_guia(store_name: str, brand: str, url: str, sender_name: str, tr
         pdf.ln(5)
         
         # === LOGO E INFORMACIÓN ADICIONAL ===
-        # Logo
+        # Logo - intentar cargar desde Supabase
         logo_url = obtener_url_logo(brand)
         current_y = pdf.get_y()
+        
         if logo_url:
             try:
+                logger.info(f"Intentando descargar logo desde: {logo_url}")
                 response = requests.get(logo_url, timeout=10)
                 if response.status_code == 200:
-                    with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as temp_file:
+                    with tempfile.NamedTemporaryFile(delete=False, suffix='.jpg') as temp_file:
                         temp_file.write(response.content)
                         temp_logo_path = temp_file.name
                     
@@ -1148,16 +1144,26 @@ def generar_pdf_guia(store_name: str, brand: str, url: str, sender_name: str, tr
                     # Ajustar la posición Y después del logo
                     current_y += 55
                     pdf.set_y(current_y)
+                    logger.info("Logo insertado correctamente en el PDF")
                 else:
-                    logger.warning(f"No se pudo descargar el logo desde {logo_url}")
-                    current_y += 20
+                    logger.warning(f"No se pudo descargar el logo desde {logo_url}. Status: {response.status_code}")
+                    # Insertar texto alternativo
+                    pdf.set_font("Arial", "I", 12)
+                    pdf.cell(0, 10, f"[Logo de {brand}]", 0, 1, "C")
+                    current_y += 10
                     pdf.set_y(current_y)
             except Exception as e:
-                logger.warning(f"No se pudo cargar el logo: {e}")
-                current_y += 20
+                logger.error(f"Error al cargar el logo: {e}")
+                # Insertar texto alternativo
+                pdf.set_font("Arial", "I", 12)
+                pdf.cell(0, 10, f"[Logo de {brand}]", 0, 1, "C")
+                current_y += 10
                 pdf.set_y(current_y)
         else:
-            current_y += 20
+            # Insertar texto alternativo si no hay URL de logo
+            pdf.set_font("Arial", "I", 12)
+            pdf.cell(0, 10, f"[Logo de {brand}]", 0, 1, "C")
+            current_y += 10
             pdf.set_y(current_y)
         
         # Información de piezas y teléfono
@@ -1183,34 +1189,6 @@ def generar_pdf_guia(store_name: str, brand: str, url: str, sender_name: str, tr
     except Exception as e:
         logger.error(f"Error al generar PDF de guía: {e}", exc_info=True)
         return b""
-
-def pil_image_to_bytes(pil_image: Image.Image) -> bytes:
-    """Convierte un objeto de imagen de PIL a bytes."""
-    buf = io.BytesIO()
-    pil_image.save(buf, format="PNG")
-    return buf.getvalue()
-
-def custom_selectbox(label: str, options: list, key: str, search_placeholder: str = "Buscar...") -> str:
-    """Componente personalizado de selectbox con búsqueda."""
-    if f"{key}_search" not in st.session_state:
-        st.session_state[f"{key}_search"] = ""
-    
-    search_term = st.text_input(f"{label} - {search_placeholder}", 
-                               value=st.session_state[f"{key}_search"], 
-                               key=f"{key}_search_input")
-    
-    st.session_state[f"{key}_search"] = search_term
-    
-    if search_term:
-        filtered_options = [opt for opt in options if search_term.lower() in opt.lower()]
-    else:
-        filtered_options = options
-    
-    if not filtered_options:
-        st.warning("No se encontraron resultados.")
-        return None
-    
-    return st.selectbox(label, filtered_options, key=key)
 
 # ================================
 # Sistema de autenticación
