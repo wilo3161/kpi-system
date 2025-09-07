@@ -920,7 +920,7 @@ def crear_grafico_frasco(porcentaje: float, titulo: str) -> go.Figure:
 
 def generar_numero_seguimiento(record_id: int) -> str:
     """Genera un número de seguimiento único."""
-    return f"AERO{str(record_id).zfill(8)}"  # Cambiado a formato LC + 8 dígitos
+    return f"AERO{str(record_id).zfill(8)}"  # Formato AERO + 8 dígitos
 
 def generar_qr_imagen(url: str) -> Image.Image:
     """Genera y devuelve una imagen del código QR."""
@@ -1048,12 +1048,29 @@ def obtener_url_logo(brand: str) -> str:
     
     try:
         # Obtener el project ID desde la URL de Supabase
-        project_ref = "https://supabase.com/dashboard/project/nsgdyqoqzlcyyameccqn"
+        # La URL de Supabase tiene el formato: https://<project_ref>.supabase.co
+        if not SUPABASE_URL:
+            logger.error("SUPABASE_URL no está configurada")
+            return None
+            
+        # Extraer el project_ref de la URL
+        # Ejemplo: https://nsgdyqoqzlcyyameccqn.supabase.co
+        parts = SUPABASE_URL.split('//')
+        if len(parts) < 2:
+            logger.error("Formato de SUPABASE_URL incorrecto")
+            return None
+            
+        domain_parts = parts[1].split('.')
+        if len(domain_parts) < 2:
+            logger.error("Formato de SUPABASE_URL incorrecto")
+            return None
+            
+        project_ref = domain_parts[0]
         bucket_name = 'images'
         file_name = f"{brand.lower()}.png"
         
         # Construir la URL pública del logo
-        logo_url = f"https://supabase.com/dashboard/project/nsgdyqoqzlcyyameccqn/storage/buckets/images"
+        logo_url = f"https://{project_ref}.supabase.co/storage/v1/object/public/{bucket_name}/{file_name}"
         return logo_url
     except Exception as e:
         logger.error(f"Error al obtener URL del logo para {brand}: {e}", exc_info=True)
@@ -1085,7 +1102,8 @@ def generar_pdf_guia(store_name: str, brand: str, url: str, sender_name: str, tr
         pdf.multi_cell(0, 8, f"{remitente_info['name']}\n{remitente_info['address']}")
         
         # Línea separadora
-        pdf.line(10, pdf.get_y() + 5, 200, pdf.get_y() + 5)
+        y_after_remitente = pdf.get_y()
+        pdf.line(10, y_after_remitente + 5, 200, y_after_remitente + 5)
         pdf.ln(10)
         
         # === SECCIÓN DESTINO ===
@@ -1102,7 +1120,8 @@ def generar_pdf_guia(store_name: str, brand: str, url: str, sender_name: str, tr
             pdf.multi_cell(0, 8, tienda_info['address'])
         
         # Línea separadora
-        pdf.line(10, pdf.get_y() + 5, 200, pdf.get_y() + 5)
+        y_after_destino = pdf.get_y()
+        pdf.line(10, y_after_destino + 5, 200, y_after_destino + 5)
         pdf.ln(10)
         
         # === SECCIÓN RECEPTOR ===
@@ -1113,6 +1132,7 @@ def generar_pdf_guia(store_name: str, brand: str, url: str, sender_name: str, tr
         # === LOGO E INFORMACIÓN ADICIONAL ===
         # Logo
         logo_url = obtener_url_logo(brand)
+        current_y = pdf.get_y()
         if logo_url:
             try:
                 response = requests.get(logo_url, timeout=10)
@@ -1121,26 +1141,41 @@ def generar_pdf_guia(store_name: str, brand: str, url: str, sender_name: str, tr
                         temp_file.write(response.content)
                         temp_logo_path = temp_file.name
                     
-                    pdf.image(temp_logo_path, x=80, y=pdf.get_y(), w=50)
+                    # Insertar logo centrado
+                    pdf.image(temp_logo_path, x=80, y=current_y, w=50)
                     os.unlink(temp_logo_path)
+                    
+                    # Ajustar la posición Y después del logo
+                    current_y += 55
+                    pdf.set_y(current_y)
+                else:
+                    logger.warning(f"No se pudo descargar el logo desde {logo_url}")
+                    current_y += 20
+                    pdf.set_y(current_y)
             except Exception as e:
                 logger.warning(f"No se pudo cargar el logo: {e}")
+                current_y += 20
+                pdf.set_y(current_y)
+        else:
+            current_y += 20
+            pdf.set_y(current_y)
         
         # Información de piezas y teléfono
-        pdf.set_y(pdf.get_y() + 55)
         pdf.set_font("Arial", "", 12)
         pdf.cell(0, 8, "PIEZAS 1/1", 0, 1, "C")
         
         if 'phone' in tienda_info:
             pdf.cell(0, 8, f"TEL.: {tienda_info['phone']}", 0, 1, "C")
         
-        # Código QR (opcional, si se necesita)
+        # Código QR
         qr_img = generar_qr_imagen(url)
         with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as temp_file:
             qr_img.save(temp_file.name)
             temp_qr_path = temp_file.name
         
-        pdf.image(temp_qr_path, x=80, y=pdf.get_y() + 5, w=50)
+        # Posicionar el QR centrado
+        qr_y = pdf.get_y() + 5
+        pdf.image(temp_qr_path, x=80, y=qr_y, w=50)
         os.unlink(temp_qr_path)
         
         return pdf.output(dest="S").encode("latin1")
@@ -1149,33 +1184,6 @@ def generar_pdf_guia(store_name: str, brand: str, url: str, sender_name: str, tr
         logger.error(f"Error al generar PDF de guía: {e}", exc_info=True)
         return b""
 
-def pil_image_to_bytes(pil_image: Image.Image) -> bytes:
-    """Convierte un objeto de imagen de PIL a bytes."""
-    buf = io.BytesIO()
-    pil_image.save(buf, format="PNG")
-    return buf.getvalue()
-
-def custom_selectbox(label: str, options: list, key: str, search_placeholder: str = "Buscar...") -> str:
-    """Componente personalizado de selectbox con búsqueda."""
-    if f"{key}_search" not in st.session_state:
-        st.session_state[f"{key}_search"] = ""
-    
-    search_term = st.text_input(f"{label} - {search_placeholder}", 
-                               value=st.session_state[f"{key}_search"], 
-                               key=f"{key}_search_input")
-    
-    st.session_state[f"{key}_search"] = search_term
-    
-    if search_term:
-        filtered_options = [opt for opt in options if search_term.lower() in opt.lower()]
-    else:
-        filtered_options = options
-    
-    if not filtered_options:
-        st.warning("No se encontraron resultados.")
-        return None
-    
-    return st.selectbox(label, filtered_options, key=key)
 def pil_image_to_bytes(pil_image: Image.Image) -> bytes:
     """Convierte un objeto de imagen de PIL a bytes."""
     buf = io.BytesIO()
