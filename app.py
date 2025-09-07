@@ -2272,6 +2272,12 @@ def mostrar_gestion_trabajadores_kpis():
         logger.error(f"Error en gestión de trabajadores: {e}", exc_info=True)
         st.markdown("<div class='error-box animate-fade-in'>❌ Error del sistema al gestionar trabajadores.</div>", unsafe_allow_html=True)
 
+def pil_image_to_bytes(pil_image: Image.Image) -> bytes:
+    """Convierte un objeto de imagen de PIL a bytes."""
+    buf = io.BytesIO()
+    pil_image.save(buf, format="PNG")
+    return buf.getvalue()
+
 def mostrar_generacion_guias():
     """Muestra la interfaz para generar guías de envío"""
     st.markdown("<h1 class='header-title animate-fade-in'>📦 Generación de Guías de Envío</h1>", unsafe_allow_html=True)
@@ -2356,10 +2362,11 @@ def mostrar_generacion_guias():
         
         st.markdown(f"<div class='guide-metric'><span class='guide-icon'>🔗</span> <strong>URL del Pedido:</strong> <a href='{st.session_state.get('url_input', '')}' target='_blank'>{st.session_state.get('url_input', '')}</a></div>", unsafe_allow_html=True)
         
-        # Código QR
+        # Código QR - MOSTRAR DIRECTAMENTE LA IMAGEN PIL
         st.markdown("<h3>Código QR:</h3>", unsafe_allow_html=True)
         qr_img = generar_qr_imagen(st.session_state.get('url_input', ''))
-        st.image(pil_image_to_bytes(qr_img), width=200)
+        # Cambio: mostrar la imagen PIL directamente en lugar de convertir a bytes
+        st.image(qr_img, width=200)
         
         # Botones de exportación
         st.markdown("<div class='export-buttons animate-fade-in'>", unsafe_allow_html=True)
@@ -2385,9 +2392,7 @@ def mostrar_generacion_guias():
                     del st.session_state.pdf_data
                 time.sleep(1)
                 st.rerun()
-        st.markdown("</div>", unsafe_allow_html=True)
-        
-                 
+        st.markdown("</div>", unsafe_allow_html=True)               
         
 def mostrar_historial_guias():
     """Muestra el historial de guías generadas"""
