@@ -2362,11 +2362,13 @@ def mostrar_generacion_guias():
         
         st.markdown(f"<div class='guide-metric'><span class='guide-icon'>🔗</span> <strong>URL del Pedido:</strong> <a href='{st.session_state.get('url_input', '')}' target='_blank'>{st.session_state.get('url_input', '')}</a></div>", unsafe_allow_html=True)
         
-        # Código QR - MOSTRAR DIRECTAMENTE LA IMAGEN PIL
+        # Código QR - CORRECCIÓN: Usar pil_image_to_bytes para convertir la imagen
         st.markdown("<h3>Código QR:</h3>", unsafe_allow_html=True)
         qr_img = generar_qr_imagen(st.session_state.get('url_input', ''))
-        # Cambio: mostrar la imagen PIL directamente en lugar de convertir a bytes
-        st.image(qr_img, width=200)
+        
+        # Convertir la imagen PIL a bytes antes de mostrarla
+        qr_bytes = pil_image_to_bytes(qr_img)
+        st.image(qr_bytes, width=200)
         
         # Botones de exportación
         st.markdown("<div class='export-buttons animate-fade-in'>", unsafe_allow_html=True)
@@ -2392,7 +2394,9 @@ def mostrar_generacion_guias():
                     del st.session_state.pdf_data
                 time.sleep(1)
                 st.rerun()
-        st.markdown("</div>", unsafe_allow_html=True)               
+        st.markdown("</div>", unsafe_allow_html=True)
+        
+        st.markdown("</div>", unsafe_allow_html=True)    
         
 def mostrar_historial_guias():
     """Muestra el historial de guías generadas"""
