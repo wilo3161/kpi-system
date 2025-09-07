@@ -2355,7 +2355,7 @@ def mostrar_generacion_guias():
             )
             st.download_button(
                 label="📄 Descargar PDF",
-                data=pdf_data.output(dest="S").encode("latin1"),
+                data=pdf_data,  # CORRECCIÓN: Usar pdf_data directamente
                 file_name=f"guia_{st.session_state.get('store_select', '')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
                 mime="application/pdf",
                 use_container_width=True
@@ -2369,7 +2369,26 @@ def mostrar_generacion_guias():
                 st.rerun()
         st.markdown("</div>", unsafe_allow_html=True)
         
-        st.markdown("</div>", unsafe_allow_html=True)
+              
+        # Botones de exportación
+st.markdown("<div class='export-buttons animate-fade-in'>", unsafe_allow_html=True)
+col1, col2 = st.columns(2)
+with col1:
+    # Generar PDF
+    pdf_data = generar_pdf_guia(
+        st.session_state.get('store_select', ''),
+        st.session_state.get('brand_select', ''),
+        st.session_state.get('url_input', ''),
+        st.session_state.get('sender_select', ''),
+        st.session_state.get('tracking_number', '')
+    )
+    st.download_button(
+        label="📄 Descargar PDF",
+        data=pdf_data,  # Cambiado: usar pdf_data directamente en lugar de pdf_data.output()
+        file_name=f"guia_{st.session_state.get('store_select', '')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
+        mime="application/pdf",
+        use_container_width=True
+    )
 
 def mostrar_historial_guias():
     """Muestra el historial de guías generadas"""
