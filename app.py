@@ -1060,103 +1060,115 @@ def obtener_url_logo(brand: str) -> str:
         logger.error(f"Error al obtener URL del logo para {brand}: {e}", exc_info=True)
         return None
 
-def generar_pdf_guia(store_name: str, brand: str, url: str, sender_name: str, tracking_number: str) -> FPDF:
-    """Genera un PDF con la guía de envío"""
-    # Crear instancia de FPDF
-    pdf = FPDF()
-    pdf.add_page()
-    
-    # === 1. LOGO DE LA EMPRESA ===
-    logo_url = obtener_url_logo(brand)
-    logo_height = 0
-    
-    if logo_url:
-        try:
-            # Descargar el logo
-            response = requests.get(logo_url)
-            if response.status_code == 200:
-                # Guardar en un archivo temporal
-                with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as temp_file:
-                    temp_file.write(response.content)
-                    temp_logo_path = temp_file.name
-                
-                # Agregar el logo al PDF
-                pdf.image(temp_logo_path, x=10, y=10, w=40)
-                os.unlink(temp_logo_path)
-                logo_height = 20  # Altura del logo para ajustar el texto
-            else:
-                logger.warning(f"No se pudo descargar el logo de {logo_url}")
-        except Exception as e:
-            logger.error(f"Error al procesar el logo: {e}", exc_info=True)
-    
-    # Título (ajustado según si hay logo)
-    pdf.set_font("Arial", "B", 16)
-    pdf.set_xy(10, 10 + logo_height)
-    pdf.cell(0, 10, f"Guía de Envío - {brand}", 0, 1, "C")
-    pdf.ln(15 + logo_height)
-    
-    # === 2. INFORMACIÓN DEL REMITENTE ===
-    pdf.set_font("Arial", "B", 12)
-    pdf.cell(0, 10, "Remitente:", 0, 1)
-    pdf.set_font("Arial", "", 12)
-    
-    # Buscar información del remitente
-    remitentes = obtener_remitentes()
-    remitente_info = remitentes[remitentes['name'] == sender_name].iloc[0]
-    
-    pdf.cell(0, 10, f"{remitente_info['name']}", 0, 1)
-    pdf.cell(0, 10, f"{remitente_info['address']}", 0, 1)
-    pdf.cell(0, 10, f"Tel: {remitente_info['phone']}", 0, 1)
-    pdf.ln(10)
-    
-    # === 3. INFORMACIÓN DEL DESTINATARIO (TIENDA) ===
-    pdf.set_font("Arial", "B", 12)
-    pdf.cell(0, 10, "Destinatario:", 0, 1)
-    pdf.set_font("Arial", "", 12)
-    
-    # Buscar información de la tienda
-    tiendas = obtener_tiendas()
-    tienda_info = tiendas[tiendas['name'] == store_name].iloc[0]
-    
-    pdf.cell(0, 10, f"{tienda_info['name']}", 0, 1)
-    # Suponiendo que hay campos de dirección y teléfono en la tabla de tiendas
-    if 'address' in tiendas.columns:
-        pdf.cell(0, 10, f"{tienda_info['address']}", 0, 1)
-    if 'phone' in tiendas.columns:
-        pdf.cell(0, 10, f"Tel: {tienda_info['phone']}", 0, 1)
-    
-    y_after_destinatario = pdf.get_y()
-    pdf.ln(15)
-    
-    # === 4. CÓDIGO QR y NÚMERO DE SEGUIMIENTO (debajo del destinatario) ===
-    # Generar QR
-    qr_img = generar_qr_imagen(url)
-    with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as temp_file:
-        qr_img.save(temp_file.name)
-        temp_qr_path = temp_file.name
-    
-    # Posicionar QR a la derecha, debajo del destinatario
-    qr_x = 100
-    qr_y = y_after_destinatario + 10
-    pdf.image(temp_qr_path, x=qr_x, y=qr_y, w=40, h=40)
-    os.unlink(temp_qr_path)
-    
-    # === 5. NÚMERO DE SEGUIMIENTO debajo del QR ===
-    pdf.set_xy(qr_x, qr_y + 45)
-    pdf.set_font("Arial", "B", 12)
-    pdf.cell(0, 10, f"Número de Seguimiento:", 0, 1)
-    pdf.set_font("Arial", "", 12)
-    pdf.cell(0, 10, f"{tracking_number}", 0, 1)
-    
-    # === 6. URL DEL PEDIDO ===
-    pdf.set_xy(10, y_after_destinatario + 10)
-    pdf.set_font("Arial", "B", 12)
-    pdf.cell(0, 10, "URL del Pedido:", 0, 1)
-    pdf.set_font("Arial", "I", 10)
-    pdf.cell(0, 10, url, 0, 1)
-    
-    return pdf
+# Crea una clase de PDF personalizada que hereda de FPDF
+class PDF(FPDF):
+    def __init__(self, orientation='P', unit='mm', format='A4'):
+        super().__init__(orientation, unit, format)
+        self.add_font('Arial', '', 'arial.ttf', uni=True)
+        self.add_font('Arial', 'B', 'arialbd.ttf', uni=True)
 
+    def header(self):
+        # Este método se puede usar para un encabezado estándar, pero en este caso lo manejamos directamente en el método de generación.
+        pass
+
+    def footer(self):
+        # Este método se puede usar para un pie de página estándar, pero en este caso lo manejamos directamente en el método de generación.
+        pass
+
+def generar_guia_pdf(guia_data):
+    try:
+        # Crea una instancia de la clase PDF personalizada
+        pdf = PDF()
+        pdf.add_page()
+        pdf.set_auto_page_break(auto=False, margin=0)
+
+        # Ubicación y tamaño del logo
+        if os.path.exists('images/aeropostale_logo.png'):
+            pdf.image('images/aeropostale_logo.png', x=10, y=10, w=50)
+
+        # Título de la Guía
+        pdf.set_font('Arial', 'B', 16)
+        pdf.set_xy(80, 20)
+        pdf.cell(0, 10, 'GUÍA DE REMISIÓN', 0, 1, 'C')
+
+        # Datos del cliente
+        pdf.set_font('Arial', '', 10)
+        pdf.set_xy(10, 40)
+        pdf.cell(0, 5, f"Cliente: {guia_data.get('cliente', '')}")
+        pdf.set_xy(10, 45)
+        pdf.cell(0, 5, f"C.I./RUC: {guia_data.get('ci_ruc_cliente', '')}")
+        pdf.set_xy(10, 50)
+        pdf.cell(0, 5, f"Dirección: {guia_data.get('direccion_cliente', '')}")
+        pdf.set_xy(10, 55)
+        pdf.cell(0, 5, f"Teléfono: {guia_data.get('telefono_cliente', '')}")
+
+        # Datos del envío
+        pdf.set_font('Arial', 'B', 12)
+        pdf.set_xy(10, 70)
+        pdf.cell(0, 5, 'Detalles del Envío:')
+        pdf.set_font('Arial', '', 10)
+        pdf.set_xy(10, 75)
+        pdf.cell(0, 5, f"Número de Guía: {guia_data.get('numero_guia', '')}")
+        pdf.set_xy(10, 80)
+        pdf.cell(0, 5, f"Fecha: {guia_data.get('fecha', '')}")
+        pdf.set_xy(10, 85)
+        pdf.cell(0, 5, f"Cantidad de Bultos: {guia_data.get('cantidad_bultos', '')}")
+        pdf.set_xy(10, 90)
+        pdf.cell(0, 5, f"Contenido: {guia_data.get('contenido_paquete', '')}")
+        pdf.set_xy(10, 95)
+        pdf.cell(0, 5, f"Costo: ${guia_data.get('costo_total', 0):.2f}")
+
+        # Datos de la ruta
+        pdf.set_font('Arial', 'B', 12)
+        pdf.set_xy(10, 110)
+        pdf.cell(0, 5, 'Detalles de la Ruta:')
+        pdf.set_font('Arial', '', 10)
+        pdf.set_xy(10, 115)
+        pdf.cell(0, 5, f"Conductor: {guia_data.get('conductor_nombre', '')}")
+        pdf.set_xy(10, 120)
+        pdf.cell(0, 5, f"Vehículo: {guia_data.get('vehiculo_placa', '')}")
+        pdf.set_xy(10, 125)
+        pdf.cell(0, 5, f"Ciudad de Destino: {guia_data.get('ciudad_destino', '')}")
+
+        # Área para firmas
+        pdf.set_font('Arial', 'B', 10)
+        pdf.set_xy(20, 170)
+        pdf.cell(60, 5, "_______________________", 0, 0, 'C')
+        pdf.set_xy(20, 175)
+        pdf.cell(60, 5, "Firma del Cliente", 0, 0, 'C')
+
+        pdf.set_xy(120, 170)
+        pdf.cell(60, 5, "_______________________", 0, 0, 'C')
+        pdf.set_xy(120, 175)
+        pdf.cell(60, 5, "Firma del Conductor", 0, 0, 'C')
+
+        # Genera el código QR
+        qr_data = f"Guía: {guia_data.get('numero_guia', '')}, Cliente: {guia_data.get('cliente', '')}"
+        qr = qrcode.QRCode(
+            version=1,
+            error_correction=qrcode.constants.ERROR_CORRECT_L,
+            box_size=10,
+            border=4,
+        )
+        qr.add_data(qr_data)
+        qr.make(fit=True)
+        img_qr = qr.make_image(fill_color="black", back_color="white")
+
+        # Guarda temporalmente el QR para incrustarlo
+        qr_img_path = tempfile.NamedTemporaryFile(suffix='.png', delete=False).name
+        img_qr.save(qr_img_path)
+
+        # Ubicación y tamaño del código QR
+        pdf.image(qr_img_path, x=150, y=10, w=40)
+        os.unlink(qr_img_path)
+
+        # Guarda el PDF en un buffer de memoria
+        pdf_output = pdf.output(dest='S').encode('latin-1')
+        return pdf_output
+
+    except Exception as e:
+        logger.error(f"Error al generar el PDF de la guía: {e}")
+        return None
 def pil_image_to_bytes(pil_image: Image.Image) -> bytes:
     """Convierte un objeto de imagen de PIL a bytes."""
     buf = io.BytesIO()
