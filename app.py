@@ -917,6 +917,27 @@ def crear_grafico_frasco(porcentaje: float, titulo: str) -> go.Figure:
 # ================================
 # Funciones de Guías (NUEVAS) - CORREGIDAS
 # ================================
+def custom_selectbox(label: str, options: list, key: str, search_placeholder: str = "Buscar...") -> str:
+    """Componente personalizado de selectbox con búsqueda."""
+    if f"{key}_search" not in st.session_state:
+        st.session_state[f"{key}_search"] = ""
+    
+    search_term = st.text_input(f"{label} - {search_placeholder}", 
+                               value=st.session_state[f"{key}_search"], 
+                               key=f"{key}_search_input")
+    
+    st.session_state[f"{key}_search"] = search_term
+    
+    if search_term:
+        filtered_options = [opt for opt in options if search_term.lower() in opt.lower()]
+    else:
+        filtered_options = options
+    
+    if not filtered_options:
+        st.warning("No se encontraron resultados.")
+        return None
+    
+    return st.selectbox(label, filtered_options, key=key)
 
 def generar_numero_seguimiento(record_id: int) -> str:
     """Genera un número de seguimiento único."""
@@ -2280,14 +2301,15 @@ def mostrar_generacion_guias():
     with st.form("form_generar_guia", clear_on_submit=False):
         col1, col2 = st.columns(2)
         with col1:
-            store_name = custom_selectbox("Seleccione Tienda", tiendas['name'].tolist(), "store_select", "Buscar tienda...")
+            store_name = st.selectbox("Seleccione Tienda", tiendas['name'].tolist(), key="store_select")
             brand = st.radio("Seleccione Empresa:", ["Fashion", "Tempo"], horizontal=True, key="brand_select")
         
         with col2:
             sender_name = st.selectbox("Seleccione Remitente:", options=remitentes['name'].tolist(), key="sender_select")
             url = st.text_input("Ingrese URL del Pedido:", key="url_input", placeholder="https://...")
         
-        submitted = st.form_submit_button("Generar Guía", use_container_width=True, key="generate_guide_button")
+        # Botón de submit dentro del formulario
+        submitted = st.form_submit_button("Generar Guía", use_container_width=True)
         
         if submitted:
             if not all([store_name, brand, url, sender_name]):
@@ -2351,7 +2373,7 @@ def mostrar_generacion_guias():
                     file_name=f"guia_{st.session_state.get('store_select', '')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
                     mime="application/pdf",
                     use_container_width=True,
-                    key="download_pdf_button"  # Clave única para este botón
+                    key="download_pdf_button"
                 )
         with col2:
             if st.button("🖨️ Marcar como Impresa", use_container_width=True, key="mark_printed_button"):
@@ -2364,8 +2386,8 @@ def mostrar_generacion_guias():
                 time.sleep(1)
                 st.rerun()
         st.markdown("</div>", unsafe_allow_html=True)
-               
-              
+        
+                 
         
 def mostrar_historial_guias():
     """Muestra el historial de guías generadas"""
