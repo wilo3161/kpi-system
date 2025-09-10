@@ -896,29 +896,6 @@ def crear_grafico_interactivo(df: pd.DataFrame, x: str, y: str, title: str,
 
 def crear_grafico_frasco(porcentaje: float, titulo: str) -> go.Figure:
     """Crea un gráfico de frasco de agua para mostrar el porcentaje de cumplimiento"""
-    # En la función mostrar_dashboard_kpis, modificar la sección del gráfico de frasco:
-
-# Obtener el mes y año del rango de fechas seleccionado
-selected_month = fecha_inicio.month
-selected_year = fecha_inicio.year
-
-# Filtrar datos del mes seleccionado para transferencias
-df_month = df[(df['fecha'].dt.month == selected_month) & 
-              (df['fecha'].dt.year == selected_year)]
-df_transferencias_month = df_month[df_month['equipo'] == 'Transferencias']
-
-# Obtener meta mensual de transferencias
-if not df_transferencias_month.empty:
-    meta_mensual_transferencias = df_transferencias_month['meta_mensual'].iloc[0]
-else:
-    # Si no hay datos, usar un valor por defecto basado en el mes
-    meta_mensual_transferencias = 70000  # Valor por defecto
-
-cum_transferencias = df_transferencias_month['cantidad'].sum()
-cumplimiento_transferencias = (cum_transferencias / meta_mensual_transferencias * 100) if meta_mensual_transferencias > 0 else 0
-
-# Mostrar el mes que se está visualizando
-st.markdown(f"<h3 class='section-title animate-fade-in'>📅 Cumplimiento de Metas Mensuales - {fecha_inicio.strftime('%B %Y')}</h3>", unsafe_allow_html=True)
     try:
         fig = go.Figure(go.Indicator(
             mode = "gauge+number",
@@ -1184,6 +1161,34 @@ def obtener_url_logo(brand: str) -> str:
             
     except Exception as e:
         logger.error(f"Error al obtener URL del logo para {brand}: {e}", exc_info=True)
+        return None
+
+def obtener_logo_imagen(brand: str) -> Image.Image:
+    """Obtiene y devuelve la imagen del logo desde Supabase Storage o local"""
+    logo_url = obtener_url_logo(brand)
+    
+    if not logo_url:
+        logger.error(f"No se pudo obtener URL del logo para {brand}")
+        return None
+        
+    try:
+        logger.info(f"Intentando descargar imagen desde: {logo_url}")
+        
+        # Manejar URLs locales
+        if logo_url.startswith("file://"):
+            local_path = logo_url[7:]
+            return Image.open(local_path)
+        
+        # Manejar URLs web
+        response = requests.get(logo_url, timeout=10)
+        
+        if response.status_code == 200:
+            return Image.open(BytesIO(response.content))
+        else:
+            logger.warning(f"No se pudo descargar el logo desde {logo_url}. Status: {response.status_code}")
+            return None
+    except Exception as e:
+        logger.error(f"Error al cargar el logo: {e}")
         return None
 
 def generar_pdf_guia(store_name: str, brand: str, url: str, sender_name: str, tracking_number: str) -> bytes:
@@ -1525,28 +1530,6 @@ def mostrar_dashboard_kpis():
     # Crear selector de rango de fechas
     st.markdown("<div class='date-selector animate-fade-in'>", unsafe_allow_html=True)
     st.markdown("<h3>Selecciona el rango de fechas a visualizar:</h3>", unsafe_allow_html=True)
-    # En la sección de selección de fechas del dashboard:
-
-# Calcular lunes y viernes de la semana actual
-hoy = datetime.now().date()
-lunes_semana = hoy - timedelta(days=hoy.weekday())
-viernes_semana = lunes_semana + timedelta(days=4)
-
-col1, col2 = st.columns(2)
-with col1:
-    fecha_inicio = st.date_input(
-        "Fecha de inicio:",
-        value=lunes_semana,
-        min_value=fechas_disponibles[-1] if fechas_disponibles else lunes_semana,
-        max_value=fechas_disponibles[0] if fechas_disponibles else viernes_semana
-    )
-with col2:
-    fecha_fin = st.date_input(
-        "Fecha de fin:",
-        value=viernes_semana,
-        min_value=fechas_disponibles[-1] if fechas_disponibles else lunes_semana,
-        max_value=fechas_disponibles[0] if fechas_disponibles else viernes_semana
-    )
     
     # Obtener fechas únicas y ordenarlas
     if not df.empty and 'fecha' in df.columns:
@@ -2791,86 +2774,4 @@ def main():
     """, unsafe_allow_html=True)
 
 if __name__ == "__main__":
-  def main():
-    """Función principal de la aplicación"""
-    
-    # Mostrar logo y título en el sidebar
-    st.sidebar.markdown("""
-    <div class='sidebar-title'>
-        <div class='aeropostale-logo'>AEROPOSTALE</div>
-        <div class='aeropostale-subtitle'>Sistema de Gestión de KPIs</div>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    # Menú de navegación para administrador
-    admin_menu_options = [
-        ("Dashboard KPIs", "📊", mostrar_dashboard_kpis),
-        ("Análisis Histórico", "📈", mostrar_analisis_historico_kpis),
-        ("Ingreso de Datos", "📥", mostrar_ingreso_datos_kpis),
-        ("Gestión de Trabajadores", "👥", mostrar_gestion_trabajadores_kpis),
-        ("Gestión de Distribuciones", "📦", mostrar_gestion_distribuciones),
-        ("Gestión de Usuarios Guías", "👤", mostrar_gestion_usuarios_guias),
-        ("Generar Guías", "📋", mostrar_generacion_guias),
-        ("Historial de Guías", "🔍", mostrar_historial_guias),
-        ("Ayuda y Contacto", "❓", mostrar_ayuda)
-    ]
-    
-    # Menú de navegación para usuarios de guías
-    guia_menu_options = [
-        ("Generar Guías", "📋", mostrar_generacion_guias),
-        ("Historial de Guías", "🔍", mostrar_historial_guias),
-        ("Ayuda y Contacto", "❓", mostrar_ayuda)
-    ]
-    
-    # Determinar qué menú mostrar
-    if verificar_password():
-        menu_options = admin_menu_options
-    elif verificar_usuario_guia():
-        menu_options = guia_menu_options
-    else:
-        # Mostrar opciones básicas hasta que se autentique
-        menu_options = [
-            ("Dashboard KPIs", "📊", mostrar_dashboard_kpis),
-            ("Generar Guías", "📋", mostrar_generacion_guias),
-            ("Historial de Guías", "🔍", mostrar_historial_guias),
-            ("Ayuda y Contacto", "❓", mostrar_ayuda)
-        ]
-    
-    # Mostrar opciones del menú
-    for i, (label, icon, _) in enumerate(menu_options):
-        selected = st.sidebar.button(
-            f"{icon} {label}",
-            key=f"menu_{i}",
-            use_container_width=True
-        )
-        if selected:
-            st.session_state.selected_menu = i
-    
-    # Establecer una opción predeterminada si no hay ninguna seleccionada
-    if 'selected_menu' not in st.session_state:
-        st.session_state.selected_menu = 0
-    
-    # Mostrar contenido según la opción seleccionada
-    _, _, func = menu_options[st.session_state.selected_menu]
-    
-    # Para las opciones que requieren autenticación específica
-    if st.session_state.selected_menu == 5:  # Gestión de Usuarios Guías
-        if not verificar_password():
-            solicitar_autenticacion()
-        else:
-            func()
-    elif st.session_state.selected_menu in [6, 7]:  # Generar Guías, Historial de Guías
-        if not verificar_usuario_guia() and not verificar_password():
-            autenticar_usuario_guia()
-        else:
-            func()
-    else:
-        func()
-    
-    # Footer
-    st.markdown("""
-    <div class="footer">
-        Sistema de KPIs Aeropostale v2.0 | © 2025 Aeropostale. Todos los derechos reservados.<br>
-        Desarrollado por: <a href="mailto:wilson.perez@aeropostale.com">Wilson Pérez</a>
-    </div>
-    """, unsafe_allow_html=True)
+    main()
