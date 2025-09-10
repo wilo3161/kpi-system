@@ -1086,44 +1086,74 @@ def obtener_historial_guias() -> pd.DataFrame:
 def verificar_imagen_existe(url: str) -> bool:
     """Verifica si una imagen existe en la URL proporcionada"""
     try:
+        # Si es una URL local (file://), verificar con os.path.exists
+        if url.startswith("file://"):
+            local_path = url[7:]  # Remover "file://"
+            return os.path.exists(local_path)
+        
         response = requests.head(url, timeout=5)
         return response.status_code == 200
-    except:
+    except Exception as e:
+        logger.error(f"Error al verificar imagen {url}: {e}")
         return False
 
 def obtener_url_logo(brand: str) -> str:
     """Obtiene la URL pública del logo de la marca desde Supabase Storage"""
-    if supabase is None:
-        logger.error("Cliente de Supabase no inicializado")
-        return None
+    brand_lower = brand.lower()
     
+    # URLs predefinidas para marcas específicas (más eficiente)
+    branded_logos = {
+        "fashion": "https://nsgdyqoqzlcyyameccqn.supabase.co/storage/v1/object/public/images/Fashion.jpg",
+        "tempo": "https://nsgdyqoqzlcyyameccqn.supabase.co/storage/v1/object/public/images/Tempo.jpg",
+        # Agrega más marcas conocidas aquí
+    }
+    
+    # Primero, intentar con URLs predefinidas para marcas conocidas
+    if brand_lower in branded_logos:
+        logo_url = branded_logos[brand_lower]
+        if verificar_imagen_existe(logo_url):
+            logger.info(f"Imagen encontrada para marca {brand}: {logo_url}")
+            return logo_url
+    
+    # Si no es una marca predefinida, intentar con el método genérico
     try:
-        # Usar el project_ref directamente desde la URL proporcionada
-        project_ref = "nsgdyqoqzlcyyameccqn"
+        project_id = "nsgdyqoqzlcyyameccqn"
         bucket_name = 'images'
         
         # Intentar con diferentes extensiones y formatos
         posibles_nombres = [
-            f"{brand.lower()}.jpg",
-            f"{brand.lower()}.jpeg",
-            f"{brand.lower()}.png",
-            f"{brand.upper()}.JPG",
-            f"{brand.upper()}.JPEG",
-            f"{brand.upper()}.PNG",
-            f"{brand.capitalize()}.jpg",
-            f"{brand.capitalize()}.jpeg",
-            f"{brand.capitalize()}.png"
+            f"{brand_lower}.jpg",
+            f"{brand_lower}.jpeg",
+            f"{brand_lower}.png",
+            f"{brand_lower}.webp",
+            f"{brand_upper}.JPG",
+            f"{brand_upper}.JPEG",
+            f"{brand_upper}.PNG",
+            f"{brand_capitalize}.jpg",
+            f"{brand_capitalize}.jpeg",
+            f"{brand_capitalize}.png"
         ]
         
         for file_name in posibles_nombres:
-            # Construir la URL pública correcta para Supabase Storage
-            logo_url = f"https://supabase.com/dashboard/project/nsgdyqoqzlcyyameccqn/storage/buckets/images/Fashion.jpg"
-            logo_url = f"https://supabase.com/dashboard/project/nsgdyqoqzlcyyameccqn/storage/buckets/images/Tempo.jpg"
+            # CONSTRUCCIÓN CORRECTA DE LA URL PÚBLICA DE SUPABASE
+            logo_url = f"https://{project_id}.supabase.co/storage/v1/object/public/{bucket_name}/{file_name}"
             
             # Verificar si la imagen existe
             if verificar_imagen_existe(logo_url):
                 logger.info(f"Imagen encontrada: {logo_url}")
                 return logo_url
+        
+        # Si no se encontró en Supabase, intentar con imágenes locales de respaldo
+        local_backup = {
+            "fashion": "local_images/fashion.jpg",
+            "tempo": "local_images/tempo.jpg"
+        }
+        
+        if brand_lower in local_backup:
+            local_path = local_backup[brand_lower]
+            if os.path.exists(local_path):
+                logger.info(f"Usando imagen de respaldo local para {brand}: {local_path}")
+                return f"file://{os.path.abspath(local_path)}"
         
         logger.error(f"No se encontró ninguna imagen para la marca {brand}")
         return None
@@ -1133,7 +1163,7 @@ def obtener_url_logo(brand: str) -> str:
         return None
 
 def obtener_logo_imagen(brand: str) -> Image.Image:
-    """Obtiene y devuelve la imagen del logo desde Supabase Storage"""
+    """Obtiene y devuelve la imagen del logo desde Supabase Storage o local"""
     logo_url = obtener_url_logo(brand)
     
     if not logo_url:
@@ -1142,6 +1172,13 @@ def obtener_logo_imagen(brand: str) -> Image.Image:
         
     try:
         logger.info(f"Intentando descargar imagen desde: {logo_url}")
+        
+        # Manejar URLs locales
+        if logo_url.startswith("file://"):
+            local_path = logo_url[7:]
+            return Image.open(local_path)
+        
+        # Manejar URLs web
         response = requests.get(logo_url, timeout=10)
         
         if response.status_code == 200:
