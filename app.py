@@ -1117,7 +1117,8 @@ def obtener_url_logo(brand: str) -> str:
         
         for file_name in posibles_nombres:
             # Construir la URL pública correcta para Supabase Storage
-            logo_url = f"https://{project_ref}.supabase.co/storage/v1/object/public/{bucket_name}/{file_name}"
+            logo_url = f"https://supabase.com/dashboard/project/nsgdyqoqzlcyyameccqn/storage/buckets/images/Fashion.jpg"
+            logo_url = f"https://supabase.com/dashboard/project/nsgdyqoqzlcyyameccqn/storage/buckets/images/Tempo.jpg"
             
             # Verificar si la imagen existe
             if verificar_imagen_existe(logo_url):
