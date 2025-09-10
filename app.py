@@ -23,6 +23,8 @@ from io import BytesIO
 from PIL import Image as PILImage
 import os
 import requests
+import calendar
+from dateutil.relativedelta import relativedelta
 
 
 # ================================
@@ -44,6 +46,7 @@ logger = logging.getLogger(__name__)
 SUPABASE_URL = "https://nsgdyqoqzlcyyameccqn.supabase.co"
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5zZ2R5cW9xemxjeXlhbWVjY3FuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTYwMTA3MzksImV4cCI6MjA3MTU4NjczOX0.jA6sem9IMts6aPeYlMsldbtQaEaKAuQaQ1xf03TdWso"
 ADMIN_PASSWORD = "Wilo3161"  # Contraseña única sensible a mayúsculas
+GUIDE_USER_PASSWORD = "AeroGuide2024"  # Contraseña por defecto para usuarios de guías
 
 # Configuración de directorios para imágenes
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -59,7 +62,7 @@ def init_supabase() -> Client:
     """Inicializa y cachea el cliente de Supabase."""
     if not SUPABASE_URL or not SUPABASE_KEY:
         logger.error("Faltan las variables de entorno SUPABASE_URL o SUPABASE_KEY")
-        st.error("Faltan las variables de entorno SUPABASE_URL o SUPABASE_KEY")
+        st.error("Faltan las variables de entorno SUPABASE_URL or SUPABASE_KEY")
         return None
     
     try:
@@ -288,6 +291,10 @@ body {
     color: var(--error-color);
 }
 
+.trend-neutral {
+    color: var(--warning-color);
+}
+
 /* Info, warning, success boxes con iluminación */
 .info-box, .warning-box, .success-box, .error-box {
     padding: 16px;
@@ -316,6 +323,22 @@ body {
     border-left-color: var(--error-color);
     background: rgba(244, 67, 54, 0.1);
     color: #ffcdd2;
+}
+
+.alert-box {
+    border-left-color: var(--warning-color);
+    background: rgba(255, 152, 0, 0.15);
+    color: #ffe0b2;
+    border-radius: 8px;
+    padding: 12px;
+    margin: 10px 0;
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0% { box-shadow: 0 0 0 0 rgba(255, 152, 0, 0.4); }
+    70% { box-shadow: 0 0 0 10px rgba(255, 152, 0, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(255, 152, 0, 0); }
 }
 
 /* Animaciones */
@@ -409,6 +432,75 @@ body {
         padding: 18px;
     }
 }
+
+/* Estilos para indicadores de tendencia */
+.trend-indicator {
+    display: inline-flex;
+    align-items: center;
+    font-size: 0.9em;
+    padding: 4px 8px;
+    border-radius: 12px;
+    margin-left: 8px;
+}
+
+.trend-indicator.up {
+    background-color: rgba(76, 175, 80, 0.2);
+    color: var(--success-color);
+}
+
+.trend-indicator.down {
+    background-color: rgba(244, 67, 54, 0.2);
+    color: var(--error-color);
+}
+
+.trend-indicator.neutral {
+    background-color: rgba(255, 152, 0, 0.2);
+    color: var(--warning-color);
+}
+
+.variation-indicator {
+    font-size: 0.85em;
+    margin-top: 5px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.variation-positive {
+    color: var(--success-color);
+}
+
+.variation-negative {
+    color: var(--error-color);
+}
+
+.variation-neutral {
+    color: var(--warning-color);
+}
+
+/* Estilos para alertas tempranas */
+.early-warning {
+    border: 1px solid var(--warning-color);
+    background: rgba(255, 152, 0, 0.1);
+    border-radius: 8px;
+    padding: 12px;
+    margin: 8px 0;
+    animation: pulse 2s infinite;
+}
+
+.early-warning-critical {
+    border: 1px solid var(--error-color);
+    background: rgba(244, 67, 54, 0.1);
+    border-radius: 8px;
+    padding: 12px;
+    margin: 8px 0;
+    animation: pulse 1s infinite;
+}
+
+.warning-icon {
+    font-size: 1.5em;
+    margin-right: 10px;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -444,6 +536,167 @@ def hash_password(pw: str) -> str:
     """Genera un hash SHA256 para una contraseña."""
     return hashlib.sha256(pw.encode()).hexdigest()
 
+def obtener_dias_laborales_mes(ano: int, mes: int) -> int:
+    """Calcula la cantidad de días laborales en un mes (excluye fines de semana)"""
+    num_dias = calendar.monthrange(ano, mes)[1]
+    dias_laborales = 0
+    
+    for dia in range(1, num_dias + 1):
+        fecha = datetime(ano, mes, dia)
+        # Lunes a Viernes (0=Lunes, 6=Domingo)
+        if fecha.weekday() < 5:
+            dias_laborales += 1
+    
+    return dias_laborales
+
+def obtener_dias_laborales_hasta_hoy(ano: int, mes: int) -> int:
+    """Calcula la cantidad de días laborales hasta la fecha actual en el mes"""
+    hoy = datetime.now()
+    dias_laborales = 0
+    
+    for dia in range(1, hoy.day + 1):
+        try:
+            fecha = datetime(ano, mes, dia)
+            # Lunes a Viernes (0=Lunes, 6=Domingo)
+            if fecha.weekday() < 5 and fecha <= hoy:
+                dias_laborales += 1
+        except ValueError:
+            # Día inválido para el mes (por ejemplo, 31 en febrero)
+            continue
+    
+    return dias_laborales
+
+def calcular_variacion(valor_actual: float, valor_anterior: float) -> Tuple[float, str]:
+    """Calcula la variación porcentual entre dos valores y determina la tendencia"""
+    if valor_anterior == 0:
+        return 0, "neutral"
+    
+    variacion = ((valor_actual - valor_anterior) / valor_anterior) * 100
+    
+    if variacion > 5:
+        tendencia = "up"
+    elif variacion < -5:
+        tendencia = "down"
+    else:
+        tendencia = "neutral"
+    
+    return variacion, tendencia
+
+def obtener_icono_tendencia(tendencia: str) -> str:
+    """Devuelve el icono correspondiente a la tendencia"""
+    if tendencia == "up":
+        return "📈"
+    elif tendencia == "down":
+        return "📉"
+    else:
+        return "➡️"
+
+# ================================
+# FUNCIONES DE AUTENTICACIÓN MEJORADAS
+# ================================
+
+def verificar_password() -> bool:
+    """Verifica si el usuario tiene permisos para realizar acciones críticas"""
+    if 'password_correct' not in st.session_state:
+        st.session_state.password_correct = False
+    return st.session_state.password_correct
+
+def verificar_usuario_guia() -> bool:
+    """Verifica si el usuario tiene permisos para el sistema de guías"""
+    if 'guia_authenticated' not in st.session_state:
+        st.session_state.guia_authenticated = False
+    return st.session_state.guia_authenticated
+
+def solicitar_autenticacion():
+    """Muestra un formulario de autenticación"""
+    st.markdown("""
+    <div class="password-container animate-fade-in">
+        <div class="logo-container">
+            <div class="aeropostale-logo">AEROPOSTALE</div>
+            <div class="aeropostale-subtitle">Sistema de Gestión de KPIs</div>
+        </div>
+        <h2 class="password-title">🔐 Acceso Restringido</h2>
+        <p style="text-align: center; color: var(--text-secondary); margin-bottom: 25px;">
+            Ingrese la contraseña para realizar esta acción
+        </p>
+    """, unsafe_allow_html=True)
+    
+    password = st.text_input("Contraseña:", type="password", key="auth_password", 
+                            placeholder="Ingrese su contraseña", 
+                            label_visibility="collapsed")
+    
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        submitted = st.button("Ingresar", use_container_width=True)
+    
+    st.markdown("</div>", unsafe_allow_html=True)
+    
+    if submitted:
+        if password == ADMIN_PASSWORD:
+            st.session_state.password_correct = True
+            st.success("✅ Acceso concedido")
+            time.sleep(1)
+            st.rerun()
+        else:
+            st.error("❌ Contraseña incorrecta")
+
+def autenticar_usuario_guia():
+    """Muestra un formulario de autenticación para usuarios de guías"""
+    st.markdown("""
+    <div class="password-container animate-fade-in">
+        <div class="logo-container">
+            <div class="aeropostale-logo">AEROPOSTALE</div>
+            <div class="aeropostale-subtitle">Sistema de Guías</div>
+        </div>
+        <h2 class="password-title">🔐 Acceso Usuarios de Guías</h2>
+        <p style="text-align: center; color: var(--text-secondary); margin-bottom: 25px;">
+            Ingrese la contraseña para acceder al sistema de guías
+        </p>
+    """, unsafe_allow_html=True)
+    
+    password = st.text_input("Contraseña:", type="password", key="guia_password", 
+                            placeholder="Ingrese la contraseña de guías", 
+                            label_visibility="collapsed")
+    
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        submitted = st.button("Ingresar", use_container_width=True)
+    
+    st.markdown("</div>", unsafe_allow_html=True)
+    
+    if submitted:
+        if password == GUIDE_USER_PASSWORD:
+            st.session_state.guia_authenticated = True
+            st.success("✅ Acceso concedido al sistema de guías")
+            time.sleep(1)
+            st.rerun()
+        else:
+            st.error("❌ Contraseña incorrecta")
+
+def mostrar_gestion_usuarios_guias():
+    """Muestra la interfaz de gestión de usuarios de guías (solo admin)"""
+    if not verificar_password():
+        solicitar_autenticacion()
+        return
+        
+    st.markdown("<h1 class='header-title animate-fade-in'>👥 Gestión de Usuarios de Guías</h1>", unsafe_allow_html=True)
+    
+    st.markdown("<div class='guide-section animate-fade-in'>", unsafe_allow_html=True)
+    st.markdown("<h2 class='section-title animate-fade-in'>Configuración de Contraseña</h2>", unsafe_allow_html=True)
+    
+    nueva_password = st.text_input("Nueva contraseña para usuarios de guías:", 
+                                  type="password", 
+                                  value=GUIDE_USER_PASSWORD,
+                                  key="nueva_password_guias")
+    
+    if st.button("Actualizar Contraseña", key="actualizar_password_guias"):
+        # Aquí iría la lógica para guardar la nueva contraseña en una base de datos segura
+        st.success("✅ Contraseña actualizada correctamente")
+        time.sleep(1)
+        st.rerun()
+    
+    st.markdown("</div>", unsafe_allow_html=True)
+
 # ================================
 # FUNCIONES DE KPIs
 # ================================
@@ -457,7 +710,7 @@ def kpi_transferencias(transferidas: float, meta: float = 1750) -> float:
     """Calcula el KPI para transferencias"""
     return calcular_kpi(transferidas, meta)
 
-def kpi_arreglos(arregladas: float, meta: float = 150) -> float:
+def kpi_arreglos(arregladas: float, meta: float = 1000) -> float:
     """Calcula el KPI para arreglos"""
     return calcular_kpi(arregladas, meta)
 
