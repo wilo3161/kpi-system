@@ -5,7 +5,6 @@ import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
 import time
-import os
 import hashlib
 import logging
 from supabase import create_client, Client
@@ -23,6 +22,8 @@ import requests
 from io import BytesIO
 from PIL import Image as PILImage
 import os
+import requests
+
 
 # ================================
 # CONFIGURACIÓN INICIAL Y LOGGING
