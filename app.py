@@ -1349,7 +1349,7 @@ def eliminar_guia(guia_id: int) -> bool:
 # SISTEMA DE AUTENTICACIÓN
 # ================================
 
-ddef verificar_password(tipo_requerido: str = "admin") -> bool:
+def verificar_password(tipo_requerido: str = "admin") -> bool:
     """Verifica si el usuario tiene permisos para la sección requerida"""
     if 'user_type' not in st.session_state:
         return False
