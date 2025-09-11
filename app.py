@@ -1369,9 +1369,9 @@ def solicitar_autenticacion(tipo_requerido: str = "admin"):
         </div>
         <h2 class="password-title">🔐 Acceso Restringido</h2>
         <p style="text-align: center; color: var(--text-secondary); margin-bottom: 25px;">
-            Ingrese la contraseña para realizar esta acción
+            Ingrese la contraseña para acceso de {tipo_requerido}
         </p>
-    """, unsafe_allow_html=True)
+    """.format(tipo_requerido="Administrador" if tipo_requerido == "admin" else "Usuario"), unsafe_allow_html=True)
     
     password = st.text_input("Contraseña:", type="password", key="auth_password", 
                             placeholder="Ingrese su contraseña", 
@@ -1380,19 +1380,26 @@ def solicitar_autenticacion(tipo_requerido: str = "admin"):
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         submitted = st.button("Ingresar", use_container_width=True)
+        cancel = st.button("Cancelar", use_container_width=True)
     
     st.markdown("</div>", unsafe_allow_html=True)
     
+    if cancel:
+        st.session_state.show_login = False
+        st.rerun()
+    
     if submitted:
-        if password == ADMIN_PASSWORD:
+        if tipo_requerido == "admin" and password == ADMIN_PASSWORD:
             st.session_state.user_type = "admin"
             st.session_state.password_correct = True
+            st.session_state.show_login = False
             st.success("✅ Acceso de administrador concedido")
             time.sleep(1)
             st.rerun()
-        elif password == USER_PASSWORD:
+        elif tipo_requerido == "user" and password == USER_PASSWORD:
             st.session_state.user_type = "user"
             st.session_state.password_correct = True
+            st.session_state.show_login = False
             st.success("✅ Acceso de usuario concedido")
             time.sleep(1)
             st.rerun()
@@ -2752,83 +2759,98 @@ def main():
     </div>
     """, unsafe_allow_html=True)
     
-    # Menú de navegación - diferentes opciones según el tipo de usuario
-    if 'user_type' not in st.session_state:
-        st.session_state.user_type = None
+    # Menú de navegación - Opciones siempre visibles
+    public_menu_options = [
+        ("Dashboard KPIs", "📊", mostrar_dashboard_kpis),
+        ("Análisis Histórico", "📈", mostrar_analisis_historico_kpis),
+        ("Ayuda y Contacto", "❓", mostrar_ayuda)
+    ]
     
     # Opciones para administradores
     admin_menu_options = [
-        ("Dashboard KPIs", "📊", mostrar_dashboard_kpis),
-        ("Análisis Histórico", "📈", mostrar_analisis_historico_kpis),
         ("Ingreso de Datos", "📥", mostrar_ingreso_datos_kpis),
         ("Gestión de Trabajadores", "👥", mostrar_gestion_trabajadores_kpis),
-        ("Gestión de Distribuciones", "📦", mostrar_gestion_distribuciones),
-        ("Generar Guías", "📋", mostrar_generacion_guias),
-        ("Historial de Guías", "🔍", mostrar_historial_guias),
-        ("Ayuda y Contacto", "❓", mostrar_ayuda)
+        ("Gestión de Distribuciones", "📦", mostrar_gestion_distribuciones)
     ]
     
     # Opciones para usuarios normales (solo guías)
     user_menu_options = [
         ("Generar Guías", "📋", mostrar_generacion_guias),
-        ("Historial de Guías", "🔍", mostrar_historial_guias),
-        ("Ayuda y Contacto", "❓", mostrar_ayuda)
+        ("Historial de Guías", "🔍", mostrar_historial_guias)
     ]
     
-    # Seleccionar menú según tipo de usuario
-    if st.session_state.user_type == "admin":
-        menu_options = admin_menu_options
-    elif st.session_state.user_type == "user":
-        menu_options = user_menu_options
-    else:
-        menu_options = []  # No mostrar menú hasta que se autentique
-    
-    # Mostrar opciones del menú
-    for i, (label, icon, _) in enumerate(menu_options):
+    # Mostrar siempre las opciones públicas
+    for i, (label, icon, func) in enumerate(public_menu_options):
         selected = st.sidebar.button(
             f"{icon} {label}",
-            key=f"menu_{i}",
+            key=f"public_menu_{i}",
             use_container_width=True
         )
         if selected:
             st.session_state.selected_menu = i
+            st.session_state.menu_type = "public"
     
-    # Mostrar botón de login si no está autenticado
+    # Separador
+    st.sidebar.markdown("---")
+    
+    # Mostrar opciones de autenticación
     if st.session_state.user_type is None:
-        if st.sidebar.button("🔐 Iniciar Sesión", use_container_width=True):
-            st.session_state.show_login = True
-        
-        if st.session_state.get('show_login', False):
-            solicitar_autenticacion("user")  # Por defecto pedir autenticación de usuario
-    
-    # Mostrar botón de logout si está autenticado
+        st.sidebar.markdown("**🔐 Acceso Restringido**")
+        col1, col2 = st.sidebar.columns(2)
+        with col1:
+            if st.button("Admin", use_container_width=True):
+                st.session_state.show_login = "admin"
+        with col2:
+            if st.button("Usuario", use_container_width=True):
+                st.session_state.show_login = "user"
     else:
+        # Mostrar opciones según tipo de usuario
+        if st.session_state.user_type == "admin":
+            menu_options = admin_menu_options
+        elif st.session_state.user_type == "user":
+            menu_options = user_menu_options
+        
+        for i, (label, icon, func) in enumerate(menu_options):
+            selected = st.sidebar.button(
+                f"{icon} {label}",
+                key=f"priv_menu_{i}",
+                use_container_width=True
+            )
+            if selected:
+                st.session_state.selected_menu = i + len(public_menu_options)
+                st.session_state.menu_type = st.session_state.user_type
+        
+        # Botón de logout
         if st.sidebar.button("🚪 Cerrar Sesión", use_container_width=True):
             st.session_state.user_type = None
             st.session_state.password_correct = False
             st.session_state.selected_menu = 0
+            st.session_state.menu_type = "public"
             st.rerun()
+    
+    # Mostrar formulario de login si es necesario
+    if st.session_state.get('show_login'):
+        solicitar_autenticacion(st.session_state.show_login)
     
     # Establecer una opción predeterminada si no hay ninguna seleccionada
     if 'selected_menu' not in st.session_state:
         st.session_state.selected_menu = 0
+        st.session_state.menu_type = "public"
     
     # Mostrar contenido según la opción seleccionada
-    if st.session_state.user_type is not None and menu_options:
-        _, _, func = menu_options[st.session_state.selected_menu]
-        
-        # Para las opciones que requieren autenticación de admin
-        if st.session_state.selected_menu in [2, 3, 4]:  # Ingreso de Datos, Gestión de Trabajadores, Gestión de Distribuciones
-            if not verificar_password("admin"):
-                solicitar_autenticacion("admin")
-            else:
-                func()
-        else:
+    if st.session_state.menu_type == "public" and st.session_state.selected_menu < len(public_menu_options):
+        _, _, func = public_menu_options[st.session_state.selected_menu]
+        func()
+    elif st.session_state.menu_type == "admin" and st.session_state.selected_menu >= len(public_menu_options):
+        index = st.session_state.selected_menu - len(public_menu_options)
+        if index < len(admin_menu_options):
+            _, _, func = admin_menu_options[index]
             func()
-    else:
-        # Mostrar página de inicio para usuarios no autenticados
-        st.markdown("<h1 class='header-title animate-fade-in'>Bienvenido al Sistema de Gestión de Guías Aeropostale</h1>", unsafe_allow_html=True)
-        st.info("Por favor, inicie sesión para acceder al sistema.")
+    elif st.session_state.menu_type == "user" and st.session_state.selected_menu >= len(public_menu_options):
+        index = st.session_state.selected_menu - len(public_menu_options)
+        if index < len(user_menu_options):
+            _, _, func = user_menu_options[index]
+            func()
     
     # Footer
     st.markdown("""
