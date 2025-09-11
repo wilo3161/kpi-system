@@ -1351,6 +1351,10 @@ def eliminar_guia(guia_id: int) -> bool:
 
 def verificar_password(tipo_requerido: str = "admin") -> bool:
     """Verifica si el usuario tiene permisos para la sección requerida"""
+    # Las secciones públicas siempre son accesibles
+    if tipo_requerido == "public":
+        return True
+    
     if 'user_type' not in st.session_state:
         return False
     
@@ -1359,6 +1363,7 @@ def verificar_password(tipo_requerido: str = "admin") -> bool:
     elif tipo_requerido == "user":
         return st.session_state.user_type in ["admin", "user"]
     return False
+
 def solicitar_autenticacion(tipo_requerido: str = "admin"):
     """Muestra un formulario de autenticación para diferentes tipos de usuario"""
     st.markdown("""
@@ -2346,6 +2351,9 @@ def mostrar_ingreso_datos_kpis():
 
 def mostrar_gestion_trabajadores_kpis():
     """Muestra la interfaz de gestión de trabajadores"""
+    if not verificar_password("admin"):
+        solicitar_autenticacion("admin")
+        return
     st.markdown("<h1 class='header-title animate-fade-in'>👥 Gestión de Trabajadores</h1>", unsafe_allow_html=True)
     
     if supabase is None:
@@ -2439,6 +2447,11 @@ def pil_image_to_bytes(pil_image: Image.Image) -> bytes:
 
 def mostrar_generacion_guias():
     """Muestra la interfaz para generar guías de envío"""
+    if not verificar_password("user"):
+        # Mostrar formulario de autenticación para usuario o admin
+        if st.session_state.user_type is None:
+            solicitar_autenticacion("user")
+        return
     st.markdown("<h1 class='header-title animate-fade-in'>📦 Generación de Guías de Envío</h1>", unsafe_allow_html=True)
     
     if supabase is None:
@@ -2559,6 +2572,11 @@ def mostrar_generacion_guias():
         
 def mostrar_historial_guias():
     """Muestra el historial de guías generadas"""
+    if not verificar_password("user"):
+        # Mostrar formulario de autenticación para usuario o admin
+        if st.session_state.user_type is None:
+            solicitar_autenticacion("user")
+        return
     st.markdown("<h1 class='header-title animate-fade-in'>🔍 Historial de Guías de Envío</h1>", unsafe_allow_html=True)
     
     if supabase is None:
@@ -2769,52 +2787,53 @@ def main():
     if 'password_correct' not in st.session_state:
         st.session_state.password_correct = False
     
-    # Menú de navegación - diferentes opciones según el tipo de usuario
-    
-    # Opciones para administradores
-    admin_menu_options = [
-        ("Dashboard KPIs", "📊", mostrar_dashboard_kpis),
-        ("Análisis Histórico", "📈", mostrar_analisis_historico_kpis),
-        ("Ingreso de Datos", "📥", mostrar_ingreso_datos_kpis),
-        ("Gestión de Trabajadores", "👥", mostrar_gestion_trabajadores_kpis),
-        ("Gestión de Distribuciones", "📦", mostrar_gestion_distribuciones),
-        ("Generar Guías", "📋", mostrar_generacion_guias),
-        ("Historial de Guías", "🔍", mostrar_historial_guias),
-        ("Ayuda y Contacto", "❓", mostrar_ayuda)
+    # Definir opciones de menú
+    menu_options = [
+        ("Dashboard KPIs", "📊", mostrar_dashboard_kpis, "public"),
+        ("Análisis Histórico", "📈", mostrar_analisis_historico_kpis, "public"),
+        ("Ingreso de Datos", "📥", mostrar_ingreso_datos_kpis, "admin"),
+        ("Gestión de Trabajadores", "👥", mostrar_gestion_trabajadores_kpis, "admin"),
+        ("Gestión de Distribuciones", "📦", mostrar_gestion_distribuciones, "admin"),
+        ("Generar Guías", "📋", mostrar_generacion_guias, "user"),
+        ("Historial de Guías", "🔍", mostrar_historial_guias, "user"),
+        ("Ayuda y Contacto", "❓", mostrar_ayuda, "public")
     ]
     
-    # Opciones para usuarios normales (solo guías)
-    user_menu_options = [
-        ("Generar Guías", "📋", mostrar_generacion_guias),
-        ("Historial de Guías", "🔍", mostrar_historial_guias),
-        ("Ayuda y Contacto", "❓", mostrar_ayuda)
-    ]
-    
-    # Seleccionar menú según tipo de usuario
-    if st.session_state.user_type == "admin":
-        menu_options = admin_menu_options
-    elif st.session_state.user_type == "user":
-        menu_options = user_menu_options
-    else:
-        menu_options = []  # No mostrar menú hasta que se autentique
-    
-    # Mostrar opciones del menú
-    for i, (label, icon, _) in enumerate(menu_options):
-        selected = st.sidebar.button(
-            f"{icon} {label}",
-            key=f"menu_{i}",
-            use_container_width=True
-        )
-        if selected:
-            st.session_state.selected_menu = i
+    # Mostrar opciones del menú según permisos
+    for i, (label, icon, _, permiso) in enumerate(menu_options):
+        # Verificar si la opción debe mostrarse
+        mostrar_opcion = False
+        
+        if permiso == "public":
+            mostrar_opcion = True
+        elif permiso == "user" and st.session_state.user_type in ["user", "admin"]:
+            mostrar_opcion = True
+        elif permiso == "admin" and st.session_state.user_type == "admin":
+            mostrar_opcion = True
+        
+        if mostrar_opcion:
+            selected = st.sidebar.button(
+                f"{icon} {label}",
+                key=f"menu_{i}",
+                use_container_width=True
+            )
+            if selected:
+                st.session_state.selected_menu = i
     
     # Mostrar botón de login si no está autenticado
     if st.session_state.user_type is None:
-        if st.sidebar.button("🔐 Iniciar Sesión", use_container_width=True):
-            st.session_state.show_login = True
+        col1, col2 = st.sidebar.columns(2)
+        with col1:
+            if st.button("👤 Acceso Usuario", use_container_width=True):
+                st.session_state.show_login = True
+                st.session_state.login_type = "user"
+        with col2:
+            if st.button("🔧 Acceso Admin", use_container_width=True):
+                st.session_state.show_login = True
+                st.session_state.login_type = "admin"
         
         if st.session_state.get('show_login', False):
-            solicitar_autenticacion("user")  # Por defecto pedir autenticación de usuario
+            solicitar_autenticacion(st.session_state.get('login_type', 'user'))
     
     # Mostrar botón de logout si está autenticado
     else:
@@ -2824,27 +2843,33 @@ def main():
             st.session_state.selected_menu = 0
             st.session_state.show_login = False
             st.rerun()
+        
+        # Mostrar información del usuario actual
+        st.sidebar.info(f"Usuario: {'Administrador' if st.session_state.user_type == 'admin' else 'Usuario'}")
     
     # Verificar que selected_menu esté dentro del rango válido
-    if menu_options and st.session_state.selected_menu >= len(menu_options):
+    if st.session_state.selected_menu >= len(menu_options):
         st.session_state.selected_menu = 0
     
-    # Mostrar contenido según la opción seleccionada
-    if st.session_state.user_type is not None and menu_options:
-        _, _, func = menu_options[st.session_state.selected_menu]
-        
-        # Para las opciones que requieren autenticación de admin
-        if st.session_state.selected_menu in [2, 3, 4]:  # Ingreso de Datos, Gestión de Trabajadores, Gestión de Distribuciones
-            if not verificar_password("admin"):
-                solicitar_autenticacion("admin")
-            else:
-                func()
-        else:
-            func()
+    # Obtener la opción seleccionada
+    label, icon, func, permiso = menu_options[st.session_state.selected_menu]
+    
+    # Verificar permisos para la opción seleccionada
+    if permiso == "public":
+        func()
+    elif permiso == "user" and st.session_state.user_type in ["user", "admin"]:
+        func()
+    elif permiso == "admin" and st.session_state.user_type == "admin":
+        func()
     else:
-        # Mostrar página de inicio para usuarios no autenticados
-        st.markdown("<h1 class='header-title animate-fade-in'>Bienvenido al Sistema de Gestión de Guías Aeropostale</h1>", unsafe_allow_html=True)
-        st.info("Por favor, inicie sesión para acceder al sistema.")
+        # Mostrar mensaje de acceso denegado
+        st.error("🔒 Acceso restringido. Necesita autenticarse para acceder a esta sección.")
+        
+        # Mostrar opciones de autenticación según el tipo requerido
+        if permiso == "admin":
+            solicitar_autenticacion("admin")
+        else:
+            solicitar_autenticacion("user")
     
     # Footer
     st.markdown("""
@@ -2853,6 +2878,5 @@ def main():
         Desarrollado por: <a href="mailto:wilson.perez@aeropostale.com">Wilson Pérez</a>
     </div>
     """, unsafe_allow_html=True)
-
 if __name__ == "__main__":
     main()
