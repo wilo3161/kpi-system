@@ -2444,131 +2444,316 @@ def pil_image_to_bytes(pil_image: Image.Image) -> bytes:
     buf = io.BytesIO()
     pil_image.save(buf, format="PNG")
     return buf.getvalue()
+    # ================================
+# NUEVAS FUNCIONES PARA GESTIÓN DE TIENDAS
+# ================================
+
+def obtener_tienda_por_id(tienda_id: int) -> Optional[Dict]:
+    """Obtiene una tienda específica por su ID desde Supabase"""
+    if supabase is None:
+        logger.error("Cliente de Supabase no inicializado")
+        return None
+    
+    try:
+        response = supabase.from_('guide_stores').select('*').eq('id', tienda_id).execute()
+        if response and hasattr(response, 'data') and response.data:
+            return response.data[0]
+        else:
+            logger.warning(f"No se encontró la tienda con ID {tienda_id}")
+            return None
+    except Exception as e:
+        logger.error(f"Error al obtener tienda por ID: {e}", exc_info=True)
+        return None
+
+def agregar_tienda(nombre: str, direccion: str, telefono: str) -> bool:
+    """Agrega una nueva tienda a la base de datos"""
+    if supabase is None:
+        logger.error("Cliente de Supabase no inicializado")
+        return False
+    
+    try:
+        data = {
+            'name': nombre,
+            'address': direccion,
+            'phone': telefono
+        }
+        response = supabase.from_('guide_stores').insert(data).execute()
+        
+        if hasattr(response, 'error') and response.error:
+            logger.error(f"No se pudo agregar la tienda: {response.error}")
+            return False
+        else:
+            logger.info(f"Tienda '{nombre}' agregada correctamente")
+            return True
+    except Exception as e:
+        logger.error(f"Error al agregar tienda: {e}", exc_info=True)
+        return False
+
+def actualizar_tienda(tienda_id: int, nombre: str, direccion: str, telefono: str) -> bool:
+    """Actualiza una tienda existente en la base de datos"""
+    if supabase is None:
+        logger.error("Cliente de Supabase no inicializado")
+        return False
+    
+    try:
+        data = {
+            'name': nombre,
+            'address': direccion,
+            'phone': telefono
+        }
+        response = supabase.from_('guide_stores').update(data).eq('id', tienda_id).execute()
+        
+        if hasattr(response, 'error') and response.error:
+            logger.error(f"No se pudo actualizar la tienda: {response.error}")
+            return False
+        else:
+            logger.info(f"Tienda ID {tienda_id} actualizada correctamente")
+            return True
+    except Exception as e:
+        logger.error(f"Error al actualizar tienda: {e}", exc_info=True)
+        return False
+
+def eliminar_tienda(tienda_id: int) -> bool:
+    """Elimina una tienda de la base de datos"""
+    if supabase is None:
+        logger.error("Cliente de Supabase no inicializado")
+        return False
+    
+    try:
+        response = supabase.from_('guide_stores').delete().eq('id', tienda_id).execute()
+        
+        if hasattr(response, 'error') and response.error:
+            logger.error(f"No se pudo eliminar la tienda: {response.error}")
+            return False
+        else:
+            logger.info(f"Tienda ID {tienda_id} eliminada correctamente")
+            return True
+    except Exception as e:
+        logger.error(f"Error al eliminar tienda: {e}", exc_info=True)
+        return False
 
 def mostrar_generacion_guias():
-    """Muestra la interfaz para generar guías de envío"""
-    if not verificar_password("user"):
-        # Mostrar formulario de autenticación para usuario o admin
-        if st.session_state.user_type is None:
-            solicitar_autenticacion("user")
-        return
+    """Muestra la interfaz para generar guías de envío y gestionar tiendas"""
     st.markdown("<h1 class='header-title animate-fade-in'>📦 Generación de Guías de Envío</h1>", unsafe_allow_html=True)
     
     if supabase is None:
         st.markdown("<div class='error-box animate-fade-in'>❌ Error de conexión a la base de datos. Verifique las variables de entorno.</div>", unsafe_allow_html=True)
         return
     
-    # Obtener datos necesarios
-    tiendas = obtener_tiendas()
-    remitentes = obtener_remitentes()
+    # Crear pestañas para las diferentes funcionalidades
+    tab1, tab2 = st.tabs(["📋 Generar Guía", "🏬 Gestionar Tiendas"])
     
-    if tiendas.empty or remitentes.empty:
-        st.markdown("<div class='warning-box animate-fade-in'>⚠️ No hay tiendas o remitentes configurados. Por favor, configure primero.</div>", unsafe_allow_html=True)
-        return
-    
-    # Inicializar estado de sesión si no existe
-    if 'show_preview' not in st.session_state:
-        st.session_state.show_preview = False
-    if 'pdf_data' not in st.session_state:
-        st.session_state.pdf_data = None
-    
-    # Formulario para generar guía
-    st.markdown("<div class='guide-section animate-fade-in'>", unsafe_allow_html=True)
-    st.markdown("<h2 class='section-title animate-fade-in'>Generar Nueva Guía</h2>", unsafe_allow_html=True)
-    
-    with st.form("form_generar_guia", clear_on_submit=False):
-        col1, col2 = st.columns(2)
-        with col1:
-            store_name = st.selectbox("Seleccione Tienda", tiendas['name'].tolist(), key="store_select")
-            brand = st.radio("Seleccione Empresa:", ["Fashion", "Tempo"], horizontal=True, key="brand_select")
+    with tab1:
+        # Código existente para generar guías
+        # Obtener datos necesarios
+        tiendas = obtener_tiendas()
+        remitentes = obtener_remitentes()
         
-        with col2:
-            sender_name = st.selectbox("Seleccione Remitente:", options=remitentes['name'].tolist(), key="sender_select")
-            url = st.text_input("Ingrese URL del Pedido:", key="url_input", placeholder="https://...")
+        if tiendas.empty or remitentes.empty:
+            st.markdown("<div class='warning-box animate-fade-in'>⚠️ No hay tiendas o remitentes configurados. Por favor, configure primero.</div>", unsafe_allow_html=True)
+            return
         
-        # Botón de submit dentro del formulario
-        submitted = st.form_submit_button("Generar Guía", use_container_width=True)
+        # Inicializar estado de sesión si no existe
+        if 'show_preview' not in st.session_state:
+            st.session_state.show_preview = False
+        if 'pdf_data' not in st.session_state:
+            st.session_state.pdf_data = None
         
-        if submitted:
-            if not all([store_name, brand, url, sender_name]):
-                st.markdown("<div class='error-box animate-fade-in'>❌ Por favor, complete todos los campos.</div>", unsafe_allow_html=True)
-                st.session_state.show_preview = False
-            elif not url.startswith(('http://', 'https://')):
-                st.markdown("<div class='error-box animate-fade-in'>❌ La URL debe comenzar con http:// or https://</div>", unsafe_allow_html=True)
-                st.session_state.show_preview = False
-            else:
-                # Guardar la guía
-                if guardar_guia(store_name, brand, url, sender_name):
-                    st.session_state.show_preview = True
-                    # Obtener información del remitente
-                    remitente_info = remitentes[remitentes['name'] == sender_name].iloc[0]
-                    st.session_state.remitente_address = remitente_info['address']
-                    st.session_state.remitente_phone = remitente_info['phone']
-                    st.session_state.tracking_number = generar_numero_seguimiento(1)
-                    
-                    # Generar PDF y guardarlo en session state
-                    st.session_state.pdf_data = generar_pdf_guia(
-                        store_name, brand, url, sender_name, st.session_state.tracking_number
-                    )
-                    
-                    st.markdown("<div class='success-box animate-fade-in'>✅ Guía generada correctamente. Puede ver la previsualización y exportarla.</div>", unsafe_allow_html=True)
-                else:
-                    st.markdown("<div class='error-box animate-fade-in'>❌ Error al guardar la guía.</div>", unsafe_allow_html=True)
-                    st.session_state.show_preview = False
-    
-    st.markdown("</div>", unsafe_allow_html=True)
-    
-    # Previsualización de la guía
-    if st.session_state.show_preview:
+        # Formulario para generar guía
         st.markdown("<div class='guide-section animate-fade-in'>", unsafe_allow_html=True)
-        st.markdown("<h2 class='section-title animate-fade-in'>Previsualización de la Guía</h2>", unsafe_allow_html=True)
+        st.markdown("<h2 class='section-title animate-fade-in'>Generar Nueva Guía</h2>", unsafe_allow_html=True)
         
-        # Información de la guía
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.markdown(f"<div class='guide-metric'><span class='guide-icon'>🏬</span> <strong>Tienda:</strong> {st.session_state.get('store_select', '')}</div>", unsafe_allow_html=True)
-        with col2:
-            st.markdown(f"<div class='guide-metric'><span class='guide-icon'>🏷️</span> <strong>Marca:</strong> {st.session_state.get('brand_select', '')}</div>", unsafe_allow_html=True)
-        with col3:
-            st.markdown(f"<div class='guide-metric'><span class='guide-icon'>📦</span> <strong>Remitente:</strong> {st.session_state.get('sender_select', '')}</div>", unsafe_allow_html=True)
+        with st.form("form_generar_guia", clear_on_submit=False):
+            col1, col2 = st.columns(2)
+            with col1:
+                store_name = st.selectbox("Seleccione Tienda", tiendas['name'].tolist(), key="store_select")
+                brand = st.radio("Seleccione Empresa:", ["Fashion", "Tempo"], horizontal=True, key="brand_select")
+            
+            with col2:
+                sender_name = st.selectbox("Seleccione Remitente:", options=remitentes['name'].tolist(), key="sender_select")
+                url = st.text_input("Ingrese URL del Pedido:", key="url_input", placeholder="https://...")
+            
+            # Botón de submit dentro del formulario
+            submitted = st.form_submit_button("Generar Guía", use_container_width=True)
+            
+            if submitted:
+                if not all([store_name, brand, url, sender_name]):
+                    st.markdown("<div class='error-box animate-fade-in'>❌ Por favor, complete todos los campos.</div>", unsafe_allow_html=True)
+                    st.session_state.show_preview = False
+                elif not url.startswith(('http://', 'https://')):
+                    st.markdown("<div class='error-box animate-fade-in'>❌ La URL debe comenzar con http:// or https://</div>", unsafe_allow_html=True)
+                    st.session_state.show_preview = False
+                else:
+                    # Guardar la guía
+                    if guardar_guia(store_name, brand, url, sender_name):
+                        st.session_state.show_preview = True
+                        # Obtener información del remitente
+                        remitente_info = remitentes[remitentes['name'] == sender_name].iloc[0]
+                        st.session_state.remitente_address = remitente_info['address']
+                        st.session_state.remitente_phone = remitente_info['phone']
+                        st.session_state.tracking_number = generar_numero_seguimiento(1)
+                        
+                        # Generar PDF y guardarlo en session state
+                        st.session_state.pdf_data = generar_pdf_guia(
+                            store_name, brand, url, sender_name, st.session_state.tracking_number
+                        )
+                        
+                        st.markdown("<div class='success-box animate-fade-in'>✅ Guía generada correctamente. Puede ver la previsualización y exportarla.</div>", unsafe_allow_html=True)
+                    else:
+                        st.markdown("<div class='error-box animate-fade-in'>❌ Error al guardar la guía.</div>", unsafe_allow_html=True)
+                        st.session_state.show_preview = False
         
-        st.markdown(f"<div class='guide-metric'><span class='guide-icon'>🔗</span> <strong>URL del Pedido:</strong> <a href='{st.session_state.get('url_input', '')}' target='_blank'>{st.session_state.get('url_input', '')}</a></div>", unsafe_allow_html=True)
-        
-        # Código QR - CORRECCIÓN: Usar pil_image_to_bytes para convertir la imagen
-        st.markdown("<h3>Código QR:</h3>", unsafe_allow_html=True)
-        qr_img = generar_qr_imagen(st.session_state.get('url_input', ''))
-        
-        # Convertir la imagen PIL a bytes antes de mostrarla
-        qr_bytes = pil_image_to_bytes(qr_img)
-        st.image(qr_bytes, width=200)
-        
-        # Botones de exportación
-        st.markdown("<div class='export-buttons animate-fade-in'>", unsafe_allow_html=True)
-        col1, col2 = st.columns(2)
-        with col1:
-            # Descargar PDF
-            if st.session_state.pdf_data is not None:
-                st.download_button(
-                    label="📄 Descargar PDF",
-                    data=st.session_state.pdf_data,
-                    file_name=f"guia_{st.session_state.get('store_select', '')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
-                    mime="application/pdf",
-                    use_container_width=True,
-                    key="download_pdf_button"
-                )
-        with col2:
-            if st.button("🖨️ Marcar como Impresa", use_container_width=True, key="mark_printed_button"):
-                # Aquí iría la lógica para actualizar el estado de la guía
-                st.markdown("<div class='success-box animate-fade-in'>✅ Guía marcada como impresa.</div>", unsafe_allow_html=True)
-                st.session_state.show_preview = False
-                # Limpiar datos de la sesión
-                if 'pdf_data' in st.session_state:
-                    del st.session_state.pdf_data
-                time.sleep(1)
-                st.rerun()
         st.markdown("</div>", unsafe_allow_html=True)
         
-        st.markdown("</div>", unsafe_allow_html=True)    
+        # Previsualización de la guía
+        if st.session_state.show_preview:
+            st.markdown("<div class='guide-section animate-fade-in'>", unsafe_allow_html=True)
+            st.markdown("<h2 class='section-title animate-fade-in'>Previsualización de la Guía</h2>", unsafe_allow_html=True)
+            
+            # Información de la guía
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.markdown(f"<div class='guide-metric'><span class='guide-icon'>🏬</span> <strong>Tienda:</strong> {st.session_state.get('store_select', '')}</div>", unsafe_allow_html=True)
+            with col2:
+                st.markdown(f"<div class='guide-metric'><span class='guide-icon'>🏷️</span> <strong>Marca:</strong> {st.session_state.get('brand_select', '')}</div>", unsafe_allow_html=True)
+            with col3:
+                st.markdown(f"<div class='guide-metric'><span class='guide-icon'>📦</span> <strong>Remitente:</strong> {st.session_state.get('sender_select', '')}</div>", unsafe_allow_html=True)
+            
+            st.markdown(f"<div class='guide-metric'><span class='guide-icon'>🔗</span> <strong>URL del Pedido:</strong> <a href='{st.session_state.get('url_input', '')}' target='_blank'>{st.session_state.get('url_input', '')}</a></div>", unsafe_allow_html=True)
+            
+            # Código QR
+            st.markdown("<h3>Código QR:</h3>", unsafe_allow_html=True)
+            qr_img = generar_qr_imagen(st.session_state.get('url_input', ''))
+            
+            # Convertir la imagen PIL a bytes antes de mostrarla
+            qr_bytes = pil_image_to_bytes(qr_img)
+            st.image(qr_bytes, width=200)
+            
+            # Botones de exportación
+            st.markdown("<div class='export-buttons animate-fade-in'>", unsafe_allow_html=True)
+            col1, col2 = st.columns(2)
+            with col1:
+                # Descargar PDF
+                if st.session_state.pdf_data is not None:
+                    st.download_button(
+                        label="📄 Descargar PDF",
+                        data=st.session_state.pdf_data,
+                        file_name=f"guia_{st.session_state.get('store_select', '')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
+                        mime="application/pdf",
+                        use_container_width=True,
+                        key="download_pdf_button"
+                    )
+            with col2:
+                if st.button("🖨️ Marcar como Impresa", use_container_width=True, key="mark_printed_button"):
+                    # Aquí iría la lógica para actualizar el estado de la guía
+                    st.markdown("<div class='success-box animate-fade-in'>✅ Guía marcada como impresa.</div>", unsafe_allow_html=True)
+                    st.session_state.show_preview = False
+                    # Limpiar datos de la sesión
+                    if 'pdf_data' in st.session_state:
+                        del st.session_state.pdf_data
+                    time.sleep(1)
+                    st.rerun()
+            st.markdown("</div>", unsafe_allow_html=True)
+            
+            st.markdown("</div>", unsafe_allow_html=True)
+    
+    with tab2:
+        # Nueva sección para gestionar tiendas (requiere permisos de admin)
+        if not verificar_password("admin"):
+            solicitar_autenticacion("admin")
+        else:
+            st.markdown("<h2 class='section-title animate-fade-in'>Gestión de Tiendas</h2>", unsafe_allow_html=True)
+            
+            # Obtener tiendas actuales
+            tiendas = obtener_tiendas()
+            
+            if tiendas.empty:
+                st.info("No hay tiendas registradas.")
+            else:
+                st.markdown("<h3>Tiendas Existentes</h3>", unsafe_allow_html=True)
+                
+                # Mostrar tiendas en un dataframe editable
+                edited_tiendas = st.data_editor(
+                    tiendas[['id', 'name', 'address', 'phone']],
+                    column_config={
+                        "id": st.column_config.NumberColumn("ID", disabled=True),
+                        "name": "Nombre",
+                        "address": "Dirección",
+                        "phone": "Teléfono"
+                    },
+                    use_container_width=True,
+                    num_rows="dynamic",
+                    key="tiendas_editor"
+                )
+                
+                # Botones para guardar cambios y eliminar tiendas
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    if st.button("💾 Guardar Cambios", use_container_width=True):
+                        cambios_realizados = 0
+                        for _, row in edited_tiendas.iterrows():
+                            tienda_original = tiendas[tiendas['id'] == row['id']].iloc[0]
+                            
+                            # Verificar si hay cambios
+                            if (tienda_original['name'] != row['name'] or 
+                                tienda_original['address'] != row['address'] or 
+                                tienda_original['phone'] != row['phone']):
+                                
+                                if actualizar_tienda(row['id'], row['name'], row['address'], row['phone']):
+                                    cambios_realizados += 1
+                        
+                        if cambios_realizados > 0:
+                            st.success(f"✅ {cambios_realizados} tienda(s) actualizada(s) correctamente.")
+                            time.sleep(1)
+                            st.rerun()
+                        else:
+                            st.info("ℹ️ No se detectaron cambios para guardar.")
+                
+                with col2:
+                    # Selector para eliminar tienda
+                    tiendas_para_eliminar = st.selectbox(
+                        "Seleccionar tienda para eliminar:",
+                        options=tiendas['id'].tolist(),
+                        format_func=lambda x: f"{tiendas[tiendas['id'] == x]['name'].iloc[0]} (ID: {x})",
+                        key="eliminar_tienda_select"
+                    )
+                
+                with col3:
+                    if st.button("🗑️ Eliminar Tienda Seleccionada", use_container_width=True):
+                        if eliminar_tienda(tiendas_para_eliminar):
+                            st.success("✅ Tienda eliminada correctamente.")
+                            time.sleep(1)
+                            st.rerun()
+                        else:
+                            st.error("❌ Error al eliminar la tienda.")
+            
+            # Formulario para agregar nueva tienda
+            st.markdown("<h3>Agregar Nueva Tienda</h3>", unsafe_allow_html=True)
+            
+            with st.form("form_nueva_tienda"):
+                col1, col2 = st.columns(2)
+                with col1:
+                    nuevo_nombre = st.text_input("Nombre de la tienda:", key="nueva_tienda_nombre")
+                    nueva_direccion = st.text_area("Dirección:", key="nueva_tienda_direccion")
+                with col2:
+                    nuevo_telefono = st.text_input("Teléfono:", key="nueva_tienda_telefono")
+                    # Espaciador para alinear el botón
+                    st.write("")  
+                    st.write("")  
+                
+                submitted = st.form_submit_button("➕ Agregar Tienda", use_container_width=True)
+                
+                if submitted:
+                    if not all([nuevo_nombre, nueva_direccion, nuevo_telefono]):
+                        st.error("❌ Por favor, complete todos los campos.")
+                    else:
+                        if agregar_tienda(nuevo_nombre, nueva_direccion, nuevo_telefono):
+                            st.success("✅ Tienda agregada correctamente.")
+                            time.sleep(1)
+                            st.rerun()
+                        else:
+                            st.error("❌ Error al agregar la tienda.")
         
 def mostrar_historial_guias():
     """Muestra el historial de guías generadas"""
