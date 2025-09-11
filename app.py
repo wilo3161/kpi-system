@@ -2110,7 +2110,7 @@ def mostrar_analisis_historico_kpis():
 
 def mostrar_ingreso_datos_kpis():
     """Muestra la interfaz para ingresar datos de KPIs"""
-     if not verificar_password("admin"):
+     if not verificar_password("admin")
         solicitar_autenticacion("admin")
         return
     st.markdown("<h1 class='header-title animate-fade-in'>📥 Ingreso de Datos de KPIs</h1>", unsafe_allow_html=True)
