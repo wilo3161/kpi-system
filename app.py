@@ -3037,51 +3037,81 @@ def generar_pdf_etiqueta(datos: dict) -> bytes:
         pdf.set_margins(10, 10, 10)
         pdf.set_auto_page_break(True, 15)
         
-        # === ENCABEZADO: AEROPOSTALE ===
+        # Fondo azul para el encabezado
+        pdf.set_fill_color(0, 45, 98)  # Azul de Aeropostale (#002D62)
+        pdf.rect(0, 0, 210, 35, style='F')  # Rectángulo azul de 35mm de alto
+        
+        # Texto blanco para el encabezado
+        pdf.set_text_color(255, 255, 255)
         pdf.set_font("Helvetica", "B", 24)
-        pdf.cell(0, 15, "AEROPOSTALE", 0, 1, "C")
+        pdf.set_xy(0, 5)
+        pdf.cell(210, 10, "AEROPOSTALE", 0, 1, "C")
+        
+        pdf.set_font("Helvetica", "B", 18)
+        pdf.set_xy(0, 18)
+        pdf.cell(210, 10, "PRICE CLUB GUAYAQUIL", 0, 1, "C")
+        
+        # Restablecer color de texto a negro
+        pdf.set_text_color(0, 0, 0)
+        
+        # Mover hacia abajo
+        pdf.set_y(40)
+        
+        # Sección BÁSICAS
         pdf.set_font("Helvetica", "B", 16)
-        pdf.cell(0, 10, "PRICE CLUB GUAYAQUIL", 0, 1, "C")
+        pdf.cell(190, 10, f"BÁSICAS {datos['tipo'].upper()}", 0, 1, "L")
         
         # Línea separadora
-        pdf.line(10, 30, 200, 30)
+        pdf.line(10, pdf.get_y(), 200, pdf.get_y())
         
-        
-        # Línea separadora
-        pdf.line(10, 45, 200, 45)
         pdf.ln(5)
         
-        # === REFERENCIA ===
+        # REFERENCIA
         pdf.set_font("Helvetica", "", 14)
-        pdf.cell(40, 10, "REFERENCIA", 0, 0)
+        pdf.cell(50, 8, "REFERENCIA", 0, 0)
         pdf.set_font("Helvetica", "B", 14)
-        pdf.cell(0, 10, datos['referencia'], 0, 1)
-        pdf.ln(5)
+        pdf.cell(0, 8, datos['referencia'], 0, 1)
         
-        # === TIPO, CANTIDAD, CAJA ===
-        pdf.set_font("Helvetica", "", 14)
-        pdf.cell(40, 10, datos['tipo'].upper(), 0, 1)
-        pdf.cell(40, 10, "CANTIDAD", 0, 0)
-        pdf.set_font("Helvetica", "B", 14)
-        pdf.cell(0, 10, str(datos['cantidad']), 0, 1)
-        pdf.set_font("Helvetica", "", 14)
-        pdf.cell(40, 10, "CAJA", 0, 0)
-        pdf.set_font("Helvetica", "B", 14)
-        pdf.cell(0, 10, str(datos['caja']), 0, 1)
-        pdf.ln(5)
+        pdf.ln(2)
         
-        # === IMAGEN (si existe) ===
+        # TIPO solo
+        pdf.set_font("Helvetica", "", 14)
+        pdf.cell(0, 8, datos['tipo'].upper(), 0, 1)
+        
+        pdf.ln(2)
+        
+        # Guardar posición Y para alineación de imagen
+        y_start = pdf.get_y()
+        
+        # CANTIDAD
+        pdf.set_font("Helvetica", "", 14)
+        pdf.cell(50, 8, "CANTIDAD", 0, 0)
+        pdf.set_font("Helvetica", "B", 14)
+        pdf.cell(0, 8, str(datos['cantidad']), 0, 1)
+        
+        pdf.ln(2)
+        
+        # CAJA
+        pdf.set_font("Helvetica", "", 14)
+        pdf.cell(50, 8, "CAJA", 0, 0)
+        pdf.set_font("Helvetica", "B", 14)
+        pdf.cell(0, 8, str(datos['caja']), 0, 1)
+        
+        # IMAGEN (si existe)
         if datos['imagen_path'] and os.path.exists(datos['imagen_path']):
             try:
-                # Insertar imagen centrada
-                pdf.image(datos['imagen_path'], x=50, w=100)
-                pdf.ln(5)
+                # Insertar imagen alineada a la derecha
+                pdf.image(datos['imagen_path'], x=120, y=y_start, w=70)
             except Exception as e:
                 logger.error(f"Error al insertar imagen en PDF: {e}")
         
-        # === PISO ===
+        # Mover hacia abajo después de la imagen/texto
+        image_height = 40 if datos['imagen_path'] else 0
+        pdf.set_y(max(pdf.get_y(), y_start + image_height + 5))
+        
+        # PISO
         pdf.set_font("Helvetica", "B", 28)
-        pdf.cell(0, 10, f"PISO {datos['piso']}", 0, 1)
+        pdf.cell(190, 15, f"PISO {datos['piso']}", 0, 1, "L")
         
         return pdf.output(dest="S").encode("latin1")
         
