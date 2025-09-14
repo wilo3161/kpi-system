@@ -3046,9 +3046,6 @@ def generar_pdf_etiqueta(datos: dict) -> bytes:
         # Línea separadora
         pdf.line(10, 30, 200, 30)
         
-        # === SECCIÓN BÁSICAS ===
-        pdf.set_font("Arial", "B", 16)
-        pdf.cell(0, 10, f"BÁSICAS {datos['tipo'].upper()}", 0, 1)
         
         # Línea separadora
         pdf.line(10, 45, 200, 45)
@@ -3077,7 +3074,7 @@ def generar_pdf_etiqueta(datos: dict) -> bytes:
         if datos['imagen_path'] and os.path.exists(datos['imagen_path']):
             try:
                 # Insertar imagen centrada
-                pdf.image(datos['imagen_path'], x=250, w=400)
+                pdf.image(datos['imagen_path'], x=50, w=100)
                 pdf.ln(5)
             except Exception as e:
                 logger.error(f"Error al insertar imagen en PDF: {e}")
