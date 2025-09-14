@@ -3055,7 +3055,7 @@ def generar_pdf_etiqueta(datos: dict) -> bytes:
         pdf.set_text_color(0, 0, 0)
         
         # Mover hacia abajo
-        pdf.set_y(20)
+        pdf.set_y(40)
         
       
         # Línea separadora
