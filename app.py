@@ -1231,8 +1231,8 @@ def generar_pdf_guia(store_name: str, brand: str, url: str, sender_name: str, tr
                 logger.error(f"Error al insertar el logo en el PDF: {e}")
         
         # Texto blanco para el encabezado centrado
-        pdf.set_text_color(255, 255, 255)
-        pdf.set_font("Arial", "B", 24)
+        pdf.set_text_color(255, 0, 0)
+        pdf.set_font("Helvetica", "B", 24)
         pdf.set_xy(0, 5)
         pdf.cell(210, 10, "AEROPOSTALE", 0, 1, "C")
         
@@ -1281,10 +1281,7 @@ def generar_pdf_guia(store_name: str, brand: str, url: str, sender_name: str, tr
         
         pdf.ln(5)
         
-        # Información adicional
-        pdf.set_font("Arial", "", 12)
-        pdf.cell(90, 8, "PIEZAS 1/1", 0, 1)
-        
+       
         if 'phone' in tienda_info:
             pdf.cell(90, 8, f"TEL.: {tienda_info['phone']}", 0, 1)
         
