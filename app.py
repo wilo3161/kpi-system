@@ -3065,7 +3065,7 @@ def generar_pdf_etiqueta(datos: dict) -> bytes:
         
         # REFERENCIA
         pdf.set_font("Helvetica", "", 20)
-        pdf.cell(0, 8, "REFERENCIA", 0, 0)
+        pdf.cell(50, 8, "REFERENCIA", 0, 0)
         pdf.set_font("Helvetica", "B", 24)
         pdf.cell(0, 8, datos['referencia'], 0, 1)
         pdf.set_text_color(0, 0, 0)
@@ -3075,7 +3075,7 @@ def generar_pdf_etiqueta(datos: dict) -> bytes:
         # TIPO solo
         pdf.set_font("Helvetica", "B", 24)
         pdf.set_text_color(10, 16, 153)
-        pdf.cell(0, 18, datos['tipo'].upper(), 0, 1)
+        pdf.cell(80, 18, datos['tipo'].upper(), 0, 1)
         pdf.set_text_color(0, 0, 0)
         
         pdf.ln(2)
