@@ -3057,10 +3057,7 @@ def generar_pdf_etiqueta(datos: dict) -> bytes:
         # Mover hacia abajo
         pdf.set_y(40)
         
-        # Sección BÁSICAS
-        pdf.set_font("Helvetica", "B", 16)
-        pdf.cell(190, 10, f"BÁSICAS {datos['tipo'].upper()}", 0, 1, "L")
-        
+      
         # Línea separadora
         pdf.line(10, pdf.get_y(), 200, pdf.get_y())
         
@@ -3110,7 +3107,7 @@ def generar_pdf_etiqueta(datos: dict) -> bytes:
         pdf.set_y(max(pdf.get_y(), y_start + image_height + 5))
         
         # PISO
-        pdf.set_font("Helvetica", "B", 28)
+        pdf.set_font("Helvetica", "B", 48)
         pdf.cell(190, 15, f"PISO {datos['piso']}", 0, 1, "L")
         
         return pdf.output(dest="S").encode("latin1")
