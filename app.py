@@ -1205,105 +1205,97 @@ def generar_pdf_guia(store_name: str, brand: str, url: str, sender_name: str, tr
         pdf.set_margins(10, 10, 10)
         pdf.set_auto_page_break(True, 15)
         
-        # === ENCABEZADO: AEROPOSTALE ===
-        pdf.set_font("Arial", "B", 40)
-        pdf.cell(0, 15, "AEROPOSTALE", 0, 1, "C")
-        pdf.line(10, 25, 200, 25)
+        # Fondo azul para el encabezado
+        pdf.set_fill_color(0, 45, 98)  # Azul (#002D62)
+        pdf.rect(0, 0, 210, 35, style='F')  # Rectángulo azul de 35mm de alto
         
-        # === SECCIÓN REMITENTE ===
-        pdf.set_font("Arial", "B", 14)
-        pdf.cell(0, 10, "REMITENTE:", 0, 1)
-        
-        remitentes = obtener_remitentes()
-        remitente_info = remitentes[remitentes['name'] == sender_name].iloc[0]
-        
-        pdf.set_font("Arial", "", 14)
-        pdf.multi_cell(0, 8, f"{remitente_info['name']}\n{remitente_info['address']}")
-        
-        # Línea separadora
-        y_after_remitente = pdf.get_y()
-        pdf.line(10, y_after_remitente + 5, 200, y_after_remitente + 5)
-        pdf.ln(10)
-        
-        # === SECCIÓN DESTINO ===
-        pdf.set_font("Arial", "B", 14)
-        pdf.cell(0, 10, "DESTINO:", 0, 1)
-        
-        pdf.set_font("Arial", "", 14)
-        pdf.cell(0, 8, tracking_number, 0, 1)
-        
-        tiendas = obtener_tiendas()
-        tienda_info = tiendas[tiendas['name'] == store_name].iloc[0]
-        
-        if 'address' in tienda_info:
-            pdf.multi_cell(0, 8, tienda_info['address'])
-        
-        # Línea separadora
-        y_after_destino = pdf.get_y()
-        pdf.line(10, y_after_destino + 5, 200, y_after_destino + 5)
-        pdf.ln(10)
-        
-        # === SECCIÓN RECEPTOR ===
-        pdf.set_font("Arial", "B", 14)
-        pdf.cell(0, 12, store_name, 0, 1, "C")
-        pdf.ln(5)
-        
-        # === LOGO E INFORMACIÓN ADICIONAL ===
-        # Logo - intentar cargar desde Supabase
+        # Insertar logo de brand en la izquierda del encabezado
         logo_img = obtener_logo_imagen(brand)
-        current_y = pdf.get_y()
-        
         if logo_img:
             try:
-                # Convertir a RGB si es necesario (para PNG con canal alpha)
+                # Convertir a RGB si es necesario
                 if logo_img.mode in ('RGBA', 'LA'):
                     background = Image.new('RGB', logo_img.size, (255, 255, 255))
                     background.paste(logo_img, mask=logo_img.split()[-1])
                     logo_img = background
                 
-                # Guardar imagen temporalmente
+                # Guardar temporalmente
                 with tempfile.NamedTemporaryFile(delete=False, suffix='.jpg') as temp_file:
                     logo_img.save(temp_file.name, format='JPEG', quality=95)
                     temp_logo_path = temp_file.name
                 
-                # Insertar logo centrado
-                pdf.image(temp_logo_path, x=80, y=current_y, w=50)
+                # Insertar logo a la izquierda
+                pdf.image(temp_logo_path, x=10, y=5, w=30)
                 os.unlink(temp_logo_path)
-                
-                # Ajustar la posición Y después del logo
-                current_y += 55
-                pdf.set_y(current_y)
-                logger.info("Logo insertado correctamente en el PDF")
             except Exception as e:
                 logger.error(f"Error al insertar el logo en el PDF: {e}")
-                # Insertar texto alternativo
-                pdf.set_font("Arial", "I", 12)
-                pdf.cell(0, 10, f"[Logo de {brand}]", 0, 1, "C")
-                current_y += 10
-                pdf.set_y(current_y)
-        else:
-            # Insertar texto alternativo si no hay logo
-            pdf.set_font("Arial", "I", 12)
-            pdf.cell(0, 10, f"[Logo de {brand}]", 0, 1, "C")
-            current_y += 10
-            pdf.set_y(current_y)
         
-        # Información de piezas y teléfono
+        # Texto blanco para el encabezado centrado
+        pdf.set_text_color(255, 255, 255)
+        pdf.set_font("Arial", "B", 24)
+        pdf.set_xy(0, 5)
+        pdf.cell(210, 10, "AEROPOSTALE", 0, 1, "C")
+        
+        pdf.set_font("Arial", "B", 18)
+        pdf.set_xy(0, 18)
+        pdf.cell(210, 10, "CENTRO DE DISTRIBUCION FASHION CLUB", 0, 1, "C")
+        
+        # Restablecer color de texto a negro
+        pdf.set_text_color(0, 0, 0)
+        
+        # Mover hacia abajo
+        pdf.set_y(40)
+        
+        # Guardar posición Y para alineación
+        y_start = pdf.get_y()
+        
+        # === SECCIÓN REMITENTE (izquierda) ===
+        pdf.set_font("Arial", "B", 14)
+        pdf.cell(90, 10, "REMITENTE:", 0, 1)
+        
+        remitentes = obtener_remitentes()
+        remitente_info = remitentes[remitentes['name'] == sender_name].iloc[0]
+        
+        pdf.set_font("Arial", "", 14)
+        pdf.multi_cell(90, 8, f"{remitente_info['name']}\n{remitente_info['address']}")
+        
+        pdf.ln(5)
+        
+        # === SECCIÓN DESTINATARIO (izquierda) ===
+        pdf.set_font("Arial", "B", 14)
+        pdf.cell(90, 10, "DESTINATARIO:", 0, 1)
+        
+        pdf.set_font("Arial", "", 14)
+        pdf.cell(90, 8, tracking_number, 0, 1)
+        
+        tiendas = obtener_tiendas()
+        tienda_info = tiendas[tiendas['name'] == store_name].iloc[0]
+        
+        if 'address' in tienda_info:
+            pdf.multi_cell(90, 8, tienda_info['address'])
+        
+        pdf.ln(5)
+        
+        # Nombre de la tienda
+        pdf.cell(90, 8, store_name, 0, 1)
+        
+        pdf.ln(5)
+        
+        # Información adicional
         pdf.set_font("Arial", "", 12)
-        pdf.cell(0, 8, "PIEZAS 1/1", 0, 1, "C")
+        pdf.cell(90, 8, "PIEZAS 1/1", 0, 1)
         
         if 'phone' in tienda_info:
-            pdf.cell(0, 8, f"TEL.: {tienda_info['phone']}", 0, 1, "C")
+            pdf.cell(90, 8, f"TEL.: {tienda_info['phone']}", 0, 1)
         
-        # Código QR
+        # === CÓDIGO QR (derecha, alineado con los datos) ===
         qr_img = generar_qr_imagen(url)
         with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as temp_file:
             qr_img.save(temp_file.name)
             temp_qr_path = temp_file.name
         
-        # Posicionar el QR centrado
-        qr_y = pdf.get_y() + 5
-        pdf.image(temp_qr_path, x=80, y=qr_y, w=50)
+        # Insertar QR a la derecha
+        pdf.image(temp_qr_path, x=110, y=y_start, w=80)
         os.unlink(temp_qr_path)
         
         return pdf.output(dest="S").encode("latin1")
