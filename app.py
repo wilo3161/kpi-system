@@ -3038,7 +3038,7 @@ def generar_pdf_etiqueta(datos: dict) -> bytes:
         pdf.set_auto_page_break(True, 15)
         
         # Fondo azul para el encabezado
-        pdf.set_fill_color(0, 45, 98)  # Azul de Aeropostale (#002D62)
+        pdf.set_fill_color(0, 45, 98)  # Azul de Aeropostale (c81d11)
         pdf.rect(0, 0, 210, 35, style='F')  # Rectángulo azul de 35mm de alto
         
         # Texto blanco para el encabezado
@@ -3064,7 +3064,7 @@ def generar_pdf_etiqueta(datos: dict) -> bytes:
         pdf.ln(5)
         
         # REFERENCIA
-        pdf.set_font("Helvetica", "", 24)
+        pdf.set_font("Helvetica", "", 20)
         pdf.cell(50, 8, "REFERENCIA", 0, 0)
         pdf.set_font("Helvetica", "B", 24)
         pdf.cell(0, 8, datos['referencia'], 0, 1)
@@ -3081,7 +3081,7 @@ def generar_pdf_etiqueta(datos: dict) -> bytes:
         y_start = pdf.get_y()
         
         # CANTIDAD
-        pdf.set_font("Helvetica", "", 24)
+        pdf.set_font("Helvetica", "", 20)
         pdf.cell(50, 8, "CANTIDAD", 0, 0)
         pdf.set_font("Helvetica", "B", 24)
         pdf.cell(0, 8, str(datos['cantidad']), 0, 1)
@@ -3089,7 +3089,7 @@ def generar_pdf_etiqueta(datos: dict) -> bytes:
         pdf.ln(2)
         
         # CAJA
-        pdf.set_font("Helvetica", "", 24)
+        pdf.set_font("Helvetica", "", 20)
         pdf.cell(50, 8, "CAJA", 0, 0)
         pdf.set_font("Helvetica", "B", 24)
         pdf.cell(0, 8, str(datos['caja']), 0, 1)
