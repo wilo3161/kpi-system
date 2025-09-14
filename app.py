@@ -2911,6 +2911,75 @@ def mostrar_historial_guias():
     
     st.markdown("</div>", unsafe_allow_html=True)
     st.markdown("</div>", unsafe_allow_html=True)
+    def mostrar_generacion_etiquetas():
+    """Muestra la interfaz para generar etiquetas de productos"""
+    if not verificar_password("user"):
+        solicitar_autenticacion("user")
+        return
+    
+    st.markdown("<h1 class='header-title animate-fade-in'>🏷️ Generación de Etiquetas de Producto</h1>", unsafe_allow_html=True)
+    
+    with st.form("form_etiqueta"):
+        col1, col2 = st.columns(2)
+        with col1:
+            referencia = st.text_input("Referencia:", key="etiqueta_referencia")
+            tipo = st.selectbox("Tipo:", options=["hombre", "mujer", "accesorios"], key="etiqueta_tipo")
+        with col2:
+            cantidad = st.number_input("Cantidad:", min_value=0, key="etiqueta_cantidad")
+            caja = st.number_input("Número de Caja:", min_value=0, key="etiqueta_caja")
+        
+        imagen_file = st.file_uploader("Imagen del producto (opcional):", type=['png', 'jpg', 'jpeg', 'bmp', 'gif'], key="etiqueta_imagen")
+        
+        submitted = st.form_submit_button("Generar Etiqueta PDF", use_container_width=True)
+        
+        if submitted:
+            if not all([referencia, tipo, cantidad is not None, caja is not None]):
+                st.error("❌ Por favor, complete todos los campos obligatorios.")
+            else:
+                # Determinar piso según el tipo
+                if tipo == 'hombre':
+                    piso = 1
+                elif tipo == 'mujer':
+                    piso = 3
+                else:
+                    piso = 2
+                
+                # Guardar imagen temporalmente si se subió
+                imagen_path = None
+                if imagen_file is not None:
+                    # Guardar la imagen en un archivo temporal
+                    with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp_file:
+                        tmp_file.write(imagen_file.getvalue())
+                        imagen_path = tmp_file.name
+                
+                # Generar el PDF
+                pdf_data = generar_pdf_etiqueta({
+                    'referencia': referencia,
+                    'tipo': tipo,
+                    'cantidad': cantidad,
+                    'caja': caja,
+                    'piso': piso,
+                    'imagen_path': imagen_path
+                })
+                
+                # Limpiar archivo temporal si existe
+                if imagen_path is not None:
+                    os.unlink(imagen_path)
+                
+                if pdf_data:
+                    # Mostrar éxito y botón de descarga
+                    st.success("✅ Etiqueta generada correctamente.")
+                    
+                    # Botón de descarga
+                    st.download_button(
+                        label="📄 Descargar Etiqueta PDF",
+                        data=pdf_data,
+                        file_name=f"etiqueta_{referencia}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
+                        mime="application/pdf",
+                        use_container_width=True
+                    )
+                else:
+                    st.error("❌ Error al generar la etiqueta.")
 
 def mostrar_ayuda():
     """Muestra la página de ayuda y contacto"""
@@ -2946,6 +3015,70 @@ def mostrar_ayuda():
     """, unsafe_allow_html=True)
     
     st.markdown("</div>", unsafe_allow_html=True)
+    def generar_pdf_etiqueta(datos: dict) -> bytes:
+    """Genera un PDF con la etiqueta de producto en el formato de AEROPOSTALE"""
+    try:
+        pdf = FPDF()
+        pdf.add_page()
+        
+        # Configuración inicial
+        pdf.set_margins(10, 10, 10)
+        pdf.set_auto_page_break(True, 15)
+        
+        # === ENCABEZADO: AEROPOSTALE ===
+        pdf.set_font("Arial", "B", 24)
+        pdf.cell(0, 15, "AEROPOSTALE", 0, 1, "C")
+        pdf.set_font("Arial", "B", 18)
+        pdf.cell(0, 10, "PRICE CLUB GUAYAQUIL", 0, 1, "C")
+        
+        # Línea separadora
+        pdf.line(10, 30, 200, 30)
+        
+        # === SECCIÓN BÁSICAS ===
+        pdf.set_font("Arial", "B", 16)
+        pdf.cell(0, 10, f"BÁSICAS {datos['tipo'].upper()}", 0, 1)
+        
+        # Línea separadora
+        pdf.line(10, 45, 200, 45)
+        pdf.ln(5)
+        
+        # === REFERENCIA ===
+        pdf.set_font("Arial", "", 14)
+        pdf.cell(40, 10, "REFERENCIA", 0, 0)
+        pdf.set_font("Arial", "B", 14)
+        pdf.cell(0, 10, datos['referencia'], 0, 1)
+        pdf.ln(5)
+        
+        # === TIPO, CANTIDAD, CAJA ===
+        pdf.set_font("Arial", "", 14)
+        pdf.cell(40, 10, datos['tipo'].upper(), 0, 1)
+        pdf.cell(40, 10, "CANTIDAD", 0, 0)
+        pdf.set_font("Arial", "B", 14)
+        pdf.cell(0, 10, str(datos['cantidad']), 0, 1)
+        pdf.set_font("Arial", "", 14)
+        pdf.cell(40, 10, "CAJA", 0, 0)
+        pdf.set_font("Arial", "B", 14)
+        pdf.cell(0, 10, str(datos['caja']), 0, 1)
+        pdf.ln(5)
+        
+        # === IMAGEN (si existe) ===
+        if datos['imagen_path'] and os.path.exists(datos['imagen_path']):
+            try:
+                # Insertar imagen centrada
+                pdf.image(datos['imagen_path'], x=50, w=100)
+                pdf.ln(5)
+            except Exception as e:
+                logger.error(f"Error al insertar imagen en PDF: {e}")
+        
+        # === PISO ===
+        pdf.set_font("Arial", "B", 16)
+        pdf.cell(0, 10, f"PISO {datos['piso']}", 0, 1)
+        
+        return pdf.output(dest="S").encode("latin1")
+        
+    except Exception as e:
+        logger.error(f"Error al generar PDF de etiqueta: {e}", exc_info=True)
+        return None
 
 # ================================
 # FUNCIÓN PRINCIPAL
@@ -2981,6 +3114,7 @@ def main():
         ("Gestión de Distribuciones", "📦", mostrar_gestion_distribuciones, "admin"),
         ("Generar Guías", "📋", mostrar_generacion_guias, "user"),
         ("Historial de Guías", "🔍", mostrar_historial_guias, "user"),
+        ("Generar Etiquetas", "🏷️", mostrar_generacion_etiquetas, "user"),
         ("Ayuda y Contacto", "❓", mostrar_ayuda, "public")
     ]
     
