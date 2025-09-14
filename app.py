@@ -3038,9 +3038,9 @@ def generar_pdf_etiqueta(datos: dict) -> bytes:
         pdf.set_auto_page_break(True, 15)
         
         # === ENCABEZADO: AEROPOSTALE ===
-        pdf.set_font("Arial", "B", 24)
+        pdf.set_font("Helvetica-Bold", "B", 24)
         pdf.cell(0, 15, "AEROPOSTALE", 0, 1, "C")
-        pdf.set_font("Arial", "B", 18)
+        pdf.set_font("Helvetica-Bold", "B", 16)
         pdf.cell(0, 10, "PRICE CLUB GUAYAQUIL", 0, 1, "C")
         
         # Línea separadora
@@ -3055,21 +3055,21 @@ def generar_pdf_etiqueta(datos: dict) -> bytes:
         pdf.ln(5)
         
         # === REFERENCIA ===
-        pdf.set_font("Arial", "", 14)
+        pdf.set_font("Helvetica-Bold", "", 14)
         pdf.cell(40, 10, "REFERENCIA", 0, 0)
-        pdf.set_font("Arial", "B", 14)
+        pdf.set_font("Helvetica-BoldArial", "B", 14)
         pdf.cell(0, 10, datos['referencia'], 0, 1)
         pdf.ln(5)
         
         # === TIPO, CANTIDAD, CAJA ===
-        pdf.set_font("Arial", "", 14)
+        pdf.set_font("Helvetica-Bold", "", 14)
         pdf.cell(40, 10, datos['tipo'].upper(), 0, 1)
         pdf.cell(40, 10, "CANTIDAD", 0, 0)
-        pdf.set_font("Arial", "B", 14)
+        pdf.set_font("Helvetica-Bold", "B", 14)
         pdf.cell(0, 10, str(datos['cantidad']), 0, 1)
-        pdf.set_font("Arial", "", 14)
+        pdf.set_font("Helvetica-Bold", "", 14)
         pdf.cell(40, 10, "CAJA", 0, 0)
-        pdf.set_font("Arial", "B", 14)
+        pdf.set_font("Helvetica-Bold", "B", 14)
         pdf.cell(0, 10, str(datos['caja']), 0, 1)
         pdf.ln(5)
         
@@ -3077,13 +3077,13 @@ def generar_pdf_etiqueta(datos: dict) -> bytes:
         if datos['imagen_path'] and os.path.exists(datos['imagen_path']):
             try:
                 # Insertar imagen centrada
-                pdf.image(datos['imagen_path'], x=50, w=100)
+                pdf.image(datos['imagen_path'], x=250, w=400)
                 pdf.ln(5)
             except Exception as e:
                 logger.error(f"Error al insertar imagen en PDF: {e}")
         
         # === PISO ===
-        pdf.set_font("Arial", "B", 16)
+        pdf.set_font("Helvetica-Bold", "B", 28)
         pdf.cell(0, 10, f"PISO {datos['piso']}", 0, 1)
         
         return pdf.output(dest="S").encode("latin1")
