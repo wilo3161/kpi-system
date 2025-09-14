@@ -2928,56 +2928,69 @@ def mostrar_generacion_etiquetas():
         imagen_file = st.file_uploader("Imagen del producto (opcional):", type=['png', 'jpg', 'jpeg', 'bmp', 'gif'], key="etiqueta_imagen")
         submitted = st.form_submit_button("Generar Etiqueta PDF", use_container_width=True)
 
-        if submitted:
-            if not all([referencia, tipo, cantidad is not None, caja is not None]):
-                st.error("❌ Por favor, complete todos los campos obligatorios.")
+    if submitted:
+        # Retrieve values from session_state after submission
+        referencia = st.session_state.etiqueta_referencia
+        tipo = st.session_state.etiqueta_tipo
+        cantidad = st.session_state.etiqueta_cantidad
+        caja = st.session_state.etiqueta_caja
+        uploaded_file = st.session_state.etiqueta_imagen  # This is the file object if uploaded
+
+        if not all([referencia, tipo, cantidad is not None, caja is not None]):
+            st.error("❌ Por favor, complete todos los campos obligatorios.")
+        else:
+            # Determinar piso según el tipo
+            if tipo == 'hombre':
+                piso = 1
+            elif tipo == 'mujer':
+                piso = 3
             else:
-                # Determinar piso según el tipo
-                if tipo == 'hombre':
-                    piso = 1
-                elif tipo == 'mujer':
-                    piso = 3
-                else:
-                    piso = 2
+                piso = 2
 
-                # Guardar imagen temporalmente si se subió
-                imagen_path = None
-                if imagen_file is not None:
-                    try:
-                        # Crear directorio temporal si no existe
-                        os.makedirs("temp", exist_ok=True)
-                        # Guardar la imagen en un archivo temporal
-                        temp_path = f"temp/{int(datetime.now().timestamp())}_{imagen_file.name}"
-                        with open(temp_path, "wb") as f:
-                            f.write(imagen_file.getvalue())
-                        imagen_path = temp_path
-                    except Exception as e:
-                        logger.error(f"Error al guardar imagen temporal: {e}")
-                        st.error("⚠️ No se pudo procesar la imagen.")
+            # Guardar imagen temporalmente si se subió
+            imagen_path = None
+            if uploaded_file is not None:
+                try:
+                    # Crear directorio temporal si no existe
+                    os.makedirs("temp", exist_ok=True)
+                    # Guardar la imagen en un archivo temporal
+                    temp_path = f"temp/{int(datetime.now().timestamp())}_{uploaded_file.name}"
+                    with open(temp_path, "wb") as f:
+                        f.write(uploaded_file.getvalue())
+                    imagen_path = temp_path
+                except Exception as e:
+                    logger.error(f"Error al guardar imagen temporal: {e}")
+                    st.error("⚠️ No se pudo procesar la imagen.")
 
-                # Datos para generar la etiqueta
-                datos_etiqueta = {
-                    'referencia': referencia,
-                    'tipo': tipo,
-                    'cantidad': int(cantidad),
-                    'caja': int(caja),
-                    'piso': piso,
-                    'imagen_path': imagen_path
-                }
+            # Datos para generar la etiqueta
+            datos_etiqueta = {
+                'referencia': referencia,
+                'tipo': tipo,
+                'cantidad': int(cantidad),
+                'caja': int(caja),
+                'piso': piso,
+                'imagen_path': imagen_path
+            }
 
-                # Generar PDF
-                pdf_data = generar_pdf_etiqueta(datos_etiqueta)
-                if pdf_data:
-                    st.success("✅ Etiqueta generada correctamente.")
-                    st.download_button(
-                        label="⬇️ Descargar Etiqueta PDF",
-                        data=pdf_data,
-                        file_name=f"etiqueta_{referencia}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
-                        mime="application/pdf",
-                        use_container_width=True
-                    )
-                else:
-                    st.error("❌ Error al generar la etiqueta.")
+            # Generar PDF
+            pdf_data = generar_pdf_etiqueta(datos_etiqueta)
+            if pdf_data:
+                st.success("✅ Etiqueta generada correctamente.")
+                st.download_button(
+                    label="⬇️ Descargar Etiqueta PDF",
+                    data=pdf_data,
+                    file_name=f"etiqueta_{referencia}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
+                    mime="application/pdf",
+                    use_container_width=True
+                )
+                # Optional: Clean up temp file
+                if imagen_path and os.path.exists(imagen_path):
+                    os.remove(imagen_path)
+            else:
+                st.error("❌ Error al generar la etiqueta.")
+                # Clean up if failed
+                if imagen_path and os.path.exists(imagen_path):
+                    os.remove(imagen_path)
 
 def mostrar_ayuda():
     """Muestra la página de ayuda y contacto"""
