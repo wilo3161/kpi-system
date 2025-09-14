@@ -2905,10 +2905,10 @@ def mostrar_historial_guias():
         else:
             st.info("🔒 Autenticación requerida para eliminar guías")
     
-    st.markdown("</div>", unsafe_allow_html=True)
+       st.markdown("</div>", unsafe_allow_html=True)
     st.markdown("</div>", unsafe_allow_html=True)
     
-   def mostrar_generacion_etiquetas():
+def mostrar_generacion_etiquetas():
     """Muestra la interfaz para generar etiquetas de productos"""
     if not verificar_password("user"):
         solicitar_autenticacion("user")
@@ -3013,7 +3013,8 @@ def mostrar_ayuda():
     """, unsafe_allow_html=True)
     
     st.markdown("</div>", unsafe_allow_html=True)
-    def generar_pdf_etiqueta(datos: dict) -> bytes:
+
+def generar_pdf_etiqueta(datos: dict) -> bytes:
     """Genera un PDF con la etiqueta de producto en el formato de AEROPOSTALE"""
     try:
         pdf = FPDF()
