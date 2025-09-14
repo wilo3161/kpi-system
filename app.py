@@ -3038,7 +3038,7 @@ def generar_pdf_etiqueta(datos: dict) -> bytes:
         pdf.set_auto_page_break(True, 15)
         
         # Fondo azul para el encabezado
-        pdf.set_fill_color(230, 0, 18)  # Azul de Aeropostale (c81d11)
+        pdf.set_fill_color(10, 16, 153)  # Azul de Aeropostale (c81d11)
         pdf.rect(0, 0, 210, 35, style='F')  # Rectángulo azul de 35mm de alto
         
         # Texto blanco para el encabezado
@@ -3065,7 +3065,6 @@ def generar_pdf_etiqueta(datos: dict) -> bytes:
         
         # REFERENCIA
         pdf.set_font("Helvetica", "", 20)
-        pdf.set_text_color(10, 16, 153)
         pdf.cell(50, 8, "REFERENCIA", 0, 0)
         pdf.set_font("Helvetica", "B", 24)
         pdf.cell(0, 8, datos['referencia'], 0, 1)
@@ -3075,7 +3074,7 @@ def generar_pdf_etiqueta(datos: dict) -> bytes:
         
         # TIPO solo
         pdf.set_font("Helvetica", "B", 24)
-        pdf.set_text_color(111, 35, 0)
+        pdf.set_text_color(10, 16, 153)
         pdf.cell(0, 8, datos['tipo'].upper(), 0, 1)
         pdf.set_text_color(0, 0, 0)
         
