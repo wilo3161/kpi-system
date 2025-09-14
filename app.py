@@ -3064,15 +3064,15 @@ def generar_pdf_etiqueta(datos: dict) -> bytes:
         pdf.ln(5)
         
         # REFERENCIA
-        pdf.set_font("Helvetica", "", 14)
+        pdf.set_font("Helvetica", "", 24)
         pdf.cell(50, 8, "REFERENCIA", 0, 0)
-        pdf.set_font("Helvetica", "B", 14)
+        pdf.set_font("Helvetica", "B", 24)
         pdf.cell(0, 8, datos['referencia'], 0, 1)
         
         pdf.ln(2)
         
         # TIPO solo
-        pdf.set_font("Helvetica", "", 14)
+        pdf.set_font("Helvetica", "", 24)
         pdf.cell(0, 8, datos['tipo'].upper(), 0, 1)
         
         pdf.ln(2)
@@ -3081,17 +3081,17 @@ def generar_pdf_etiqueta(datos: dict) -> bytes:
         y_start = pdf.get_y()
         
         # CANTIDAD
-        pdf.set_font("Helvetica", "", 14)
+        pdf.set_font("Helvetica", "", 24)
         pdf.cell(50, 8, "CANTIDAD", 0, 0)
-        pdf.set_font("Helvetica", "B", 14)
+        pdf.set_font("Helvetica", "B", 24)
         pdf.cell(0, 8, str(datos['cantidad']), 0, 1)
         
         pdf.ln(2)
         
         # CAJA
-        pdf.set_font("Helvetica", "", 14)
+        pdf.set_font("Helvetica", "", 24)
         pdf.cell(50, 8, "CAJA", 0, 0)
-        pdf.set_font("Helvetica", "B", 14)
+        pdf.set_font("Helvetica", "B", 24)
         pdf.cell(0, 8, str(datos['caja']), 0, 1)
         
         # IMAGEN (si existe)
@@ -3107,7 +3107,7 @@ def generar_pdf_etiqueta(datos: dict) -> bytes:
         pdf.set_y(max(pdf.get_y(), y_start + image_height + 5))
         
         # PISO
-        pdf.set_font("Helvetica", "B", 48)
+        pdf.set_font("Helvetica", "B", 78)
         pdf.cell(190, 15, f"PISO {datos['piso']}", 0, 1, "L")
         
         return pdf.output(dest="S").encode("latin1")
