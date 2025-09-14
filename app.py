@@ -1196,7 +1196,7 @@ def obtener_logo_imagen(brand: str) -> Image.Image:
         return None
 
 def generar_pdf_guia(store_name: str, brand: str, url: str, sender_name: str, tracking_number: str) -> bytes:
-    """Genera un PDF con la guía de envío en el formato exacto de la imagen"""
+    
     try:
         pdf = FPDF()
         pdf.add_page()
@@ -1237,9 +1237,9 @@ def generar_pdf_guia(store_name: str, brand: str, url: str, sender_name: str, tr
         pdf.cell(210, 10, "AEROPOSTALE", 0, 1, "C")
 
         pdf.set_text_color(255, 255, 255)
-        pdf.set_font("Arial", "B", 18)
+        pdf.set_font("Helvetica", "B", 18)
         pdf.set_xy(0, 18)
-        pdf.cell(210, 10, "CENTRO DE DISTRIBUCION FASHION CLUB", 0, 1, "C")
+        pdf.cell(210, 10, "CENTRO DE DISTRIBUCIÓN FASHION CLUB", 0, 1, "C")
         
         # Restablecer color de texto a negro
         pdf.set_text_color(0, 0, 0)
