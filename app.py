@@ -3059,7 +3059,7 @@ def generar_pdf_etiqueta(datos: dict) -> bytes:
         
       
         # Línea separadora
-        pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+        pdf.line(5, pdf.get_y(), 200, pdf.get_y())
         
         pdf.ln(5)
         
@@ -3098,7 +3098,7 @@ def generar_pdf_etiqueta(datos: dict) -> bytes:
         if datos['imagen_path'] and os.path.exists(datos['imagen_path']):
             try:
                 # Insertar imagen alineada a la derecha
-                pdf.image(datos['imagen_path'], x=140, y=y_start, w=85)
+                pdf.image(datos['imagen_path'], x=100, y=y_start, w=85)
             except Exception as e:
                 logger.error(f"Error al insertar imagen en PDF: {e}")
         
