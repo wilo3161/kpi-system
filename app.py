@@ -1235,7 +1235,8 @@ def generar_pdf_guia(store_name: str, brand: str, url: str, sender_name: str, tr
         pdf.set_font("Helvetica", "B", 24)
         pdf.set_xy(0, 5)
         pdf.cell(210, 10, "AEROPOSTALE", 0, 1, "C")
-        
+
+        pdf.set_text_color(255, 255, 255)
         pdf.set_font("Arial", "B", 18)
         pdf.set_xy(0, 18)
         pdf.cell(210, 10, "CENTRO DE DISTRIBUCION FASHION CLUB", 0, 1, "C")
@@ -1265,7 +1266,7 @@ def generar_pdf_guia(store_name: str, brand: str, url: str, sender_name: str, tr
         pdf.set_font("Arial", "B", 14)
         pdf.cell(90, 10, "DESTINATARIO:", 0, 1)
         
-        pdf.set_font("Arial", "", 14)
+        pdf.set_font("Arial", "B", 14)
         pdf.cell(90, 8, tracking_number, 0, 1)
         
         tiendas = obtener_tiendas()
@@ -1292,7 +1293,7 @@ def generar_pdf_guia(store_name: str, brand: str, url: str, sender_name: str, tr
             temp_qr_path = temp_file.name
         
         # Insertar QR a la derecha
-        pdf.image(temp_qr_path, x=110, y=y_start, w=80)
+        pdf.image(temp_qr_path, x=90, y=y_start, w=60)
         os.unlink(temp_qr_path)
         
         return pdf.output(dest="S").encode("latin1")
