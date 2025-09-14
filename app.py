@@ -2908,7 +2908,7 @@ def mostrar_historial_guias():
     st.markdown("</div>", unsafe_allow_html=True)
     st.markdown("</div>", unsafe_allow_html=True)
     
-    def mostrar_generacion_etiquetas():
+   def mostrar_generacion_etiquetas():
     """Muestra la interfaz para generar etiquetas de productos"""
     if not verificar_password("user"):
         solicitar_autenticacion("user")
