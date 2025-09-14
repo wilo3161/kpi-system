@@ -2905,7 +2905,7 @@ def mostrar_historial_guias():
         else:
             st.info("🔒 Autenticación requerida para eliminar guías")
     
-       st.markdown("</div>", unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
     st.markdown("</div>", unsafe_allow_html=True)
     
 def mostrar_generacion_etiquetas():
