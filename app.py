@@ -3262,7 +3262,6 @@ import warnings
 
 warnings.filterwarnings('ignore')
 
-
 class StreamlitLogisticsReconciliation:
     def __init__(self):
         # Core data structures
@@ -3581,7 +3580,6 @@ class StreamlitLogisticsReconciliation:
 # ================================
 # FUNCIÓN PRINCIPAL
 # ================================
-
 st.title("📦 Logistics Reconciliation & Business Intelligence Tool")
     if 'reconciler' not in st.session_state:
         st.session_state.reconciler = StreamlitLogisticsReconciliation()
