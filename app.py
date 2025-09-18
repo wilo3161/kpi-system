@@ -3472,29 +3472,6 @@ class Reconciler(StreamlitLogisticsReconciliation):
 # ================================
 # FUNCIÓN PRINCIPAL
 # ================================
-st.title("📦 Logistics Reconciliation & Business Intelligence Tool")
-factura_file = st.sidebar.file_uploader(
-    "Upload Invoice File (Excel)",
-    type=['xlsx', 'xls']
-)
-
-manifiesto_file = st.sidebar.file_uploader(
-    "Upload Manifest File (Excel)",
-    type=['xlsx', 'xls']
-)
-
-    process_btn = st.sidebar.button("🚀 Process Files")
-
-    if process_btn and factura_file and manifiesto_file:
-        with st.spinner("Processing files..."):
-            st.session_state.processed = st.session_state.reconciler.process_files(
-                factura_file, manifiesto_file
-            )
-
-    if st.session_state.processed:
-        reconciler = st.session_state.reconciler
-        kpis = reconciler.kpis
-
         st.header("📊 Key Performance Indicators")
 
         col1, col2, col3, col4 = st.columns(4)
@@ -3568,6 +3545,9 @@ manifiesto_file = st.sidebar.file_uploader(
             mime="application/pdf"
         )
     # ================================
+# FUNCIÓN PRINCIPAL
+# ================================
+# ================================
 # FUNCIÓN PRINCIPAL
 # ================================
 def main():
