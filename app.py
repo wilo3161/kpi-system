@@ -3567,11 +3567,14 @@ manifiesto_file = st.sidebar.file_uploader(
             file_name="logistics_report.pdf",
             mime="application/pdf"
         )
-    def main():
+    # ================================
+# FUNCIÓN PRINCIPAL
+# ================================
+def main():
     """Función principal de la aplicación"""
     
     # Mostrar logo y título en el sidebar
-     st.sidebar.markdown("""
+    st.sidebar.markdown("""
     <div class='sidebar-title'>
         <div class='aeropostale-logo'>AEROPOSTALE</div>
         <div class='aeropostale-subtitle'>Sistema de Gestión de KPIs</div>
@@ -3681,5 +3684,6 @@ manifiesto_file = st.sidebar.file_uploader(
         Desarrollado por: <a href="mailto:wilson.perez@aeropostale.com">Wilson Pérez</a>
     </div>
     """, unsafe_allow_html=True)
+
 if __name__ == "__main__":
     main()
