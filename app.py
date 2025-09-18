@@ -3581,8 +3581,7 @@ class StreamlitLogisticsReconciliation:
 # FUNCIÓN PRINCIPAL
 # ================================
 
-def main():
-st.set_page_config(
+ st.set_page_config(
         page_title="Logistics Reconciliation Tool",
         page_icon="📦",
         layout="wide",
@@ -3590,7 +3589,6 @@ st.set_page_config(
     )
 
     st.title("📦 Logistics Reconciliation & Business Intelligence Tool")
-
     if 'reconciler' not in st.session_state:
         st.session_state.reconciler = StreamlitLogisticsReconciliation()
         st.session_state.processed = False
