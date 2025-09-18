@@ -2529,14 +2529,14 @@ def eliminar_tienda(tienda_id: int) -> bool:
     
 def mostrar_reconciliacion_logistica():
     """Muestra la interfaz de reconciliación logística"""
-    if not verificar_password("admin"):
+        if not verificar_password("admin"):
         solicitar_autenticacion("admin")
         return
     
     st.markdown("<h1 class='header-title animate-fade-in'>📦 Reconciliación Logística</h1>", unsafe_allow_html=True)
     
     # Inicializar el reconciliador en session state si no existe
-   if 'reconciler' not in st.session_state:
+         if 'reconciler' not in st.session_state:
         st.session_state.reconciler = StreamlitLogisticsReconciliation()
         st.session_state.processed = False
         st.session_state.show_details = False
