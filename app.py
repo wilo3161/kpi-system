@@ -3468,15 +3468,15 @@ class StreamlitLogisticsReconciliation:
 # ================================
 st.title("📦 Logistics Reconciliation & Business Intelligence Tool")
 
-        factura_file = st.sidebar.file_uploader(
-        "Upload Invoice File (Excel)",
-        type=['xlsx', 'xls']
-    )
+factura_file = st.sidebar.file_uploader(
+    "Upload Invoice File (Excel)",
+    type=['xlsx', 'xls']
+)
 
-    manifiesto_file = st.sidebar.file_uploader(
-        "Upload Manifest File (Excel)",
-        type=['xlsx', 'xls']
-    )
+manifiesto_file = st.sidebar.file_uploader(
+    "Upload Manifest File (Excel)",
+    type=['xlsx', 'xls']
+)
 
     process_btn = st.sidebar.button("🚀 Process Files")
 
