@@ -3582,10 +3582,10 @@ class StreamlitLogisticsReconciliation:
 # ================================
 
  st.set_page_config(
-        page_title="Logistics Reconciliation Tool",
-        page_icon="📦",
-        layout="wide",
-        initial_sidebar_state="expanded"
+    page_title="Logistics Reconciliation Tool",
+    page_icon="📦",
+    layout="wide",
+    initial_sidebar_state="expanded"
     )
 
     st.title("📦 Logistics Reconciliation & Business Intelligence Tool")
