@@ -23,14 +23,6 @@ from io import BytesIO
 from PIL import Image as PILImage
 import os
 import requests
-import matplotlib.pyplot as plt
-import seaborn as sns
-from reportlab.lib.pagesizes import letter
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image
-from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.lib import colors
-import warnings
-warnings.filterwarnings('ignore')
 if 'user_type' not in st.session_state:
     st.session_state.user_type = None
 if 'password_correct' not in st.session_state:
@@ -2526,7 +2518,6 @@ def eliminar_tienda(tienda_id: int) -> bool:
     except Exception as e:
         logger.error(f"Error al eliminar tienda: {e}", exc_info=True)
         return False
- 
 
 def mostrar_generacion_guias():
     """Muestra la interfaz para generar guías de envío y gestionar tiendas"""
@@ -3118,32 +3109,16 @@ def generar_pdf_etiqueta(datos: dict) -> bytes:
     except Exception as e:
         logger.error(f"Error al generar PDF de etiqueta: {e}", exc_info=True)
         return None
-import streamlit as st
-import os
-import re
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
-from reportlab.lib.pagesizes import letter
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image
-from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.lib import colors
-import tempfile
-import datetime
-from io import BytesIO
-import warnings
-
-warnings.filterwarnings('ignore')
 
 # ================================
 # FUNCIÓN PRINCIPAL
 # ================================
 
-"""Función principal de la aplicación"""
+def main():
+    """Función principal de la aplicación"""
     
     # Mostrar logo y título en el sidebar
-st.sidebar.markdown("""
+    st.sidebar.markdown("""
     <div class='sidebar-title'>
         <div class='aeropostale-logo'>AEROPOSTALE</div>
         <div class='aeropostale-subtitle'>Sistema de Gestión de KPIs</div>
@@ -3151,17 +3126,17 @@ st.sidebar.markdown("""
     """, unsafe_allow_html=True)
     
     # Inicializar session state variables si no existen
-if 'user_type' not in st.session_state:
+    if 'user_type' not in st.session_state:
         st.session_state.user_type = None
-if 'selected_menu' not in st.session_state:
+    if 'selected_menu' not in st.session_state:
         st.session_state.selected_menu = 0
-if 'show_login' not in st.session_state:
+    if 'show_login' not in st.session_state:
         st.session_state.show_login = False
-if 'password_correct' not in st.session_state:
+    if 'password_correct' not in st.session_state:
         st.session_state.password_correct = False
     
     # Definir opciones de menú
-menu_options = [
+    menu_options = [
         ("Dashboard KPIs", "📊", mostrar_dashboard_kpis, "public"),
         ("Análisis Histórico", "📈", mostrar_analisis_historico_kpis, "public"),
         ("Ingreso de Datos", "📥", mostrar_ingreso_datos_kpis, "admin"),
@@ -3174,7 +3149,7 @@ menu_options = [
     ]
     
     # Mostrar opciones del menú según permisos
-for i, (label, icon, _, permiso) in enumerate(menu_options):
+    for i, (label, icon, _, permiso) in enumerate(menu_options):
         # Verificar si la opción debe mostrarse
         mostrar_opcion = False
         
@@ -3195,7 +3170,7 @@ for i, (label, icon, _, permiso) in enumerate(menu_options):
                 st.session_state.selected_menu = i
     
     # Mostrar botón de login si no está autenticado
-if st.session_state.user_type is None:
+    if st.session_state.user_type is None:
         col1, col2 = st.sidebar.columns(2)
         with col1:
             if st.button("👤 Acceso Usuario", use_container_width=True):
@@ -3210,7 +3185,7 @@ if st.session_state.user_type is None:
             solicitar_autenticacion(st.session_state.get('login_type', 'user'))
     
     # Mostrar botón de logout si está autenticado
-else:
+    else:
         if st.sidebar.button("🚪 Cerrar Sesión", use_container_width=True):
             st.session_state.user_type = None
             st.session_state.password_correct = False
@@ -3222,20 +3197,20 @@ else:
         st.sidebar.info(f"Usuario: {'Administrador' if st.session_state.user_type == 'admin' else 'Usuario'}")
     
     # Verificar que selected_menu esté dentro del rango válido
-if st.session_state.selected_menu >= len(menu_options):
+    if st.session_state.selected_menu >= len(menu_options):
         st.session_state.selected_menu = 0
     
     # Obtener la opción seleccionada
-label, icon, func, permiso = menu_options[st.session_state.selected_menu]
+    label, icon, func, permiso = menu_options[st.session_state.selected_menu]
     
     # Verificar permisos para la opción seleccionada
-if permiso == "public":
+    if permiso == "public":
         func()
-elif permiso == "user" and st.session_state.user_type in ["user", "admin"]:
+    elif permiso == "user" and st.session_state.user_type in ["user", "admin"]:
         func()
-elif permiso == "admin" and st.session_state.user_type == "admin":
+    elif permiso == "admin" and st.session_state.user_type == "admin":
         func()
-else:
+    else:
         # Mostrar mensaje de acceso denegado
         st.error("🔒 Acceso restringido. Necesita autenticarse para acceder a esta sección.")
         
@@ -3246,7 +3221,7 @@ else:
             solicitar_autenticacion("user")
     
     # Footer
-st.markdown("""
+    st.markdown("""
     <div class="footer">
         Sistema de KPIs Aeropostale v2.0 | © 2025 Aeropostale. Todos los derechos reservados.<br>
         Desarrollado por: <a href="mailto:wilson.perez@aeropostale.com">Wilson Pérez</a>
