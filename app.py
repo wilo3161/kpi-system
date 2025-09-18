@@ -3463,9 +3463,7 @@ class StreamlitLogisticsReconciliation:
 # FUNCIÓN PRINCIPAL
 # ================================
 st.title("📦 Logistics Reconciliation & Business Intelligence Tool")
-  
-        st.session_state.processed = False
-        st.session_state.show_details = False
+
 
     factura_file = st.sidebar.file_uploader(
         "Upload Invoice File (Excel)",
