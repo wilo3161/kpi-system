@@ -2538,30 +2538,26 @@ def mostrar_reconciliacion_logistica():
     if not verificar_password("admin"):
         solicitar_autenticacion("admin")
         return
-    
+
     st.markdown("<h1 class='header-title animate-fade-in'>📦 Reconciliación Logística</h1>", unsafe_allow_html=True)
     
     # Inicializar el reconciliador en session state si no existe
-     if 'reconciler' not in st.session_state:
-        st.session_state.reconciler = Reconciler()  # Usando la clase corregida
+    if 'reconciler' not in st.session_state:
+        st.session_state.reconciler = Reconciler()
         st.session_state.processed = False
         st.session_state.show_details = False
     
     # Cargar archivos
-     st.markdown("<div class='guide-section animate-fade-in'>", unsafe_allow_html=True)
+    st.markdown("<div class='guide-section animate-fade-in'>", unsafe_allow_html=True)
     st.markdown("<h2 class='section-title animate-fade-in'>Cargar Archivos</h2>", unsafe_allow_html=True)
     
     col1, col2 = st.columns(2)
     with col1:
-    
-    col1, col2 = st.columns(2)
-    with col1:
-    factura_file = st.file_uploader(
+        factura_file = st.file_uploader(
             "Subir archivo de facturas (Excel)",
             type=['xlsx', 'xls'],
             key="factura_file"
         )
-   
     with col2:
         manifiesto_file = st.file_uploader(
             "Subir archivo de manifiesto (Excel)",
@@ -2576,6 +2572,9 @@ def mostrar_reconciliacion_logistica():
             )
     
     st.markdown("</div>", unsafe_allow_html=True)
+    
+    # El resto del código de la función mostrar_reconciliacion_logistica...
+    # [Aquí va el resto del código de la función]
     
     # Mostrar resultados si se procesaron los archivos
     if st.session_state.processed:
