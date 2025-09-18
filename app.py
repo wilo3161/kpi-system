@@ -2314,6 +2314,10 @@ def mostrar_reconciliacion_logistica():
         "Upload Invoice File (Excel)",
         type=['xlsx', 'xls']
     )
+    manifiesto_file = st.sidebar.file_uploader(
+        "Upload Manifest File (Excel)",
+        type=['xlsx', 'xls']
+    )
 
     manifiesto_file = st.sidebar.file_uploader(
         "Upload Manifest File (Excel)",
