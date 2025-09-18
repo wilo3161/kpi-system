@@ -3463,7 +3463,7 @@ class StreamlitLogisticsReconciliation:
 # FUNCIÓN PRINCIPAL
 # ================================
 st.title("📦 Logistics Reconciliation & Business Intelligence Tool")
-        if 'reconciler' not in st.session_state:
+    if 'reconciler' not in st.session_state:
         st.session_state.reconciler = StreamlitLogisticsReconciliation()
         st.session_state.processed = False
         st.session_state.show_details = False
