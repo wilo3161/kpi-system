@@ -39,10 +39,6 @@ if 'selected_menu' not in st.session_state:
     st.session_state.selected_menu = 0
 if 'show_login' not in st.session_state:
     st.session_state.show_login = False
-if 'reconciler' not in st.session_state:
-    st.session_state.reconciler = Reconciler()
-if 'processed' not in st.session_state:
-    st.session_state.processed = False   
 
 # ================================
 # CONFIGURACIÓN INICIAL Y LOGGING
@@ -1097,7 +1093,7 @@ def obtener_historial_guias() -> pd.DataFrame:
         return pd.DataFrame()
 
 # ================================
-# NUEVAS FUNCIONES PARA MANEJO DE IMÁGENES
+# FUNCIONES MEJORADAS PARA MANEJO DE IMÁGENES
 # ================================
 
 def verificar_imagen_existe(url: str) -> bool:
@@ -1294,7 +1290,7 @@ def generar_pdf_guia(store_name: str, brand: str, url: str, sender_name: str, tr
         pdf.cell(90, 8, store_name, 0, 1)
         
         pdf.ln(5)
-       
+        
        
         if 'phone' in tienda_info:
             pdf.cell(90, 8, f"TEL.: {tienda_info['phone']}", 0, 1)
@@ -1425,9 +1421,1156 @@ def mostrar_estado_abastecimiento():
     with col1:
         st.markdown(f"""
         <div class="kpi-card animate-fade-in">
-            <div class="metric-label">M...
-(truncated 56855 characters)...
-= reconciler.kpis
+            <div class="metric-label">Meta Semanal</div>
+            <p class="metric-value">{resultado['meta_semanal']:,.0f}</p>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with col2:
+        st.markdown(f"""
+        <div class="kpi-card animate-fade-in">
+            <div class="metric-label">Distribuciones Totales</div>
+            <p class="metric-value">{resultado['distribuciones_totales']:,.0f}</p>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with col3:
+        tendencia = "trend-up" if resultado['cumplimiento_porcentaje'] >= 100 else "trend-down"
+        st.markdown(f"""
+        <div class="kpi-card animate-fade-in">
+            <div class="metric-label">Cumplimiento</div>
+            <p class="metric-value">{resultado['cumplimiento_porcentaje']:.1f}%</p>
+            <p class="{tendencia}">Meta: 100%</p>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    # Mostrar detalles de abastecimiento
+    if resultado['detalles']:
+        st.markdown("<div class='warning-box'>⚠️ Problemas de Abastecimiento Detectados</div>", unsafe_allow_html=True)
+        
+        for detalle in resultado['detalles']:
+            st.markdown(f"""
+            <div class="info-box">
+                <strong>{detalle['transferidor']}</strong> no recibió suficientes distribuciones de <strong>{detalle['proveedor']}</strong><br>
+                - Recibido: {detalle['distribuciones_recibidas']:,.0f}<br>
+                - Requerido: {detalle['distribuciones_requeridas']:,.0f}<br>
+                - Déficit: {detalle['distribuciones_requeridas'] - detalle['distribuciones_recibidas']:,.0f}
+            </div>
+            """, unsafe_allow_html=True)
+    else:
+        st.markdown("<div class='success-box'>✅ Abastecimiento adecuado para cumplir la meta semanal</div>", unsafe_allow_html=True)
+
+def mostrar_gestion_distribuciones():
+    """Muestra la interfaz para gestionar distribuciones semanales"""
+    if not verificar_password("admin"):
+        solicitar_autenticacion("admin")
+        return
+    st.markdown("<h1 class='header-title animate-fade-in'>📊 Gestión de Distribuciones Semanales</h1>", unsafe_allow_html=True)
+    
+    if supabase is None:
+        st.markdown("<div class='error-box animate-fade-in'>❌ Error de conexión a la base de datos. Verifique las variables de entorno.</div>", unsafe_allow_html=True)
+        return
+    
+    # Obtener fecha de inicio de la semana actual
+    fecha_actual = datetime.now().date()
+    fecha_inicio_semana = fecha_actual - timedelta(days=fecha_actual.weekday())
+    fecha_inicio_semana_str = fecha_inicio_semana.strftime("%Y-%m-%d")
+    
+    # Obtener distribuciones existentes si las hay
+    distribuciones_existentes = obtener_distribuciones_semana(fecha_inicio_semana_str)
+    
+    with st.form("form_distribuciones_semanales"):
+        st.markdown("<h3 class='section-title'>Distribuciones de la Semana</h3>", unsafe_allow_html=True)
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            tempo_distribuciones = st.number_input(
+                "Distribuciones de Tempo:", 
+                min_value=0, 
+                value=distribuciones_existentes.get('tempo', 0),
+                key="tempo_distribuciones"
+            )
+        
+        with col2:
+            luis_distribuciones = st.number_input(
+                "Distribuciones de Luis Perugachi:", 
+                min_value=0, 
+                value=distribuciones_existentes.get('luis', 0),
+                key="luis_distribuciones"
+            )
+        
+        meta_semanal = st.number_input(
+            "Meta Semanal:", 
+            min_value=0, 
+            value=7500,
+            key="meta_semanal"
+        )
+        
+        submitted = st.form_submit_button("Guardar Distribuciones", use_container_width=True)
+        
+        if submitted:
+            if guardar_distribuciones_semanales(fecha_inicio_semana_str, tempo_distribuciones, luis_distribuciones, meta_semanal):
+                st.markdown("<div class='success-box animate-fade-in'>✅ Distribuciones guardadas correctamente!</div>", unsafe_allow_html=True)
+                time.sleep(1)
+                st.rerun()
+            else:
+                st.markdown("<div class='error-box animate-fade-in'>❌ Error al guardar las distribuciones.</div>", unsafe_allow_html=True)
+    
+    # Mostrar estado actual de abastecimiento
+    mostrar_estado_abastecimiento()
+    
+    # Mostrar alertas de abastecimiento
+    alertas = verificar_alertas_abastecimiento()
+    if alertas:
+        st.markdown("<h3 class='section-title'>🚨 Alertas de Abastecimiento</h3>", unsafe_allow_html=True)
+        for alerta in alertas:
+            if alerta['gravedad'] == 'ALTA':
+                st.markdown(f"<div class='error-box'>{alerta['mensaje']}<br>Acción: {alerta['accion']}</div>", unsafe_allow_html=True)
+
+# ================================
+# COMPONENTES DE LA APLICACIÓN
+# ================================
+
+def mostrar_dashboard_kpis():
+    """Muestra el dashboard principal con KPIs"""
+    st.markdown("<h1 class='header-title animate-fade-in'>📊 Dashboard de KPIs Aeropostale</h1>", unsafe_allow_html=True)
+    
+    if supabase is None:
+        st.markdown("<div class='error-box animate-fade-in'>❌ Error de conexión a la base de datos. Verifique las variables de entorno.</div>", unsafe_allow_html=True)
+        return
+    
+    # Mostrar alertas de abastecimiento
+    alertas = verificar_alertas_abastecimiento()
+    if alertas:
+        for alerta in alertas:
+            if alerta['gravedad'] == 'ALTA':
+                st.markdown(f"<div class='error-box'>🚨 {alerta['mensaje']}</div>", unsafe_allow_html=True)
+    
+    # Cargar datos históricos
+    if 'historico_data' not in st.session_state:
+        with st.spinner("Cargando datos históricos..."):
+            st.session_state.historico_data = cargar_historico_db()
+    
+    df = st.session_state.historico_data
+    if df.empty:
+        st.markdown("<div class='warning-box animate-fade-in'>⚠️ No hay datos históricos. Por favor, ingresa datos primero.</div>", unsafe_allow_html=True)
+        return
+    
+    # Crear selector de rango de fechas
+    st.markdown("<div class='date-selector animate-fade-in'>", unsafe_allow_html=True)
+    st.markdown("<h3>Selecciona el rango de fechas a visualizar:</h3>", unsafe_allow_html=True)
+    
+    # Obtener fechas únicas y ordenarlas
+    if not df.empty and 'fecha' in df.columns:
+        # Convertir a fecha y eliminar duplicados
+        fechas_disponibles = sorted(df['fecha'].dt.date.unique(), reverse=True)
+        if not fechas_disponibles:
+            st.markdown("<div class='warning-box animate-fade-in'>⚠️ No hay fechas disponibles para mostrar.</div>", unsafe_allow_html=True)
+            return
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            fecha_inicio = st.date_input(
+                "Fecha de inicio:",
+                value=fechas_disponibles[-1] if fechas_disponibles else datetime.now().date(),
+                min_value=fechas_disponibles[-1] if fechas_disponibles else datetime.now().date(),
+                max_value=fechas_disponibles[0] if fechas_disponibles else datetime.now().date()
+            )
+        with col2:
+            fecha_fin = st.date_input(
+                "Fecha de fin:",
+                value=fechas_disponibles[0] if fechas_disponibles else datetime.now().date(),
+                min_value=fechas_disponibles[-1] if fechas_disponibles else datetime.now().date(),
+                max_value=fechas_disponibles[0] if fechas_disponibles else datetime.now().date()
+            )
+    else:
+        st.markdown("<div class='warning-box animate-fade-in'>⚠️ No hay datos disponibles.</div>", unsafe_allow_html=True)
+        return
+    st.markdown("</div>", unsafe_allow_html=True)
+    
+    # Validar que la fecha de inicio no sea mayor que la fecha de fin
+    if fecha_inicio > fecha_fin:
+        st.markdown("<div class='error-box animate-fade-in'>❌ La fecha de inicio no puede ser mayor que la fecha de fin.</div>", unsafe_allow_html=True)
+        return
+    
+    # Filtrar datos por rango de fechas seleccionado
+    df_rango = df[(df['fecha'].dt.date >= fecha_inicio) & (df['fecha'].dt.date <= fecha_fin)]
+    if df_rango.empty:
+        st.markdown(f"<div class='warning-box animate-fade-in'>⚠️ No hay datos disponibles para el rango de fechas {fecha_inicio} a {fecha_fin}.</div>", unsafe_allow_html=True)
+        return
+    
+    st.markdown(f"<p style='color: var(--text-secondary); font-size: 1.1em;'>Datos para el rango de fechas: {fecha_inicio} a {fecha_fin}</p>", unsafe_allow_html=True)
+    st.markdown("<h2 class='section-title animate-fade-in'>📈 KPIs Globales</h2>", unsafe_allow_html=True)
+    
+    # Cálculos globales
+    total_cantidad = df_rango['cantidad'].sum()
+    total_meta = df_rango['meta'].sum()
+    total_horas = df_rango['horas_trabajo'].sum()
+    avg_eficiencia = (df_rango['eficiencia'] * df_rango['horas_trabajo']).sum() / total_horas if total_horas > 0 else 0
+    avg_productividad = df_rango['productividad'].mean()
+    productividad_total = total_cantidad / total_horas if total_horas > 0 else 0
+    
+    kpi1, kpi2, kpi3, kpi4 = st.columns(4)
+    with kpi1:
+        cumplimiento_meta = (total_cantidad / total_meta * 100) if total_meta > 0 else 0
+        st.markdown(f"""
+        <div class="kpi-card animate-fade-in">
+            <div class="metric-label">✅ Total Producción</div>
+            <p class="metric-value">{total_cantidad:,.0f}</p>
+            <p>Meta: {total_meta:,.0f} | <span class="{'trend-up' if cumplimiento_meta >= 100 else 'trend-down'}">{cumplimiento_meta:.1f}%</span></p>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with kpi2:
+        st.markdown(f"""
+        <div class="kpi-card animate-fade-in">
+            <div class="metric-label">🎯 Eficiencia Promedio</div>
+            <p class="metric-value">{avg_eficiencia:.1f}%</p>
+            <p>Meta: 100% | <span class="{'trend-up' if avg_eficiencia >= 100 else 'trend-down'}">{avg_eficiencia - 100:.1f}%</span></p>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with kpi3:
+        st.markdown(f"""
+        <div class="kpi-card animate-fade-in">
+            <div class="metric-label">⚡ Productividad Promedio</div>
+            <p class="metric-value">{avg_productividad:.1f}</p>
+            <p>unidades/hora</p>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with kpi4:
+        st.markdown(f"""
+        <div class="kpi-card animate-fade-in">
+            <div class="metric-label">⏱️ Productividad Total</div>
+            <p class="metric-value">{productividad_total:.1f}</p>
+            <p>unidades/hora ({total_horas:.1f} h)</p>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    # Mostrar estado de abastecimiento
+    mostrar_estado_abastecimiento()
+    
+    st.markdown("<h2 class='section-title animate-fade-in'>📅 Cumplimiento de Metas Mensuales (Transferencias)</h2>", unsafe_allow_html=True)
+    
+    # Obtener el mes y año del rango de fechas
+    current_month = fecha_inicio.month
+    current_year = fecha_inicio.year
+    
+    # Filtrar datos del mes actual para transferencias
+    df_month = df[(df['fecha'].dt.month == current_month) & 
+                  (df['fecha'].dt.year == current_year)]
+    df_transferencias_month = df_month[df_month['equipo'] == 'Transferencias']
+    
+    # Obtener meta mensual de transferencias (usamos el último valor registrado)
+    if not df_transferencias_month.empty:
+        meta_mensual_transferencias = df_transferencias_month['meta_mensual'].iloc[0]
+    else:
+        # Si no hay datos, usar un valor por defecto
+        meta_mensual_transferencias = 70000
+    
+    cum_transferencias = df_transferencias_month['cantidad'].sum()
+    cumplimiento_transferencias = (cum_transferencias / meta_mensual_transferencias * 100) if meta_mensual_transferencias > 0 else 0
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown(f"""
+        <div class="kpi-card animate-fade-in">
+            <div class="metric-label">Meta Mensual Transferencias</div>
+            <p class="metric-value">{cumplimiento_transferencias:.1f}%</p>
+            <p>Acumulado: {cum_transferencias:,.0f} / Meta Mensual: {meta_mensual_transferencias:,.0f}</p>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with col2:
+        # Gráfico de frasco de agua para el cumplimiento
+        fig = crear_grafico_frasco(cumplimiento_transferencias, "Cumplimiento Mensual Transferencias")
+        st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+    
+    # Gráfico de evolución mensual
+    if not df_transferencias_month.empty:
+        df_transferencias_daily = df_transferencias_month.groupby(df_transferencias_month['fecha'].dt.date)['cantidad'].sum().reset_index(name='cantidad')
+        df_transferencias_daily['fecha'] = pd.to_datetime(df_transferencias_daily['fecha'])
+        df_transferencias_daily = df_transferencias_daily.sort_values('fecha')
+        df_transferencias_daily['cumulative'] = df_transferencias_daily['cantidad'].cumsum()
+        
+        fig = crear_grafico_interactivo(
+            df_transferencias_daily, 
+            'fecha', 
+            'cumulative', 
+            'Cumplimiento Mensual Transferencias', 
+            'Día', 
+            'Acumulado',
+            'line'
+        )
+        # Añadir línea de meta
+        fig.add_hline(y=meta_mensual_transferencias, line_dash="dash", line_color="white", annotation_text="Meta Mensual")
+        st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+    else:
+        st.info("No hay datos para el gráfico de Transferencias.")
+    
+    st.markdown("<h2 class='section-title animate-fade-in'>👥 Rendimiento por Equipos</h2>", unsafe_allow_html=True)
+    
+    # Obtener lista de equipos
+    equipos = df_rango['equipo'].unique()
+    # Ordenar equipos en un orden específico
+    orden_equipos = ["Transferencias", "Distribución", "Arreglo", "Guías", "Ventas"]
+    equipos_ordenados = [eq for eq in orden_equipos if eq in equipos]
+    equipos_restantes = [eq for eq in equipos if eq not in orden_equipos]
+    equipos_finales = equipos_ordenados + equipos_restantes
+    
+    for equipo in equipos_finales:
+        df_equipo = df_rango[df_rango['equipo'] == equipo]
+        st.markdown(f"<div class='team-section animate-fade-in'><div class='team-header'>{equipo}</div></div>", unsafe_allow_html=True)
+        
+        # Calcular KPIs del equipo
+        total_equipo = df_equipo['cantidad'].sum()
+        meta_equipo = df_equipo['meta'].sum()
+        horas_equipo = df_equipo['horas_trabajo'].sum()
+        eficiencia_equipo = (df_equipo['eficiencia'] * df_equipo['horas_trabajo']).sum() / horas_equipo if horas_equipo > 0 else 0
+        productividad_equipo = total_equipo / horas_equipo if horas_equipo > 0 else 0
+        
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.markdown(f"""
+            <div class="kpi-card">
+                <div class="metric-label">Producción</div>
+                <p class="metric-value">{total_equipo:,.0f}</p>
+                <p>Meta: {meta_equipo:,.0f}</p>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with col2:
+            st.markdown(f"""
+            <div class="kpi-card">
+                <div class="metric-label">Eficiencia</div>
+                <p class="metric-value">{eficiencia_equipo:.1f}%</p>
+                <p>Meta: 100%</p>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with col3:
+            st.markdown(f"""
+            <div class="kpi-card">
+                <div class="metric-label">Productividad</div>
+                <p class="metric-value">{productividad_equipo:.1f}</p>
+                <p>unidades/hora</p>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with col4:
+            st.markdown(f"""
+            <div class="kpi-card">
+                <div class="metric-label">Horas</div>
+                <p class="metric-value">{horas_equipo:.1f}</p>
+                <p>horas trabajadas</p>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        # Mostrar trabajadores del equipo
+        for _, row in df_equipo.iterrows():
+            col1, col2 = st.columns([3, 1])
+            with col1:
+                color = "#8bc34a" if row['eficiencia'] >= 100 else "#ff6b6b"
+                card_content = f"""
+                <div class="worker-card">
+                    <div class="stats-container">
+                        <div class="worker-header">{row['nombre']}</div>
+                        <div class="worker-metric">📦 {row['actividad']}: <span style='font-weight:bold'>{row['cantidad']}</span></div>
+                        <div class="worker-metric">🎯 Eficiencia: <span style='color:{color}; font-weight:bold'>{row['eficiencia']:.1f}%</span></div>
+                        <div class="worker-metric">⏱️ Productividad: {row['productividad']:.1f}/hora</div>
+                        <div class="worker-metric">⏰ Horas: {row['horas_trabajo']:.1f} h</div>
+                    </div>
+                </div>
+                """
+                st.markdown(card_content, unsafe_allow_html=True)
+            
+            with col2:
+                comentario = row.get('comentario', None)
+                if pd.notna(comentario) and str(comentario).strip() != "":
+                    st.markdown(f"""
+                    <div class="comment-container">
+                        <div class="comment-title">💬 Comentario:</div>
+                        <div class="comment-content">{comentario}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+def mostrar_analisis_historico_kpis():
+    """Muestra el análisis histórico de KPIs"""
+    st.markdown("<h1 class='header-title animate-fade-in'>📈 Análisis Histórico de KPIs</h1>", unsafe_allow_html=True)
+    
+    if supabase is None:
+        st.markdown("<div class='error-box animate-fade-in'>❌ Error de conexión a la base de datos. Verifique las variables de entorno.</div>", unsafe_allow_html=True)
+        return
+    
+    # Cargar datos históricos
+    df = cargar_historico_db()
+    if df.empty:
+        st.markdown("<div class='warning-box animate-fade-in'>⚠️ No hay datos históricos. Por favor, ingresa datos primero.</div>", unsafe_allow_html=True)
+        return
+    
+    df['dia'] = df['fecha'].dt.date
+    fecha_min = df['dia'].min()
+    fecha_max = df['dia'].max()
+    
+    col1, col2, col3 = st.columns([1, 1, 2])
+    with col1:
+        fecha_inicio = st.date_input("Fecha de inicio:", value=fecha_min, min_value=fecha_min, max_value=fecha_max)
+    with col2:
+        fecha_fin = st.date_input("Fecha de fin:", value=fecha_max, min_value=fecha_min, max_value=fecha_max)
+    with col3:
+        trabajador = st.selectbox("Filtrar por trabajador:", options=["Todos"] + list(df['nombre'].unique()))
+    
+    if fecha_inicio > fecha_fin:
+        st.markdown("<div class='error-box animate-fade-in'>❌ La fecha de inicio no puede ser mayor que la fecha de fin.</div>", unsafe_allow_html=True)
+        return
+    
+    # Aplicar filtros
+    df_filtrado = df[(df['dia'] >= fecha_inicio) & (df['dia'] <= fecha_fin)]
+    if trabajador != "Todos":
+        df_filtrado = df_filtrado[df_filtrado['nombre'] == trabajador]
+    
+    if df_filtrado.empty:
+        st.markdown("<div class='warning-box animate-fade-in'>⚠️ No hay datos en el rango de fechas seleccionado.</div>", unsafe_allow_html=True)
+        return
+    
+    # Botones de exportación
+    st.markdown("<div class='export-buttons animate-fade-in'>", unsafe_allow_html=True)
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        # Botón para exportar a Excel
+        if st.button("💾 Exportar a Excel", use_container_width=True):
+            try:
+                # Crear una copia del DataFrame para no modificar el original
+                export_df = df_filtrado.copy()
+                
+                # Asegurar que las fechas estén en formato adecuado
+                if 'fecha' in export_df.columns:
+                    export_df['fecha'] = pd.to_datetime(export_df['fecha']).dt.strftime('%Y-%m-%d')
+                
+                # Manejar valores NaN и None
+                export_df = export_df.fillna('N/A')
+                
+                # Reordenar columnas para una mejor presentación
+                columnas_ordenadas = [
+                    'fecha', 'nombre', 'equipo', 'actividad', 'cantidad', 'meta', 
+                    'eficiencia', 'productividad', 'horas_trabajo', 'meta_mensual', 'comentario'
+                ]
+                # Solo incluir las columnas que existen en el DataFrame
+                columnas_finales = [col for col in columnas_ordenadas if col in export_df.columns]
+                export_df = export_df[columnas_finales]
+                
+                output = io.BytesIO()
+                with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                    export_df.to_excel(writer, sheet_name='Datos_KPIs', index=False)
+                    # Formato adicional para mejorar el Excel
+                    workbook = writer.book
+                    worksheet = writer.sheets['Datos_KPIs']
+                    
+                    # Formato para encabezados
+                    header_format = workbook.add_format({
+                        'bold': True,
+                        'text_wrap': True,
+                        'valign': 'top',
+                        'fg_color': '#e60012',
+                        'font_color': 'white',
+                        'border': 1
+                    })
+                    
+                    # Formato para celdas
+                    cell_format = workbook.add_format({
+                        'border': 1,
+                        'align': 'left',
+                        'valign': 'vcenter'
+                    })
+                    
+                    # Aplicar formato a encabezados
+                    for col_num, value in enumerate(export_df.columns.values):
+                        worksheet.write(0, col_num, value, header_format)
+                    
+                    # Aplicar formato a todas las celdas de datos
+                    for row in range(1, len(export_df) + 1):
+                        for col in range(len(export_df.columns)):
+                            worksheet.write(row, col, export_df.iloc[row-1, col], cell_format)
+                    
+                    # Autoajustar columnas
+                    for i, col in enumerate(export_df.columns):
+                        # Obtener la longitud máxima de los datos en la columna
+                        max_len = max((
+                            export_df[col].astype(str).str.len().max(),  # Longitud máxima de los datos
+                            len(str(col))  # Longitud del nombre de la columna
+                        )) + 2  # Añadir un poco de espacio extra
+                        worksheet.set_column(i, i, max_len)
+                
+                excel_data = output.getvalue()
+                st.download_button(
+                    label="⬇️ Descargar archivo Excel",
+                    data=excel_data,
+                    file_name=f"kpis_historico_{fecha_inicio}_a_{fecha_fin}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True
+                )
+            except Exception as e:
+                logger.error(f"Error al exportar a Excel: {e}", exc_info=True)
+                st.markdown("<div class='error-box animate-fade-in'>❌ Error al exportar a Excel.</div>", unsafe_allow_html=True)
+    
+    with col2:
+        # Botón para exportar a PDF
+        if st.button("📄 Exportar to PDF", use_container_width=True):
+            try:
+                # Crear un PDF simple con los datos
+                pdf = FPDF()
+                pdf.add_page()
+                pdf.set_font("Arial", "B", 16)
+                pdf.cell(0, 10, "Reporte de KPIs - Aeropostale", ln=True, align="C")
+                pdf.ln(10)
+                
+                pdf.set_font("Arial", "", 12)
+                pdf.cell(0, 10, f"Período: {fecha_inicio} a {fecha_fin}", ln=True)
+                pdf.ln(10)
+                
+                # Agregar tabla con los datos
+                pdf.set_font("Arial", "B", 10)
+                columnas = ['Fecha', 'Nombre', 'Equipo', 'Actividad', 'Cantidad', 'Meta', 'Eficiencia']
+                for i, col in enumerate(columnas):
+                    pdf.cell(27, 10, col, border=1)
+                pdf.ln()
+                
+                pdf.set_font("Arial", "", 8)
+                for _, row in df_filtrado.iterrows():
+                    pdf.cell(27, 10, str(row['fecha'].strftime('%Y-%m-%d') if pd.notna(row['fecha']) else ''), border=1)
+                    pdf.cell(27, 10, str(row['nombre'])[:15] if pd.notna(row['nombre']) else '', border=1)
+                    pdf.cell(27, 10, str(row['equipo'])[:10] if pd.notna(row['equipo']) else '', border=1)
+                    pdf.cell(27, 10, str(row['actividad'])[:10] if pd.notna(row['actividad']) else '', border=1)
+                    pdf.cell(27, 10, str(row['cantidad']) if pd.notna(row['cantidad']) else '', border=1)
+                    pdf.cell(27, 10, str(row['meta']) if pd.notna(row['meta']) else '', border=1)
+                    pdf.cell(27, 10, f"{row['eficiencia']:.1f}%" if pd.notna(row['eficiencia']) else '', border=1)
+                    pdf.ln()
+                
+                # Convertir PDF to bytes
+                pdf_data = pdf.output(dest="S").encode("latin1")
+                
+                st.download_button(
+                    label="⬇️ Descargar reporte PDF",
+                    data=pdf_data,
+                    file_name=f"reporte_kpis_{fecha_inicio}_a_{fecha_fin}.pdf",
+                    mime="application/pdf",
+                    use_container_width=True
+                )
+            except Exception as e:
+                logger.error(f"Error al exportar a PDF: {e}", exc_info=True)
+                st.markdown("<div class='error-box animate-fade-in'>❌ Error al exportar a PDF.</div>", unsafe_allow_html=True)
+    
+    with col3:
+        # Botón para exportar a CSV
+        csv = df_filtrado.to_csv(index=False).encode('utf-8')
+        st.download_button(
+            label="📊 Descargar CSV",
+            data=csv,
+            file_name=f"kpis_historico_{fecha_inicio}_a_{fecha_fin}.csv",
+            mime="text/csv",
+            use_container_width=True
+        )
+    
+    st.markdown("</div>", unsafe_allow_html=True)
+    
+    st.markdown("<h2 class='section-title animate-fade-in'>📋 Resumen Estadístico</h2>", unsafe_allow_html=True)
+    # Mostrar resumen estadístico
+    st.dataframe(df_filtrado.groupby('nombre').agg({
+        'cantidad': ['count', 'mean', 'sum', 'max', 'min'],
+        'eficiencia': ['mean', 'max', 'min'],
+        'productividad': ['mean', 'max', 'min'],
+        'horas_trabajo': ['sum', 'mean']
+    }).round(2), use_container_width=True)
+    
+    st.markdown("<h2 class='section-title animate-fade-in'>📊 Tendencias Históricas</h2>", unsafe_allow_html=True)
+    
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(["Eficiencia por Día", "Producción Acumulada", "Comparativa por Área", "Análisis Detallado", "Predicciones"])
+    
+    with tab1:
+        df_eficiencia_dia = df_filtrado.groupby('dia')['eficiencia'].mean().reset_index()
+        if not df_eficiencia_dia.empty:
+            fig = crear_grafico_interactivo(
+                df_eficiencia_dia, 
+                'dia', 
+                'eficiencia', 
+                'Evolución de la Eficiencia Promedio Diaria', 
+                'Fecha', 
+                'Eficiencia Promedio (%)',
+                'line'
+            )
+            # Añadir línea de meta
+            fig.add_hline(y=100, line_dash="dash", line_color="white", annotation_text="Meta de eficiencia")
+            st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+        else:
+            st.info("No hay datos para el gráfico.")
+    
+    with tab2:
+        df_produccion = df_filtrado.groupby(['dia', 'actividad'])['cantidad'].sum().reset_index()
+        if not df_produccion.empty:
+            fig = crear_grafico_interactivo(
+                df_produccion, 
+                'dia', 
+                'cantidad', 
+                'Producción Acumulada por Área', 
+                'Fecha', 
+                'Producción Acumulada',
+                'line'
+            )
+            st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+        else:
+            st.info("No hay datos para el gráfico.")
+    
+    with tab3:
+        if not df_filtrado.empty:
+            fig = crear_grafico_interactivo(
+                df_filtrado, 
+                'actividad', 
+                'productividad', 
+                'Distribución de Productividad por Área', 
+                'Área', 
+                'Productividad (unidades/hora)',
+                'box'
+            )
+            st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+        else:
+            st.info("No hay datos para el gráfico.")
+    
+    with tab4:
+        st.markdown("<h3>📈 Análisis de Correlación</h3>", unsafe_allow_html=True)
+        # Calcular matriz de correlación
+        numeric_cols = df_filtrado.select_dtypes(include=[np.number]).columns
+        if len(numeric_cols) > 1:
+            corr_matrix = df_filtrado[numeric_cols].corr()
+            fig = px.imshow(
+                corr_matrix,
+                text_auto=True,
+                aspect="auto",
+                color_continuous_scale='RdBu_r',
+                title='Matriz de Correlación'
+            )
+            st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+        else:
+            st.info("No hay suficientes datos numéricos para calcular correlaciones.")
+        
+        st.markdown("<h3>📋 Datos Detallados</h3>", unsafe_allow_html=True)
+        st.dataframe(df_filtrado, use_container_width=True)
+    
+    with tab5:
+        st.markdown("<h3>🔮 Predicción de Tendencia</h3>", unsafe_allow_html=True)
+        if not df_eficiencia_dia.empty and len(df_eficiencia_dia) > 5:
+            try:
+                # Preparar datos para predicción
+                dias_prediccion = 7
+                x = np.arange(len(df_eficiencia_dia))
+                y = df_eficiencia_dia['eficiencia'].values
+                
+                # Ajustar modelo
+                model = np.polyfit(x, y, 1)
+                poly = np.poly1d(model)
+                
+                # Predecir valores futuros
+                x_pred = np.arange(len(df_eficiencia_dia), len(df_eficiencia_dia) + dias_prediccion)
+                y_pred = poly(x_pred)
+                
+                # Crear fechas futuras
+                ultima_fecha = df_eficiencia_dia['dia'].max()
+                fechas_futuras = [ultima_fecha + timedelta(days=i+1) for i in range(dias_prediccion)]
+                
+                # Crear gráfico
+                fig = go.Figure()
+                # Datos históricos
+                fig.add_trace(go.Scatter(
+                    x=df_eficiencia_dia['dia'], 
+                    y=df_eficiencia_dia['eficiencia'],
+                    mode='lines+markers',
+                    name='Datos Históricos'
+                ))
+                # Predicciones
+                fig.add_trace(go.Scatter(
+                    x=fechas_futuras, 
+                    y=y_pred,
+                    mode='lines+markers',
+                    name='Predicción',
+                    line=dict(dash='dash', color='orange')
+                ))
+                # Línea de meta
+                fig.add_hline(y=100, line_dash="dash", line_color="white", annotation_text="Meta de eficiencia")
+                fig.update_layout(
+                    title='Predicción de Eficiencia para los Próximos 7 Días',
+                    xaxis_title='Fecha',
+                    yaxis_title='Eficiencia Promedio (%)',
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    font=dict(color="#ffffff")
+                )
+                st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+                
+                # Mostrar valores de predicción
+                st.markdown("<h4>Valores de Predicción:</h4>", unsafe_allow_html=True)
+                for i, (fecha, pred) in enumerate(zip(fechas_futuras, y_pred)):
+                    st.write(f"{fecha.strftime('%Y-%m-%d')}: {pred:.1f}%")
+            except Exception as e:
+                st.error(f"Error al generar predicciones: {str(e)}")
+        else:
+            st.info("Se necesitan al menos 5 días de datos para realizar predicciones.")
+
+def mostrar_ingreso_datos_kpis():
+    """Muestra la interfaz para ingresar datos de KPIs"""
+    if not verificar_password("admin"):  # ← Misma indentación que las demás líneas
+        solicitar_autenticacion("admin")
+        return
+    st.markdown("<h1 class='header-title animate-fade-in'>📥 Ingreso de Datos de KPIs</h1>", unsafe_allow_html=True)
+    
+    if supabase is None:
+        st.markdown("<div class='error-box animate-fade-in'>❌ Error de conexión a la base de datos. Verifique las variables de entorno.</div>", unsafe_allow_html=True)
+        return
+    
+    # Obtener trabajadores desde Supabase
+    df_trabajadores = obtener_trabajadores()
+    if df_trabajadores.empty:
+        st.markdown("<div class='warning-box animate-fade-in'>⚠️ No hay trabajadores registrados. Por favor, registre trabajadores primero.</div>", unsafe_allow_html=True)
+        return
+    
+    # Asegurar que Luis Perugachi esté en el equipo de Distribución
+    if 'Luis Perugachi' in df_trabajadores['nombre'].values:
+        df_trabajadores.loc[df_trabajadores['nombre'] == 'Luis Perugachi', 'equipo'] = 'Distribución'
+    
+    trabajadores_por_equipo = {}
+    for _, row in df_trabajadores.iterrows():
+        equipo = row['equipo']
+        if equipo not in trabajadores_por_equipo:
+            trabajadores_por_equipo[equipo] = []
+        trabajadores_por_equipo[equipo].append(row['nombre'])
+    
+    # Si no existe el equipo de Distribución, crearlo
+    if 'Distribución' not in trabajadores_por_equipo:
+        trabajadores_por_equipo['Distribución'] = []
+    
+    # Selector de fecha
+    col_fecha, _ = st.columns([1, 2])
+    with col_fecha:
+        fecha_seleccionada = st.date_input(
+            "Selecciona la fecha:",
+            value=datetime.now(),
+            max_value=datetime.now()
+        )
+    
+    # Verificar si ya existen datos para esta fecha
+    fecha_str = fecha_seleccionada.strftime("%Y-%m-%d")
+    datos_existentes = obtener_datos_fecha(fecha_str)
+    
+    # Inicializar variables de sesión para almacenar datos
+    if 'datos_calculados' not in st.session_state:
+        st.session_state.datos_calculados = None
+    if 'fecha_guardar' not in st.session_state:
+        st.session_state.fecha_guardar = None
+    
+    # Si hay datos existentes, mostrar mensaje
+    if not datos_existentes.empty:
+        st.markdown(f"<div class='info-box animate-fade-in'>ℹ️ Ya existen datos para la fecha {fecha_seleccionada}. Puede editarlos a continuación.</div>", unsafe_allow_html=True)
+    
+    periodo = st.radio("Selecciona el período:", ["Día", "Semana"], horizontal=True)
+    
+    with st.form("form_datos"):
+        # Meta mensual única para transferencias
+        st.markdown("<h3 class='section-title animate-fade-in'>Meta Mensual de Transferencias</h3>", unsafe_allow_html=True)
+        
+        # Obtener meta mensual existente si hay datos
+        meta_mensual_existente = 70000  # Valor por defecto
+        if not datos_existentes.empty:
+            meta_mensual_existente = datos_existentes['meta_mensual'].iloc[0] if 'meta_mensual' in datos_existentes.columns else 70000
+        
+        meta_mensual_transferencias = st.number_input("Meta mensual para el equipo de transferencias:", min_value=0, value=int(meta_mensual_existente), key="meta_mensual_transferencias")
+        
+        # Asegurar que el equipo de Distribución esté presente
+        if 'Distribución' not in trabajadores_por_equipo:
+            trabajadores_por_equipo['Distribución'] = []
+        
+        # Ordenar los equipos para mostrarlos en un orden específico
+        orden_equipos = ["Transferencias", "Distribución", "Arreglo", "Guías", "Ventas"]
+        equipos_ordenados = [eq for eq in orden_equipos if eq in trabajadores_por_equipo]
+        equipos_restantes = [eq for eq in trabajadores_por_equipo.keys() if eq not in orden_equipos]
+        equipos_finales = equipos_ordenados + equipos_restantes
+        
+        for equipo in equipos_finales:
+            miembros = trabajadores_por_equipo[equipo]
+            st.markdown(f"<div class='team-section animate-fade-in'><div class='team-header'>{equipo}</div></div>", unsafe_allow_html=True)
+            for trabajador in miembros:
+                st.subheader(trabajador)
+                
+                # Obtener datos existentes para este trabajador si existen
+                datos_trabajador = None
+                if not datos_existentes.empty:
+                    datos_trabajador = datos_existentes[datos_existentes['nombre'] == trabajador].iloc[0] if trabajador in datos_existentes['nombre'].values else None
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    # Establecer valores por defecto basados en datos existentes o valores predeterminados
+                    if datos_trabajador is not None:
+                        cantidad_default = int(datos_trabajador['cantidad']) if pd.notna(datos_trabajador['cantidad']) else 0
+                        meta_default = int(datos_trabajador['meta']) if pd.notna(datos_trabajador['meta']) else 0
+                        comentario_default = datos_trabajador['comentario'] if pd.notna(datos_trabajador['comentario']) else ""
+                    else:
+                        # Valores por defecto según el equipo
+                        if equipo == "Transferencias":
+                            cantidad_default = 1800
+                            meta_default = 1750
+                        elif equipo == "Distribución":
+                            cantidad_default = 1000
+                            meta_default = 1750
+                        elif equipo == "Arreglo":
+                            cantidad_default = 130
+                            meta_default = 1000
+                        elif equipo == "Guías":
+                            cantidad_default = 110
+                            meta_default = 120
+                        elif equipo == "Ventas":
+                            cantidad_default = 600
+                            meta_default = 700
+                        else:
+                            cantidad_default = 100
+                            meta_default = 100
+                        comentario_default = ""
+                    
+                    if equipo == "Transferencias":
+                        cantidad = st.number_input(f"Prendas transferidas por {trabajador}:", min_value=0, value=cantidad_default, key=f"{trabajador}_cantidad")
+                        meta = st.number_input(f"Meta diaria para {trabajador}:", min_value=0, value=meta_default, key=f"{trabajador}_meta")
+                    elif equipo == "Distribución":
+                        # Para el equipo de Distribución
+                        cantidad = st.number_input(f"Prendas distribuidas por {trabajador}:", min_value=0, value=cantidad_default, key=f"{trabajador}_cantidad")
+                        meta = st.number_input(f"Meta diaria para {trabajador}:", min_value=0, value=meta_default, key=f"{trabajador}_meta")
+                    elif equipo == "Arreglo":
+                        cantidad = st.number_input(f"Prendas arregladas por {trabajador}:", min_value=0, value=cantidad_default, key=f"{trabajador}_cantidad")
+                        meta = st.number_input(f"Meta diaria para {trabajador}:", min_value=0, value=meta_default, key=f"{trabajador}_meta")
+                    elif equipo == "Guías":
+                        cantidad = st.number_input(f"Guías realizadas por {trabajador}:", min_value=0, value=cantidad_default, key=f"{trabajador}_cantidad")
+                        meta = st.number_input(f"Meta diaria para {trabajador}:", min_value=0, value=meta_default, key=f"{trabajador}_meta")
+                    elif equipo == "Ventas":
+                        cantidad = st.number_input(f"Pedidos preparados por {trabajador}:", min_value=0, value=cantidad_default, key=f"{trabajador}_cantidad")
+                        meta = st.number_input(f"Meta diaria para {trabajador}:", min_value=0, value=meta_default, key=f"{trabajador}_meta")
+                    else:
+                        cantidad = st.number_input(f"Cantidad realizada por {trabajador}:", min_value=0, value=cantidad_default, key=f"{trabajador}_cantidad")
+                        meta = st.number_input(f"Meta diaria para {trabajador}:", min_value=0, value=meta_default, key=f"{trabajador}_meta")
+                with col2:
+                    # Obtener horas trabajadas existentes o usar valor por defecto
+                    if datos_trabajador is not None:
+                        horas_default = float(datos_trabajador['horas_trabajo']) if pd.notna(datos_trabajador['horas_trabajo']) else 8.0
+                    else:
+                        horas_default = 8.0
+                    
+                    horas = st.number_input(f"Horas trabajadas por {trabajador}:", min_value=0.0, value=horas_default, key=f"{trabajador}_horas", step=0.5)
+                    comentario = st.text_area(f"Comentario para {trabajador}:", value=comentario_default, key=f"{trabajador}_comentario")
+        
+        submitted = st.form_submit_button("Calcular KPIs")
+        if submitted:
+            datos_guardar = {}
+            for equipo, miembros in trabajadores_por_equipo.items():
+                for trabajador in miembros:
+                    # Obtener valores del formulario
+                    cantidad = st.session_state.get(f"{trabajador}_cantidad", 0)
+                    meta = st.session_state.get(f"{trabajador}_meta", 0)
+                    horas = st.session_state.get(f"{trabajador}_horas", 0)
+                    comentario = st.session_state.get(f"{trabajador}_comentario", "")
+                    
+                    # Validar datos
+                    if not all([validar_numero_positivo(cantidad), validar_numero_positivo(meta), validar_numero_positivo(horas)]):
+                        st.markdown(f"<div class='error-box animate-fade-in'>❌ Datos inválidos para {trabajador}. Verifique los valores ingresados.</div>", unsafe_allow_html=True)
+                        continue
+                    
+                    # Calcular KPIs según el equipo
+                    if equipo == "Transferencias":
+                        eficiencia = kpi_transferencias(cantidad, meta)
+                        actividad = "Transferencias"
+                        meta_mensual = meta_mensual_transferencias
+                    elif equipo == "Distribución":
+                        # Para el equipo de Distribución
+                        eficiencia = kpi_distribucion(cantidad, meta)
+                        actividad = "Distribución"
+                        meta_mensual = 0
+                    elif equipo == "Arreglo":
+                        eficiencia = kpi_arreglos(cantidad, meta)
+                        actividad = "Arreglos"
+                        meta_mensual = 0
+                    elif equipo == "Guías":
+                        eficiencia = kpi_guias(cantidad, meta)
+                        actividad = "Guías"
+                        meta_mensual = 0
+                    elif equipo == "Ventas":
+                        eficiencia = kpi_transferencias(cantidad, meta)
+                        actividad = "Ventas"
+                        meta_mensual = 0
+                    else:
+                        eficiencia = (cantidad / meta * 100) if meta > 0 else 0
+                        actividad = "General"
+                        meta_mensual = 0
+                    
+                    productividad = productividad_hora(cantidad, horas)
+                    datos_guardar[trabajador] = {
+                        "actividad": actividad, 
+                        "cantidad": cantidad, 
+                        "meta": meta, 
+                        "eficiencia": eficiencia, 
+                        "productividad": productividad,
+                        "comentario": comentario, 
+                        "meta_mensual": meta_mensual,
+                        "horas_trabajo": horas,
+                        "equipo": equipo
+                    }
+            
+            # Almacenar datos en sesión para confirmación posterior
+            st.session_state.datos_calculados = datos_guardar
+            st.session_state.fecha_guardar = fecha_str
+            
+            # Mostrar resumen
+            st.markdown("<h3 class='section-title animate-fade-in'>📋 Resumen de KPIs Calculados</h3>", unsafe_allow_html=True)
+            for equipo, miembros in trabajadores_por_equipo.items():
+                st.markdown(f"**{equipo}:**")
+                for trabajador in miembros:
+                    if trabajador in datos_guardar:
+                        datos = datos_guardar[trabajador]
+                        st.markdown(f"- {trabajador}: {datos['cantidad']} unidades ({datos['eficiencia']:.1f}%)")
+    
+    # Botón de confirmación fuera del formulario
+    if st.session_state.datos_calculados is not None and st.session_state.fecha_guardar is not None:
+        if st.button("✅ Confirmar y Guardar Datos", key="confirmar_guardar", use_container_width=True):
+            if guardar_datos_db(st.session_state.fecha_guardar, st.session_state.datos_calculados):
+                st.markdown("<div class='success-box animate-fade-in'>✅ Datos guardados correctamente!</div>", unsafe_allow_html=True)
+                # Limpiar datos de confirmación
+                st.session_state.datos_calculados = None
+                st.session_state.fecha_guardar = None
+                time.sleep(2)
+                st.rerun()
+            else:
+                st.markdown("<div class='error-box animate-fade-in'>❌ Error al guardar los datos. Por favor, intente nuevamente.</div>", unsafe_allow_html=True)
+
+def mostrar_gestion_trabajadores_kpis():
+    """Muestra la interfaz de gestión de trabajadores"""
+    if not verificar_password("admin"):
+        solicitar_autenticacion("admin")
+        return
+    st.markdown("<h1 class='header-title animate-fade-in'>👥 Gestión de Trabajadores</h1>", unsafe_allow_html=True)
+    
+    if supabase is None:
+        st.markdown("<div class='error-box animate-fade-in'>❌ Error de conexión a la base de datos. Verifique las variables de entorno.</div>", unsafe_allow_html=True)
+        return
+    
+    try:
+        # Obtener lista actual de trabajadores
+        response = supabase.from_('trabajadores').select('*').order('equipo,nombre', desc=False).execute()
+        # Verificar si hay datos en la respuesta
+        if response and hasattr(response, 'data') and response.data:
+            trabajadores = response.data
+        else:
+            trabajadores = []
+        
+        # Asegurar que Luis Perugachi esté en el equipo de Distribución
+        if any(trab['nombre'] == 'Luis Perugachi' for trab in trabajadores):
+            for trab in trabajadores:
+                if trab['nombre'] == 'Luis Perugachi':
+                    trab['equipo'] = 'Distribución'
+        
+        st.markdown("<h2 class='section-title animate-fade-in'>Trabajadores Actuales</h2>", unsafe_allow_html=True)
+        if trabajadores:
+            df_trabajadores = pd.DataFrame(trabajadores)
+            st.dataframe(df_trabajadores[['nombre', 'equipo', 'activo']], use_container_width=True)
+        else:
+            st.info("No hay trabajadores registrados.")
+        
+        st.markdown("<h2 class='section-title animate-fade-in'>Agregar Nuevo Trabajador</h2>", unsafe_allow_html=True)
+        with st.form("form_nuevo_trabajador"):
+            col1, col2 = st.columns(2)
+            with col1:
+                nuevo_nombre = st.text_input("Nombre del trabajador:")
+            with col2:
+                equipos = obtener_equipos()
+                nuevo_equipo = st.selectbox("Equipo:", options=equipos)
+            submitted = st.form_submit_button("Agregar Trabajador")
+            if submitted:
+                if nuevo_nombre:
+                    try:
+                        # Verificar si el trabajador ya existe
+                        response = supabase.from_('trabajadores').select('*').eq('nombre', nuevo_nombre).execute()
+                        # Verificar si hay datos en la respuesta
+                        if response and hasattr(response, 'data') and response.data:
+                            st.markdown("<div class='error-box animate-fade-in'>❌ El trabajador ya existe.</div>", unsafe_allow_html=True)
+                            st.session_state.show_preview = False
+                        else:
+                            # Insertar nuevo trabajador
+                            supabase.from_('trabajadores').insert({
+                                'nombre': nuevo_nombre, 
+                                'equipo': nuevo_equipo,
+                                'activo': True
+                            }).execute()
+                            st.markdown("<div class='success-box animate-fade-in'>✅ Trabajador agregado correctamente.</div>", unsafe_allow_html=True)
+                            time.sleep(1)
+                            st.rerun()
+                    except Exception as e:
+                        logger.error(f"Error al agregar trabajador: {e}", exc_info=True)
+                        st.markdown("<div class='error-box animate-fade-in'>❌ Error al agregar trabajador.</div>", unsafe_allow_html=True)
+                else:
+                    st.markdown("<div class='error-box animate-fade-in'>❌ Debe ingresar un nombre.</div>", unsafe_allow_html=True)
+        
+        st.markdown("<h2 class='section-title animate-fade-in'>Eliminar Trabajador</h2>", unsafe_allow_html=True)
+        if trabajadores:
+            trabajadores_activos = [t['nombre'] for t in trabajadores if t.get('activo', True)]
+            if trabajadores_activos:
+                trabajador_eliminar = st.selectbox("Selecciona un trabajador para eliminar:", options=trabajadores_activos)
+                if st.button("Eliminar Trabajador", use_container_width=True):
+                    try:
+                        # Actualizar el estado del trabajador a inactivo
+                        supabase.from_('trabajadores').update({'activo': False}).eq('nombre', trabajador_eliminar).execute()
+                        st.markdown("<div class='success-box animate-fade-in'>✅ Trabajador eliminado correctamente.</div>", unsafe_allow_html=True)
+                        time.sleep(1)
+                        st.rerun()
+                    except Exception as e:
+                        logger.error(f"Error al eliminar trabajador: {e}", exc_info=True)
+                        st.markdown("<div class='error-box animate-fade-in'>❌ Error al eliminar trabajador.</div>", unsafe_allow_html=True)
+            else:
+                st.info("No hay trabajadores activos para eliminar.")
+        else:
+            st.info("No hay trabajadores registrados.")
+    except Exception as e:
+        logger.error(f"Error en gestión de trabajadores: {e}", exc_info=True)
+        st.markdown("<div class='error-box animate-fade-in'>❌ Error del sistema al gestionar trabajadores.</div>", unsafe_allow_html=True)
+
+def pil_image_to_bytes(pil_image: Image.Image) -> bytes:
+    """Convierte un objeto de imagen de PIL a bytes."""
+    buf = io.BytesIO()
+    pil_image.save(buf, format="PNG")
+    return buf.getvalue()
+    # ================================
+# NUEVAS FUNCIONES PARA GESTIÓN DE TIENDAS
+# ================================
+
+def obtener_tienda_por_id(tienda_id: int) -> Optional[Dict]:
+    """Obtiene una tienda específica por su ID desde Supabase"""
+    if supabase is None:
+        logger.error("Cliente de Supabase no inicializado")
+        return None
+    
+    try:
+        response = supabase.from_('guide_stores').select('*').eq('id', tienda_id).execute()
+        if response and hasattr(response, 'data') and response.data:
+            return response.data[0]
+        else:
+            logger.warning(f"No se encontró la tienda con ID {tienda_id}")
+            return None
+    except Exception as e:
+        logger.error(f"Error al obtener tienda por ID: {e}", exc_info=True)
+        return None
+
+def agregar_tienda(nombre: str, direccion: str, telefono: str) -> bool:
+    """Agrega una nueva tienda a la base de datos"""
+    if supabase is None:
+        logger.error("Cliente de Supabase no inicializado")
+        return False
+    
+    try:
+        data = {
+            'name': nombre,
+            'address': direccion,
+            'phone': telefono
+        }
+        response = supabase.from_('guide_stores').insert(data).execute()
+        
+        if hasattr(response, 'error') and response.error:
+            logger.error(f"No se pudo agregar la tienda: {response.error}")
+            return False
+        else:
+            logger.info(f"Tienda '{nombre}' agregada correctamente")
+            return True
+    except Exception as e:
+        logger.error(f"Error al agregar tienda: {e}", exc_info=True)
+        return False
+
+def actualizar_tienda(tienda_id: int, nombre: str, direccion: str, telefono: str) -> bool:
+    """Actualiza una tienda existente en la base de datos"""
+    if supabase is None:
+        logger.error("Cliente de Supabase no inicializado")
+        return False
+    
+    try:
+        data = {
+            'name': nombre,
+            'address': direccion,
+            'phone': telefono
+        }
+        response = supabase.from_('guide_stores').update(data).eq('id', tienda_id).execute()
+        
+        if hasattr(response, 'error') and response.error:
+            logger.error(f"No se pudo actualizar la tienda: {response.error}")
+            return False
+        else:
+            logger.info(f"Tienda ID {tienda_id} actualizada correctamente")
+            return True
+    except Exception as e:
+        logger.error(f"Error al actualizar tienda: {e}", exc_info=True)
+        return False
+
+def eliminar_tienda(tienda_id: int) -> bool:
+    """Elimina una tienda de la base de datos"""
+    if supabase is None:
+        logger.error("Cliente de Supabase no inicializado")
+        return False
+    
+    try:
+        response = supabase.from_('guide_stores').delete().eq('id', tienda_id).execute()
+        
+        if hasattr(response, 'error') and response.error:
+            logger.error(f"No se pudo eliminar la tienda: {response.error}")
+            return False
+        else:
+            logger.info(f"Tienda ID {tienda_id} eliminada correctamente")
+            return True
+    except Exception as e:
+        logger.error(f"Error al eliminar tienda: {e}", exc_info=True)
+        return False
+    
+def mostrar_reconciliacion_logistica():
+    """Muestra la interfaz de reconciliación logística"""
+    if not verificar_password("admin"):
+        solicitar_autenticacion("admin")
+        return
+    
+    st.markdown("<h1 class='header-title animate-fade-in'>📦 Reconciliación Logística</h1>", unsafe_allow_html=True)
+    
+    # Inicializar el reconciliador en session state si no existe
+    if 'reconciler' not in st.session_state:
+        st.session_state.reconciler = StreamlitLogisticsReconciliation()
+        st.session_state.processed = False
+        st.session_state.show_details = False
+    
+    # Cargar archivos
+    st.markdown("<div class='guide-section animate-fade-in'>", unsafe_allow_html=True)
+    st.markdown("<h2 class='section-title animate-fade-in'>Cargar Archivos</h2>", unsafe_allow_html=True)
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        factura_file = st.file_uploader(
+            "Subir archivo de facturas (Excel)",
+            type=['xlsx', 'xls'],
+            key="factura_file"
+        )
+    with col2:
+        manifiesto_file = st.file_uploader(
+            "Subir archivo de manifiesto (Excel)",
+            type=['xlsx', 'xls'],
+            key="manifiesto_file"
+        )
+    
+    if st.button("🚀 Procesar Archivos", use_container_width=True) and factura_file and manifiesto_file:
+        with st.spinner("Procesando archivos..."):
+            st.session_state.processed = st.session_state.reconciler.process_files(
+                factura_file, manifiesto_file
+            )
+    
+    st.markdown("</div>", unsafe_allow_html=True)
+    
+    # Mostrar resultados si se procesaron los archivos
+    if st.session_state.processed:
+        reconciler = st.session_state.reconciler
+        kpis = reconciler.kpis
         
         st.markdown("<div class='guide-section animate-fade-in'>", unsafe_allow_html=True)
         st.markdown("<h2 class='section-title animate-fade-in'>📊 Métricas Principales</h2>", unsafe_allow_html=True)
@@ -2101,6 +3244,23 @@ def generar_pdf_etiqueta(datos: dict) -> bytes:
     except Exception as e:
         logger.error(f"Error al generar PDF de etiqueta: {e}", exc_info=True)
         return None
+import streamlit as st
+import os
+import re
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+from reportlab.lib.pagesizes import letter
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib import colors
+import tempfile
+import datetime
+from io import BytesIO
+import warnings
+
+warnings.filterwarnings('ignore')
 
 class StreamlitLogisticsReconciliation:
     def __init__(self):
@@ -2299,43 +3459,31 @@ class StreamlitLogisticsReconciliation:
         doc.build(elements)
         buffer.seek(0)
         return buffer
+# ================================
+# FUNCIÓN PRINCIPAL
+# ================================
+st.title("📦 Logistics Reconciliation & Business Intelligence Tool")
 
-def mostrar_reconciliacion_logistica():
-    """Muestra la interfaz para la reconciliación logística."""
-    if 'reconciler' not in st.session_state:
-        st.session_state.reconciler = StreamlitLogisticsReconciliation()
-    if 'processed' not in st.session_state:
-        st.session_state.processed = False
-    if 'show_details' not in st.session_state:
-        st.session_state.show_details = False
 
-    st.title("📦 Logistics Reconciliation & Business Intelligence Tool")
-    factura_file = st.sidebar.file_uploader(
+factura_file = st.sidebar.file_uploader(
         "Upload Invoice File (Excel)",
         type=['xlsx', 'xls']
     )
-    manifiesto_file = st.sidebar.file_uploader(
+
+manifiesto_file = st.sidebar.file_uploader(
         "Upload Manifest File (Excel)",
         type=['xlsx', 'xls']
     )
 
-    manifiesto_file = st.sidebar.file_uploader(
-        "Upload Manifest File (Excel)",
-        type=['xlsx', 'xls']
-    )
+process_btn = st.sidebar.button("🚀 Process Files")
 
-    process_btn = st.sidebar.button("🚀 Process Files")
+if process_btn and factura_file and manifiesto_file:
+        with st.spinner("Processing files..."):
+            st.session_state.processed = st.session_state.reconciler.process_files(
+                factura_file, manifiesto_file
+            )
 
-    if process_btn:
-        if not factura_file or not manifiesto_file:
-            st.error("Por favor, suba ambos archivos.")
-        else:
-            with st.spinner("Processing files..."):
-                st.session_state.processed = st.session_state.reconciler.process_files(
-                    factura_file, manifiesto_file
-                )
-
-    if st.session_state.processed:
+if st.session_state.processed:
         reconciler = st.session_state.reconciler
         kpis = reconciler.kpis
 
@@ -2411,15 +3559,10 @@ def mostrar_reconciliacion_logistica():
             file_name="logistics_report.pdf",
             mime="application/pdf"
         )
-
-# ================================
-# FUNCIÓN PRINCIPAL
-# ================================
-def main():
-    """Función principal de la aplicación"""
+"""Función principal de la aplicación"""
     
     # Mostrar logo y título en el sidebar
-    st.sidebar.markdown("""
+st.sidebar.markdown("""
     <div class='sidebar-title'>
         <div class='aeropostale-logo'>AEROPOSTALE</div>
         <div class='aeropostale-subtitle'>Sistema de Gestión de KPIs</div>
@@ -2427,17 +3570,17 @@ def main():
     """, unsafe_allow_html=True)
     
     # Inicializar session state variables si no existen
-    if 'user_type' not in st.session_state:
+if 'user_type' not in st.session_state:
         st.session_state.user_type = None
-    if 'selected_menu' not in st.session_state:
+if 'selected_menu' not in st.session_state:
         st.session_state.selected_menu = 0
-    if 'show_login' not in st.session_state:
+if 'show_login' not in st.session_state:
         st.session_state.show_login = False
-    if 'password_correct' not in st.session_state:
+if 'password_correct' not in st.session_state:
         st.session_state.password_correct = False
     
     # Definir opciones de menú
-    menu_options = [
+menu_options = [
         ("Dashboard KPIs", "📊", mostrar_dashboard_kpis, "public"),
         ("Análisis Histórico", "📈", mostrar_analisis_historico_kpis, "public"),
         ("Ingreso de Datos", "📥", mostrar_ingreso_datos_kpis, "admin"),
@@ -2451,7 +3594,7 @@ def main():
     ]
     
     # Mostrar opciones del menú según permisos
-    for i, (label, icon, _, permiso) in enumerate(menu_options):
+for i, (label, icon, _, permiso) in enumerate(menu_options):
         # Verificar si la opción debe mostrarse
         mostrar_opcion = False
         
@@ -2472,7 +3615,7 @@ def main():
                 st.session_state.selected_menu = i
     
     # Mostrar botón de login si no está autenticado
-    if st.session_state.user_type is None:
+if st.session_state.user_type is None:
         col1, col2 = st.sidebar.columns(2)
         with col1:
             if st.button("👤 Acceso Usuario", use_container_width=True):
@@ -2487,7 +3630,7 @@ def main():
             solicitar_autenticacion(st.session_state.get('login_type', 'user'))
     
     # Mostrar botón de logout si está autenticado
-    else:
+else:
         if st.sidebar.button("🚪 Cerrar Sesión", use_container_width=True):
             st.session_state.user_type = None
             st.session_state.password_correct = False
@@ -2499,31 +3642,31 @@ def main():
         st.sidebar.info(f"Usuario: {'Administrador' if st.session_state.user_type == 'admin' else 'Usuario'}")
     
     # Verificar que selected_menu esté dentro del rango válido
-    if st.session_state.selected_menu >= len(menu_options):
+if st.session_state.selected_menu >= len(menu_options):
         st.session_state.selected_menu = 0
     
     # Obtener la opción seleccionada
-    label, icon, func, permiso = menu_options[st.session_state.selected_menu]
+label, icon, func, permiso = menu_options[st.session_state.selected_menu]
     
     # Verificar permisos para la opción seleccionada
-    if permiso == "public":
+if permiso == "public":
         func()
-    elif permiso == "user" and st.session_state.user_type in ["user", "admin"]:
+elif permiso == "user" and st.session_state.user_type in ["user", "admin"]:
         func()
-    elif permiso == "admin" and st.session_state.user_type == "admin":
+elif permiso == "admin" and st.session_state.user_type == "admin":
         func()
-    else:
+else:
         # Mostrar mensaje de acceso denegado
         st.error("🔒 Acceso restringido. Necesita autenticarse para acceder a esta sección.")
         
-        # Mostrar mensaje de autenticación según el tipo requerido
+        # Mostrar opciones de autenticación según el tipo requerido
         if permiso == "admin":
             solicitar_autenticacion("admin")
         else:
             solicitar_autenticacion("user")
     
     # Footer
-    st.markdown("""
+st.markdown("""
     <div class="footer">
         Sistema de KPIs Aeropostale v2.0 | © 2025 Aeropostale. Todos los derechos reservados.<br>
         Desarrollado por: <a href="mailto:wilson.perez@aeropostale.com">Wilson Pérez</a>
