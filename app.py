@@ -3464,7 +3464,6 @@ class StreamlitLogisticsReconciliation:
 # ================================
 st.title("📦 Logistics Reconciliation & Business Intelligence Tool")
   
-        st.session_state.reconciler = StreamlitLogisticsReconciliation()
         st.session_state.processed = False
         st.session_state.show_details = False
 
