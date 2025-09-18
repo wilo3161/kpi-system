@@ -1117,6 +1117,8 @@ def verificar_imagen_existe(url: str) -> bool:
 def obtener_url_logo(brand: str) -> str:
     """Obtiene la URL pública del logo de la marca desde Supabase Storage"""
     brand_lower = brand.lower()
+    brand_upper = brand.upper()  # Añadido
+    brand_capitalize = brand.capitalize()  # Añadido
     
     # URLs predefinidas para marcas específicas (más eficiente)
     branded_logos = {
@@ -2540,14 +2542,17 @@ def mostrar_reconciliacion_logistica():
     st.markdown("<h1 class='header-title animate-fade-in'>📦 Reconciliación Logística</h1>", unsafe_allow_html=True)
     
     # Inicializar el reconciliador en session state si no existe
-    if 'reconciler' not in st.session_state:
-        st.session_state.reconciler = StreamlitLogisticsReconciliation()
+     if 'reconciler' not in st.session_state:
+        st.session_state.reconciler = Reconciler()  # Usando la clase corregida
         st.session_state.processed = False
         st.session_state.show_details = False
     
     # Cargar archivos
-    st.markdown("<div class='guide-section animate-fade-in'>", unsafe_allow_html=True)
+     st.markdown("<div class='guide-section animate-fade-in'>", unsafe_allow_html=True)
     st.markdown("<h2 class='section-title animate-fade-in'>Cargar Archivos</h2>", unsafe_allow_html=True)
+    
+    col1, col2 = st.columns(2)
+    with col1:
     
     col1, col2 = st.columns(2)
     with col1:
@@ -2556,6 +2561,7 @@ def mostrar_reconciliacion_logistica():
             type=['xlsx', 'xls'],
             key="factura_file"
         )
+   
     with col2:
         manifiesto_file = st.file_uploader(
             "Subir archivo de manifiesto (Excel)",
@@ -3266,7 +3272,8 @@ import warnings
 
 warnings.filterwarnings('ignore')
 
-class StreamlitLogisticsReconciliation:
+class Reconciler(StreamlitLogisticsReconciliation):
+    pass
     def __init__(self):
         # Estructuras principales
         self.df_facturas = None
@@ -3561,10 +3568,11 @@ manifiesto_file = st.sidebar.file_uploader(
             file_name="logistics_report.pdf",
             mime="application/pdf"
         )
+    def main():
     """Función principal de la aplicación"""
     
     # Mostrar logo y título en el sidebar
-    st.sidebar.markdown("""
+     st.sidebar.markdown("""
     <div class='sidebar-title'>
         <div class='aeropostale-logo'>AEROPOSTALE</div>
         <div class='aeropostale-subtitle'>Sistema de Gestión de KPIs</div>
