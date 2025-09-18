@@ -2526,6 +2526,7 @@ def eliminar_tienda(tienda_id: int) -> bool:
     except Exception as e:
         logger.error(f"Error al eliminar tienda: {e}", exc_info=True)
         return False
+    
 def mostrar_reconciliacion_logistica():
     """Muestra la interfaz de reconciliación logística"""
     if not verificar_password("admin"):
