@@ -2551,7 +2551,7 @@ def mostrar_reconciliacion_logistica():
     
     col1, col2 = st.columns(2)
     with col1:
-        factura_file = st.file_uploader(
+    factura_file = st.file_uploader(
             "Subir archivo de facturas (Excel)",
             type=['xlsx', 'xls'],
             key="factura_file"
