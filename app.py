@@ -1376,40 +1376,40 @@ class StreamlitLogisticsReconciliationIntegrated:
 
     def process_files(self, factura_file, manifiesto_file) -> bool:
         try:
-        # Cargar archivos Excel directamente
-        self.df_facturas = pd.read_excel(factura_file, sheet_name=0, header=0)
-        self.df_manifiesto = pd.read_excel(manifiesto_file, sheet_name=0, header=0)
-
-        # Limpiar espacios en blanco
-        self.df_facturas = self.df_facturas.applymap(lambda x: x.strip() if isinstance(x, str) else x)
-        self.df_manifiesto = self.df_manifiesto.applymap(lambda x: x.strip() if isinstance(x, str) else x)
-
-        # Identificar columnas de guías
-        factura_guide_col = self._identify_guide_column(self.df_facturas)
-        manifiesto_guide_col = self._identify_guide_column(self.df_manifiesto)
-
-        if not factura_guide_col or not manifiesto_guide_col:
-            st.error("❌ No se pudo identificar la columna de guías en uno de los archivos.")
-            return False
-
-        # Normalizar guías
-        self.df_facturas['GUIDE_CLEAN'] = self.df_facturas[factura_guide_col].astype(str).str.extract(r'(LC\d+)', expand=False).fillna('')
-        self.df_manifiesto['GUIDE_CLEAN'] = self.df_manifiesto[manifiesto_guide_col].astype(str).str.extract(r'(LC\d+)', expand=False).fillna('')
-
-        self.df_facturas = self.df_facturas[self.df_facturas['GUIDE_CLEAN'] != '']
-        self.df_manifiesto = self.df_manifiesto[self.df_manifiesto['GUIDE_CLEAN'] != '']
-
-        # Reconciliación
-        facturas_set = set(self.df_facturas['GUIDE_CLEAN'])
-        manifiesto_set = set(self.df_manifiesto['GUIDE_CLEAN'])
-
-        self.guides_facturadas = list(facturas_set & manifiesto_set)
-        self.guides_anuladas = list(facturas_set - manifiesto_set)
-        self.guides_sobrantes = list(manifiesto_set - facturas_set)
-
-        # Calcular KPIs
-        self._calculate_kpis_safe()
-        return True
+            # Cargar archivos Excel directamente
+            self.df_facturas = pd.read_excel(factura_file, sheet_name=0, header=0)
+            self.df_manifiesto = pd.read_excel(manifiesto_file, sheet_name=0, header=0)
+    
+            # Limpiar espacios en blanco
+            self.df_facturas = self.df_facturas.applymap(lambda x: x.strip() if isinstance(x, str) else x)
+            self.df_manifiesto = self.df_manifiesto.applymap(lambda x: x.strip() if isinstance(x, str) else x)
+    
+            # Identificar columnas de guías
+            factura_guide_col = self._identify_guide_column(self.df_facturas)
+            manifiesto_guide_col = self._identify_guide_column(self.df_manifiesto)
+    
+            if not factura_guide_col or not manifiesto_guide_col:
+                st.error("❌ No se pudo identificar la columna de guías en uno de los archivos.")
+                return False
+    
+            # Normalizar guías
+            self.df_facturas['GUIDE_CLEAN'] = self.df_facturas[factura_guide_col].astype(str).str.extract(r'(LC\d+)', expand=False).fillna('')
+            self.df_manifiesto['GUIDE_CLEAN'] = self.df_manifiesto[manifiesto_guide_col].astype(str).str.extract(r'(LC\d+)', expand=False).fillna('')
+    
+            self.df_facturas = self.df_facturas[self.df_facturas['GUIDE_CLEAN'] != '']
+            self.df_manifiesto = self.df_manifiesto[self.df_manifiesto['GUIDE_CLEAN'] != '']
+    
+            # Reconciliación
+            facturas_set = set(self.df_facturas['GUIDE_CLEAN'])
+            manifiesto_set = set(self.df_manifiesto['GUIDE_CLEAN'])
+    
+            self.guides_facturadas = list(facturas_set & manifiesto_set)
+            self.guides_anuladas = list(facturas_set - manifiesto_set)
+            self.guides_sobrantes = list(manifiesto_set - facturas_set)
+    
+            # Calcular KPIs
+            self._calculate_kpis_safe()
+            return True
 
     except Exception as e:
         st.error(f"⚠️ Error procesando archivos: {str(e)}")
