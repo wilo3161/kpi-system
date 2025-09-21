@@ -23,6 +23,11 @@ from io import BytesIO
 from PIL import Image as PILImage
 import os
 import requests
+import pdfplumber
+from reportlab.lib.pagesizes import letter
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+from reportlab.lib.styles import getSampleStyleSheet
+
 if 'user_type' not in st.session_state:
     st.session_state.user_type = None
 if 'password_correct' not in st.session_state:
@@ -1331,6 +1336,105 @@ def eliminar_guia(guia_id: int) -> bool:
     except Exception as e:
         logger.error(f"Error al eliminar guía: {e}", exc_info=True)
         return False
+class StreamlitLogisticsReconciliationIntegrated:
+    def __init__(self):
+        self.df_facturas = None
+        self.df_manifiesto = None
+        self.guides_facturadas = []
+        self.guides_anuladas = []
+        self.guides_sobrantes = []
+        self.kpis = {
+            'total_facturadas': 0,
+            'total_anuladas': 0,
+            'total_sobrantes': 0,
+            'total_value': 0.0,
+            'avg_shipment_value': 0.0,
+        }
+
+    def _extract_tables_from_pdf(self, pdf_file) -> pd.DataFrame:
+        dfs = []
+        with pdfplumber.open(pdf_file) as pdf:
+            for page in pdf.pages:
+                tables = page.extract_tables()
+                for t in tables:
+                    if t and len(t) > 1:
+                        df = pd.DataFrame(t[1:], columns=t[0])
+                        dfs.append(df)
+        if not dfs:
+            raise ValueError("No se extrajeron tablas del PDF")
+        return pd.concat(dfs, ignore_index=True)
+
+    def _identify_guide_column(self, df: pd.DataFrame):
+        for col in df.columns:
+            try:
+                extracted = df[col].astype(str).str.extract(r'(LC\d+)', expand=False)
+                if extracted.notna().mean() > 0.25:
+                    return col
+            except Exception:
+                continue
+        return None
+
+    def process_files(self, factura_file, manifiesto_file) -> bool:
+        try:
+            # facturas (PDF o Excel)
+            if factura_file.name.lower().endswith('.pdf'):
+                df_fact = self._extract_tables_from_pdf(factura_file)
+            else:
+                df_fact = pd.read_excel(factura_file)
+
+            df_man = pd.read_excel(manifiesto_file)
+
+            f_col = self._identify_guide_column(df_fact)
+            m_col = self._identify_guide_column(df_man)
+
+            if not f_col or not m_col:
+                st.error("No se encontró columna de guía en los archivos.")
+                return False
+
+            df_fact['GUIDE_CLEAN'] = df_fact[f_col].astype(str).str.extract(r'(LC\d+)', expand=False)
+            df_man['GUIDE_CLEAN'] = df_man[m_col].astype(str).str.extract(r'(LC\d+)', expand=False)
+
+            set_fact = set(df_fact['GUIDE_CLEAN'].dropna().unique())
+            set_man = set(df_man['GUIDE_CLEAN'].dropna().unique())
+
+            self.guides_facturadas = list(set_fact & set_man)
+            self.guides_anuladas = list(set_fact - set_man)
+            self.guides_sobrantes = list(set_man - set_fact)
+
+            self.kpis['total_facturadas'] = len(self.guides_facturadas)
+            self.kpis['total_anuladas'] = len(self.guides_anuladas)
+            self.kpis['total_sobrantes'] = len(self.guides_sobrantes)
+
+            return True
+        except Exception as e:
+            st.error(f"Error procesando archivos: {e}")
+            return False
+
+    def to_excel_bytes(self):
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            pd.DataFrame([
+                {"KPI": "Facturadas", "Value": self.kpis['total_facturadas']},
+                {"KPI": "Anuladas", "Value": self.kpis['total_anuladas']},
+                {"KPI": "Sobrantes", "Value": self.kpis['total_sobrantes']},
+            ]).to_excel(writer, index=False, sheet_name="Summary")
+        output.seek(0)
+        return output.getvalue()
+
+    def to_pdf_bytes(self):
+        buffer = BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=letter)
+        styles = getSampleStyleSheet()
+        elements = [
+            Paragraph("Reconciliación de Guías", styles['Title']),
+            Spacer(1, 12),
+            Paragraph(f"Facturadas: {self.kpis['total_facturadas']}", styles['Normal']),
+            Paragraph(f"Anuladas: {self.kpis['total_anuladas']}", styles['Normal']),
+            Paragraph(f"Sobrantes: {self.kpis['total_sobrantes']}", styles['Normal']),
+        ]
+        doc.build(elements)
+        buffer.seek(0)
+        return buffer.getvalue()
 
 # ================================
 # SISTEMA DE AUTENTICACIÓN
@@ -2741,7 +2845,40 @@ def mostrar_generacion_guias():
                             st.rerun()
                         else:
                             st.error("❌ Error al agregar la tienda.")
-        
+def mostrar_reconciliacion():
+    st.header("🔁 Reconciliación: Facturas vs Manifiesto")
+    reconciler = StreamlitLogisticsReconciliationIntegrated()
+
+    col1, col2 = st.columns(2)
+    with col1:
+        factura_file = st.file_uploader("Factura (PDF/XLSX)", type=['pdf','xlsx','xls'], key="rec_factura")
+    with col2:
+        manifiesto_file = st.file_uploader("Manifiesto (XLSX)", type=['xlsx','xls'], key="rec_manifiesto")
+
+    if st.button("Procesar Reconciliación"):
+        if not factura_file or not manifiesto_file:
+            st.error("Ambos archivos son requeridos.")
+        else:
+            if reconciler.process_files(factura_file, manifiesto_file):
+                st.success("Procesamiento completado ✅")
+                st.metric("Facturadas", reconciler.kpis['total_facturadas'])
+                st.metric("Anuladas", reconciler.kpis['total_anuladas'])
+                st.metric("Sobrantes", reconciler.kpis['total_sobrantes'])
+
+                # Descargas
+                st.download_button(
+                    "⬇️ Descargar Excel",
+                    data=reconciler.to_excel_bytes(),
+                    file_name="reconciliacion.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
+                st.download_button(
+                    "⬇️ Descargar PDF",
+                    data=reconciler.to_pdf_bytes(),
+                    file_name="reconciliacion.pdf",
+                    mime="application/pdf"
+                )
+
 def mostrar_historial_guias():
     """Muestra el historial de guías generadas"""
     if not verificar_password("user"):
@@ -3116,7 +3253,8 @@ def generar_pdf_etiqueta(datos: dict) -> bytes:
 
 def main():
     """Función principal de la aplicación"""
-    
+    elif menu == "Reconciliación":
+    mostrar_reconciliacion()
     # Mostrar logo y título en el sidebar
     st.sidebar.markdown("""
     <div class='sidebar-title'>
@@ -3142,6 +3280,7 @@ def main():
         ("Ingreso de Datos", "📥", mostrar_ingreso_datos_kpis, "admin"),
         ("Gestión de Trabajadores", "👥", mostrar_gestion_trabajadores_kpis, "admin"),
         ("Gestión de Distribuciones", "📦", mostrar_gestion_distribuciones, "admin"),
+        ("Reconciliación Logística", "📦", mostrar_reconciliacion_logistica, "admin"),
         ("Generar Guías", "📋", mostrar_generacion_guias, "user"),
         ("Historial de Guías", "🔍", mostrar_historial_guias, "user"),
         ("Generar Etiquetas", "🏷️", mostrar_generacion_etiquetas, "user"),
