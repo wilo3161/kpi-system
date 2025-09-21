@@ -1578,6 +1578,70 @@ class StreamlitLogisticsReconciliation:
 
             # Value for sobrantes (no en facturas, así que 0)
             self.kpis['value_sobrantes'] = 0.0
+    def to_excel_bytes(self):
+    """Genera y devuelve bytes de un archivo Excel con los datos de reconciliación"""
+    try:
+        output = BytesIO()
+        
+        # Crear un escritor de Excel
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            # Crear hoja de resumen
+            summary_data = {
+                'Métrica': [
+                    'Total Facturadas',
+                    'Total Anuladas',
+                    'Total Sobrantes',
+                    'Valor Total Pagado',
+                    'Valor Facturadas',
+                    'Valor Anuladas',
+                    'Valor Sobrantes',
+                    'Valor Promedio de Envío'
+                ],
+                'Valor': [
+                    self.kpis['total_facturadas'],
+                    self.kpis['total_anuladas'],
+                    self.kpis['total_sobrantes'],
+                    self.kpis['total_value'],
+                    self.kpis['value_facturadas'],
+                    self.kpis['value_anuladas'],
+                    self.kpis['value_sobrantes'],
+                    self.kpis['avg_shipment_value'] if self.kpis['avg_shipment_value'] else 'N/A'
+                ]
+            }
+            
+            df_summary = pd.DataFrame(summary_data)
+            df_summary.to_excel(writer, sheet_name='Resumen', index=False)
+            
+            # Agregar hojas con datos detallados si están disponibles
+            if not self.kpis['top_cities'].empty:
+                self.kpis['top_cities'].to_excel(writer, sheet_name='Top Ciudades')
+            
+            if not self.kpis['top_stores'].empty:
+                self.kpis['top_stores'].to_excel(writer, sheet_name='Top Tiendas')
+            
+            if not self.kpis['spending_by_city'].empty:
+                self.kpis['spending_by_city'].to_excel(writer, sheet_name='Gasto por Ciudad')
+            
+            if not self.kpis['spending_by_store'].empty:
+                self.kpis['spending_by_store'].to_excel(writer, sheet_name='Gasto por Tienda')
+            
+            if not self.kpis['anuladas_by_destinatario'].empty:
+                self.kpis['anuladas_by_destinatario'].to_excel(writer, sheet_name='Anuladas por Destinatario')
+            
+            if not self.kpis['shipment_volume'].empty:
+                self.kpis['shipment_volume'].to_excel(writer, sheet_name='Volumen por Mes')
+        
+        output.seek(0)
+        return output.getvalue()
+        
+    except Exception as e:
+        logger.error(f"Error al generar Excel: {e}", exc_info=True)
+        # Devolver un Excel vacío en caso de error
+        output = BytesIO()
+        df_error = pd.DataFrame({'Error': [f'No se pudo generar el reporte: {str(e)}']})
+        df_error.to_excel(output, index=False)
+        output.seek(0)
+        return output.getvalue()
 
     # ===========================================================
     # Generación de Reporte PDF
@@ -1658,72 +1722,7 @@ class StreamlitLogisticsReconciliation:
         doc.build(elements)
         buffer.seek(0)
         return buffer
-def to_excel_bytes(self):
-    """Genera y devuelve bytes de un archivo Excel con los datos de reconciliación"""
-    try:
-        output = BytesIO()
-        
-        # Crear un escritor de Excel
-        with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            # Crear hoja de resumen
-            summary_data = {
-                'Métrica': [
-                    'Total Facturadas',
-                    'Total Anuladas',
-                    'Total Sobrantes',
-                    'Valor Total Pagado',
-                    'Valor Facturadas',
-                    'Valor Anuladas',
-                    'Valor Sobrantes',
-                    'Valor Promedio de Envío'
-                ],
-                'Valor': [
-                    self.kpis['total_facturadas'],
-                    self.kpis['total_anuladas'],
-                    self.kpis['total_sobrantes'],
-                    self.kpis['total_value'],
-                    self.kpis['value_facturadas'],
-                    self.kpis['value_anuladas'],
-                    self.kpis['value_sobrantes'],
-                    self.kpis['avg_shipment_value'] if self.kpis['avg_shipment_value'] else 'N/A'
-                ]
-            }
-            
-            df_summary = pd.DataFrame(summary_data)
-            df_summary.to_excel(writer, sheet_name='Resumen', index=False)
-            
-            # Agregar hojas con datos detallados si están disponibles
-            if not self.kpis['top_cities'].empty:
-                self.kpis['top_cities'].to_excel(writer, sheet_name='Top Ciudades')
-            
-            if not self.kpis['top_stores'].empty:
-                self.kpis['top_stores'].to_excel(writer, sheet_name='Top Tiendas')
-            
-            if not self.kpis['spending_by_city'].empty:
-                self.kpis['spending_by_city'].to_excel(writer, sheet_name='Gasto por Ciudad')
-            
-            if not self.kpis['spending_by_store'].empty:
-                self.kpis['spending_by_store'].to_excel(writer, sheet_name='Gasto por Tienda')
-            
-            if not self.kpis['anuladas_by_destinatario'].empty:
-                self.kpis['anuladas_by_destinatario'].to_excel(writer, sheet_name='Anuladas por Destinatario')
-            
-            if not self.kpis['shipment_volume'].empty:
-                self.kpis['shipment_volume'].to_excel(writer, sheet_name='Volumen por Mes')
-        
-        output.seek(0)
-        return output.getvalue()
-        
-    except Exception as e:
-        logger.error(f"Error al generar Excel: {e}", exc_info=True)
-        # Devolver un Excel vacío en caso de error
-        output = BytesIO()
-        df_error = pd.DataFrame({'Error': [f'No se pudo generar el reporte: {str(e)}']})
-        df_error.to_excel(output, index=False)
-        output.seek(0)
-        return output.getvalue()
-
-
+ 
 # ================================
 # SISTEMA DE AUTENTICACIÓN
 # ================================
