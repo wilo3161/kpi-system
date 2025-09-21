@@ -1612,43 +1612,43 @@ def to_excel_bytes(self):
             return b""
 
 def generate_report(self):
-        """Genera un reporte PDF con los datos de reconciliación usando reportlab."""
+    """Genera un reporte PDF con los datos de reconciliación usando reportlab."""
     try:
         buffer = BytesIO()
         doc = SimpleDocTemplate(buffer, pagesize=letter)
         styles = getSampleStyleSheet()
         story = []
 
-            # Título
+        # Título
         story.append(Paragraph("Reporte de Reconciliación Logística", styles['Title']))
         story.append(Spacer(1, 12))
 
-            # KPIs principales
+        # KPIs principales
         story.append(Paragraph("Métricas Principales:", styles['Heading2']))
         for key, value in self.kpis.items():
             if not isinstance(value, pd.Series):
-            story.append(Paragraph(f"{key.replace('_', ' ').title()}: {value}", styles['Normal']))
-            story.append(Spacer(1, 12))
+                story.append(Paragraph(f"{key.replace('_', ' ').title()}: {value}", styles['Normal']))
+        story.append(Spacer(1, 12))
 
-            # Listas de guías
-            story.append(Paragraph("Guías Facturadas:", styles['Heading2']))
-            story.append(Paragraph(", ".join(self.guides_facturadas), styles['Normal']))
-            story.append(Spacer(1, 12))
+        # Listas de guías
+        story.append(Paragraph("Guías Facturadas:", styles['Heading2']))
+        story.append(Paragraph(", ".join(self.guides_facturadas), styles['Normal']))
+        story.append(Spacer(1, 12))
 
-            story.append(Paragraph("Guías Anuladas:", styles['Heading2']))
-            story.append(Paragraph(", ".join(self.guides_anuladas), styles['Normal']))
-            story.append(Spacer(1, 12))
+        story.append(Paragraph("Guías Anuladas:", styles['Heading2']))
+        story.append(Paragraph(", ".join(self.guides_anuladas), styles['Normal']))
+        story.append(Spacer(1, 12))
 
-            story.append(Paragraph("Guías Sobrantes:", styles['Heading2']))
-            story.append(Paragraph(", ".join(self.guides_sobrantes), styles['Normal']))
-            story.append(Spacer(1, 12))
+        story.append(Paragraph("Guías Sobrantes:", styles['Heading2']))
+        story.append(Paragraph(", ".join(self.guides_sobrantes), styles['Normal']))
+        story.append(Spacer(1, 12))
 
-            # Otras series (ejemplo)
-            for key, value in self.kpis.items():
-                if isinstance(value, pd.Series) and not value.empty:
-                    story.append(Paragraph(f"{key.replace('_', ' ').title()}:", styles['Heading2']))
-                    for idx, val in value.items():
-                        story.append(Paragraph(f"{idx}: {val}", styles['Normal']))
+        # Otras series (ejemplo)
+        for key, value in self.kpis.items():
+            if isinstance(value, pd.Series) and not value.empty:
+                story.append(Paragraph(f"{key.replace('_', ' ').title()}:", styles['Heading2']))
+                for idx, val in value.items():
+                    story.append(Paragraph(f"{idx}: {val}", styles['Normal']))
 
         doc.build(story)
         buffer.seek(0)
