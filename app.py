@@ -1412,8 +1412,8 @@ class StreamlitLogisticsReconciliationIntegrated:
             return True
 
         except Exception as e:
-        st.error(f"⚠️ Error procesando archivos: {str(e)}")
-        return False
+            st.error(f"⚠️ Error procesando archivos: {str(e)}")
+            return False
 
     def to_excel_bytes(self):
         output = BytesIO()
