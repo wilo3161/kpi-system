@@ -1343,7 +1343,7 @@ from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import getSampleStyleSheet
 import streamlit as st
 
-class StreamlitLogisticsReconciliation:
+class LogisticsReconciliation:
     def __init__(self):
         # Core data structures
         self.df_facturas = None
@@ -3149,7 +3149,7 @@ def mostrar_reconciliacion():
     st.markdown("<h1 class='header-title animate-fade-in'>📦 Reconciliación Logística Completa</h1>", unsafe_allow_html=True)
     
     if 'reconciler' not in st.session_state:
-        st.session_state.reconciler = StreamlitLogisticsReconciliation()
+        st.session_state.reconciler = LogisticsReconciliation()
         st.session_state.processed = False
         st.session_state.show_details = False
 
