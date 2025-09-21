@@ -1473,9 +1473,9 @@ class StreamlitLogisticsReconciliation:
             self.calculate_kpis()
             return True
 
-    except Exception as e:
-        st.error(f"Error procesando archivos: {str(e)}")
-        return False
+        except Exception as e:
+            st.error(f"Error procesando archivos: {str(e)}")
+            return False
 
     # ===========================================================
     # Cálculo de KPIs
