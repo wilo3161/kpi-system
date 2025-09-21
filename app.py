@@ -1632,7 +1632,7 @@ def to_excel_bytes(self):
                    self.kpis['shipment_volume'].to_excel(writer, sheet_name='Volumen por Mes')
         
         output.seek(0)
-    return output.getvalue()
+        return output.getvalue()
         
     except Exception as e:
         logger.error(f"Error al generar Excel: {e}", exc_info=True)
