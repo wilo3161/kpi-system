@@ -3337,8 +3337,7 @@ def mostrar_reconciliacion():
                 st.write(", ".join(reconciler.guides_sobrantes))
 
         # Descargar reporte
-        st.markdown("<h3 class='section-title animate-fade-in'>Exportar Reporte</h3>", unsafe_allow_html=True)
-        
+        st.markdown("<h3 class='section-title animate-fade-in'>Exportar Reporte</h3>", unsafe_allow_html=True)        
         col1, col2 = st.columns(2)
         with col1:
             # Exportar a Excel
@@ -3831,23 +3830,23 @@ def main():
     elif permiso == "user" and st.session_state.user_type in ["user", "admin"]:
         func()
     elif permiso == "admin" and st.session_state.user_type == "admin":
-        func()
-    else:
-        # Mostrar mensaje de acceso denegado
-        st.error("🔒 Acceso restringido. Necesita autenticarse para acceder a esta sección.")
-        
-        # Mostrar opciones de autenticación según el tipo requerido
-        if permiso == "admin":
-            solicitar_autenticacion("admin")
-        else:
-            solicitar_autenticacion("user")
-    
-    # Footer
-    st.markdown("""
-    <div class="footer">
-        Sistema de KPIs Aeropostale v2.0 | © 2025 Aeropostale. Todos los derechos reservados.<br>
-        Desarrollado por: <a href="mailto:wilson.perez@aeropostale.com">Wilson Pérez</a>
-    </div>
-    """, unsafe_allow_html=True)
-if __name__ == "__main__":
-    main()
+         func()
+     else:
+         # Mostrar mensaje de acceso denegado
+         st.error("🔒 Acceso restringido. Necesita autenticarse para acceder a esta sección.")
+         
+         # Mostrar opciones de autenticación según el tipo requerido
+         if permiso == "admin":
+             solicitar_autenticacion("admin")
+         else:
+             solicitar_autenticacion("user")
+     
+     # Footer
+     st.markdown("""
+     <div class="footer">
+         Sistema de KPIs Aeropostale v2.0 | © 2025 Aeropostale. Todos los derechos reservados.<br>
+         Desarrollado por: <a href="mailto:wilson.perez@aeropostale.com">Wilson Pérez</a>
+     </div>
+     """, unsafe_allow_html=True)
+     if __name__ == "__main__":
+         main()
