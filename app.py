@@ -1658,7 +1658,7 @@ class StreamlitLogisticsReconciliation:
         doc.build(elements)
         buffer.seek(0)
         return buffer
-def to_excel_bytes(self):
+def to_excel_guiasreport(self):
     """Genera y devuelve bytes de un archivo Excel con los datos de reconciliación"""
     try:
         output = BytesIO()
