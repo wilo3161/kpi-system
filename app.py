@@ -3496,10 +3496,10 @@ def mostrar_historial_guias():
                         if eliminar_guia(guia_id):
                             eliminaciones_exitosas += 1
                     
-                    if eliminaciones_exitosas > 0:
-                        st.markdown(f"<div class='success-box animate-fade-in'>✅ {eliminaciones_exitosas} guía(s) eliminada(s) correctamente.</div>", unsafe_allow_html=True)
-                        time.sleep(1)
-                            st.return()
+            if eliminaciones_exitosas > 0:
+                st.markdown(f"<div class='success-box animate-fade-in'>✅ {eliminaciones_exitosas} guía(s) eliminada(s) correctamente.</div>", unsafe_allow_html=True)
+                time.sleep(1)
+                    st.rerun()  # ✅ CORRECTO - Recarga la app
                     else:
                         st.markdown("<div class='error-box animate-fade-in'>❌ Error al eliminar las guías.</div>", unsafe_allow_html=True)
                 else:
