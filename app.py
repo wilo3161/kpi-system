@@ -1434,7 +1434,7 @@ class StreamlitLogisticsReconciliation:
     # Procesamiento de archivos
     # ===========================================================
     def process_files(self, factura_file, manifiesto_file):
-    try:
+        try:
         self.df_facturas = pd.read_excel(factura_file, sheet_name=0, header=0)
         self.df_manifiesto = pd.read_excel(manifiesto_file, sheet_name=0, header=0)
 
