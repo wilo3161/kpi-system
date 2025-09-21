@@ -1344,386 +1344,133 @@ from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import getSampleStyleSheet
 import streamlit as st
 
-class StreamlitLogisticsReconciliation:
+class StreamlitLogisticsReconciliationIntegrated:
     def __init__(self):
-        # Core data structures
         self.df_facturas = None
         self.df_manifiesto = None
         self.guides_facturadas = []
         self.guides_anuladas = []
         self.guides_sobrantes = []
-
-        # KPI results
         self.kpis = {
             'total_facturadas': 0,
             'total_anuladas': 0,
             'total_sobrantes': 0,
             'total_value': 0.0,
-            'value_facturadas': 0.0,
-            'value_anuladas': 0.0,
-            'value_sobrantes': 0.0,
-            'top_cities': pd.Series(dtype="object"),
-            'top_stores': pd.Series(dtype="object"),
-            'spending_by_city': pd.Series(dtype="float"),
-            'spending_by_store': pd.Series(dtype="float"),
             'avg_shipment_value': 0.0,
-            'shipment_volume': pd.Series(dtype="int"),
-            'anuladas_by_destinatario': pd.Series(dtype="object")
         }
 
-    # ===========================================================
-    # Identificación de columnas clave
-    # ===========================================================
-    def identify_guide_column(self, df):
-        for col in df.columns:
-            extracted = df[col].astype(str).str.extract(r'(LC\d+)', expand=False)
-            if extracted.notna().mean() > 0.3:  # Adjusted threshold to 30% to be more flexible
-                return col
-        return None
+    def _extract_tables_from_pdf(self, pdf_file) -> pd.DataFrame:
+        dfs = []
+        with pdfplumber.open(pdf_file) as pdf:
+            for page in pdf.pages:
+                tables = page.extract_tables()
+                for t in tables:
+                    if t and len(t) > 1:
+                        df = pd.DataFrame(t[1:], columns=t[0])
+                        dfs.append(df)
+        if not dfs:
+            raise ValueError("No se extrajeron tablas del PDF")
+        return pd.concat(dfs, ignore_index=True)
 
-    def identify_destination_city_column(self, df):
-        ecuador_cities = [
-            'GUAYAQUIL', 'QUITO', 'IBARRA', 'CUENCA', 'MACHALA',
-            'SANGOLQUI', 'LATACUNGA', 'AMBATO', 'PORTOVIEJO',
-            'MILAGRO', 'LOJA', 'RIOBAMBA', 'ESMERALDAS', 'LAGO AGRIO'
-        ]
-        for col in df.columns:
-            upper_col = df[col].astype(str).str.upper()
-            if upper_col.isin(ecuador_cities).mean() > 0.3:
-                return col
-        return None
-
-    def identify_store_column(self, df):
-        store_keywords = ['AEROPOSTALE', 'LOCAL', 'SHOPPING', 'MALL', 'CENTRO COMERCIAL']
-        regex = '|'.join(store_keywords)
-        for col in df.columns:
-            if df[col].astype(str).str.upper().str.contains(regex).mean() > 0.4:
-                return col
-        return None
-
-    def identify_monetary_column(self, df):
+    def _identify_guide_column(self, df: pd.DataFrame):
         for col in df.columns:
             try:
-                numeric_vals = pd.to_numeric(df[col].astype(str).str.replace(',', '.'), errors='coerce')  # Handle commas
-                if numeric_vals.notna().mean() > 0.7 and (numeric_vals > 0).mean() > 0.5:
+                extracted = df[col].astype(str).str.extract(r'(LC\d+)', expand=False)
+                if extracted.notna().mean() > 0.25:
                     return col
             except Exception:
                 continue
         return None
 
-    def identify_date_column(self, df):
-        date_patterns = [
-            r'\d{4}-\d{2}-\d{2}',  # YYYY-MM-DD
-            r'\d{2}/\d{2}/\d{4}',  # DD/MM/YYYY
-            r'\d{2}-\d{2}-\d{4}'   # DD-MM-YYYY
-        ]
-        for col in df.columns:
-            col_str = df[col].astype(str)
-            for pattern in date_patterns:
-                if col_str.str.match(pattern).mean() > 0.7:
-                    return col
-        return None
-
-    def identify_destinatario_column(self, df):
-        for col in df.columns:
-            if any(keyword in col.lower() for keyword in ['destin', 'cliente', 'nombre', 'recipient']):
-                return col
-        return None
-
-    # ===========================================================
-    # Procesamiento de archivos
-    # ===========================================================
-    def process_files(self, factura_file, manifiesto_file):
+    def _calculate_kpis_safe(self):
+        """Calcula KPIs a partir de las listas de reconciliación."""
         try:
+            self.kpis['total_facturadas'] = len(self.guides_facturadas)
+            self.kpis['total_anuladas'] = len(self.guides_anuladas)
+            self.kpis['total_sobrantes'] = len(self.guides_sobrantes)
+
+            # Ejemplo de KPI adicional: valor total y promedio si existe columna 'Value'
+            if self.df_facturas is not None and 'Value' in self.df_facturas.columns:
+                self.kpis['total_value'] = self.df_facturas['Value'].sum()
+                self.kpis['avg_shipment_value'] = self.df_facturas['Value'].mean()
+            else:
+                self.kpis['total_value'] = 0
+                self.kpis['avg_shipment_value'] = 0.0
+        except Exception as e:
+            st.error(f"⚠️ Error calculando KPIs: {str(e)}")
+
+    def process_files(self, factura_file, manifiesto_file) -> bool:
+        try:
+            # Cargar archivos Excel
             self.df_facturas = pd.read_excel(factura_file, sheet_name=0, header=0)
             self.df_manifiesto = pd.read_excel(manifiesto_file, sheet_name=0, header=0)
-    
-            # Limpiar datos iniciales
+
+            # Limpiar espacios en blanco
             self.df_facturas = self.df_facturas.applymap(lambda x: x.strip() if isinstance(x, str) else x)
             self.df_manifiesto = self.df_manifiesto.applymap(lambda x: x.strip() if isinstance(x, str) else x)
-    
-            # Identificar columnas clave con chequeos de errores
-            factura_guide_col = self.identify_guide_column(self.df_facturas)
-            if not factura_guide_col:
-                st.error(f"No se pudo identificar la columna de guías en el archivo de facturas.\nColumnas disponibles: {list(self.df_facturas.columns)}")
+
+            # Identificar columnas de guías
+            factura_guide_col = self._identify_guide_column(self.df_facturas)
+            manifiesto_guide_col = self._identify_guide_column(self.df_manifiesto)
+
+            if not factura_guide_col or not manifiesto_guide_col:
+                st.error("❌ No se pudo identificar la columna de guías en uno de los archivos.")
                 return False
-    
-            manifiesto_guide_col = self.identify_guide_column(self.df_manifiesto)
-            if not manifiesto_guide_col:
-                st.error(f"No se pudo identificar la columna de guías en el archivo de manifiesto.\nColumnas disponibles: {list(self.df_manifiesto.columns)}")
-                return False
-    
-            # Limpieza de guías
-            self.df_facturas['GUIDE_CLEAN'] = self.df_facturas[factura_guide_col].astype(str).str.strip().str.upper()
-            self.df_manifiesto['GUIDE_CLEAN'] = self.df_manifiesto[manifiesto_guide_col].astype(str).str.strip().str.upper()
-            self.df_facturas['GUIDE_CLEAN'] = self.df_facturas['GUIDE_CLEAN'].str.extract(r'(LC\d+)', expand=False).fillna('')
-            self.df_manifiesto['GUIDE_CLEAN'] = self.df_manifiesto['GUIDE_CLEAN'].str.extract(r'(LC\d+)', expand=False).fillna('')
-    
+
+            # Normalizar guías
+            self.df_facturas['GUIDE_CLEAN'] = self.df_facturas[factura_guide_col].astype(str).str.extract(r'(LC\d+)', expand=False).fillna('')
+            self.df_manifiesto['GUIDE_CLEAN'] = self.df_manifiesto[manifiesto_guide_col].astype(str).str.extract(r'(LC\d+)', expand=False).fillna('')
+
             self.df_facturas = self.df_facturas[self.df_facturas['GUIDE_CLEAN'] != '']
             self.df_manifiesto = self.df_manifiesto[self.df_manifiesto['GUIDE_CLEAN'] != '']
-    
+
             # Reconciliación
             facturas_set = set(self.df_facturas['GUIDE_CLEAN'])
-            manifiesto_set = set(self.df_manifiesto['GUIDE_CLEAN'])  # Fixed variable name
-    
+            manifiesto_set = set(self.df_manifiesto['GUIDE_CLEAN'])
+
             self.guides_facturadas = list(facturas_set & manifiesto_set)
-            self.guides_anuladas = list(facturas_set - manifiesto_set)  # Fixed variable name
-            self.guides_sobrantes = list(manifiesto_set - facturas_set)  # Fixed variable name
-    
-            self.calculate_kpis()
+            self.guides_anuladas = list(facturas_set - manifiesto_set)
+            self.guides_sobrantes = list(manifiesto_set - facturas_set)
+
+            # Calcular KPIs
+            self._calculate_kpis_safe()
             return True
 
         except Exception as e:
-            st.error(f"Error procesando archivos: {str(e)}")
+            st.error(f"⚠️ Error procesando archivos: {str(e)}")
             return False
 
-    # ===========================================================
-    # Cálculo de KPIs
-    # ===========================================================
-    def calculate_kpis(self):
-        self.kpis['total_facturadas'] = len(self.guides_facturadas)
-        self.kpis['total_anuladas'] = len(self.guides_anuladas)
-        self.kpis['total_sobrantes'] = len(self.guides_sobrantes)
-
-        # Preparar DataFrame para facturadas desde facturas (para valores monetarios)
-        facturadas_df = self.df_facturas[self.df_facturas['GUIDE_CLEAN'].isin(self.guides_facturadas)].copy()
-
-        # Preparar subset de manifiesto para facturadas
-        manifest_fact = self.df_manifiesto[self.df_manifiesto['GUIDE_CLEAN'].isin(self.guides_facturadas)].copy()
-
-        # Merge para combinar info útil (ciudades, tiendas de manifiesto + monetario de facturas)
-        facturadas_merged = pd.merge(facturadas_df, manifest_fact, on='GUIDE_CLEAN', suffixes=('_fact', '_man'), how='left')
-
-        # Identificar columnas clave con fallbacks
-        city_col = self.identify_destination_city_column(facturadas_merged) or \
-                   'CIUDAD DESTINO' if 'CIUDAD DESTINO' in facturadas_merged.columns else \
-                   'DESTINO_fact' if 'DESTINO_fact' in facturadas_merged.columns else None
-
-        store_col = self.identify_store_column(facturadas_merged) or \
-                    'SUCURSAL' if 'SUCURSAL' in facturadas_merged.columns else None
-
-        monetary_col = 'VALOR FLETE' if 'VALOR FLETE' in facturadas_merged.columns else \
-                       self.identify_monetary_column(facturadas_merged)
-
-        date_col = 'FECHA' if 'FECHA' in facturadas_merged.columns else \
-                   self.identify_date_column(facturadas_merged)
-
-        destinatario_col = self.identify_destinatario_column(facturadas_merged) or \
-                           'DESTINO_man' if 'DESTINO_man' in facturadas_merged.columns else None
-
-        # Convertir columna monetaria a numérica
-        if monetary_col:
-            facturadas_merged[monetary_col] = pd.to_numeric(
-                facturadas_merged[monetary_col].astype(str).str.replace(',', '.'),
-                errors='coerce'
-            )
-
-        # Convertir fecha
-        if date_col:
-            if facturadas_merged[date_col].dtype in [float, int]:  # Excel numeric date
-                facturadas_merged[date_col] = pd.to_datetime('1899-12-30') + pd.to_timedelta(facturadas_merged[date_col], unit='D')
-            else:
-                facturadas_merged[date_col] = pd.to_datetime(facturadas_merged[date_col], errors='coerce', dayfirst=True)
-
-        # Calcular KPIs si las columnas existen
-        if city_col:
-            self.kpis['top_cities'] = facturadas_merged[city_col].value_counts().head(10)
-
-        if store_col:
-            self.kpis['top_stores'] = facturadas_merged[store_col].value_counts().head(10)
-
-        if city_col and monetary_col:
-            spending_by_city = facturadas_merged.groupby(city_col)[monetary_col].sum().sort_values(ascending=False)
-            self.kpis['spending_by_city'] = spending_by_city.head(10)
-
-        if store_col and monetary_col:
-            spending_by_store = facturadas_merged.groupby(store_col)[monetary_col].sum().sort_values(ascending=False)
-            self.kpis['spending_by_store'] = spending_by_store.head(10)
-
-        if monetary_col:
-            valid_amounts = facturadas_merged[monetary_col].dropna()
-            if not valid_amounts.empty:
-                self.kpis['avg_shipment_value'] = valid_amounts.mean()
-
-        if date_col:
-            valid_dates = facturadas_merged[facturadas_merged[date_col].notna()].copy()
-            valid_dates['MONTH'] = valid_dates[date_col].dt.to_period('M')
-            self.kpis['shipment_volume'] = valid_dates['MONTH'].value_counts().sort_index()
-
-        # Para anuladas (usando facturas, ya que no están en manifiesto)
-        anuladas_df = self.df_facturas[self.df_facturas['GUIDE_CLEAN'].isin(self.guides_anuladas)].copy()
-        anuladas_dest_col = self.identify_destinatario_column(anuladas_df) or \
-                            'DESTINO' if 'DESTINO' in anuladas_df.columns else None
-        if anuladas_dest_col:
-            self.kpis['anuladas_by_destinatario'] = anuladas_df[anuladas_dest_col].value_counts().head(10)
-
-        # Calcular valores totales
-        if monetary_col:
-            # Total value from all facturas
-            self.df_facturas[monetary_col] = pd.to_numeric(
-                self.df_facturas[monetary_col].astype(str).str.replace(',', '.'),
-                errors='coerce'
-            )
-            self.kpis['total_value'] = self.df_facturas[monetary_col].sum()
-
-            # Value for facturadas
-            self.kpis['value_facturadas'] = facturadas_df[monetary_col].sum()
-
-            # Value for anuladas
-            anuladas_df[monetary_col] = pd.to_numeric(
-                anuladas_df[monetary_col].astype(str).str.replace(',', '.'),
-                errors='coerce'
-            )
-            self.kpis['value_anuladas'] = anuladas_df[monetary_col].sum()
-
-            # Value for sobrantes (no en facturas, así que 0)
-            self.kpis['value_sobrantes'] = 0.0
-
-    # ===========================================================
-    # Generación de Reporte PDF
-    # ===========================================================
-    def generate_report(self):
-        buffer = BytesIO()
-        doc = SimpleDocTemplate(buffer, pagesize=letter)
-        elements = []
-        styles = getSampleStyleSheet()
-
-        # Título
-        elements.append(Paragraph("Logistics Reconciliation Report", styles['Title']))
-        elements.append(Spacer(1, 12))
-
-        # KPIs Básicos
-        elements.append(Paragraph("Key Performance Indicators", styles['Heading2']))
-        kpi_data = [
-            ['Métrica', 'Valor'],
-            ['Total Facturadas', self.kpis['total_facturadas']],
-            ['Total Anuladas', self.kpis['total_anuladas']],
-            ['Total Sobrantes', self.kpis['total_sobrantes']],
-            ['Valor Total Pagado', f"${self.kpis['total_value']:.2f}"],
-            ['Valor Facturadas', f"${self.kpis['value_facturadas']:.2f}"],
-            ['Valor Anuladas', f"${self.kpis['value_anuladas']:.2f}"],
-            ['Valor Sobrantes', f"${self.kpis['value_sobrantes']:.2f}"],
-            ['Valor Promedio de Envío', f"${self.kpis['avg_shipment_value']:.2f}" if self.kpis['avg_shipment_value'] else 'N/A']
-        ]
-        table = Table(kpi_data)
-        table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
-            ('GRID', (0, 0), (-1, -1), 1, colors.black)
-        ]))
-        elements.append(table)
-        elements.append(Spacer(1, 12))
-
-        # Función para agregar tabla desde Series
-        def add_series_table(title, series, is_float=False):
-            if not series.empty:
-                elements.append(Paragraph(title, styles['Heading2']))
-                data = [['Categoría', 'Valor']] + [[str(idx), f"{val:.2f}" if is_float else val] for idx, val in series.items()]
-                table = Table(data)
-                table.setStyle(TableStyle([
-                    ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
-                    ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-                    ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-                    ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-                    ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-                    ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
-                    ('GRID', (0, 0), (-1, -1), 1, colors.black)
-                ]))
-                elements.append(table)
-                elements.append(Spacer(1, 12))
-
-        add_series_table("Top Ciudades", self.kpis['top_cities'])
-        add_series_table("Top Tiendas", self.kpis['top_stores'])
-        add_series_table("Gasto por Ciudad", self.kpis['spending_by_city'], is_float=True)
-        add_series_table("Gasto por Tienda", self.kpis['spending_by_store'], is_float=True)
-        add_series_table("Anuladas por Destinatario", self.kpis['anuladas_by_destinatario'])
-
-        # Gráfico de Volumen de Envíos
-        if not self.kpis['shipment_volume'].empty:
-            fig, ax = plt.subplots()
-            self.kpis['shipment_volume'].plot(kind='bar', ax=ax)
-            ax.set_title('Volumen de Envíos por Mes')
-            img_buffer = BytesIO()
-            fig.savefig(img_buffer, format='png')
-            img_buffer.seek(0)
-            elements.append(Paragraph("Volumen de Envíos por Mes", styles['Heading2']))
-            elements.append(Image(img_buffer, width=400, height=200))
-            elements.append(Spacer(1, 12))
-            plt.close(fig)
-
-        doc.build(elements)
-        buffer.seek(0)
-        return buffer
-def to_excel_guiasreport(self):
-    """Genera y devuelve bytes de un archivo Excel con los datos de reconciliación"""
-    try:
+    def to_excel_bytes(self):
         output = BytesIO()
-            
-            # Crear un escritor de Excel
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                # Crear hoja de resumen
-            summary_data = {
-                'Métrica': [
-                'Total Facturadas',
-                'Total Anuladas',
-                'Total Sobrantes',
-                'Valor Total Pagado',
-                'Valor Facturadas',
-                'Valor Anuladas',
-                'Valor Sobrantes',
-                'Valor Promedio de Envío'
-                ],
-                'Valor': [
-                self.kpis['total_facturadas'],
-                self.kpis['total_anuladas'],
-                self.kpis['total_sobrantes'],
-                self.kpis['total_value'],
-                self.kpis['value_facturadas'],
-                self.kpis['value_anuladas'],
-                self.kpis['value_sobrantes'],
-                self.kpis['avg_shipment_value'] if self.kpis['avg_shipment_value'] else 'N/A'
-                ]
-                }
-                
-            df_summary = pd.DataFrame(summary_data)
-            df_summary.to_excel(writer, sheet_name='Resumen', index=False)
-                
-                # Agregar hojas con datos detallados si están disponibles
-            if not self.kpis['top_cities'].empty:
-                   self.kpis['top_cities'].to_excel(writer, sheet_name='Top Ciudades')
-                
-            if not self.kpis['top_stores'].empty:
-                   self.kpis['top_stores'].to_excel(writer, sheet_name='Top Tiendas')
-                
-            if not self.kpis['spending_by_city'].empty:
-                   self.kpis['spending_by_city'].to_excel(writer, sheet_name='Gasto por Ciudad')
-                
-            if not self.kpis['spending_by_store'].empty:
-                   self.kpis['spending_by_store'].to_excel(writer, sheet_name='Gasto por Tienda')
-                
-            if not self.kpis['anuladas_by_destinatario'].empty:
-                   self.kpis['anuladas_by_destinatario'].to_excel(writer, sheet_name='Anuladas por Destinatario')
-                
-            if not self.kpis['shipment_volume'].empty:
-                   self.kpis['shipment_volume'].to_excel(writer, sheet_name='Volumen por Mes')
-        
-            output.seek(0)
-        return output.getvalue()
-        
-    except Exception as e:
-        logger.error(f"Error al generar Excel: {e}", exc_info=True)
-        # Devolver un Excel vacío en caso de error
-        output = BytesIO()
-        df_error = pd.DataFrame({'Error': [f'No se pudo generar el reporte: {str(e)}']})
-        df_error.to_excel(output, index=False)
+            pd.DataFrame([
+                {"KPI": "Facturadas", "Value": self.kpis['total_facturadas']},
+                {"KPI": "Anuladas", "Value": self.kpis['total_anuladas']},
+                {"KPI": "Sobrantes", "Value": self.kpis['total_sobrantes']},
+                {"KPI": "Valor Total", "Value": self.kpis['total_value']},
+                {"KPI": "Valor Promedio", "Value": self.kpis['avg_shipment_value']},
+            ]).to_excel(writer, index=False, sheet_name="Summary")
         output.seek(0)
         return output.getvalue()
 
- 
+    def to_pdf_bytes(self):
+        buffer = BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=letter)
+        styles = getSampleStyleSheet()
+        elements = [
+            Paragraph("Reconciliación de Guías", styles['Title']),
+            Spacer(1, 12),
+            Paragraph(f"Facturadas: {self.kpis['total_facturadas']}", styles['Normal']),
+            Paragraph(f"Anuladas: {self.kpis['total_anuladas']}", styles['Normal']),
+            Paragraph(f"Sobrantes: {self.kpis['total_sobrantes']}", styles['Normal']),
+            Paragraph(f"Valor Total: {self.kpis['total_value']}", styles['Normal']),
+            Paragraph(f"Valor Promedio: {self.kpis['avg_shipment_value']}", styles['Normal']),
+        ]
+        doc.build(elements)
+        buffer.seek(0)
+        return buffer.getvalue()
+
+
 # ================================
 # SISTEMA DE AUTENTICACIÓN
 # ================================
@@ -3134,225 +2881,39 @@ def mostrar_generacion_guias():
                         else:
                             st.error("❌ Error al agregar la tienda.")
 def mostrar_reconciliacion():
-    """Muestra la interfaz completa de reconciliación con todas las funcionalidades de guiast.py"""
-    st.markdown("<h1 class='header-title animate-fade-in'>📦 Reconciliación Logística Completa</h1>", unsafe_allow_html=True)
-    
-    if ('reconciler' not in st.session_state or 
-        not hasattr(st.session_state.reconciler, 'to_excel_guiasreport')):
-        st.session_state.reconciler = StreamlitLogisticsReconciliation()
-        st.session_state.processed = False  # Reiniciar estado relacionado
-        st.rerun()  # Opcional: forzar recarga limpia
+    st.header("🔁 Reconciliación: Facturas vs Manifiesto")
+    reconciler = StreamlitLogisticsReconciliationIntegrated()
 
-    st.markdown("<div class='guide-section animate-fade-in'>", unsafe_allow_html=True)
-    st.markdown("<h2 class='section-title animate-fade-in'>Cargar Archivos</h2>", unsafe_allow_html=True)
-    
     col1, col2 = st.columns(2)
     with col1:
         factura_file = st.file_uploader("Factura (Excel)", type=['xlsx','xls'], key="rec_factura")
     with col2:
-        manifiesto_file = st.file_uploader("Manifiesto (Excel)", type=['xlsx','xls'], key="rec_manifiesto")
+        manifiesto_file = st.file_uploader("Manifiesto (XLSX)", type=['xlsx','xls'], key="rec_manifiesto")
 
-    process_btn = st.button("🚀 Procesar Archivos", use_container_width=True)
+    if st.button("Procesar Reconciliación"):
+        if not factura_file or not manifiesto_file:
+            st.error("Ambos archivos son requeridos.")
+        else:
+            if reconciler.process_files(factura_file, manifiesto_file):
+                st.success("Procesamiento completado ✅")
+                st.metric("Facturadas", reconciler.kpis['total_facturadas'])
+                st.metric("Anuladas", reconciler.kpis['total_anuladas'])
+                st.metric("Sobrantes", reconciler.kpis['total_sobrantes'])
 
-    if process_btn and factura_file and manifiesto_file:
-        with st.spinner("Procesando archivos..."):
-            st.session_state.processed = st.session_state.reconciler.process_files(factura_file, manifiesto_file)
-
-    if st.session_state.processed:
-        reconciler = st.session_state.reconciler
-        kpis = reconciler.kpis
-
-        st.markdown("<div class='success-box animate-fade-in'>✅ Procesamiento completado</div>", unsafe_allow_html=True)
-        
-        st.markdown("<h2 class='section-title animate-fade-in'>📊 Métricas Principales</h2>", unsafe_allow_html=True)
-        
-        col1, col2, col3, col4 = st.columns(4)
-        with col1:
-            st.markdown(f"""
-            <div class="kpi-card animate-fade-in">
-                <div class="metric-label">Total Facturadas</div>
-                <p class="metric-value">{kpis['total_facturadas']}</p>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        with col2:
-            st.markdown(f"""
-            <div class="kpi-card animate-fade-in">
-                <div class="metric-label">Total Anuladas</div>
-                <p class="metric-value">{kpis['total_anuladas']}</p>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        with col3:
-            st.markdown(f"""
-            <div class="kpi-card animate-fade-in">
-                <div class="metric-label">Total Sobrantes</div>
-                <p class="metric-value">{kpis['total_sobrantes']}</p>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        with col4:
-            valor_promedio = f"${kpis['avg_shipment_value']:.2f}" if kpis['avg_shipment_value'] else "N/A"
-            st.markdown(f"""
-            <div class="kpi-card animate-fade-in">
-                <div class="metric-label">Valor Promedio</div>
-                <p class="metric-value">{valor_promedio}</p>
-            </div>
-            """, unsafe_allow_html=True)
-
-        # Métricas de valor
-        col5, col6, col7, col8 = st.columns(4)
-        with col5:
-            st.markdown(f"""
-            <div class="kpi-card animate-fade-in">
-                <div class="metric-label">Valor Total</div>
-                <p class="metric-value">${kpis['total_value']:.2f}</p>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        with col6:
-            st.markdown(f"""
-            <div class="kpi-card animate-fade-in">
-                <div class="metric-label">Valor Facturadas</div>
-                <p class="metric-value">${kpis['value_facturadas']:.2f}</p>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        with col7:
-            st.markdown(f"""
-            <div class="kpi-card animate-fade-in">
-                <div class="metric-label">Valor Anuladas</div>
-                <p class="metric-value">${kpis['value_anuladas']:.2f}</p>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        with col8:
-            st.markdown(f"""
-            <div class="kpi-card animate-fade-in">
-                <div class="metric-label">Valor Sobrantes</div>
-                <p class="metric-value">${kpis['value_sobrantes']:.2f}</p>
-            </div>
-            """, unsafe_allow_html=True)
-
-        # Gráficos y análisis detallados
-        st.markdown("<h2 class='section-title animate-fade-in'>📈 Análisis Detallado</h2>", unsafe_allow_html=True)
-        
-        tab1, tab2, tab3, tab4, tab5 = st.tabs(["Top Ciudades", "Top Tiendas", "Gasto por Ciudad", "Gasto por Tienda", "Anuladas por Destinatario"])
-        
-        with tab1:
-            if not kpis['top_cities'].empty:
-                fig = px.bar(
-                    x=kpis['top_cities'].index, 
-                    y=kpis['top_cities'].values,
-                    title="Top Ciudades por Volumen de Envíos",
-                    labels={'x': 'Ciudad', 'y': 'Cantidad'}
+                # Descargas
+                st.download_button(
+                    "⬇️ Descargar Excel",
+                    data=reconciler.to_excel_bytes(),
+                    file_name="reconciliacion.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 )
-                st.plotly_chart(fig, use_container_width=True)
-            else:
-                st.info("No hay datos disponibles para top cities")
-        
-        with tab2:
-            if not kpis['top_stores'].empty:
-                fig = px.bar(
-                    x=kpis['top_stores'].index, 
-                    y=kpis['top_stores'].values,
-                    title="Top Tiendas por Volumen de Envíos",
-                    labels={'x': 'Tienda', 'y': 'Cantidad'}
+                st.download_button(
+                    "⬇️ Descargar PDF",
+                    data=reconciler.to_pdf_bytes(),
+                    file_name="reconciliacion.pdf",
+                    mime="application/pdf"
                 )
-                st.plotly_chart(fig, use_container_width=True)
-            else:
-                st.info("No hay datos disponibles para top stores")
-        
-        with tab3:
-            if not kpis['spending_by_city'].empty:
-                fig = px.bar(
-                    x=kpis['spending_by_city'].index, 
-                    y=kpis['spending_by_city'].values,
-                    title="Gasto por Ciudad",
-                    labels={'x': 'Ciudad', 'y': 'Valor ($)'}
-                )
-                st.plotly_chart(fig, use_container_width=True)
-            else:
-                st.info("No hay datos disponibles para gasto por ciudad")
-        
-        with tab4:
-            if not kpis['spending_by_store'].empty:
-                fig = px.bar(
-                    x=kpis['spending_by_store'].index, 
-                    y=kpis['spending_by_store'].values,
-                    title="Gasto por Tienda",
-                    labels={'x': 'Tienda', 'y': 'Valor ($)'}
-                )
-                st.plotly_chart(fig, use_container_width=True)
-            else:
-                st.info("No hay datos disponibles para gasto por tienda")
-        
-        with tab5:
-            if not kpis['anuladas_by_destinatario'].empty:
-                fig = px.bar(
-                    x=kpis['anuladas_by_destinatario'].index, 
-                    y=kpis['anuladas_by_destinatario'].values,
-                    title="Anuladas por Destinatario",
-                    labels={'x': 'Destinatario', 'y': 'Cantidad'}
-                )
-                st.plotly_chart(fig, use_container_width=True)
-            else:
-                st.info("No hay datos disponibles para anuladas por destinatario")
 
-        # Volumen de envíos por mes
-        if not kpis['shipment_volume'].empty:
-            st.markdown("<h3 class='section-title animate-fade-in'>Volumen de Envíos por Mes</h3>", unsafe_allow_html=True)
-            fig = px.bar(
-                x=kpis['shipment_volume'].index.astype(str), 
-                y=kpis['shipment_volume'].values,
-                title="Volumen de Envíos por Mes",
-                labels={'x': 'Mes', 'y': 'Cantidad'}
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-        # Detalles de guías
-        st.markdown("<h3 class='section-title animate-fade-in'>Detalles de Guías</h3>", unsafe_allow_html=True)
-        
-        if st.button("👁️ Mostrar/Ocultar Detalles de Guías"):
-            st.session_state.show_details = not st.session_state.show_details
-
-        if st.session_state.show_details:
-            with st.expander("Guías Facturadas"):
-                st.write(", ".join(reconciler.guides_facturadas))
-            
-            with st.expander("Guías Anuladas (Facturadas pero no en Manifiesto)"):
-                st.write(", ".join(reconciler.guides_anuladas))
-            
-            with st.expander("Guías Sobrantes (No Facturadas, en Manifiesto pero no en Facturas)"):
-                st.write(", ".join(reconciler.guides_sobrantes))
-
-        # Descargar reporte
-        st.markdown("<h3 class='section-title animate-fade-in'>Exportar Reporte</h3>", unsafe_allow_html=True)
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            # Exportar a Excel
-            excel_data = reconciler.to_excel_guiasreport()
-            st.download_button(
-                label="💾 Descargar Excel",
-                data=excel_data,
-                file_name="reconciliacion.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True
-            )
-        
-        with col2:
-            # Exportar a PDF
-            pdf_buffer = reconciler.generate_report()
-            st.download_button(
-                label="📄 Descargar PDF",
-                data=pdf_buffer,
-                file_name="logistics_report.pdf",
-                mime="application/pdf",
-                use_container_width=True
-            )
-
-    st.markdown("</div>", unsafe_allow_html=True)
 def mostrar_historial_guias():
     """Muestra el historial de guías generadas"""
     if not verificar_password("user"):
@@ -3496,16 +3057,19 @@ def mostrar_historial_guias():
                         if eliminar_guia(guia_id):
                             eliminaciones_exitosas += 1
                     
-            if eliminaciones_exitosas > 0:
-                st.markdown(f"<div class='success-box animate-fade-in'>✅ {eliminaciones_exitosas} guía(s) eliminada(s) correctamente.</div>", unsafe_allow_html=True)
-                time.sleep(1)
-                st.rerun()  # ✅ CORRECTO - Recarga la app
-            else:
-                st.markdown("<div class='error-box animate-fade-in'>❌ Error al eliminar las guías.</div>", unsafe_allow_html=True)
+                    if eliminaciones_exitosas > 0:
+                        st.markdown(f"<div class='success-box animate-fade-in'>✅ {eliminaciones_exitosas} guía(s) eliminada(s) correctamente.</div>", unsafe_allow_html=True)
+                        time.sleep(1)
+                        st.rerun()
+                    else:
+                        st.markdown("<div class='error-box animate-fade-in'>❌ Error al eliminar las guías.</div>", unsafe_allow_html=True)
+                else:
+                    st.markdown("<div class='warning-box animate-fade-in'>⚠️ No se seleccionaron guías para eliminar.</div>", unsafe_allow_html=True)
         else:
-            st.info("🔒 Autenticación requerida para eliminar guías")    
-            st.markdown("</div>", unsafe_allow_html=True)
-            st.markdown("</div>", unsafe_allow_html=True)
+            st.info("🔒 Autenticación requerida para eliminar guías")
+    
+    st.markdown("</div>", unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
     
 def mostrar_generacion_etiquetas():
     """Muestra la interfaz para generar etiquetas de productos"""
