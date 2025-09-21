@@ -1435,43 +1435,43 @@ class StreamlitLogisticsReconciliation:
     # ===========================================================
     def process_files(self, factura_file, manifiesto_file):
         try:
-        self.df_facturas = pd.read_excel(factura_file, sheet_name=0, header=0)
-        self.df_manifiesto = pd.read_excel(manifiesto_file, sheet_name=0, header=0)
-
-        # Limpiar datos iniciales
-        self.df_facturas = self.df_facturas.applymap(lambda x: x.strip() if isinstance(x, str) else x)
-        self.df_manifiesto = self.df_manifiesto.applymap(lambda x: x.strip() if isinstance(x, str) else x)
-
-        # Identificar columnas clave con chequeos de errores
-        factura_guide_col = self.identify_guide_column(self.df_facturas)
-        if not factura_guide_col:
-            st.error(f"No se pudo identificar la columna de guías en el archivo de facturas.\nColumnas disponibles: {list(self.df_facturas.columns)}")
-            return False
-
-        manifiesto_guide_col = self.identify_guide_column(self.df_manifiesto)
-        if not manifiesto_guide_col:
-            st.error(f"No se pudo identificar la columna de guías en el archivo de manifiesto.\nColumnas disponibles: {list(self.df_manifiesto.columns)}")
-            return False
-
-        # Limpieza de guías
-        self.df_facturas['GUIDE_CLEAN'] = self.df_facturas[factura_guide_col].astype(str).str.strip().str.upper()
-        self.df_manifiesto['GUIDE_CLEAN'] = self.df_manifiesto[manifiesto_guide_col].astype(str).str.strip().str.upper()
-        self.df_facturas['GUIDE_CLEAN'] = self.df_facturas['GUIDE_CLEAN'].str.extract(r'(LC\d+)', expand=False).fillna('')
-        self.df_manifiesto['GUIDE_CLEAN'] = self.df_manifiesto['GUIDE_CLEAN'].str.extract(r'(LC\d+)', expand=False).fillna('')
-
-        self.df_facturas = self.df_facturas[self.df_facturas['GUIDE_CLEAN'] != '']
-        self.df_manifiesto = self.df_manifiesto[self.df_manifiesto['GUIDE_CLEAN'] != '']
-
-        # Reconciliación
-        facturas_set = set(self.df_facturas['GUIDE_CLEAN'])
-        manifiesto_set = set(self.df_manifiesto['GUIDE_CLEAN'])  # Fixed variable name
-
-        self.guides_facturadas = list(facturas_set & manifiesto_set)
-        self.guides_anuladas = list(facturas_set - manifiesto_set)  # Fixed variable name
-        self.guides_sobrantes = list(manifiesto_set - facturas_set)  # Fixed variable name
-
-        self.calculate_kpis()
-        return True
+            self.df_facturas = pd.read_excel(factura_file, sheet_name=0, header=0)
+            self.df_manifiesto = pd.read_excel(manifiesto_file, sheet_name=0, header=0)
+    
+            # Limpiar datos iniciales
+            self.df_facturas = self.df_facturas.applymap(lambda x: x.strip() if isinstance(x, str) else x)
+            self.df_manifiesto = self.df_manifiesto.applymap(lambda x: x.strip() if isinstance(x, str) else x)
+    
+            # Identificar columnas clave con chequeos de errores
+            factura_guide_col = self.identify_guide_column(self.df_facturas)
+            if not factura_guide_col:
+                st.error(f"No se pudo identificar la columna de guías en el archivo de facturas.\nColumnas disponibles: {list(self.df_facturas.columns)}")
+                return False
+    
+            manifiesto_guide_col = self.identify_guide_column(self.df_manifiesto)
+            if not manifiesto_guide_col:
+                st.error(f"No se pudo identificar la columna de guías en el archivo de manifiesto.\nColumnas disponibles: {list(self.df_manifiesto.columns)}")
+                return False
+    
+            # Limpieza de guías
+            self.df_facturas['GUIDE_CLEAN'] = self.df_facturas[factura_guide_col].astype(str).str.strip().str.upper()
+            self.df_manifiesto['GUIDE_CLEAN'] = self.df_manifiesto[manifiesto_guide_col].astype(str).str.strip().str.upper()
+            self.df_facturas['GUIDE_CLEAN'] = self.df_facturas['GUIDE_CLEAN'].str.extract(r'(LC\d+)', expand=False).fillna('')
+            self.df_manifiesto['GUIDE_CLEAN'] = self.df_manifiesto['GUIDE_CLEAN'].str.extract(r'(LC\d+)', expand=False).fillna('')
+    
+            self.df_facturas = self.df_facturas[self.df_facturas['GUIDE_CLEAN'] != '']
+            self.df_manifiesto = self.df_manifiesto[self.df_manifiesto['GUIDE_CLEAN'] != '']
+    
+            # Reconciliación
+            facturas_set = set(self.df_facturas['GUIDE_CLEAN'])
+            manifiesto_set = set(self.df_manifiesto['GUIDE_CLEAN'])  # Fixed variable name
+    
+            self.guides_facturadas = list(facturas_set & manifiesto_set)
+            self.guides_anuladas = list(facturas_set - manifiesto_set)  # Fixed variable name
+            self.guides_sobrantes = list(manifiesto_set - facturas_set)  # Fixed variable name
+    
+            self.calculate_kpis()
+            return True
 
     except Exception as e:
         st.error(f"Error procesando archivos: {str(e)}")
