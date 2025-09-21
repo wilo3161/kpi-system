@@ -3500,13 +3500,12 @@ def mostrar_historial_guias():
                 st.markdown(f"<div class='success-box animate-fade-in'>✅ {eliminaciones_exitosas} guía(s) eliminada(s) correctamente.</div>", unsafe_allow_html=True)
                 time.sleep(1)
                 st.rerun()  # ✅ CORRECTO - Recarga la app
-                else:
-                        st.markdown("<div class='error-box animate-fade-in'>❌ Error al eliminar las guías.</div>", unsafe_allow_html=True)
+            else:
+                st.markdown("<div class='error-box animate-fade-in'>❌ Error al eliminar las guías.</div>", unsafe_allow_html=True)
         else:
-            st.info("🔒 Autenticación requerida para eliminar guías")
-    
-    st.markdown("</div>", unsafe_allow_html=True)
-    st.markdown("</div>", unsafe_allow_html=True)
+            st.info("🔒 Autenticación requerida para eliminar guías")    
+            st.markdown("</div>", unsafe_allow_html=True)
+            st.markdown("</div>", unsafe_allow_html=True)
     
 def mostrar_generacion_etiquetas():
     """Muestra la interfaz para generar etiquetas de productos"""
