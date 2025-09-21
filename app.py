@@ -1609,8 +1609,8 @@ def to_excel_bytes(self):
                 ]
                 }
                 
-                df_summary = pd.DataFrame(summary_data)
-                df_summary.to_excel(writer, sheet_name='Resumen', index=False)
+            df_summary = pd.DataFrame(summary_data)
+            df_summary.to_excel(writer, sheet_name='Resumen', index=False)
                 
                 # Agregar hojas con datos detallados si están disponibles
             if not self.kpis['top_cities'].empty:
