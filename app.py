@@ -1611,23 +1611,23 @@ def to_excel_bytes(self):
             logger.error(f"Error al generar Excel: {e}", exc_info=True)
             return b""
 
-    def generate_report(self):
+def generate_report(self):
         """Genera un reporte PDF con los datos de reconciliación usando reportlab."""
-        try:
-            buffer = BytesIO()
-            doc = SimpleDocTemplate(buffer, pagesize=letter)
-            styles = getSampleStyleSheet()
-            story = []
+    try:
+        buffer = BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=letter)
+        styles = getSampleStyleSheet()
+        story = []
 
             # Título
-            story.append(Paragraph("Reporte de Reconciliación Logística", styles['Title']))
-            story.append(Spacer(1, 12))
+        story.append(Paragraph("Reporte de Reconciliación Logística", styles['Title']))
+        story.append(Spacer(1, 12))
 
             # KPIs principales
-            story.append(Paragraph("Métricas Principales:", styles['Heading2']))
-            for key, value in self.kpis.items():
-                if not isinstance(value, pd.Series):
-                    story.append(Paragraph(f"{key.replace('_', ' ').title()}: {value}", styles['Normal']))
+        story.append(Paragraph("Métricas Principales:", styles['Heading2']))
+        for key, value in self.kpis.items():
+            if not isinstance(value, pd.Series):
+            story.append(Paragraph(f"{key.replace('_', ' ').title()}: {value}", styles['Normal']))
             story.append(Spacer(1, 12))
 
             # Listas de guías
@@ -1650,12 +1650,12 @@ def to_excel_bytes(self):
                     for idx, val in value.items():
                         story.append(Paragraph(f"{idx}: {val}", styles['Normal']))
 
-            doc.build(story)
-            buffer.seek(0)
-            return buffer
-        except Exception as e:
-            logger.error(f"Error al generar PDF: {e}", exc_info=True)
-            return BytesIO(b"")
+        doc.build(story)
+        buffer.seek(0)
+        return buffer
+    except Exception as e:
+        logger.error(f"Error al generar PDF: {e}", exc_info=True)
+        return BytesIO(b"")
     # ===========================================================
     # Generación de Reporte PDF
     # ===========================================================
