@@ -3253,8 +3253,7 @@ def generar_pdf_etiqueta(datos: dict) -> bytes:
 
 def main():
     """Función principal de la aplicación"""
-    elif menu == "Reconciliación":
-    mostrar_reconciliacion()
+
     # Mostrar logo y título en el sidebar
     st.sidebar.markdown("""
     <div class='sidebar-title'>
@@ -3280,7 +3279,7 @@ def main():
         ("Ingreso de Datos", "📥", mostrar_ingreso_datos_kpis, "admin"),
         ("Gestión de Trabajadores", "👥", mostrar_gestion_trabajadores_kpis, "admin"),
         ("Gestión de Distribuciones", "📦", mostrar_gestion_distribuciones, "admin"),
-        ("Reconciliación Logística", "📦", mostrar_reconciliacion_logistica, "admin"),
+        ("Reconciliación", "🔁", mostrar_reconciliacion, "admin"),
         ("Generar Guías", "📋", mostrar_generacion_guias, "user"),
         ("Historial de Guías", "🔍", mostrar_historial_guias, "user"),
         ("Generar Etiquetas", "🏷️", mostrar_generacion_etiquetas, "user"),
