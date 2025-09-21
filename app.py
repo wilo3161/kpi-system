@@ -3831,7 +3831,7 @@ def main():
         func()
     elif permiso == "admin" and st.session_state.user_type == "admin":
          func()
-     else:
+    else:
          # Mostrar mensaje de acceso denegado
          st.error("🔒 Acceso restringido. Necesita autenticarse para acceder a esta sección.")
          
