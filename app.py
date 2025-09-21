@@ -3137,10 +3137,11 @@ def mostrar_reconciliacion():
     """Muestra la interfaz completa de reconciliación con todas las funcionalidades de guiast.py"""
     st.markdown("<h1 class='header-title animate-fade-in'>📦 Reconciliación Logística Completa</h1>", unsafe_allow_html=True)
     
-    if 'reconciler' not in st.session_state:
-        st.session_state.reconciler = StreamlitLogisticsReconciliation()
-        st.session_state.processed = False
-        st.session_state.show_details = False
+    if ('reconciler' not in st.session_state or 
+    not hasattr(st.session_state.reconciler, 'to_excel_guiasreport')):
+    st.session_state.reconciler = StreamlitLogisticsReconciliation()
+    st.session_state.processed = False  # Reiniciar estado relacionado
+    st.rerun()  # Opcional: forzar recarga limpia
 
     st.markdown("<div class='guide-section animate-fade-in'>", unsafe_allow_html=True)
     st.markdown("<h2 class='section-title animate-fade-in'>Cargar Archivos</h2>", unsafe_allow_html=True)
