@@ -1337,7 +1337,6 @@ def eliminar_guia(guia_id: int) -> bool:
         logger.error(f"Error al eliminar guía: {e}", exc_info=True)
         return False
 import pandas as pd
-import pdfplumber
 from io import BytesIO
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 from reportlab.lib.pagesizes import letter
