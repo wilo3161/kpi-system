@@ -1578,16 +1578,16 @@ class StreamlitLogisticsReconciliation:
 
             # Value for sobrantes (no en facturas, así que 0)
             self.kpis['value_sobrantes'] = 0.0
-    def to_excel_bytes(self):
+def to_excel_bytes(self):
     """Genera y devuelve bytes de un archivo Excel con los datos de reconciliación"""
-        try:
-            output = BytesIO()
+    try:
+        output = BytesIO()
             
             # Crear un escritor de Excel
-            with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
                 # Crear hoja de resumen
-                summary_data = {
-                    'Métrica': [
+            summary_data = {
+                'Métrica': [
                         'Total Facturadas',
                         'Total Anuladas',
                         'Total Sobrantes',
