@@ -1411,7 +1411,7 @@ class StreamlitLogisticsReconciliationIntegrated:
             self._calculate_kpis_safe()
             return True
 
-    except Exception as e:
+        except Exception as e:
         st.error(f"⚠️ Error procesando archivos: {str(e)}")
         return False
 
