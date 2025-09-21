@@ -3331,7 +3331,7 @@ def mostrar_reconciliacion():
         col1, col2 = st.columns(2)
         with col1:
             # Exportar a Excel
-            excel_data = reconciler.to_excel_bytes()
+            excel_data = reconciler.to_excel_guiasreport()
             st.download_button(
                 label="💾 Descargar Excel",
                 data=excel_data,
