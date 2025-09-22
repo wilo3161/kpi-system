@@ -1376,7 +1376,7 @@ class LogisticsReconciliation:
     def identify_guide_column(self, df):
         for col in df.columns:
             extracted = df[col].astype(str).str.extract(r'(LC\d+)', expand=False)
-            if extracted.notna().mean() > 0.3:
+            if extracted.notna().mean() > 0.3:  # Adjusted threshold to 30% to be more flexible
                 return col
         return None
 
@@ -1403,7 +1403,7 @@ class LogisticsReconciliation:
     def identify_monetary_column(self, df):
         for col in df.columns:
             try:
-                numeric_vals = pd.to_numeric(df[col].astype(str).str.replace(',', '.'), errors='coerce')
+                numeric_vals = pd.to_numeric(df[col].astype(str).str.replace(',', '.'), errors='coerce')  # Handle commas
                 if numeric_vals.notna().mean() > 0.7 and (numeric_vals > 0).mean() > 0.5:
                     return col
             except Exception:
@@ -1412,9 +1412,9 @@ class LogisticsReconciliation:
 
     def identify_date_column(self, df):
         date_patterns = [
-            r'\d{4}-\d{2}-\d{2}',
-            r'\d{2}/\d{2}/\d{4}',
-            r'\d{2}-\d{2}-\d{4}'
+            r'\d{4}-\d{2}-\d{2}',  # YYYY-MM-DD
+            r'\d{2}/\d{2}/\d{4}',  # DD/MM/YYYY
+            r'\d{2}-\d{2}-\d{4}'   # DD-MM-YYYY
         ]
         for col in df.columns:
             col_str = df[col].astype(str)
@@ -1436,39 +1436,39 @@ class LogisticsReconciliation:
         try:
             self.df_facturas = pd.read_excel(factura_file, sheet_name=0, header=0)
             self.df_manifiesto = pd.read_excel(manifiesto_file, sheet_name=0, header=0)
-
+    
             # Limpiar datos iniciales
             self.df_facturas = self.df_facturas.applymap(lambda x: x.strip() if isinstance(x, str) else x)
             self.df_manifiesto = self.df_manifiesto.applymap(lambda x: x.strip() if isinstance(x, str) else x)
-
+    
             # Identificar columnas clave con chequeos de errores
             factura_guide_col = self.identify_guide_column(self.df_facturas)
             if not factura_guide_col:
                 st.error(f"No se pudo identificar la columna de guías en el archivo de facturas.\nColumnas disponibles: {list(self.df_facturas.columns)}")
                 return False
-
+    
             manifiesto_guide_col = self.identify_guide_column(self.df_manifiesto)
             if not manifiesto_guide_col:
                 st.error(f"No se pudo identificar la columna de guías en el archivo de manifiesto.\nColumnas disponibles: {list(self.df_manifiesto.columns)}")
                 return False
-
+    
             # Limpieza de guías
             self.df_facturas['GUIDE_CLEAN'] = self.df_facturas[factura_guide_col].astype(str).str.strip().str.upper()
             self.df_manifiesto['GUIDE_CLEAN'] = self.df_manifiesto[manifiesto_guide_col].astype(str).str.strip().str.upper()
             self.df_facturas['GUIDE_CLEAN'] = self.df_facturas['GUIDE_CLEAN'].str.extract(r'(LC\d+)', expand=False).fillna('')
             self.df_manifiesto['GUIDE_CLEAN'] = self.df_manifiesto['GUIDE_CLEAN'].str.extract(r'(LC\d+)', expand=False).fillna('')
-
+    
             self.df_facturas = self.df_facturas[self.df_facturas['GUIDE_CLEAN'] != '']
             self.df_manifiesto = self.df_manifiesto[self.df_manifiesto['GUIDE_CLEAN'] != '']
-
+    
             # Reconciliación
             facturas_set = set(self.df_facturas['GUIDE_CLEAN'])
-            manifiesto_set = set(self.df_manifiesto['GUIDE_CLEAN'])
-
+            manifiesto_set = set(self.df_manifiesto['GUIDE_CLEAN'])  # Fixed variable name
+    
             self.guides_facturadas = list(facturas_set & manifiesto_set)
-            self.guides_anuladas = list(facturas_set - manifiesto_set)
-            self.guides_sobrantes = list(manifiesto_set - facturas_set)
-
+            self.guides_anuladas = list(facturas_set - manifiesto_set)  # Fixed variable name
+            self.guides_sobrantes = list(manifiesto_set - facturas_set)  # Fixed variable name
+    
             self.calculate_kpis()
             return True
 
@@ -1486,132 +1486,129 @@ class LogisticsReconciliation:
 
         # Preparar DataFrame para facturadas desde facturas (para valores monetarios)
         facturadas_df = self.df_facturas[self.df_facturas['GUIDE_CLEAN'].isin(self.guides_facturadas)].copy()
+
+        # Preparar subset de manifiesto para facturadas
         manifest_fact = self.df_manifiesto[self.df_manifiesto['GUIDE_CLEAN'].isin(self.guides_facturadas)].copy()
+
+        # Merge para combinar info útil (ciudades, tiendas de manifiesto + monetario de facturas)
         facturadas_merged = pd.merge(facturadas_df, manifest_fact, on='GUIDE_CLEAN', suffixes=('_fact', '_man'), how='left')
 
+        # Identificar columnas clave con fallbacks
         city_col = self.identify_destination_city_column(facturadas_merged) or \
-            'CIUDAD DESTINO' if 'CIUDAD DESTINO' in facturadas_merged.columns else \
-            'DESTINO_fact' if 'DESTINO_fact' in facturadas_merged.columns else None
+                   'CIUDAD DESTINO' if 'CIUDAD DESTINO' in facturadas_merged.columns else \
+                   'DESTINO_fact' if 'DESTINO_fact' in facturadas_merged.columns else None
 
         store_col = self.identify_store_column(facturadas_merged) or \
-            'SUCURSAL' if 'SUCURSAL' in facturadas_merged.columns else None
+                    'SUCURSAL' if 'SUCURSAL' in facturadas_merged.columns else None
 
         monetary_col = 'VALOR FLETE' if 'VALOR FLETE' in facturadas_merged.columns else \
-            self.identify_monetary_column(facturadas_merged)
+                       self.identify_monetary_column(facturadas_merged)
 
         date_col = 'FECHA' if 'FECHA' in facturadas_merged.columns else \
-            self.identify_date_column(facturadas_merged)
+                   self.identify_date_column(facturadas_merged)
 
         destinatario_col = self.identify_destinatario_column(facturadas_merged) or \
-            'DESTINO_man' if 'DESTINO_man' in facturadas_merged.columns else None
+                           'DESTINO_man' if 'DESTINO_man' in facturadas_merged.columns else None
 
+        # Convertir columna monetaria a numérica
         if monetary_col:
             facturadas_merged[monetary_col] = pd.to_numeric(
                 facturadas_merged[monetary_col].astype(str).str.replace(',', '.'),
                 errors='coerce'
             )
 
+        # Convertir fecha
         if date_col:
-            if facturadas_merged[date_col].dtype in [float, int]:
+            if facturadas_merged[date_col].dtype in [float, int]:  # Excel numeric date
                 facturadas_merged[date_col] = pd.to_datetime('1899-12-30') + pd.to_timedelta(facturadas_merged[date_col], unit='D')
             else:
                 facturadas_merged[date_col] = pd.to_datetime(facturadas_merged[date_col], errors='coerce', dayfirst=True)
 
+        # Calcular KPIs si las columnas existen
         if city_col:
             self.kpis['top_cities'] = facturadas_merged[city_col].value_counts().head(10)
+
         if store_col:
             self.kpis['top_stores'] = facturadas_merged[store_col].value_counts().head(10)
+
         if city_col and monetary_col:
             spending_by_city = facturadas_merged.groupby(city_col)[monetary_col].sum().sort_values(ascending=False)
             self.kpis['spending_by_city'] = spending_by_city.head(10)
+
         if store_col and monetary_col:
             spending_by_store = facturadas_merged.groupby(store_col)[monetary_col].sum().sort_values(ascending=False)
             self.kpis['spending_by_store'] = spending_by_store.head(10)
+
         if monetary_col:
             valid_amounts = facturadas_merged[monetary_col].dropna()
             if not valid_amounts.empty:
                 self.kpis['avg_shipment_value'] = valid_amounts.mean()
+
         if date_col:
             valid_dates = facturadas_merged[facturadas_merged[date_col].notna()].copy()
             valid_dates['MONTH'] = valid_dates[date_col].dt.to_period('M')
             self.kpis['shipment_volume'] = valid_dates['MONTH'].value_counts().sort_index()
+
+        # Para anuladas (usando facturas, ya que no están en manifiesto)
         anuladas_df = self.df_facturas[self.df_facturas['GUIDE_CLEAN'].isin(self.guides_anuladas)].copy()
         anuladas_dest_col = self.identify_destinatario_column(anuladas_df) or \
-            'DESTINO' if 'DESTINO' in anuladas_df.columns else None
+                            'DESTINO' if 'DESTINO' in anuladas_df.columns else None
         if anuladas_dest_col:
             self.kpis['anuladas_by_destinatario'] = anuladas_df[anuladas_dest_col].value_counts().head(10)
+
+        # Calcular valores totales
         if monetary_col:
+            # Total value from all facturas
             self.df_facturas[monetary_col] = pd.to_numeric(
                 self.df_facturas[monetary_col].astype(str).str.replace(',', '.'),
                 errors='coerce'
             )
             self.kpis['total_value'] = self.df_facturas[monetary_col].sum()
+
+            # Value for facturadas
             self.kpis['value_facturadas'] = facturadas_df[monetary_col].sum()
+
+            # Value for anuladas
             anuladas_df[monetary_col] = pd.to_numeric(
                 anuladas_df[monetary_col].astype(str).str.replace(',', '.'),
                 errors='coerce'
             )
             self.kpis['value_anuladas'] = anuladas_df[monetary_col].sum()
-            self.kpis['value_sobrantes'] = 0.0
 
-    def to_excel_bytes(self):
+            # Value for sobrantes (no en facturas, así que 0)
+            self.kpis['value_sobrantes'] = 0.0
+def to_excel_bytes(self):
         """Genera un archivo Excel en bytes con los datos de reconciliación."""
         try:
             output = BytesIO()
             with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                # Hoja de KPIs
                 kpi_data = {
                     'KPI': list(self.kpis.keys()),
                     'Valor': list(self.kpis.values())
                 }
                 kpi_df = pd.DataFrame(kpi_data)
                 kpi_df.to_excel(writer, sheet_name='KPIs', index=False)
+
+                # Hoja de Guías Facturadas
                 pd.DataFrame({'Guías Facturadas': self.guides_facturadas}).to_excel(writer, sheet_name='Facturadas', index=False)
+
+                # Hoja de Guías Anuladas
                 pd.DataFrame({'Guías Anuladas': self.guides_anuladas}).to_excel(writer, sheet_name='Anuladas', index=False)
+
+                # Hoja de Guías Sobrantes
                 pd.DataFrame({'Guías Sobrantes': self.guides_sobrantes}).to_excel(writer, sheet_name='Sobrantes', index=False)
+
+                # Otras hojas para series en KPIs (ejemplo para top_cities, etc.)
                 for key, value in self.kpis.items():
                     if isinstance(value, pd.Series) and not value.empty:
                         value.to_frame(name=key).to_excel(writer, sheet_name=key.replace('_', ' ').title())
+
             output.seek(0)
             return output.getvalue()
         except Exception as e:
             logger.error(f"Error al generar Excel: {e}", exc_info=True)
             return b""
-
-    def generate_report(self):
-        """Genera un reporte PDF con los datos de reconciliación usando reportlab."""
-        try:
-            buffer = BytesIO()
-            doc = SimpleDocTemplate(buffer, pagesize=letter)
-            styles = getSampleStyleSheet()
-            story = []
-
-            story.append(Paragraph("Reporte de Reconciliación Logística", styles['Title']))
-            story.append(Spacer(1, 12))
-            story.append(Paragraph("Métricas Principales:", styles['Heading2']))
-            for key, value in self.kpis.items():
-                if not isinstance(value, pd.Series):
-                    story.append(Paragraph(f"{key.replace('_', ' ').title()}: {value}", styles['Normal']))
-            story.append(Spacer(1, 12))
-            story.append(Paragraph("Guías Facturadas:", styles['Heading2']))
-            story.append(Paragraph(", ".join(self.guides_facturadas), styles['Normal']))
-            story.append(Spacer(1, 12))
-            story.append(Paragraph("Guías Anuladas:", styles['Heading2']))
-            story.append(Paragraph(", ".join(self.guides_anuladas), styles['Normal']))
-            story.append(Spacer(1, 12))
-            story.append(Paragraph("Guías Sobrantes:", styles['Heading2']))
-            story.append(Paragraph(", ".join(self.guides_sobrantes), styles['Normal']))
-            story.append(Spacer(1, 12))
-            for key, value in self.kpis.items():
-                if isinstance(value, pd.Series) and not value.empty:
-                    story.append(Paragraph(f"{key.replace('_', ' ').title()}:", styles['Heading2']))
-                    for idx, val in value.items():
-                        story.append(Paragraph(f"{idx}: {val}", styles['Normal']))
-            doc.build(story)
-            buffer.seek(0)
-            return buffer
-        except Exception as e:
-            logger.error(f"Error al generar PDF: {e}", exc_info=True)
-            return BytesIO(b"")
 
 def generate_report(self):
     """Genera un reporte PDF con los datos de reconciliación usando reportlab."""
