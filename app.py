@@ -16,12 +16,18 @@ import base64
 import io
 import tempfile
 import re
+import sqlite3
 from typing import Dict, List, Optional, Tuple, Any, Union
 import requests
 from io import BytesIO
 from PIL import Image as PILImage
 import os
+import requests
 import pdfplumber
+from reportlab.lib.pagesizes import letter
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+from reportlab.lib.styles import getSampleStyleSheet
+
 if 'user_type' not in st.session_state:
     st.session_state.user_type = None
 if 'password_correct' not in st.session_state:
@@ -1301,6 +1307,12 @@ def generar_pdf_guia(store_name: str, brand: str, url: str, sender_name: str, tr
     except Exception as e:
         logger.error(f"Error al generar PDF de guía: {e}", exc_info=True)
         return b""
+
+def pil_image_to_bytes(pil_image: Image.Image) -> bytes:
+    """Convierte un objeto de imagen de PIL a bytes."""
+    buf = io.BytesIO()
+    pil_image.save(buf, format="PNG")
+    return buf.getvalue()
 
 # ================================
 # FUNCIÓN PARA ELIMINAR GUÍAS
@@ -3830,10 +3842,11 @@ def main():
              solicitar_autenticacion("user")
      
      # Footer
-         st.markdown("""<div class="footer">
-         Sistema de KPIs Aeropostale v2.0 |  2025 Aeropostale. Todos los derechos reservados.<br>
+     st.markdown("""
+     <div class="footer">
+         Sistema de KPIs Aeropostale v2.0 | © 2025 Aeropostale. Todos los derechos reservados.<br>
          Desarrollado por: <a href="mailto:wilson.perez@aeropostale.com">Wilson Pérez</a>
      </div>
      """, unsafe_allow_html=True)
-         if __name__ == "__main__":
+     if __name__ == "__main__":
          main()
