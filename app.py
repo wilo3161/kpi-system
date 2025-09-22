@@ -1337,13 +1337,14 @@ def eliminar_guia(guia_id: int) -> bool:
         logger.error(f"Error al eliminar guía: {e}", exc_info=True)
         return False
 import pandas as pd
+import pdfplumber
 from io import BytesIO
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import getSampleStyleSheet
 import streamlit as st
 
-class LogisticsReconciliation:
+class StreamlitLogisticsReconciliation:
     def __init__(self):
         # Core data structures
         self.df_facturas = None
@@ -1578,83 +1579,70 @@ class LogisticsReconciliation:
             # Value for sobrantes (no en facturas, así que 0)
             self.kpis['value_sobrantes'] = 0.0
 def to_excel_bytes(self):
-        """Genera un archivo Excel en bytes con los datos de reconciliación."""
-        try:
-            output = BytesIO()
-            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                # Hoja de KPIs
-                kpi_data = {
-                    'KPI': list(self.kpis.keys()),
-                    'Valor': list(self.kpis.values())
-                }
-                kpi_df = pd.DataFrame(kpi_data)
-                kpi_df.to_excel(writer, sheet_name='KPIs', index=False)
-
-                # Hoja de Guías Facturadas
-                pd.DataFrame({'Guías Facturadas': self.guides_facturadas}).to_excel(writer, sheet_name='Facturadas', index=False)
-
-                # Hoja de Guías Anuladas
-                pd.DataFrame({'Guías Anuladas': self.guides_anuladas}).to_excel(writer, sheet_name='Anuladas', index=False)
-
-                # Hoja de Guías Sobrantes
-                pd.DataFrame({'Guías Sobrantes': self.guides_sobrantes}).to_excel(writer, sheet_name='Sobrantes', index=False)
-
-                # Otras hojas para series en KPIs (ejemplo para top_cities, etc.)
-                for key, value in self.kpis.items():
-                    if isinstance(value, pd.Series) and not value.empty:
-                        value.to_frame(name=key).to_excel(writer, sheet_name=key.replace('_', ' ').title())
-
-            output.seek(0)
-            return output.getvalue()
-        except Exception as e:
-            logger.error(f"Error al generar Excel: {e}", exc_info=True)
-            return b""
-
-def generate_report(self):
-    """Genera un reporte PDF con los datos de reconciliación usando reportlab."""
+    """Genera y devuelve bytes de un archivo Excel con los datos de reconciliación"""
     try:
-        buffer = BytesIO()
-        doc = SimpleDocTemplate(buffer, pagesize=letter)
-        styles = getSampleStyleSheet()
-        story = []
-
-        # Título
-        story.append(Paragraph("Reporte de Reconciliación Logística", styles['Title']))
-        story.append(Spacer(1, 12))
-
-        # KPIs principales
-        story.append(Paragraph("Métricas Principales:", styles['Heading2']))
-        for key, value in self.kpis.items():
-            if not isinstance(value, pd.Series):
-                story.append(Paragraph(f"{key.replace('_', ' ').title()}: {value}", styles['Normal']))
-        story.append(Spacer(1, 12))
-
-        # Listas de guías
-        story.append(Paragraph("Guías Facturadas:", styles['Heading2']))
-        story.append(Paragraph(", ".join(self.guides_facturadas), styles['Normal']))
-        story.append(Spacer(1, 12))
-
-        story.append(Paragraph("Guías Anuladas:", styles['Heading2']))
-        story.append(Paragraph(", ".join(self.guides_anuladas), styles['Normal']))
-        story.append(Spacer(1, 12))
-
-        story.append(Paragraph("Guías Sobrantes:", styles['Heading2']))
-        story.append(Paragraph(", ".join(self.guides_sobrantes), styles['Normal']))
-        story.append(Spacer(1, 12))
-
-        # Otras series (ejemplo)
-        for key, value in self.kpis.items():
-            if isinstance(value, pd.Series) and not value.empty:
-                story.append(Paragraph(f"{key.replace('_', ' ').title()}:", styles['Heading2']))
-                for idx, val in value.items():
-                    story.append(Paragraph(f"{idx}: {val}", styles['Normal']))
-
-        doc.build(story)
-        buffer.seek(0)
-        return buffer
+        output = BytesIO()
+            
+            # Crear un escritor de Excel
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                # Crear hoja de resumen
+            summary_data = {
+                'Métrica': [
+                'Total Facturadas',
+                'Total Anuladas',
+                'Total Sobrantes',
+                'Valor Total Pagado',
+                'Valor Facturadas',
+                'Valor Anuladas',
+                'Valor Sobrantes',
+                'Valor Promedio de Envío'
+                ],
+                'Valor': [
+                self.kpis['total_facturadas'],
+                self.kpis['total_anuladas'],
+                self.kpis['total_sobrantes'],
+                self.kpis['total_value'],
+                self.kpis['value_facturadas'],
+                self.kpis['value_anuladas'],
+                self.kpis['value_sobrantes'],
+                self.kpis['avg_shipment_value'] if self.kpis['avg_shipment_value'] else 'N/A'
+                ]
+                }
+                
+            df_summary = pd.DataFrame(summary_data)
+            df_summary.to_excel(writer, sheet_name='Resumen', index=False)
+                
+                # Agregar hojas con datos detallados si están disponibles
+            if not self.kpis['top_cities'].empty:
+                   self.kpis['top_cities'].to_excel(writer, sheet_name='Top Ciudades')
+                
+            if not self.kpis['top_stores'].empty:
+                   self.kpis['top_stores'].to_excel(writer, sheet_name='Top Tiendas')
+                
+            if not self.kpis['spending_by_city'].empty:
+                   self.kpis['spending_by_city'].to_excel(writer, sheet_name='Gasto por Ciudad')
+                
+            if not self.kpis['spending_by_store'].empty:
+                   self.kpis['spending_by_store'].to_excel(writer, sheet_name='Gasto por Tienda')
+                
+            if not self.kpis['anuladas_by_destinatario'].empty:
+                   self.kpis['anuladas_by_destinatario'].to_excel(writer, sheet_name='Anuladas por Destinatario')
+                
+            if not self.kpis['shipment_volume'].empty:
+                   self.kpis['shipment_volume'].to_excel(writer, sheet_name='Volumen por Mes')
+        
+        output.seek(0)
+        return output.getvalue()
+        
     except Exception as e:
-        logger.error(f"Error al generar PDF: {e}", exc_info=True)
-        return BytesIO(b"")
+        logger.error(f"Error al generar Excel: {e}", exc_info=True)
+        # Devolver un Excel vacío en caso de error
+        output = BytesIO()
+        df_error = pd.DataFrame({'Error': [f'No se pudo generar el reporte: {str(e)}']})
+        df_error.to_excel(output, index=False)
+        output.seek(0)
+        return output.getvalue()
+
     # ===========================================================
     # Generación de Reporte PDF
     # ===========================================================
@@ -3149,7 +3137,7 @@ def mostrar_reconciliacion():
     st.markdown("<h1 class='header-title animate-fade-in'>📦 Reconciliación Logística Completa</h1>", unsafe_allow_html=True)
     
     if 'reconciler' not in st.session_state:
-        st.session_state.reconciler = LogisticsReconciliation()
+        st.session_state.reconciler = StreamlitLogisticsReconciliation()
         st.session_state.processed = False
         st.session_state.show_details = False
 
@@ -3337,7 +3325,8 @@ def mostrar_reconciliacion():
                 st.write(", ".join(reconciler.guides_sobrantes))
 
         # Descargar reporte
-        st.markdown("<h3 class='section-title animate-fade-in'>Exportar Reporte</h3>", unsafe_allow_html=True)        
+        st.markdown("<h3 class='section-title animate-fade-in'>Exportar Reporte</h3>", unsafe_allow_html=True)
+        
         col1, col2 = st.columns(2)
         with col1:
             # Exportar a Excel
@@ -3830,23 +3819,23 @@ def main():
     elif permiso == "user" and st.session_state.user_type in ["user", "admin"]:
         func()
     elif permiso == "admin" and st.session_state.user_type == "admin":
-         func()
+        func()
     else:
-         # Mostrar mensaje de acceso denegado
-         st.error("🔒 Acceso restringido. Necesita autenticarse para acceder a esta sección.")
-         
-         # Mostrar opciones de autenticación según el tipo requerido
-         if permiso == "admin":
-             solicitar_autenticacion("admin")
-         else:
-             solicitar_autenticacion("user")
-     
-     # Footer
-     st.markdown("""
-     <div class="footer">
-         Sistema de KPIs Aeropostale v2.0 | © 2025 Aeropostale. Todos los derechos reservados.<br>
-         Desarrollado por: <a href="mailto:wilson.perez@aeropostale.com">Wilson Pérez</a>
-     </div>
-     """, unsafe_allow_html=True)
-     if __name__ == "__main__":
-         main()
+        # Mostrar mensaje de acceso denegado
+        st.error("🔒 Acceso restringido. Necesita autenticarse para acceder a esta sección.")
+        
+        # Mostrar opciones de autenticación según el tipo requerido
+        if permiso == "admin":
+            solicitar_autenticacion("admin")
+        else:
+            solicitar_autenticacion("user")
+    
+    # Footer
+    st.markdown("""
+    <div class="footer">
+        Sistema de KPIs Aeropostale v2.0 | © 2025 Aeropostale. Todos los derechos reservados.<br>
+        Desarrollado por: <a href="mailto:wilson.perez@aeropostale.com">Wilson Pérez</a>
+    </div>
+    """, unsafe_allow_html=True)
+if __name__ == "__main__":
+    main()
