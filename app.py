@@ -3830,7 +3830,7 @@ def main():
              solicitar_autenticacion("user")
      
      # Footer
-         st.markdown("""<div class="footer""">
+         st.markdown("""<div class="footer">
          Sistema de KPIs Aeropostale v2.0 |  2025 Aeropostale. Todos los derechos reservados.<br>
          Desarrollado por: <a href="mailto:wilson.perez@aeropostale.com">Wilson Pérez</a>
      </div>
