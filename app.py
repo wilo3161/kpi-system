@@ -2842,7 +2842,40 @@ def mostrar_generacion_guias():
     tab1, tab2 = st.tabs(["📋 Generar Guía", "🏬 Gestionar Tiendas"])
     
     with tab1:
-        # Código existente para generar guías
+        # ===================================================================
+        # INICIO DE CAMBIOS: Carga dinámica de imágenes desde GitHub
+        # ===================================================================
+
+        # URLs "raw" de las imágenes desde tu repositorio de GitHub.
+        # Asegúrate de que tu usuario (wilo3161) y repo (kpi-system) sean correctos.
+        url_fashion_logo = "https://raw.githubusercontent.com/wilo3161/kpi-system/main/images/Fashion.jpg"
+        url_tempo_logo = "https://raw.githubusercontent.com/wilo3161/kpi-system/main/images/Tempo.jpg"
+
+        # Dividimos la pantalla en dos columnas para una mejor disposición
+        col_controles, col_imagen = st.columns([2, 1])
+
+        with col_controles:
+            st.markdown("### 1. Seleccione la Empresa")
+            # Este selector está FUERA del formulario para que la imagen se actualice al instante.
+            brand = st.radio(
+                "Seleccione Empresa:", 
+                ["Fashion", "Tempo"], 
+                horizontal=True, 
+                key="brand_select",
+                label_visibility="collapsed" # Oculta la etiqueta "Seleccione Empresa"
+            )
+
+        with col_imagen:
+            # Se muestra la imagen correspondiente a la selección del radio button.
+            if brand == "Tempo":
+                st.image(url_tempo_logo, caption="Logo Tempo", use_column_width='auto')
+            else: # Por defecto o si es "Fashion"
+                st.image(url_fashion_logo, caption="Logo Fashion Club", use_column_width='auto')
+        
+        # ===================================================================
+        # FIN DE CAMBIOS
+        # ===================================================================
+
         # Obtener datos necesarios
         tiendas = obtener_tiendas()
         remitentes = obtener_remitentes()
@@ -2859,39 +2892,38 @@ def mostrar_generacion_guias():
         
         # Formulario para generar guía
         st.markdown("<div class='guide-section animate-fade-in'>", unsafe_allow_html=True)
-        st.markdown("<h2 class='section-title animate-fade-in'>Generar Nueva Guía</h2>", unsafe_allow_html=True)
+        st.markdown("<h2 class='section-title animate-fade-in'>2. Complete los Datos de la Guía</h2>", unsafe_allow_html=True)
         
         with st.form("form_generar_guia", clear_on_submit=False):
+            # El selector de "brand" ya no es necesario aquí porque lo definimos arriba
             col1, col2 = st.columns(2)
             with col1:
                 store_name = st.selectbox("Seleccione Tienda", tiendas['name'].tolist(), key="store_select")
-                brand = st.radio("Seleccione Empresa:", ["Fashion", "Tempo"], horizontal=True, key="brand_select")
             
             with col2:
                 sender_name = st.selectbox("Seleccione Remitente:", options=remitentes['name'].tolist(), key="sender_select")
-                url = st.text_input("Ingrese URL del Pedido:", key="url_input", placeholder="https://...")
+            
+            url = st.text_input("Ingrese URL del Pedido:", key="url_input", placeholder="https://...")
             
             # Botón de submit dentro del formulario
             submitted = st.form_submit_button("Generar Guía", use_container_width=True)
             
             if submitted:
+                # La variable 'brand' ya contiene la selección del radio button de arriba.
                 if not all([store_name, brand, url, sender_name]):
                     st.markdown("<div class='error-box animate-fade-in'>❌ Por favor, complete todos los campos.</div>", unsafe_allow_html=True)
                     st.session_state.show_preview = False
                 elif not url.startswith(('http://', 'https://')):
-                    st.markdown("<div class='error-box animate-fade-in'>❌ La URL debe comenzar con http:// or https://</div>", unsafe_allow_html=True)
+                    st.markdown("<div class='error-box animate-fade-in'>❌ La URL debe comenzar con http:// o https://</div>", unsafe_allow_html=True)
                     st.session_state.show_preview = False
                 else:
-                    # Guardar la guía
                     if guardar_guia(store_name, brand, url, sender_name):
                         st.session_state.show_preview = True
-                        # Obtener información del remitente
                         remitente_info = remitentes[remitentes['name'] == sender_name].iloc[0]
                         st.session_state.remitente_address = remitente_info['address']
                         st.session_state.remitente_phone = remitente_info['phone']
                         st.session_state.tracking_number = generar_numero_seguimiento(1)
                         
-                        # Generar PDF y guardarlo en session state
                         st.session_state.pdf_data = generar_pdf_guia(
                             store_name, brand, url, sender_name, st.session_state.tracking_number
                         )
@@ -2903,7 +2935,7 @@ def mostrar_generacion_guias():
         
         st.markdown("</div>", unsafe_allow_html=True)
         
-        # Previsualización de la guía
+        # Previsualización de la guía (esta parte no necesita cambios)
         if st.session_state.show_preview:
             st.markdown("<div class='guide-section animate-fade-in'>", unsafe_allow_html=True)
             st.markdown("<h2 class='section-title animate-fade-in'>Previsualización de la Guía</h2>", unsafe_allow_html=True)
@@ -2956,10 +2988,11 @@ def mostrar_generacion_guias():
             st.markdown("</div>", unsafe_allow_html=True)
     
     with tab2:
-        # Nueva sección para gestionar tiendas (requiere permisos de admin)
+        # La sección para gestionar tiendas no necesita cambios
         if not verificar_password("admin"):
             solicitar_autenticacion("admin")
         else:
+            # (El código existente para gestionar tiendas va aquí...)
             st.markdown("<h2 class='section-title animate-fade-in'>Gestión de Tiendas</h2>", unsafe_allow_html=True)
             
             # Obtener tiendas actuales
