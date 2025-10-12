@@ -24,14 +24,12 @@ from PIL import Image as PILImage
 import os
 import requests
 import pdfplumber
-
-# Imports para la nueva funcionalidad de reconciliación
-import matplotlib.pyplot as plt
-import seaborn as sns
 from reportlab.lib.pagesizes import letter
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image as ReportLabImage
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image as ReportLabImage
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib import colors
+import matplotlib.pyplot as plt
+import seaborn as sns
 import warnings
 
 warnings.filterwarnings('ignore')
@@ -1119,7 +1117,9 @@ def verificar_imagen_existe(url: str) -> bool:
 def obtener_url_logo(brand: str) -> str:
     """Obtiene la URL pública del logo de la marca desde Supabase Storage"""
     brand_lower = brand.lower()
-    
+    brand_upper = brand.upper()
+    brand_capitalize = brand.capitalize()
+
     # URLs predefinidas para marcas específicas (más eficiente)
     branded_logos = {
         "fashion": "https://nsgdyqoqzlcyyameccqn.supabase.co/storage/v1/object/public/images/Fashion.jpg",
@@ -1140,8 +1140,6 @@ def obtener_url_logo(brand: str) -> str:
         bucket_name = 'images'
         
         # Intentar con diferentes extensiones y formatos
-        brand_upper = brand.upper()
-        brand_capitalize = brand.capitalize()
         posibles_nombres = [
             f"{brand_lower}.jpg",
             f"{brand_lower}.jpeg",
@@ -1349,8 +1347,9 @@ def eliminar_guia(guia_id: int) -> bool:
         return False
 
 # ===========================================================
-# CÓDIGO DE RECONCILIACIÓN LOGÍSTICA (IMPLEMENTACIÓN SOLICITADA)
+# CLASE DE RECONCILIACIÓN LOGÍSTICA (INTEGRADA)
 # ===========================================================
+
 class StreamlitLogisticsReconciliation:
     def __init__(self):
         # Estructuras de datos principales
@@ -1358,11 +1357,13 @@ class StreamlitLogisticsReconciliation:
         self.df_manifiesto = None
         self.guides_facturadas = []
         self.guides_anuladas = []
+        self.guides_sobrantes_factura = []
 
         # Resultados de KPI
         self.kpis = {
             'total_facturadas': 0,
             'total_anuladas': 0,
+            'total_sobrantes_factura': 0,
             'total_value': 0.0,
             'value_facturadas': 0.0,
             'value_anuladas': 0.0,
@@ -1379,9 +1380,10 @@ class StreamlitLogisticsReconciliation:
     # Identificación de columnas clave
     # ===========================================================
     def identify_guide_column(self, df):
+        guide_pattern = r'(LC\d+|\d{6,})'
         for col in df.columns:
-            extracted = df[col].astype(str).str.extract(r'(LC\d+)', expand=False)
-            if extracted.notna().mean() > 0.3:  # Umbral ajustado al 30% para mayor flexibilidad
+            extracted = df[col].astype(str).str.extract(guide_pattern, expand=False)
+            if extracted.notna().mean() > 0.3:
                 return col
         return None
 
@@ -1392,35 +1394,36 @@ class StreamlitLogisticsReconciliation:
             'MILAGRO', 'LOJA', 'RIOBAMBA', 'ESMERALDAS', 'LAGO AGRIO'
         ]
         for col in df.columns:
-            upper_col = df[col].astype(str).str.upper()
-            if upper_col.isin(ecuador_cities).mean() > 0.3:
-                return col
+            if df[col].dtype == 'object':
+                upper_col = df[col].astype(str).str.upper()
+                if upper_col.isin(ecuador_cities).mean() > 0.3:
+                    return col
         return None
 
     def identify_store_column(self, df):
         store_keywords = ['AEROPOSTALE', 'LOCAL', 'SHOPPING', 'MALL', 'CENTRO COMERCIAL']
         regex = '|'.join(store_keywords)
         for col in df.columns:
-            if df[col].astype(str).str.upper().str.contains(regex).mean() > 0.4:
-                return col
+            if df[col].dtype == 'object':
+                if df[col].astype(str).str.upper().str.contains(regex).mean() > 0.4:
+                    return col
         return None
 
-    def identify_monetary_column(self, df):
+    def identify_monetary_column_fallback(self, df):
+        # Este es el método de respaldo para "adivinar"
         for col in df.columns:
-            try:
-                numeric_vals = pd.to_numeric(df[col].astype(str).str.replace(',', '.'), errors='coerce')  # Manejar comas
-                if numeric_vals.notna().mean() > 0.7 and (numeric_vals > 0).mean() > 0.5:
-                    return col
-            except Exception:
-                continue
+            # Asegurarse de que no sea una columna de guía numérica
+            if df[col].astype(str).str.match(r'^\d{6,}$').mean() < 0.5:
+                try:
+                    numeric_vals = pd.to_numeric(df[col].astype(str).str.replace(',', '.'), errors='coerce')
+                    if numeric_vals.notna().mean() > 0.7 and (numeric_vals > 0).mean() > 0.5:
+                        return col
+                except Exception:
+                    continue
         return None
 
     def identify_date_column(self, df):
-        date_patterns = [
-            r'\d{4}-\d{2}-\d{2}',  # YYYY-MM-DD
-            r'\d{2}/\d{2}/\d{4}',  # DD/MM/YYYY
-            r'\d{2}-\d{2}-\d{4}'   # DD-MM-YYYY
-        ]
+        date_patterns = [r'\d{4}-\d{2}-\d{2}', r'\d{2}/\d{2}/\d{4}', r'\d{2}-\d{2}-\d{4}']
         for col in df.columns:
             col_str = df[col].astype(str)
             for pattern in date_patterns:
@@ -1442,37 +1445,41 @@ class StreamlitLogisticsReconciliation:
             self.df_facturas = pd.read_excel(factura_file, sheet_name=0, header=0)
             self.df_manifiesto = pd.read_excel(manifiesto_file, sheet_name=0, header=0)
 
-            # Limpiar datos iniciales
             self.df_facturas = self.df_facturas.applymap(lambda x: x.strip() if isinstance(x, str) else x)
             self.df_manifiesto = self.df_manifiesto.applymap(lambda x: x.strip() if isinstance(x, str) else x)
 
-            # Identificar columnas clave con chequeos de errores
             factura_guide_col = self.identify_guide_column(self.df_facturas)
             if not factura_guide_col:
-                st.error(f"No se pudo identificar la columna de guías en el archivo de facturas.\nColumnas disponibles: {list(self.df_facturas.columns)}")
+                st.error("No se pudo identificar una columna de guías válida en el archivo de facturas.")
                 return False
 
             manifiesto_guide_col = self.identify_guide_column(self.df_manifiesto)
             if not manifiesto_guide_col:
-                st.error(f"No se pudo identificar la columna de guías en el archivo de manifiesto.\nColumnas disponibles: {list(self.df_manifiesto.columns)}")
+                st.error("No se pudo identificar una columna de guías válida en el archivo de manifiesto.")
                 return False
 
-            # Limpieza de guías
-            self.df_facturas['GUIDE_CLEAN'] = self.df_facturas[factura_guide_col].astype(str).str.strip().str.upper()
-            self.df_manifiesto['GUIDE_CLEAN'] = self.df_manifiesto[manifiesto_guide_col].astype(str).str.strip().str.upper()
-            self.df_facturas['GUIDE_CLEAN'] = self.df_facturas['GUIDE_CLEAN'].str.extract(r'(LC\d+)', expand=False).fillna('')
-            self.df_manifiesto['GUIDE_CLEAN'] = self.df_manifiesto['GUIDE_CLEAN'].str.extract(r'(LC\d+)', expand=False).fillna('')
+            guide_pattern = r'(LC\d+|\d{6,})'
 
-            self.df_facturas = self.df_facturas[self.df_facturas['GUIDE_CLEAN'] != '']
-            self.df_manifiesto = self.df_manifiesto[self.df_manifiesto['GUIDE_CLEAN'] != '']
+            self.df_facturas['GUIDE_CLEAN'] = self.df_facturas[factura_guide_col].astype(str).str.strip().str.upper().str.extract(guide_pattern, expand=False)
+            invalid_guides_factura = self.df_facturas[self.df_facturas['GUIDE_CLEAN'].isna()]
+            if not invalid_guides_factura.empty:
+                st.warning(f"⚠️ Se encontraron {len(invalid_guides_factura)} filas en Facturas sin formato de guía válido. Serán ignoradas:")
+                st.dataframe(invalid_guides_factura[[factura_guide_col]].rename(columns={factura_guide_col: "Guías con formato incorrecto"}), use_container_width=True)
+            self.df_facturas.dropna(subset=['GUIDE_CLEAN'], inplace=True)
+            
+            self.df_manifiesto['GUIDE_CLEAN'] = self.df_manifiesto[manifiesto_guide_col].astype(str).str.strip().str.upper().str.extract(guide_pattern, expand=False)
+            invalid_guides_manifiesto = self.df_manifiesto[self.df_manifiesto['GUIDE_CLEAN'].isna()]
+            if not invalid_guides_manifiesto.empty:
+                st.warning(f"⚠️ Se encontraron {len(invalid_guides_manifiesto)} filas en Manifiesto sin formato de guía válido. Serán ignoradas:")
+                st.dataframe(invalid_guides_manifiesto[[manifiesto_guide_col]].rename(columns={manifiesto_guide_col: "Guías con formato incorrecto"}), use_container_width=True)
+            self.df_manifiesto.dropna(subset=['GUIDE_CLEAN'], inplace=True)
 
-            # Reconciliación
             facturas_set = set(self.df_facturas['GUIDE_CLEAN'])
             manifiesto_set = set(self.df_manifiesto['GUIDE_CLEAN'])
 
             self.guides_facturadas = list(facturas_set & manifiesto_set)
-            # **CAMBIO**: Anuladas ahora son las que están en manifiesto pero no en facturas
             self.guides_anuladas = list(manifiesto_set - facturas_set)
+            self.guides_sobrantes_factura = list(facturas_set - manifiesto_set)
 
             self.calculate_kpis()
             return True
@@ -1487,93 +1494,81 @@ class StreamlitLogisticsReconciliation:
     def calculate_kpis(self):
         self.kpis['total_facturadas'] = len(self.guides_facturadas)
         self.kpis['total_anuladas'] = len(self.guides_anuladas)
+        self.kpis['total_sobrantes_factura'] = len(self.guides_sobrantes_factura)
 
-        # Preparar DataFrame para facturadas desde facturas (para valores monetarios)
         facturadas_df = self.df_facturas[self.df_facturas['GUIDE_CLEAN'].isin(self.guides_facturadas)].copy()
-
-        # Preparar subset de manifiesto para facturadas
         manifest_fact = self.df_manifiesto[self.df_manifiesto['GUIDE_CLEAN'].isin(self.guides_facturadas)].copy()
+        
+        if not facturadas_df.empty and not manifest_fact.empty:
+             facturadas_merged = pd.merge(facturadas_df, manifest_fact, on='GUIDE_CLEAN', suffixes=('_fact', '_man'), how='left')
+        else:
+            facturadas_merged = facturadas_df.copy()
 
-        # Merge para combinar info útil (ciudades, tiendas de manifiesto + monetario de facturas)
-        facturadas_merged = pd.merge(facturadas_df, manifest_fact, on='GUIDE_CLEAN', suffixes=('_fact', '_man'), how='left')
+        # ===========================================================
+        # **LÓGICA MEJORADA PARA ENCONTRAR LA COLUMNA DE SUBTOTAL**
+        # ===========================================================
+        monetary_col = None
+        # 1. Buscar prioritariamente una columna llamada 'SUBTOTAL'
+        for col in self.df_facturas.columns:
+            if 'SUBTOTAL' in str(col).upper():
+                monetary_col = col
+                st.success(f"Columna de subtotal encontrada: **'{monetary_col}'**")
+                break
+        
+        # 2. Si no se encuentra, usar el método de respaldo para "adivinar"
+        if not monetary_col:
+            monetary_col = self.identify_monetary_column_fallback(self.df_facturas)
+            if monetary_col:
+                st.info(f"No se encontró 'Subtotal'. Usando columna numérica detectada: **'{monetary_col}'**")
 
-        # Identificar columnas clave con fallbacks
-        city_col = self.identify_destination_city_column(facturadas_merged) or \
-                   'CIUDAD DESTINO' if 'CIUDAD DESTINO' in facturadas_merged.columns else \
-                   'DESTINO_fact' if 'DESTINO_fact' in facturadas_merged.columns else None
+        # 3. Si no se encuentra ninguna columna de dinero, detener y avisar.
+        if not monetary_col:
+            st.error("Error crítico: No se pudo encontrar ninguna columna de valores monetarios en el archivo de facturas.")
+            return # Detiene la ejecución de esta función
+        # ===========================================================
 
-        store_col = self.identify_store_column(facturadas_merged) or \
-                    'SUCURSAL' if 'SUCURSAL' in facturadas_merged.columns else None
+        city_col = self.identify_destination_city_column(facturadas_merged)
+        store_col = self.identify_store_column(facturadas_merged)
+        date_col = self.identify_date_column(facturadas_merged)
+        destinatario_col = self.identify_destinatario_column(self.df_manifiesto)
 
-        monetary_col = 'VALOR FLETE' if 'VALOR FLETE' in facturadas_merged.columns else \
-                       self.identify_monetary_column(facturadas_merged)
+        # --- Cálculos de KPIs ---
+        if not facturadas_merged.empty:
+            if monetary_col in facturadas_merged.columns:
+                facturadas_merged[monetary_col] = pd.to_numeric(facturadas_merged[monetary_col].astype(str).str.replace(',', '.'), errors='coerce')
+            if date_col in facturadas_merged.columns:
+                if facturadas_merged[date_col].dtype in [float, int]:
+                    facturadas_merged[date_col] = pd.to_datetime('1899-12-30') + pd.to_timedelta(facturadas_merged[date_col], unit='D')
+                else:
+                    facturadas_merged[date_col] = pd.to_datetime(facturadas_merged[date_col], errors='coerce', dayfirst=True)
 
-        date_col = 'FECHA' if 'FECHA' in facturadas_merged.columns else \
-                   self.identify_date_column(facturadas_merged)
+            if city_col: self.kpis['top_cities'] = facturadas_merged[city_col].value_counts().head(10)
+            if store_col: self.kpis['top_stores'] = facturadas_merged[store_col].value_counts().head(10)
+            if city_col and monetary_col: self.kpis['spending_by_city'] = facturadas_merged.groupby(city_col)[monetary_col].sum().sort_values(ascending=False).head(10)
+            if store_col and monetary_col: self.kpis['spending_by_store'] = facturadas_merged.groupby(store_col)[monetary_col].sum().sort_values(ascending=False).head(10)
 
-        destinatario_col = self.identify_destinatario_column(facturadas_merged) or \
-                           'DESTINO_man' if 'DESTINO_man' in facturadas_merged.columns else None
+            if monetary_col in facturadas_merged.columns:
+                valid_amounts = facturadas_merged[monetary_col].dropna()
+                if not valid_amounts.empty: self.kpis['avg_shipment_value'] = valid_amounts.mean()
 
-        # Convertir columna monetaria a numérica
-        if monetary_col:
-            facturadas_merged[monetary_col] = pd.to_numeric(
-                facturadas_merged[monetary_col].astype(str).str.replace(',', '.'),
-                errors='coerce'
-            )
+            if date_col in facturadas_merged.columns:
+                valid_dates = facturadas_merged[facturadas_merged[date_col].notna()].copy()
+                valid_dates['MONTH'] = valid_dates[date_col].dt.to_period('M')
+                self.kpis['shipment_volume'] = valid_dates['MONTH'].value_counts().sort_index()
 
-        # Convertir fecha
-        if date_col:
-            if facturadas_merged[date_col].dtype in [float, int]:  # Fecha numérica de Excel
-                facturadas_merged[date_col] = pd.to_datetime('1899-12-30') + pd.to_timedelta(facturadas_merged[date_col], unit='D')
-            else:
-                facturadas_merged[date_col] = pd.to_datetime(facturadas_merged[date_col], errors='coerce', dayfirst=True)
-
-        # Calcular KPIs si las columnas existen
-        if city_col:
-            self.kpis['top_cities'] = facturadas_merged[city_col].value_counts().head(10)
-
-        if store_col:
-            self.kpis['top_stores'] = facturadas_merged[store_col].value_counts().head(10)
-
-        if city_col and monetary_col:
-            spending_by_city = facturadas_merged.groupby(city_col)[monetary_col].sum().sort_values(ascending=False)
-            self.kpis['spending_by_city'] = spending_by_city.head(10)
-
-        if store_col and monetary_col:
-            spending_by_store = facturadas_merged.groupby(store_col)[monetary_col].sum().sort_values(ascending=False)
-            self.kpis['spending_by_store'] = spending_by_store.head(10)
-
-        if monetary_col:
-            valid_amounts = facturadas_merged[monetary_col].dropna()
-            if not valid_amounts.empty:
-                self.kpis['avg_shipment_value'] = valid_amounts.mean()
-
-        if date_col:
-            valid_dates = facturadas_merged[facturadas_merged[date_col].notna()].copy()
-            valid_dates['MONTH'] = valid_dates[date_col].dt.to_period('M')
-            self.kpis['shipment_volume'] = valid_dates['MONTH'].value_counts().sort_index()
-
-        # **CAMBIO**: Para anuladas, se usa el manifiesto, ya que no están en facturas
         anuladas_df = self.df_manifiesto[self.df_manifiesto['GUIDE_CLEAN'].isin(self.guides_anuladas)].copy()
-        anuladas_dest_col = self.identify_destinatario_column(anuladas_df) or \
-                            'DESTINO' if 'DESTINO' in anuladas_df.columns else None
-        if anuladas_dest_col:
-            self.kpis['anuladas_by_destinatario'] = anuladas_df[anuladas_dest_col].value_counts().head(10)
+        if destinatario_col and destinatario_col in anuladas_df.columns:
+            self.kpis['anuladas_by_destinatario'] = anuladas_df[destinatario_col].value_counts().head(10)
+        
+        # --- Cálculos de Valores Totales ---
+        self.df_facturas[monetary_col] = pd.to_numeric(self.df_facturas[monetary_col].astype(str).str.replace(',', '.'), errors='coerce')
+        
+        self.kpis['total_value'] = self.df_facturas[monetary_col].sum()
+        
+        facturadas_df_monetary = self.df_facturas[self.df_facturas['GUIDE_CLEAN'].isin(self.guides_facturadas)]
+        self.kpis['value_facturadas'] = facturadas_df_monetary[monetary_col].sum()
 
-        # Calcular valores totales
-        if monetary_col:
-            # Valor total desde todas las facturas
-            self.df_facturas[monetary_col] = pd.to_numeric(
-                self.df_facturas[monetary_col].astype(str).str.replace(',', '.'),
-                errors='coerce'
-            )
-            self.kpis['total_value'] = self.df_facturas[monetary_col].sum()
-
-            # Valor para facturadas
-            self.kpis['value_facturadas'] = facturadas_df[monetary_col].sum()
-
-            # **CAMBIO**: El valor de las anuladas es 0 porque no están en las facturas
-            self.kpis['value_anuladas'] = 0.0
+        self.kpis['value_anuladas'] = 0.0
 
     # ===========================================================
     # Generación de Reporte PDF
@@ -1584,75 +1579,75 @@ class StreamlitLogisticsReconciliation:
         elements = []
         styles = getSampleStyleSheet()
 
-        # Título
-        elements.append(Paragraph("Logistics Reconciliation Report", styles['Title']))
+        elements.append(Paragraph("Reporte de Reconciliación Logística", styles['Title']))
         elements.append(Spacer(1, 12))
-
-        # KPIs Básicos
-        elements.append(Paragraph("Key Performance Indicators", styles['Heading2']))
+        elements.append(Paragraph("Indicadores Clave de Desempeño", styles['Heading2']))
+        
         kpi_data = [
             ['Métrica', 'Valor'],
-            ['Total Facturadas', self.kpis['total_facturadas']],
+            ['Total Concordantes', self.kpis['total_facturadas']],
             ['Total Anuladas', self.kpis['total_anuladas']],
-            ['Valor Total Pagado', f"${self.kpis['total_value']:.2f}"],
-            ['Valor Facturadas', f"${self.kpis['value_facturadas']:.2f}"],
-            ['Valor Anuladas', f"${self.kpis['value_anuladas']:.2f}"],
-            ['Valor Promedio de Envío', f"${self.kpis['avg_shipment_value']:.2f}" if self.kpis['avg_shipment_value'] else 'N/A']
+            ['Total Sobrantes en Factura', self.kpis['total_sobrantes_factura']],
+            ['Valor Total (Bruto Facturas)', f"${self.kpis['total_value']:,.2f}"],
+            ['Valor Concordante', f"${self.kpis['value_facturadas']:,.2f}"],
+            ['Valor Anuladas', f"${self.kpis['value_anuladas']:,.2f}"],
+            ['Valor Promedio de Envío (Concordantes)', f"${self.kpis['avg_shipment_value']:,.2f}" if self.kpis['avg_shipment_value'] else 'N/A']
         ]
         table = Table(kpi_data)
         table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+            ('BACKGROUND', (0, 0), (-1, 0), colors.grey), ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'), ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12), ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
             ('GRID', (0, 0), (-1, -1), 1, colors.black)
         ]))
         elements.append(table)
         elements.append(Spacer(1, 12))
 
-        # Función para agregar tabla desde Series
         def add_series_table(title, series, is_float=False):
             if not series.empty:
                 elements.append(Paragraph(title, styles['Heading2']))
-                data = [['Categoría', 'Valor']] + [[str(idx), f"{val:.2f}" if is_float else val] for idx, val in series.items()]
+                data = [['Categoría', 'Valor']] + [[str(idx), f"${val:,.2f}" if is_float else val] for idx, val in series.items()]
                 table = Table(data)
                 table.setStyle(TableStyle([
-                    ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
-                    ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-                    ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-                    ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-                    ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-                    ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+                    ('BACKGROUND', (0, 0), (-1, 0), colors.grey), ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                    ('ALIGN', (0, 0), (-1, -1), 'CENTER'), ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                    ('BOTTOMPADDING', (0, 0), (-1, 0), 12), ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
                     ('GRID', (0, 0), (-1, -1), 1, colors.black)
                 ]))
                 elements.append(table)
                 elements.append(Spacer(1, 12))
 
-        add_series_table("Top Ciudades", self.kpis['top_cities'])
-        add_series_table("Top Tiendas", self.kpis['top_stores'])
-        add_series_table("Gasto por Ciudad", self.kpis['spending_by_city'], is_float=True)
-        add_series_table("Gasto por Tienda", self.kpis['spending_by_store'], is_float=True)
+        add_series_table("Top Ciudades (Envíos Concordantes)", self.kpis['top_cities'])
+        add_series_table("Top Tiendas (Envíos Concordantes)", self.kpis['top_stores'])
+        add_series_table("Gasto por Ciudad (Envíos Concordantes)", self.kpis['spending_by_city'], is_float=True)
+        add_series_table("Gasto por Tienda (Envíos Concordantes)", self.kpis['spending_by_store'], is_float=True)
         add_series_table("Anuladas por Destinatario", self.kpis['anuladas_by_destinatario'])
-
-        # Gráfico de Volumen de Envíos
+        
         if not self.kpis['shipment_volume'].empty:
-            fig, ax = plt.subplots()
-            self.kpis['shipment_volume'].plot(kind='bar', ax=ax)
-            ax.set_title('Volumen de Envíos por Mes')
+            fig, ax = plt.subplots(figsize=(8, 4))
+            # Convert PeriodIndex to string for plotting
+            shipment_volume_str_index = self.kpis['shipment_volume'].copy()
+            shipment_volume_str_index.index = shipment_volume_str_index.index.astype(str)
+            shipment_volume_str_index.plot(kind='bar', ax=ax, color='skyblue')
+
+            ax.set_title('Volumen de Envíos por Mes (Concordantes)')
+            ax.set_ylabel('Número de Guías')
+            ax.tick_params(axis='x', rotation=45)
+            plt.tight_layout()
+            
             img_buffer = BytesIO()
-            fig.savefig(img_buffer, format='png')
+            fig.savefig(img_buffer, format='PNG', dpi=300)
             img_buffer.seek(0)
-            elements.append(Paragraph("Volumen de Envíos por Mes", styles['Heading2']))
-            elements.append(ReportLabImage(img_buffer, width=400, height=200))
+            
+            elements.append(Paragraph("Volumen de Envíos Mensual", styles['Heading2']))
+            elements.append(ReportLabImage(img_buffer, width=450, height=225))
             elements.append(Spacer(1, 12))
             plt.close(fig)
 
         doc.build(elements)
         buffer.seek(0)
         return buffer
-
+ 
 # ================================
 # SISTEMA DE AUTENTICACIÓN
 # ================================
@@ -2430,7 +2425,7 @@ def mostrar_analisis_historico_kpis():
 
 def mostrar_ingreso_datos_kpis():
     """Muestra la interfaz para ingresar datos de KPIs"""
-    if not verificar_password("admin"):
+    if not verificar_password("admin"):  # ← Misma indentación que las demás líneas
         solicitar_autenticacion("admin")
         return
     st.markdown("<h1 class='header-title animate-fade-in'>📥 Ingreso de Datos de KPIs</h1>", unsafe_allow_html=True)
@@ -2747,12 +2742,6 @@ def mostrar_gestion_trabajadores_kpis():
         logger.error(f"Error en gestión de trabajadores: {e}", exc_info=True)
         st.markdown("<div class='error-box animate-fade-in'>❌ Error del sistema al gestionar trabajadores.</div>", unsafe_allow_html=True)
 
-def pil_image_to_bytes(pil_image: Image.Image) -> bytes:
-    """Convierte un objeto de imagen de PIL a bytes."""
-    buf = io.BytesIO()
-    pil_image.save(buf, format="PNG")
-    return buf.getvalue()
-
 # ================================
 # NUEVAS FUNCIONES PARA GESTIÓN DE TIENDAS
 # ================================
@@ -3063,109 +3052,111 @@ def mostrar_generacion_guias():
                             st.rerun()
                         else:
                             st.error("❌ Error al agregar la tienda.")
-
 def mostrar_reconciliacion():
-    """Muestra la interfaz de reconciliación logística solicitada."""
-    st.title("📦 Logistics Reconciliation & Business Intelligence Tool")
+    """Muestra la interfaz de reconciliación logística"""
+    st.markdown("<h1 class='header-title animate-fade-in'>📦 Herramienta de Reconciliación Logística y BI</h1>", unsafe_allow_html=True)
 
     if 'reconciler' not in st.session_state:
         st.session_state.reconciler = StreamlitLogisticsReconciliation()
         st.session_state.processed = False
         st.session_state.show_details = False
 
-    factura_file = st.sidebar.file_uploader(
-        "Upload Invoice File (Excel)",
-        type=['xlsx', 'xls'],
-        key="rec_factura_file"
-    )
-
-    manifiesto_file = st.sidebar.file_uploader(
-        "Upload Manifest File (Excel)",
-        type=['xlsx', 'xls'],
-        key="rec_manifiesto_file"
-    )
-
-    process_btn = st.sidebar.button("🚀 Process Files")
-
-    if process_btn and factura_file and manifiesto_file:
-        with st.spinner("Processing files..."):
-            st.session_state.processed = st.session_state.reconciler.process_files(
-                factura_file, manifiesto_file
-            )
+    st.markdown("<div class='guide-section animate-fade-in'>", unsafe_allow_html=True)
+    st.markdown("<h2 class='section-title'>Carga de Archivos</h2>", unsafe_allow_html=True)
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        factura_file = st.file_uploader("Cargar Archivo de Facturas (Excel)", type=['xlsx', 'xls'])
+    with col2:
+        manifiesto_file = st.file_uploader("Cargar Archivo de Manifiesto (Excel)", type=['xlsx', 'xls'])
+    
+    if st.button("🚀 Procesar Archivos", use_container_width=True):
+        if factura_file and manifiesto_file:
+            with st.spinner("Procesando y reconciliando archivos..."):
+                st.session_state.processed = st.session_state.reconciler.process_files(factura_file, manifiesto_file)
+        else:
+            st.warning("Por favor, carga ambos archivos.")
+    
+    st.markdown("</div>", unsafe_allow_html=True)
 
     if st.session_state.processed:
         reconciler = st.session_state.reconciler
         kpis = reconciler.kpis
 
-        st.header("📊 Key Performance Indicators")
-
-        # **CAMBIO**: Se ajustan las columnas de 4 a 3 para las métricas principales
+        st.markdown("<h2 class='section-title'>📊 Resumen de Reconciliación</h2>", unsafe_allow_html=True)
+        
         col1, col2, col3 = st.columns(3)
-        col1.metric("Total Facturadas", kpis['total_facturadas'])
-        col2.metric("Total Anuladas", kpis['total_anuladas'])
-        col3.metric("Valor Promedio de Envío", f"${kpis['avg_shipment_value']:.2f}" if kpis['avg_shipment_value'] else "N/A")
+        col1.metric("Guías Concordantes", f"{kpis['total_facturadas']:,}", help="Guías encontradas en Facturas y Manifiesto.")
+        col2.metric("Guías Anuladas", f"{kpis['total_anuladas']:,}", help="Guías en Manifiesto pero NO en Facturas.")
+        col3.metric("Guías Sobrantes", f"{kpis['total_sobrantes_factura']:,}", help="Guías en Facturas pero NO en Manifiesto.")
 
-        # **CAMBIO**: Se ajustan las columnas de 4 a 3 para las métricas de valor
         col4, col5, col6 = st.columns(3)
-        col4.metric("Valor Total Pagado", f"${kpis['total_value']:.2f}")
-        col5.metric("Valor Facturadas", f"${kpis['value_facturadas']:.2f}")
-        col6.metric("Valor Anuladas", f"${kpis['value_anuladas']:.2f}")
+        col4.metric("Valor Total (Bruto Facturas)", f"${kpis['total_value']:,.2f}")
+        col5.metric("Valor Concordante", f"${kpis['value_facturadas']:,.2f}")
+        col6.metric("Valor Anuladas", f"${kpis['value_anuladas']:,.2f}")
+        
+        st.markdown("---")
+        
+        st.markdown("<h2 class='section-title'>📈 Análisis de Guías Concordantes</h2>", unsafe_allow_html=True)
+        c1, c2 = st.columns(2)
+        with c1:
+            st.subheader("Top 5 Ciudades")
+            if not kpis['top_cities'].empty: st.bar_chart(kpis['top_cities'].head(5))
+            else: st.info("No hay datos disponibles.")
 
-        st.subheader("Top Ciudades")
-        if not kpis['top_cities'].empty:
-            st.bar_chart(kpis['top_cities'])
-        else:
-            st.info("No data available for top cities")
+            st.subheader("Gasto por Ciudad")
+            if not kpis['spending_by_city'].empty: st.bar_chart(kpis['spending_by_city'].head(5))
+            else: st.info("No hay datos disponibles.")
 
-        st.subheader("Top Tiendas")
-        if not kpis['top_stores'].empty:
-            st.bar_chart(kpis['top_stores'])
-        else:
-            st.info("No data available for top stores")
-
-        st.subheader("Gasto por Ciudad")
-        if not kpis['spending_by_city'].empty:
-            st.bar_chart(kpis['spending_by_city'])
-        else:
-            st.info("No data available for spending by city")
-
-        st.subheader("Gasto por Tienda")
-        if not kpis['spending_by_store'].empty:
-            st.bar_chart(kpis['spending_by_store'])
-        else:
-            st.info("No data available for spending by store")
+        with c2:
+            st.subheader("Top 5 Tiendas")
+            if not kpis['top_stores'].empty: st.bar_chart(kpis['top_stores'].head(5))
+            else: st.info("No hay datos disponibles.")
+            
+            st.subheader("Gasto por Tienda")
+            if not kpis['spending_by_store'].empty: st.bar_chart(kpis['spending_by_store'].head(5))
+            else: st.info("No hay datos disponibles.")
+        
+        st.markdown("---")
 
         st.subheader("Volumen de Envíos por Mes")
         if not kpis['shipment_volume'].empty:
-            st.bar_chart(kpis['shipment_volume'])
+            # Convert PeriodIndex to string for Streamlit compatibility
+            shipment_volume_str_index = kpis['shipment_volume'].copy()
+            shipment_volume_str_index.index = shipment_volume_str_index.index.astype(str)
+            st.line_chart(shipment_volume_str_index)
         else:
-            st.info("No data available for shipment volume")
+            st.info("No hay datos para el volumen de envíos.")
 
-        st.subheader("Anuladas por Destinatario")
+        st.subheader("Análisis de Guías Anuladas por Destinatario")
         if not kpis['anuladas_by_destinatario'].empty:
             st.dataframe(kpis['anuladas_by_destinatario'])
         else:
-            st.info("No data available for anuladas by destinatario")
+            st.info("No se encontraron guías anuladas.")
 
-        # Botón para ver detalles
-        if st.button("Ver Detalles de Guías"):
+        if st.button("👁️ Mostrar/Ocultar Detalles de Guías"):
             st.session_state.show_details = not st.session_state.show_details
 
         if st.session_state.show_details:
-            with st.expander("Guías Facturadas"):
-                st.write(", ".join(reconciler.guides_facturadas))
+            st.header("Detalle de Guías por Categoría")
+            with st.expander("Guías Concordantes (Facturadas)"):
+                st.text_area("guides_facturadas_list", ", ".join(reconciler.guides_facturadas), height=150)
 
-            # **CAMBIO**: Se actualiza el título y se elimina el expander de "Sobrantes"
             with st.expander("Guías Anuladas (En Manifiesto pero no en Facturas)"):
-                st.write(", ".join(reconciler.guides_anuladas))
+                st.text_area("guides_anuladas_list", ", ".join(reconciler.guides_anuladas), height=150)
+            
+            with st.expander("Guías Sobrantes (En Facturas pero no en Manifiesto)"):
+                st.text_area("guides_sobrantes_list", ", ".join(reconciler.guides_sobrantes_factura), height=150)
 
-        # Botón para descargar reporte PDF
+        st.markdown("---")
+        st.markdown("<h2 class='section-title'>Descargas</h2>", unsafe_allow_html=True)
         pdf_buffer = reconciler.generate_report()
         st.download_button(
-            label="📥 Download Report PDF",
+            label="📥 Descargar Reporte PDF",
             data=pdf_buffer,
-            file_name="logistics_report.pdf",
-            mime="application/pdf"
+            file_name=f"reporte_logistica_{datetime.now().date()}.pdf",
+            mime="application/pdf",
+            use_container_width=True
         )
 
 def mostrar_historial_guias():
@@ -3643,14 +3634,14 @@ def main():
             st.error("🔒 Acceso restringido. Necesita autenticarse para acceder a esta sección.")
         
         # Mostrar opciones de autenticación según el tipo requerido
-        if permiso == "admin":
-            st.session_state.show_login = True
-            st.session_state.login_type = "admin"
-            # No se llama directamente para evitar renderizado doble
-        else: # user
+        if permiso == "admin" and not st.session_state.get('show_login', False):
+             st.session_state.show_login = True
+             st.session_state.login_type = "admin"
+             st.rerun()
+        elif not st.session_state.get('show_login', False):
             st.session_state.show_login = True
             st.session_state.login_type = "user"
-            # No se llama directamente para evitar renderizado doble
+            st.rerun()
     
     # Footer
     st.markdown("""
@@ -3659,5 +3650,6 @@ def main():
         Desarrollado por: <a href="mailto:wilson.perez@aeropostale.com">Wilson Pérez</a>
     </div>
     """, unsafe_allow_html=True)
+
 if __name__ == "__main__":
     main()
