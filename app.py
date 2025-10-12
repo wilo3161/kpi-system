@@ -1339,7 +1339,11 @@ def generar_pdf_guia(store_name: str, brand: str, url: str, sender_name: str, tr
     except Exception as e:
         logger.error(f"Error al generar PDF de guía: {e}", exc_info=True)
         return b""
-
+def pil_image_to_bytes(pil_image: Image.Image) -> bytes:
+    """Convierte un objeto de imagen de PIL a bytes."""
+    buf = io.BytesIO()
+    pil_image.save(buf, format="PNG")
+    return buf.getvalue()
 # ================================
 # FUNCIÓN PARA ELIMINAR GUÍAS
 # ================================
