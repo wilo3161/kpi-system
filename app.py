@@ -2868,9 +2868,9 @@ def mostrar_generacion_guias():
         with col_imagen:
             # Se muestra la imagen correspondiente a la selección del radio button.
             if brand == "Tempo":
-                st.image(url_tempo_logo, caption="Logo Tempo", use_column_width='auto')
+                st.image(url_tempo_logo, caption="Logo Tempo", use_column_width='true')
             else: # Por defecto o si es "Fashion"
-                st.image(url_fashion_logo, caption="Logo Fashion Club", use_column_width='auto')
+                st.image(url_fashion_logo, caption="Logo Fashion Club", use_column_width='true')
         
         # ===================================================================
         # FIN DE CAMBIOS
