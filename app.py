@@ -1210,7 +1210,6 @@ def obtener_logo_imagen(brand: str) -> Image.Image:
         return None
 
 def generar_pdf_guia(store_name: str, brand: str, url: str, sender_name: str, tracking_number: str) -> bytes:
-    
     try:
         pdf = FPDF()
         pdf.add_page()
@@ -1223,28 +1222,52 @@ def generar_pdf_guia(store_name: str, brand: str, url: str, sender_name: str, tr
         pdf.set_fill_color(0, 45, 98)  # Azul (#002D62)
         pdf.rect(0, 0, 210, 35, style='F')  # Rectángulo azul de 35mm de alto
         
-        # Insertar logo de brand en la izquierda del encabezado
-        logo_img = obtener_logo_imagen(brand)
-        if logo_img:
-            try:
-                # Convertir a RGB si es necesario
-                if logo_img.mode in ('RGBA', 'LA'):
-                    background = Image.new('RGB', logo_img.size, (255, 255, 255))
-                    background.paste(logo_img, mask=logo_img.split()[-1])
-                    logo_img = background
-                
-                # Guardar temporalmente
-                with tempfile.NamedTemporaryFile(delete=False, suffix='.jpg') as temp_file:
-                    logo_img.save(temp_file.name, format='JPEG', quality=95)
-                    temp_logo_path = temp_file.name
-                
-                # Insertar logo a la izquierda
-                pdf.image(temp_logo_path, x=10, y=5, w=30)
-                os.unlink(temp_logo_path)
-            except Exception as e:
-                logger.error(f"Error al insertar el logo en el PDF: {e}")
+        # ===================================================================
+        # INICIO DE CAMBIOS: Carga del logo seleccionado en el PDF
+        # ===================================================================
+
+        # 1. Definimos las URLs de los logos directamente desde GitHub para consistencia.
+        logos_urls = {
+            "Fashion": "https://raw.githubusercontent.com/wilo3161/kpi-system/main/images/Fashion.jpg",
+            "Tempo": "https://raw.githubusercontent.com/wilo3161/kpi-system/main/images/Tempo.jpg"
+        }
         
-        # Texto blanco para el encabezado centrado
+        # 2. Obtenemos la URL del logo que corresponde a la marca ('brand') seleccionada.
+        logo_url = logos_urls.get(brand)
+
+        if logo_url:
+            try:
+                # 3. Descargamos la imagen desde la URL.
+                response = requests.get(logo_url)
+                if response.status_code == 200:
+                    logo_img = Image.open(BytesIO(response.content))
+
+                    # Se convierte la imagen a formato JPG para asegurar compatibilidad con FPDF.
+                    if logo_img.mode in ('RGBA', 'LA', 'P'):
+                        # Si la imagen tiene transparencia o es paleta de colores, se le añade un fondo blanco.
+                        background = Image.new('RGB', logo_img.size, (255, 255, 255))
+                        background.paste(logo_img, mask=logo_img.split()[-1] if logo_img.mode in ('RGBA', 'P') else None)
+                        logo_img = background
+                    
+                    # 4. Guardamos la imagen en un archivo temporal para poder insertarla en el PDF.
+                    with tempfile.NamedTemporaryFile(delete=False, suffix='.jpg') as temp_file:
+                        logo_img.save(temp_file.name, format='JPEG')
+                        temp_logo_path = temp_file.name
+                    
+                    # 5. Insertamos el logo en la esquina superior izquierda del encabezado.
+                    # Coordenadas: x=10 (10mm desde la izquierda), y=5 (5mm desde arriba), w=30 (30mm de ancho).
+                    pdf.image(temp_logo_path, x=10, y=5, w=30)
+                    os.unlink(temp_logo_path) # Se elimina el archivo temporal después de usarlo.
+                else:
+                    logger.error(f"No se pudo descargar el logo desde {logo_url}")
+            except Exception as e:
+                logger.error(f"Error al procesar e insertar el logo en el PDF: {e}")
+        
+        # ===================================================================
+        # FIN DE CAMBIOS
+        # ===================================================================
+        
+        # Texto blanco para el encabezado centrado (esto no cambia)
         pdf.set_text_color(255, 0, 0)
         pdf.set_font("Helvetica", "B", 24)
         pdf.set_xy(0, 5)
@@ -1316,12 +1339,6 @@ def generar_pdf_guia(store_name: str, brand: str, url: str, sender_name: str, tr
     except Exception as e:
         logger.error(f"Error al generar PDF de guía: {e}", exc_info=True)
         return b""
-
-def pil_image_to_bytes(pil_image: Image.Image) -> bytes:
-    """Convierte un objeto de imagen de PIL a bytes."""
-    buf = io.BytesIO()
-    pil_image.save(buf, format="PNG")
-    return buf.getvalue()
 
 # ================================
 # FUNCIÓN PARA ELIMINAR GUÍAS
