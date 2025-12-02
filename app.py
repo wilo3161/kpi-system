@@ -1390,15 +1390,6 @@ class StreamlitLogisticsReconciliation:
         self.guides_facturadas = []
         self.guides_anuladas = []
         self.guides_sobrantes_factura = []
-        
-        # Columnas identificadas (para uso en todos los métodos)
-        self.factura_guide_col = None
-        self.manifiesto_guide_col = None
-        self.monetary_col = None
-        self.city_col = None
-        self.store_col = None
-        self.date_col = None
-        self.destinatario_col = None
 
         # Resultados de KPI
         self.kpis = {
@@ -1489,56 +1480,30 @@ class StreamlitLogisticsReconciliation:
             self.df_facturas = self.df_facturas.applymap(lambda x: x.strip() if isinstance(x, str) else x)
             self.df_manifiesto = self.df_manifiesto.applymap(lambda x: x.strip() if isinstance(x, str) else x)
 
-            # Identificar columnas en facturas
-            self.factura_guide_col = self.identify_guide_column(self.df_facturas)
-            if not self.factura_guide_col:
+            factura_guide_col = self.identify_guide_column(self.df_facturas)
+            if not factura_guide_col:
                 st.error("No se pudo identificar una columna de guías válida en el archivo de facturas.")
                 return False
 
-            # Identificar columna monetaria en facturas
-            self.monetary_col = None
-            for col in self.df_facturas.columns:
-                if 'SUBTOTAL' in str(col).upper():
-                    self.monetary_col = col
-                    st.success(f"Columna de subtotal encontrada: **'{self.monetary_col}'**")
-                    break
-            
-            if not self.monetary_col:
-                self.monetary_col = self.identify_monetary_column_fallback(self.df_facturas)
-                if self.monetary_col:
-                    st.info(f"No se encontró 'Subtotal'. Usando columna numérica detectada: **'{self.monetary_col}'**")
-
-            if not self.monetary_col:
-                st.error("Error crítico: No se pudo encontrar ninguna columna de valores monetarios en el archivo de facturas.")
-                return False
-
-            # Identificar columnas en manifiesto
-            self.manifiesto_guide_col = self.identify_guide_column(self.df_manifiesto)
-            if not self.manifiesto_guide_col:
+            manifiesto_guide_col = self.identify_guide_column(self.df_manifiesto)
+            if not manifiesto_guide_col:
                 st.error("No se pudo identificar una columna de guías válida en el archivo de manifiesto.")
                 return False
 
-            self.city_col = self.identify_destination_city_column(self.df_manifiesto)
-            self.store_col = self.identify_store_column(self.df_manifiesto)
-            self.date_col = self.identify_date_column(self.df_manifiesto)
-            self.destinatario_col = self.identify_destinatario_column(self.df_manifiesto)
-
             guide_pattern = r'(LC\d+|\d{6,})'
 
-            # Limpiar guías en facturas
-            self.df_facturas['GUIDE_CLEAN'] = self.df_facturas[self.factura_guide_col].astype(str).str.strip().str.upper().str.extract(guide_pattern, expand=False)
+            self.df_facturas['GUIDE_CLEAN'] = self.df_facturas[factura_guide_col].astype(str).str.strip().str.upper().str.extract(guide_pattern, expand=False)
             invalid_guides_factura = self.df_facturas[self.df_facturas['GUIDE_CLEAN'].isna()]
             if not invalid_guides_factura.empty:
                 st.warning(f"⚠️ Se encontraron {len(invalid_guides_factura)} filas en Facturas sin formato de guía válido. Serán ignoradas:")
-                st.dataframe(invalid_guides_factura[[self.factura_guide_col]].rename(columns={self.factura_guide_col: "Guías con formato incorrecto"}), use_container_width=True)
+                st.dataframe(invalid_guides_factura[[factura_guide_col]].rename(columns={factura_guide_col: "Guías con formato incorrecto"}), use_container_width=True)
             self.df_facturas.dropna(subset=['GUIDE_CLEAN'], inplace=True)
             
-            # Limpiar guías en manifiesto
-            self.df_manifiesto['GUIDE_CLEAN'] = self.df_manifiesto[self.manifiesto_guide_col].astype(str).str.strip().str.upper().str.extract(guide_pattern, expand=False)
+            self.df_manifiesto['GUIDE_CLEAN'] = self.df_manifiesto[manifiesto_guide_col].astype(str).str.strip().str.upper().str.extract(guide_pattern, expand=False)
             invalid_guides_manifiesto = self.df_manifiesto[self.df_manifiesto['GUIDE_CLEAN'].isna()]
             if not invalid_guides_manifiesto.empty:
                 st.warning(f"⚠️ Se encontraron {len(invalid_guides_manifiesto)} filas en Manifiesto sin formato de guía válido. Serán ignoradas:")
-                st.dataframe(invalid_guides_manifiesto[[self.manifiesto_guide_col]].rename(columns={self.manifiesto_guide_col: "Guías con formato incorrecto"}), use_container_width=True)
+                st.dataframe(invalid_guides_manifiesto[[manifiesto_guide_col]].rename(columns={manifiesto_guide_col: "Guías con formato incorrecto"}), use_container_width=True)
             self.df_manifiesto.dropna(subset=['GUIDE_CLEAN'], inplace=True)
 
             facturas_set = set(self.df_facturas['GUIDE_CLEAN'])
@@ -1556,117 +1521,89 @@ class StreamlitLogisticsReconciliation:
             return False
 
     # ===========================================================
-    # Cálculo de KPIs (CORREGIDO)
+    # Cálculo de KPIs
     # ===========================================================
     def calculate_kpis(self):
         self.kpis['total_facturadas'] = len(self.guides_facturadas)
         self.kpis['total_anuladas'] = len(self.guides_anuladas)
         self.kpis['total_sobrantes_factura'] = len(self.guides_sobrantes_factura)
 
-        # Obtener datos de facturas para guías concordantes
         facturadas_df = self.df_facturas[self.df_facturas['GUIDE_CLEAN'].isin(self.guides_facturadas)].copy()
-        
-        # Obtener datos de manifiesto para guías concordantes
         manifest_fact = self.df_manifiesto[self.df_manifiesto['GUIDE_CLEAN'].isin(self.guides_facturadas)].copy()
         
-        # Realizar merge para combinar información
         if not facturadas_df.empty and not manifest_fact.empty:
-            facturadas_merged = pd.merge(
-                facturadas_df[['GUIDE_CLEAN', self.monetary_col]], 
-                manifest_fact[['GUIDE_CLEAN', self.city_col, self.store_col] if self.city_col and self.store_col else ['GUIDE_CLEAN']], 
-                on='GUIDE_CLEAN', 
-                suffixes=('_fact', '_man'), 
-                how='left'
-            )
+             facturadas_merged = pd.merge(facturadas_df, manifest_fact, on='GUIDE_CLEAN', suffixes=('_fact', '_man'), how='left')
         else:
             facturadas_merged = facturadas_df.copy()
 
-        # Convertir columna monetaria a numérico
-        self.df_facturas[self.monetary_col] = pd.to_numeric(
-            self.df_facturas[self.monetary_col].astype(str).str.replace(',', '.'), 
-            errors='coerce'
-        )
+        # ===========================================================
+        # **LÓGICA MEJORADA PARA ENCONTRAR LA COLUMNA DE SUBTOTAL**
+        # ===========================================================
+        monetary_col = None
+        # 1. Buscar prioritariamente una columna llamada 'SUBTOTAL'
+        for col in self.df_facturas.columns:
+            if 'SUBTOTAL' in str(col).upper():
+                monetary_col = col
+                st.success(f"Columna de subtotal encontrada: **'{monetary_col}'**")
+                break
         
-        if not facturadas_merged.empty and self.monetary_col in facturadas_merged.columns:
-            facturadas_merged[self.monetary_col] = pd.to_numeric(
-                facturadas_merged[self.monetary_col].astype(str).str.replace(',', '.'), 
-                errors='coerce'
-            )
+        # 2. Si no se encuentra, usar el método de respaldo para "adivinar"
+        if not monetary_col:
+            monetary_col = self.identify_monetary_column_fallback(self.df_facturas)
+            if monetary_col:
+                st.info(f"No se encontró 'Subtotal'. Usando columna numérica detectada: **'{monetary_col}'**")
 
+        # 3. Si no se encuentra ninguna columna de dinero, detener y avisar.
+        if not monetary_col:
+            st.error("Error crítico: No se pudo encontrar ninguna columna de valores monetarios en el archivo de facturas.")
+            return # Detiene la ejecución de esta función
+        # ===========================================================
+
+        city_col = self.identify_destination_city_column(facturadas_merged)
+        store_col = self.identify_store_column(facturadas_merged)
+        date_col = self.identify_date_column(facturadas_merged)
+        destinatario_col = self.identify_destinatario_column(self.df_manifiesto)
+
+        # --- Cálculos de KPIs ---
+        if not facturadas_merged.empty:
+            if monetary_col in facturadas_merged.columns:
+                facturadas_merged[monetary_col] = pd.to_numeric(facturadas_merged[monetary_col].astype(str).str.replace(',', '.'), errors='coerce')
+            if date_col in facturadas_merged.columns:
+                if facturadas_merged[date_col].dtype in [float, int]:
+                    facturadas_merged[date_col] = pd.to_datetime('1899-12-30') + pd.to_timedelta(facturadas_merged[date_col], unit='D')
+                else:
+                    facturadas_merged[date_col] = pd.to_datetime(facturadas_merged[date_col], errors='coerce', dayfirst=True)
+
+            if city_col: self.kpis['top_cities'] = facturadas_merged[city_col].value_counts().head(10)
+            if store_col: self.kpis['top_stores'] = facturadas_merged[store_col].value_counts().head(10)
+            if city_col and monetary_col: self.kpis['spending_by_city'] = facturadas_merged.groupby(city_col)[monetary_col].sum().sort_values(ascending=False).head(10)
+            if store_col and monetary_col: self.kpis['spending_by_store'] = facturadas_merged.groupby(store_col)[monetary_col].sum().sort_values(ascending=False).head(10)
+
+            if monetary_col in facturadas_merged.columns:
+                valid_amounts = facturadas_merged[monetary_col].dropna()
+                if not valid_amounts.empty: self.kpis['avg_shipment_value'] = valid_amounts.mean()
+
+            if date_col in facturadas_merged.columns:
+                valid_dates = facturadas_merged[facturadas_merged[date_col].notna()].copy()
+                valid_dates['MONTH'] = valid_dates[date_col].dt.to_period('M')
+                self.kpis['shipment_volume'] = valid_dates['MONTH'].value_counts().sort_index()
+
+        anuladas_df = self.df_manifiesto[self.df_manifiesto['GUIDE_CLEAN'].isin(self.guides_anuladas)].copy()
+        if destinatario_col and destinatario_col in anuladas_df.columns:
+            self.kpis['anuladas_by_destinatario'] = anuladas_df[destinatario_col].value_counts().head(10)
+        
         # --- Cálculos de Valores Totales ---
-        self.kpis['total_value'] = self.df_facturas[self.monetary_col].sum()
-        self.kpis['value_facturadas'] = facturadas_df[self.monetary_col].sum()
+        self.df_facturas[monetary_col] = pd.to_numeric(self.df_facturas[monetary_col].astype(str).str.replace(',', '.'), errors='coerce')
+        
+        self.kpis['total_value'] = self.df_facturas[monetary_col].sum()
+        
+        facturadas_df_monetary = self.df_facturas[self.df_facturas['GUIDE_CLEAN'].isin(self.guides_facturadas)]
+        self.kpis['value_facturadas'] = facturadas_df_monetary[monetary_col].sum()
+
         self.kpis['value_anuladas'] = 0.0
 
-        # --- Cálculos de KPIs sobre guías concordantes ---
-        if not facturadas_merged.empty:
-            # Convertir fecha si existe
-            if self.date_col and self.date_col in facturadas_df.columns:
-                if facturadas_df[self.date_col].dtype in [float, int]:
-                    facturadas_df[self.date_col] = pd.to_datetime('1899-12-30') + pd.to_timedelta(facturadas_df[self.date_col], unit='D')
-                else:
-                    facturadas_df[self.date_col] = pd.to_datetime(facturadas_df[self.date_col], errors='coerce', dayfirst=True)
-
-            # Top ciudades (conteo)
-            if self.city_col and self.city_col in facturadas_merged.columns:
-                self.kpis['top_cities'] = facturadas_merged[self.city_col].value_counts().head(10)
-            
-            # Top tiendas (conteo)
-            if self.store_col and self.store_col in facturadas_merged.columns:
-                self.kpis['top_stores'] = facturadas_merged[self.store_col].value_counts().head(10)
-            
-            # GASTO POR CIUDAD (CORREGIDO) - Solo guías concordantes
-            if self.city_col and self.monetary_col and self.city_col in facturadas_merged.columns:
-                spending_city = facturadas_merged.groupby(self.city_col)[self.monetary_col].sum().sort_values(ascending=False)
-                self.kpis['spending_by_city'] = spending_city.head(10)
-                
-                # Verificación: el total debe coincidir con value_facturadas
-                total_spending_city = spending_city.sum()
-                if abs(total_spending_city - self.kpis['value_facturadas']) > 0.01:
-                    st.warning(f"⚠️ Discrepancia en gasto por ciudad: Total ciudades (${total_spending_city:,.2f}) vs Valor concordante (${self.kpis['value_facturadas']:,.2f})")
-            
-            # GASTO POR TIENDA (CORREGIDO) - Solo guías concordantes
-            if self.store_col and self.monetary_col and self.store_col in facturadas_merged.columns:
-                spending_store = facturadas_merged.groupby(self.store_col)[self.monetary_col].sum().sort_values(ascending=False)
-                self.kpis['spending_by_store'] = spending_store.head(10)
-                
-                # Verificación: el total debe coincidir con value_facturadas
-                total_spending_store = spending_store.sum()
-                if abs(total_spending_store - self.kpis['value_facturadas']) > 0.01:
-                    st.warning(f"⚠️ Discrepancia en gasto por tienda: Total tiendas (${total_spending_store:,.2f}) vs Valor concordante (${self.kpis['value_facturadas']:,.2f})")
-            
-            # Valor promedio de envío (solo guías concordantes)
-            if self.monetary_col in facturadas_merged.columns:
-                valid_amounts = facturadas_merged[self.monetary_col].dropna()
-                if not valid_amounts.empty:
-                    self.kpis['avg_shipment_value'] = valid_amounts.mean()
-                else:
-                    self.kpis['avg_shipment_value'] = 0.0
-            
-            # Volumen de envíos por mes
-            if self.date_col and self.date_col in facturadas_df.columns:
-                valid_dates = facturadas_df[facturadas_df[self.date_col].notna()].copy()
-                valid_dates['MONTH'] = valid_dates[self.date_col].dt.to_period('M')
-                self.kpis['shipment_volume'] = valid_dates['MONTH'].value_counts().sort_index()
-            else:
-                self.kpis['shipment_volume'] = pd.Series(dtype="int")
-
-        # Anuladas por destinatario
-        anuladas_df = self.df_manifiesto[self.df_manifiesto['GUIDE_CLEAN'].isin(self.guides_anuladas)].copy()
-        if self.destinatario_col and self.destinatario_col in anuladas_df.columns:
-            self.kpis['anuladas_by_destinatario'] = anuladas_df[self.destinatario_col].value_counts().head(10)
-        else:
-            self.kpis['anuladas_by_destinatario'] = pd.Series(dtype="object")
-
-        # Mostrar verificación final
-        st.info(f"✅ **Verificación:** Valor total concordante: **${self.kpis['value_facturadas']:,.2f}**")
-        if not self.kpis['spending_by_city'].empty:
-            st.info(f"   • Suma de gasto por ciudad: **${self.kpis['spending_by_city'].sum():,.2f}**")
-        if not self.kpis['spending_by_store'].empty:
-            st.info(f"   • Suma de gasto por tienda: **${self.kpis['spending_by_store'].sum():,.2f}**")
-
     # ===========================================================
-    # Generación de Reporte PDF (ACTUALIZADO)
+    # Generación de Reporte PDF
     # ===========================================================
     def generate_report(self):
         buffer = BytesIO()
@@ -1678,77 +1615,35 @@ class StreamlitLogisticsReconciliation:
         elements.append(Spacer(1, 12))
         elements.append(Paragraph("Indicadores Clave de Desempeño", styles['Heading2']))
         
-        # Información de columnas usadas
-        elements.append(Paragraph(f"**Columnas identificadas:**", styles['Heading3']))
-        info_data = [
-            ['Tipo de Dato', 'Columna Identificada'],
-            ['Guías Facturas', self.factura_guide_col or 'No identificada'],
-            ['Guías Manifiesto', self.manifiesto_guide_col or 'No identificada'],
-            ['Valor Monetario', self.monetary_col or 'No identificada'],
-            ['Ciudad Destino', self.city_col or 'No identificada'],
-            ['Tienda', self.store_col or 'No identificada']
-        ]
-        info_table = Table(info_data)
-        info_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
-            ('GRID', (0, 0), (-1, -1), 1, colors.black)
-        ]))
-        elements.append(info_table)
-        elements.append(Spacer(1, 12))
-        
-        # KPIs principales
         kpi_data = [
             ['Métrica', 'Valor'],
-            ['Total Guías Concordantes', self.kpis['total_facturadas']],
-            ['Total Guías Anuladas', self.kpis['total_anuladas']],
-            ['Total Guías Sobrantes en Factura', self.kpis['total_sobrantes_factura']],
-            ['Valor Total Facturas (Bruto)', f"${self.kpis['total_value']:,.2f}"],
-            ['Valor Guías Concordantes', f"${self.kpis['value_facturadas']:,.2f}"],
-            ['Valor Guías Anuladas', f"${self.kpis['value_anuladas']:,.2f}"],
-            ['Valor Promedio por Envío (Concordantes)', f"${self.kpis['avg_shipment_value']:,.2f}" if self.kpis['avg_shipment_value'] else 'N/A']
+            ['Total Concordantes', self.kpis['total_facturadas']],
+            ['Total Anuladas', self.kpis['total_anuladas']],
+            ['Total Sobrantes en Factura', self.kpis['total_sobrantes_factura']],
+            ['Valor Total (Bruto Facturas)', f"${self.kpis['total_value']:,.2f}"],
+            ['Valor Concordante', f"${self.kpis['value_facturadas']:,.2f}"],
+            ['Valor Anuladas', f"${self.kpis['value_anuladas']:,.2f}"],
+            ['Valor Promedio de Envío (Concordantes)', f"${self.kpis['avg_shipment_value']:,.2f}" if self.kpis['avg_shipment_value'] else 'N/A']
         ]
         table = Table(kpi_data)
         table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+            ('BACKGROUND', (0, 0), (-1, 0), colors.grey), ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'), ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12), ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
             ('GRID', (0, 0), (-1, -1), 1, colors.black)
         ]))
         elements.append(table)
         elements.append(Spacer(1, 12))
 
-        def add_series_table(title, series, is_float=False, total_value=None):
+        def add_series_table(title, series, is_float=False):
             if not series.empty:
                 elements.append(Paragraph(title, styles['Heading2']))
-                data = [['Categoría', 'Valor']]
-                for idx, val in series.items():
-                    if is_float:
-                        data.append([str(idx), f"${val:,.2f}"])
-                    else:
-                        data.append([str(idx), val])
-                
-                # Agregar total si se proporciona
-                if is_float and total_value is not None:
-                    data.append(['TOTAL', f"${total_value:,.2f}"])
-                
+                data = [['Categoría', 'Valor']] + [[str(idx), f"${val:,.2f}" if is_float else val] for idx, val in series.items()]
                 table = Table(data)
                 table.setStyle(TableStyle([
-                    ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
-                    ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-                    ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-                    ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-                    ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-                    ('BACKGROUND', (0, 1), (-1, -2 if is_float and total_value is not None else -1), colors.beige),
-                    ('BACKGROUND', (0, -1), (-1, -1), colors.lightgrey) if is_float and total_value is not None else (),
-                    ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold') if is_float and total_value is not None else (),
+                    ('BACKGROUND', (0, 0), (-1, 0), colors.grey), ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                    ('ALIGN', (0, 0), (-1, -1), 'CENTER'), ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                    ('BOTTOMPADDING', (0, 0), (-1, 0), 12), ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
                     ('GRID', (0, 0), (-1, -1), 1, colors.black)
                 ]))
                 elements.append(table)
@@ -1756,28 +1651,13 @@ class StreamlitLogisticsReconciliation:
 
         add_series_table("Top Ciudades (Envíos Concordantes)", self.kpis['top_cities'])
         add_series_table("Top Tiendas (Envíos Concordantes)", self.kpis['top_stores'])
-        
-        # Mostrar gasto por ciudad con total
-        if not self.kpis['spending_by_city'].empty:
-            total_city_spending = self.kpis['spending_by_city'].sum()
-            add_series_table("Gasto por Ciudad (Envíos Concordantes)", 
-                           self.kpis['spending_by_city'], 
-                           is_float=True,
-                           total_value=total_city_spending)
-        
-        # Mostrar gasto por tienda con total
-        if not self.kpis['spending_by_store'].empty:
-            total_store_spending = self.kpis['spending_by_store'].sum()
-            add_series_table("Gasto por Tienda (Envíos Concordantes)", 
-                           self.kpis['spending_by_store'], 
-                           is_float=True,
-                           total_value=total_store_spending)
-        
+        add_series_table("Gasto por Ciudad (Envíos Concordantes)", self.kpis['spending_by_city'], is_float=True)
+        add_series_table("Gasto por Tienda (Envíos Concordantes)", self.kpis['spending_by_store'], is_float=True)
         add_series_table("Anuladas por Destinatario", self.kpis['anuladas_by_destinatario'])
         
-        # Gráfico de volumen de envíos
         if not self.kpis['shipment_volume'].empty:
             fig, ax = plt.subplots(figsize=(8, 4))
+            # Convert PeriodIndex to string for plotting
             shipment_volume_str_index = self.kpis['shipment_volume'].copy()
             shipment_volume_str_index.index = shipment_volume_str_index.index.astype(str)
             shipment_volume_str_index.plot(kind='bar', ax=ax, color='skyblue')
@@ -1795,26 +1675,6 @@ class StreamlitLogisticsReconciliation:
             elements.append(ReportLabImage(img_buffer, width=450, height=225))
             elements.append(Spacer(1, 12))
             plt.close(fig)
-
-        # Resumen de verificación
-        elements.append(Paragraph("Verificación de Totales", styles['Heading2']))
-        verification_data = [
-            ['Concepto', 'Valor'],
-            ['Valor Total Guías Concordantes', f"${self.kpis['value_facturadas']:,.2f}"],
-            ['Suma Gasto por Ciudad', f"${self.kpis['spending_by_city'].sum():,.2f}" if not self.kpis['spending_by_city'].empty else 'N/A'],
-            ['Suma Gasto por Tienda', f"${self.kpis['spending_by_store'].sum():,.2f}" if not self.kpis['spending_by_store'].empty else 'N/A']
-        ]
-        verification_table = Table(verification_data)
-        verification_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2E86C1')),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmike),
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-            ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor('#D6EAF8')),
-            ('GRID', (0, 0), (-1, -1), 1, colors.black)
-        ]))
-        elements.append(verification_table)
 
         doc.build(elements)
         buffer.seek(0)
