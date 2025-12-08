@@ -1427,7 +1427,7 @@ def generar_pdf_guia(store_name: str, brand: str, url: str, sender_name: str, tr
                         logo_img.save(temp_file.name, format='JPEG')
                         temp_logo_path = temp_file.name
                     
-                    pdf.image(temp_logo_path, x=10, y=5, w=30)
+                    pdf.image(temp_logo_path, x=10, y=1, w=30)
                     os.unlink(temp_logo_path)
                 else:
                     logger.error(f"No se pudo descargar el logo desde {logo_url}")
@@ -1441,7 +1441,7 @@ def generar_pdf_guia(store_name: str, brand: str, url: str, sender_name: str, tr
         pdf.cell(210, 10, "AEROPOSTALE", 0, 1, "C")
 
         pdf.set_text_color(255, 255, 255)
-        pdf.set_font("Helvetica", "B", 20)
+        pdf.set_font("Helvetica", "B", 16)
         pdf.set_xy(0, 18)
         pdf.cell(210, 10, "CENTRO DE DISTRIBUCIÓN FASHION CLUB", 0, 1, "C")
         
