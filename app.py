@@ -1441,7 +1441,7 @@ def generar_pdf_guia(store_name: str, brand: str, url: str, sender_name: str, tr
         pdf.cell(210, 10, "AEROPOSTALE", 0, 1, "C")
 
         pdf.set_text_color(255, 255, 255)
-        pdf.set_font("Helvetica", "B", 18)
+        pdf.set_font("Helvetica", "B", 20)
         pdf.set_xy(0, 18)
         pdf.cell(210, 10, "CENTRO DE DISTRIBUCIÓN FASHION CLUB", 0, 1, "C")
         
@@ -1463,7 +1463,7 @@ def generar_pdf_guia(store_name: str, brand: str, url: str, sender_name: str, tr
         pdf.ln(5)
         
         # Sección Destinatario
-        pdf.set_font("Arial", "B", 14)
+        pdf.set_font("Arial", "B", 20)
         pdf.cell(90, 10, "DESTINATARIO:", 0, 1)
         
         pdf.set_font("Arial", "", 14)
