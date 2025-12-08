@@ -2975,7 +2975,13 @@ def mostrar_generacion_guias():
             with col2:
                 sender_name = st.selectbox("Seleccione Remitente:", options=remitentes['name'].tolist(), key="sender_select")
             
-            url = st.text_input("Ingrese URL del Pedido:", key="url_input", placeholder="https://...")
+            # CAMBIO 1: Textbox con prefijo https:// y valor predeterminado
+            url = st.text_input(
+                "Ingrese URL del Pedido:", 
+                key="url_input", 
+                placeholder="ejemplo.com/pedido/123",
+                value="https://"  # VALOR PREDETERMINADO CON PREFIJO
+            )
             
             submitted = st.form_submit_button("Generar Guía", use_container_width=True)
             
@@ -2997,6 +3003,10 @@ def mostrar_generacion_guias():
                         st.session_state.pdf_data = generar_pdf_guia(
                             store_name, brand, url, sender_name, st.session_state.tracking_number
                         )
+                        
+                        # CAMBIO 2: Limpiar URL automáticamente después de generar
+                        # Esto se logra con clear_on_submit=True en el form
+                        # y el value="https://" en el text_input que se restablece
                         
                         st.markdown("<div class='alert-banner alert-success'>✅ Guía generada correctamente. Puede ver la previsualización y exportarla.</div>", unsafe_allow_html=True)
                     else:
