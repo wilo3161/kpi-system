@@ -1451,7 +1451,7 @@ def generar_pdf_guia(store_name: str, brand: str, url: str, sender_name: str, tr
         y_start = pdf.get_y()
         
         # Sección Remitente
-        pdf.set_font("Arial", "B", 14)
+        pdf.set_font("Arial", "B", 20)
         pdf.cell(90, 10, "REMITENTE:", 0, 1)
         
         remitentes = obtener_remitentes()
@@ -1477,7 +1477,7 @@ def generar_pdf_guia(store_name: str, brand: str, url: str, sender_name: str, tr
         
         pdf.ln(5)
         
-        pdf.set_font("Helvetica", "B", 14)
+        pdf.set_font("Helvetica", "B", 24)
         pdf.cell(90, 8, store_name, 0, 1)
         
         pdf.ln(5)
