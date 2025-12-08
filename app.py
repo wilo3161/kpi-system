@@ -1491,7 +1491,7 @@ def generar_pdf_guia(store_name: str, brand: str, url: str, sender_name: str, tr
             qr_img.save(temp_file.name)
             temp_qr_path = temp_file.name
         
-        pdf.image(temp_qr_path, x=120, y=y_start, w=40)
+        pdf.image(temp_qr_path, x=140, y=y_start, w=65)
         os.unlink(temp_qr_path)
         
         return pdf.output(dest="S").encode("latin1")
