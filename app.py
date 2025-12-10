@@ -3707,7 +3707,19 @@ def wilo_extraer_cuerpo(mensaje):
 
 # --- GESTIÓN DE CONFIGURACIÓN ---
 def wilo_cargar_config(archivo):
-    return json.load(open(archivo)) if archivo.exists() else {}
+    """Carga configuración con manejo de errores si el archivo está corrupto"""
+    try:
+        if archivo.exists():
+            # Verificamos si el archivo tiene contenido antes de cargarlo
+            if archivo.stat().st_size == 0:
+                return {}
+            
+            with open(archivo, "r") as f:
+                return json.load(f)
+        return {}
+    except (json.JSONDecodeError, Exception):
+        # Si el archivo está dañado, retornamos diccionario vacío para no romper la app
+        return {}
 
 def wilo_guardar_config(archivo, data):
     with open(archivo, "w") as f: json.dump(data, f, indent=4)
