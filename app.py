@@ -30,7 +30,16 @@ from reportlab.lib import colors
 import matplotlib.pyplot as plt
 import seaborn as sns
 import warnings
-
+import smtplib
+import imaplib
+import email
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.header import decode_header
+import unicodedata
+import google.generativeai as genai
+from google.generativeai.types import GenerationConfig
+from pathlib import Path
 warnings.filterwarnings('ignore')
 
 # ================================
@@ -3649,6 +3658,247 @@ def generar_pdf_etiqueta(datos: dict) -> bytes:
     except Exception as e:
         logger.error(f"Error al generar PDF de etiqueta: {e}", exc_info=True)
         return None
+        # ==============================================================================
+# 🧠 NÚCLEO WILO AI: MÓDULOS DE INTELIGENCIA Y TIEMPOS
+# ==============================================================================
+
+# --- CONFIGURACIÓN GLOBAL WILO ---
+WILO_DATA_FOLDER = Path("data_wilo")
+WILO_DATA_FOLDER.mkdir(exist_ok=True)
+NOVEDADES_DB = WILO_DATA_FOLDER / "novedades_database.json"
+CONFIG_EMAIL_FILE = WILO_DATA_FOLDER / "email_config.json"
+CONFIG_GEMINI_FILE = WILO_DATA_FOLDER / "gemini_config.json"
+
+# --- UTILIDADES DE TEXTO Y CORREO ---
+def wilo_normalizar_texto(texto: str) -> str:
+    if not texto: return ""
+    texto = unicodedata.normalize('NFKD', texto)
+    texto = texto.encode('ASCII', 'ignore').decode('ASCII')
+    return texto.lower().strip()
+
+def wilo_decode_header(header):
+    if not header: return ""
+    try:
+        decoded_parts = decode_header(header)
+        decoded_str = ""
+        for content, encoding in decoded_parts:
+            if isinstance(content, bytes):
+                decoded_str += content.decode(encoding or 'utf-8', errors='ignore')
+            else:
+                decoded_str += str(content)
+        return decoded_str
+    except: return str(header)
+
+def wilo_extraer_cuerpo(mensaje):
+    try:
+        cuerpo = ""
+        if mensaje.is_multipart():
+            for part in mensaje.walk():
+                if part.get_content_type() == "text/plain" and "attachment" not in str(part.get("Content-Disposition", "")):
+                    cuerpo = part.get_payload(decode=True).decode('utf-8', errors='ignore'); break
+                elif part.get_content_type() == "text/html":
+                    cuerpo = part.get_payload(decode=True).decode('utf-8', errors='ignore') # Fallback HTML
+        else:
+            cuerpo = mensaje.get_payload(decode=True).decode('utf-8', errors='ignore')
+        return cuerpo[:8000] if cuerpo else "Sin contenido legible."
+    except Exception as e: return f"Error leyendo cuerpo: {str(e)}"
+
+# --- GESTIÓN DE CONFIGURACIÓN ---
+def wilo_cargar_config(archivo):
+    return json.load(open(archivo)) if archivo.exists() else {}
+
+def wilo_guardar_config(archivo, data):
+    with open(archivo, "w") as f: json.dump(data, f, indent=4)
+
+# --- MÓDULO 1: ANÁLISIS DE NOVEDADES (CORREOS + GEMINI) ---
+def modulo_novedades_correo():
+    st.header("📨 Wilo AI: Centro de Inteligencia de Correos")
+    
+    # 1. Configuración Rápida en Sidebar Específico
+    with st.expander("⚙️ Configuración de Conexión (Gemini & Email)"):
+        c_gemini = wilo_cargar_config(CONFIG_GEMINI_FILE)
+        c_email = wilo_cargar_config(CONFIG_EMAIL_FILE)
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            api_key = st.text_input("Gemini API Key", value=c_gemini.get("api_key", ""), type="password")
+            if st.button("Guardar API Key"):
+                wilo_guardar_config(CONFIG_GEMINI_FILE, {"api_key": api_key})
+                st.success("Guardado")
+        with col2:
+            email_user = st.text_input("Email", value=c_email.get("email", "wperez@fashionclub.com.ec"))
+            email_pass = st.text_input("Password", value=c_email.get("password", ""), type="password")
+            if st.button("Guardar Credenciales"):
+                wilo_guardar_config(CONFIG_EMAIL_FILE, {"email": email_user, "password": email_pass, "imap_server": "mail.fashionclub.com.ec", "imap_port": 993})
+                st.success("Guardado")
+
+    # 2. Panel Principal
+    tab1, tab2 = st.tabs(["🚀 Análisis en Tiempo Real", "📊 Dashboard de Novedades"])
+    
+    with tab1:
+        st.info("Wilo analizará tu bandeja de entrada buscando: Faltantes, Sobrantes, Daños, Errores de Etiquetado y más.")
+        dias = st.slider("Días atrás a analizar", 1, 30, 7)
+        
+        if st.button("🧠 EJECUTAR ANÁLISIS DE CORREOS", type="primary"):
+            cfg_mail = wilo_cargar_config(CONFIG_EMAIL_FILE)
+            cfg_ai = wilo_cargar_config(CONFIG_GEMINI_FILE)
+            
+            if not cfg_mail.get("password") or not cfg_ai.get("api_key"):
+                st.error("❌ Faltan configuraciones. Revisa el desplegable de arriba.")
+                return
+
+            # Proceso de Conexión
+            status_log = st.empty()
+            progress = st.progress(0)
+            
+            try:
+                # Conexión IMAP
+                status_log.text("🔌 Conectando al servidor de correo...")
+                mail = imaplib.IMAP4_SSL(cfg_mail["imap_server"], cfg_mail["imap_port"])
+                mail.login(cfg_mail["email"], cfg_mail["password"])
+                mail.select("INBOX")
+                
+                # Búsqueda
+                date_limit = (datetime.now() - timedelta(days=dias)).strftime("%d-%b-%Y")
+                typ, msgs = mail.search(None, f'(SINCE "{date_limit}")')
+                msg_ids = msgs[0].split()
+                total_msgs = len(msg_ids)
+                
+                status_log.text(f"📥 Se encontraron {total_msgs} correos. Analizando con IA...")
+                
+                # Configurar Gemini
+                genai.configure(api_key=cfg_ai["api_key"])
+                model = genai.GenerativeModel('gemini-1.5-flash')
+                
+                novedades_detectadas = []
+                
+                for i, num in enumerate(reversed(msg_ids)): # Analizar desde el más reciente
+                    if i >= 50: break # Límite de seguridad
+                    
+                    _, data = mail.fetch(num, '(RFC822)')
+                    msg = email.message_from_bytes(data[0][1])
+                    asunto = wilo_decode_header(msg["Subject"])
+                    cuerpo = wilo_extraer_cuerpo(msg)
+                    
+                    # Prompt Optimizado para Fashion Club
+                    prompt = f"""
+                    Analiza este correo de logística de Aeropostale Ecuador.
+                    Asunto: {asunto}
+                    Cuerpo: {cuerpo}
+                    
+                    Busca EXCLUSIVAMENTE problemas operativos:
+                    - Faltantes/Sobrantes de prendas
+                    - Daños/Manchas/Huecos
+                    - Errores de Etiquetado/RFID
+                    - Problemas de Transferencias (Jireh)
+                    
+                    Si encuentras algo, responde SOLO un JSON así (si no, responde {{}}):
+                    {{
+                        "tienda": "Nombre tienda o 'Desconocida'",
+                        "problema": "Descripción corta del problema",
+                        "tipo": "FALTANTE|SOBRANTE|DAÑO|ETIQUETA|OTRO",
+                        "urgencia": "ALTA|MEDIA|BAJA"
+                    }}
+                    """
+                    
+                    try:
+                        response = model.generate_content(prompt)
+                        res_text = response.text.strip()
+                        if "{" in res_text and "problema" in res_text:
+                            # Limpieza básica de JSON
+                            json_str = res_text[res_text.find('{'):res_text.rfind('}')+1]
+                            data_json = json.loads(json_str)
+                            data_json["asunto_correo"] = asunto
+                            data_json["fecha"] = msg["Date"]
+                            novedades_detectadas.append(data_json)
+                    except: pass
+                    
+                    progress.progress((i + 1) / min(len(msg_ids), 50))
+                
+                mail.logout()
+                
+                # Guardar Resultados
+                if novedades_detectadas:
+                    wilo_guardar_config(NOVEDADES_DB, novedades_detectadas)
+                    st.success(f"✅ Análisis Terminado. Se detectaron {len(novedades_detectadas)} novedades.")
+                else:
+                    st.warning("El análisis terminó sin detectar novedades críticas en los últimos correos.")
+                    
+            except Exception as e:
+                st.error(f"Error crítico en el núcleo: {e}")
+
+    with tab2:
+        if NOVEDADES_DB.exists():
+            data = json.load(open(NOVEDADES_DB))
+            if data:
+                df = pd.DataFrame(data)
+                
+                # Métricas
+                c1, c2, c3 = st.columns(3)
+                c1.metric("Total Novedades", len(df))
+                c2.metric("Alta Urgencia", len(df[df['urgencia'] == 'ALTA']))
+                c3.metric("Tiendas Afectadas", df['tienda'].nunique())
+                
+                # Gráficos
+                col_g1, col_g2 = st.columns(2)
+                with col_g1:
+                    st.caption("Por Tipo de Problema")
+                    st.bar_chart(df['tipo'].value_counts())
+                with col_g2:
+                    st.caption("Detalle Reciente")
+                    st.dataframe(df[['tienda', 'problema', 'urgencia']], hide_index=True)
+            else:
+                st.info("Base de datos de novedades vacía.")
+        else:
+            st.info("Aún no has ejecutado el análisis.")
+
+# --- MÓDULO 2: TEMPO ANÁLISIS (Integrado) ---
+def modulo_tempo_analisis():
+    st.header("⏱️ Tempo Análisis: Estudio de Tiempos")
+    st.caption("Optimización de procesos operativos en CEDI y Tiendas")
+    
+    col_input, col_timer = st.columns([1, 1])
+    
+    with col_input:
+        st.subheader("Configuración de la Toma")
+        operario = st.selectbox("Operario", ["Jessica Suarez", "Luis Perugachi", "Diana Garcia", "Simón Vera", "Otro"])
+        actividad = st.selectbox("Actividad", ["Picking", "Etiquetado RFID", "Embalaje", "Carga Camión", "Revisión Calidad"])
+        observaciones = st.text_area("Observaciones")
+        
+    with col_timer:
+        st.subheader("Cronómetro")
+        if 'cronometro_inicio' not in st.session_state:
+            st.session_state.cronometro_inicio = None
+            
+        if st.button("🟢 INICIAR ACTIVIDAD", use_container_width=True):
+            st.session_state.cronometro_inicio = time.time()
+            st.toast("Cronómetro iniciado...", icon="⏱️")
+            
+        if st.button("🔴 DETENER Y REGISTRAR", use_container_width=True):
+            if st.session_state.cronometro_inicio:
+                duracion = time.time() - st.session_state.cronometro_inicio
+                st.session_state.cronometro_inicio = None
+                
+                # Simulación de guardado
+                st.success(f"✅ Tiempo registrado: {duracion:.2f} segundos para {operario}")
+                st.markdown(f"**Ritmo estimado:** {3600/duracion:.0f} un/hora")
+            else:
+                st.warning("El cronómetro no está corriendo.")
+
+    # Tabla histórica (Simulada para visualización)
+    st.subheader("📜 Historial de Tomas")
+    datos_simulados = pd.DataFrame({
+        "Fecha": [datetime.now().strftime("%Y-%m-%d")]*3,
+        "Operario": ["Jessica S.", "Luis P.", "Diana G."],
+        "Actividad": ["Picking", "Picking", "Etiquetado"],
+        "Tiempo (seg)": [45.2, 48.1, 12.5],
+        "Eficiencia": ["105%", "98%", "110%"]
+    })
+    st.dataframe(datos_simulados, use_container_width=True)
+
+# ==============================================================================
+# FIN DEL NÚCLEO WILO
+# ==============================================================================
 
 # ================================
 # FUNCIÓN PRINCIPAL
@@ -3666,17 +3916,22 @@ def main():
         """, unsafe_allow_html=True)
         
         menu_options = [
-            ("Dashboard KPIs", "📊", mostrar_dashboard_kpis, "public"),
-            ("Análisis Histórico", "📈", mostrar_analisis_historico_kpis, "public"),
-            ("Ingreso de Datos", "📥", mostrar_ingreso_datos_kpis, "admin"),
-            ("Gestión de Trabajadores", "👥", mostrar_gestion_trabajadores_kpis, "admin"),
-            ("Gestión de Distribuciones", "📦", mostrar_gestion_distribuciones, "admin"),
-            ("Reconciliación", "🔁", mostrar_reconciliacion, "admin"),
-            ("Generar Guías", "📋", mostrar_generacion_guias, "user"),
-            ("Historial de Guías", "🔍", mostrar_historial_guias, "user"),
-            ("Generar Etiquetas", "🏷️", mostrar_generacion_etiquetas, "user"),
-            ("Ayuda y Contacto", "❓", mostrar_ayuda, "public")
-        ]
+        # --- NUEVOS MÓDULOS WILO ---
+        ("Wilo AI: Novedades Correo", "🤖", modulo_novedades_correo, "admin"),
+        ("Tempo Análisis (Tiempos)", "⏱️", modulo_tempo_analisis, "user"),
+        
+        # --- TUS MÓDULOS ORIGINALES (NO BORRAR) ---
+        ("Dashboard KPIs", "📊", mostrar_dashboard_kpis, "public"),
+        ("Análisis Histórico", "📈", mostrar_analisis_historico_kpis, "public"),
+        ("Ingreso de Datos", "📥", mostrar_ingreso_datos_kpis, "admin"),
+        ("Gestión de Trabajadores", "👥", mostrar_gestion_trabajadores_kpis, "admin"),
+        ("Gestión de Distribuciones", "📦", mostrar_gestion_distribuciones, "admin"),
+        ("Reconciliación", "🔁", mostrar_reconciliacion, "admin"),
+        ("Generar Guías", "📋", mostrar_generacion_guias, "user"),
+        ("Historial de Guías", "🔍", mostrar_historial_guias, "user"),
+        ("Generar Etiquetas", "🏷️", mostrar_generacion_etiquetas, "user"),
+        ("Ayuda y Contacto", "❓", mostrar_ayuda, "public")
+    ]
         
         # Mostrar opciones del menú según permisos
         for i, (label, icon, _, permiso) in enumerate(menu_options):
