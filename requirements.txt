@@ -18,3 +18,15 @@ qrcode[pil]
 Pillow
 fpdf
 pdfplumber
+streamlit
+pandas
+numpy
+plotly
+supabase
+qrcode
+Pillow
+fpdf
+reportlab
+matplotlib
+seaborn
+google-generativeai
