@@ -312,7 +312,7 @@ Wilo AI - Gestor Automático""",
         
         # Usar Gemini para personalizar
         return self.llamar_ia_para_personalizacion(prompt)
-        class SistemaAlertasWhatsApp:
+class SistemaAlertasWhatsApp:
     def __init__(self):
         self.config = self.cargar_config_whatsapp()
         self.contactos_prioritarios = self.cargar_contactos()
