@@ -573,7 +573,7 @@ def mostrar_dashboard_wilo_ai():
         2. **Mejora detectada:** Template #3 tiene 95% efectividad
         3. **Optimización:** Respuesta WhatsApp reduce tiempo 40%
         """)
-    def main():
+def main():
     # Inicializar WILO AI en segundo plano
     if 'wilo_ai' not in st.session_state:
         st.session_state.wilo_ai = {
