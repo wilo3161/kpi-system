@@ -4033,8 +4033,7 @@ def mostrar_generacion_etiquetas():
                     os.remove(imagen_path)
 
 def mostrar_ayuda():
-    def mostrar_ayuda():
-    """Muestra la página de ayuda y contacto"""
+      """Muestra la página de ayuda y contacto"""
     # ... tu código existente completo ...
     # (deja esta función como está)
 
