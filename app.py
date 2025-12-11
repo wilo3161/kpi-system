@@ -4235,8 +4235,7 @@ def wilo_guardar_config(archivo, data):
     with open(archivo, "w") as f: json.dump(data, f, indent=4)
 
 # --- MÓDULO 1: ANÁLISIS DE NOVEDADES (CORREOS + GEMINI) ---
-def modulo_novedades_correo():
-    # ==============================================================================
+# ==============================================================================
 # 🧠 MÓDULO MEJORADO DE ANÁLISIS DE CORREOS - BUSQUEDA EXHAUSTIVA
 # ==============================================================================
 
