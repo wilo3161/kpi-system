@@ -4236,145 +4236,462 @@ def wilo_guardar_config(archivo, data):
 
 # --- MÓDULO 1: ANÁLISIS DE NOVEDADES (CORREOS + GEMINI) ---
 def modulo_novedades_correo():
-    st.header("📨 Wilo AI: Centro de Inteligencia de Correos")
+    """Módulo mejorado de análisis exhaustivo de correos"""
+    st.header("🔍 Wilo AI: Análisis Exhaustivo de Correos")
     
-    # 1. Configuración Rápida en Sidebar Específico
     with st.expander("⚙️ Configuración de Conexión (Gemini & Email)"):
         c_gemini = wilo_cargar_config(CONFIG_GEMINI_FILE)
         c_email = wilo_cargar_config(CONFIG_EMAIL_FILE)
         
         col1, col2 = st.columns(2)
         with col1:
-            api_key = st.text_input("Gemini API Key", value=c_gemini.get("api_key", ""), type="password")
-            if st.button("Guardar API Key"):
+            api_key = st.text_input("Gemini API Key", 
+                                   value=c_gemini.get("api_key", ""), 
+                                   type="password",
+                                   key="gemini_api_improved")
+            if st.button("💾 Guardar API Key", key="save_gemini_improved"):
                 wilo_guardar_config(CONFIG_GEMINI_FILE, {"api_key": api_key})
-                st.success("Guardado")
+                st.success("API Key guardada")
+                
         with col2:
-            email_user = st.text_input("Email", value=c_email.get("email", "wperez@fashionclub.com.ec"))
-            email_pass = st.text_input("Password", value=c_email.get("password", ""), type="password")
-            if st.button("Guardar Credenciales"):
-                wilo_guardar_config(CONFIG_EMAIL_FILE, {"email": email_user, "password": email_pass, "imap_server": "mail.fashionclub.com.ec", "imap_port": 993})
-                st.success("Guardado")
-
-    # 2. Panel Principal
-    tab1, tab2 = st.tabs(["🚀 Análisis en Tiempo Real", "📊 Dashboard de Novedades"])
+            email_user = st.text_input("Email", 
+                                      value=c_email.get("email", "wperez@fashionclub.com.ec"),
+                                      key="email_user_improved")
+            email_pass = st.text_input("Password", 
+                                      value=c_email.get("password", ""), 
+                                      type="password",
+                                      key="email_pass_improved")
+            if st.button("💾 Guardar Credenciales", key="save_email_improved"):
+                wilo_guardar_config(CONFIG_EMAIL_FILE, {
+                    "email": email_user, 
+                    "password": email_pass, 
+                    "imap_server": "mail.fashionclub.com.ec", 
+                    "imap_port": 993
+                })
+                st.success("Credenciales guardadas")
     
-    with tab1:
-        st.info("Wilo analizará tu bandeja de entrada buscando: Faltantes, Sobrantes, Daños, Errores de Etiquetado y más.")
-        dias = st.slider("Días atrás a analizar", 1, 30, 7)
+    # Panel de configuración de búsqueda
+    st.markdown("<div class='filter-panel'>", unsafe_allow_html=True)
+    st.markdown("<h3 class='filter-title'>🎯 Configuración de Búsqueda</h3>", unsafe_allow_html=True)
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        dias_analisis = st.slider("📅 Días atrás a analizar", 1, 90, 30,
+                                 help="Analizar correos desde hace X días")
+    
+    with col2:
+        carpetas_busqueda = st.multiselect(
+            "📂 Carpetas a analizar",
+            options=["INBOX", "SENT", "DRAFTS", "TRASH", "ARCHIVE"],
+            default=["INBOX", "SENT"],
+            help="Selecciona las carpetas a analizar"
+        )
+    
+    with col3:
+        tipos_problemas = st.multiselect(
+            "🔍 Tipos de problemas a buscar",
+            options=[
+                "FALTANTE_SOBRANTE", "DAÑO", "ERROR_ETIQUETADO", 
+                "CRUCE_CODIGOS", "TRANSFERENCIA", "CALIDAD",
+                "DEVOLUCION", "GARANTIA", "PRIORIDAD", "INFORMACION"
+            ],
+            default=["FALTANTE_SOBRANTE", "DAÑO", "ERROR_ETIQUETADO", "CRUCE_CODIGOS"],
+            help="Selecciona los tipos de problemas específicos a buscar"
+        )
+    
+    st.markdown("</div>", unsafe_allow_html=True)
+    
+    # Botón de análisis exhaustivo
+    if st.button("🚀 EJECUTAR ANÁLISIS EXHAUSTIVO", 
+                type="primary", 
+                use_container_width=True,
+                help="Analizar TODOS los correos de las carpetas seleccionadas"):
         
-        if st.button("🧠 EJECUTAR ANÁLISIS DE CORREOS", type="primary"):
-            cfg_mail = wilo_cargar_config(CONFIG_EMAIL_FILE)
-            cfg_ai = wilo_cargar_config(CONFIG_GEMINI_FILE)
-            
-            if not cfg_mail.get("password") or not cfg_ai.get("api_key"):
-                st.error("❌ Faltan configuraciones. Revisa el desplegable de arriba.")
-                return
-
-            # Proceso de Conexión
+        cfg_mail = wilo_cargar_config(CONFIG_EMAIL_FILE)
+        cfg_ai = wilo_cargar_config(CONFIG_GEMINI_FILE)
+        
+        if not cfg_mail.get("password") or not cfg_ai.get("api_key"):
+            st.error("❌ Faltan configuraciones. Configura la API de Gemini y las credenciales de email.")
+            return
+        
+        # Contenedor para resultados
+        resultados_container = st.container()
+        
+        with resultados_container:
+            # Progreso
             status_log = st.empty()
-            progress = st.progress(0)
+            progress_bar = st.progress(0)
+            metricas_container = st.empty()
             
             try:
                 # Conexión IMAP
                 status_log.text("🔌 Conectando al servidor de correo...")
                 mail = imaplib.IMAP4_SSL(cfg_mail["imap_server"], cfg_mail["imap_port"])
                 mail.login(cfg_mail["email"], cfg_mail["password"])
-                mail.select("INBOX")
                 
-                # Búsqueda
-                date_limit = (datetime.now() - timedelta(days=dias)).strftime("%d-%b-%Y")
-                typ, msgs = mail.search(None, f'(SINCE "{date_limit}")')
-                msg_ids = msgs[0].split()
-                total_msgs = len(msg_ids)
-                
-                status_log.text(f"📥 Se encontraron {total_msgs} correos. Analizando con IA...")
+                total_correos = 0
+                total_procesados = 0
+                problemas_detectados = []
+                resumen_correos = {
+                    "total": 0,
+                    "con_problemas": 0,
+                    "por_tipo": {},
+                    "por_carpeta": {},
+                    "por_dia": {}
+                }
                 
                 # Configurar Gemini
                 genai.configure(api_key=cfg_ai["api_key"])
                 model = genai.GenerativeModel('gemini-1.5-flash')
                 
-                novedades_detectadas = []
+                # Fecha límite
+                date_limit = (datetime.now() - timedelta(days=dias_analisis)).strftime("%d-%b-%Y")
                 
-                for i, num in enumerate(reversed(msg_ids)): # Analizar desde el más reciente
-                    if i >= 50: break # Límite de seguridad
-                    
-                    _, data = mail.fetch(num, '(RFC822)')
-                    msg = email.message_from_bytes(data[0][1])
-                    asunto = wilo_decode_header(msg["Subject"])
-                    cuerpo = wilo_extraer_cuerpo(msg)
-                    
-                    # Prompt Optimizado para Fashion Club
-                    prompt = f"""
-                    Analiza este correo de logística de Aeropostale Ecuador.
-                    Asunto: {asunto}
-                    Cuerpo: {cuerpo}
-                    
-                    Busca EXCLUSIVAMENTE problemas operativos:
-                    - Faltantes/Sobrantes de prendas
-                    - Daños/Manchas/Huecos
-                    - Errores de Etiquetado/RFID
-                    - Problemas de Transferencias (Jireh)
-                    
-                    Si encuentras algo, responde SOLO un JSON así (si no, responde {{}}):
-                    {{
-                        "tienda": "Nombre tienda o 'Desconocida'",
-                        "problema": "Descripción corta del problema",
-                        "tipo": "FALTANTE|SOBRANTE|DAÑO|ETIQUETA|OTRO",
-                        "urgencia": "ALTA|MEDIA|BAJA"
-                    }}
-                    """
-                    
+                # Procesar cada carpeta
+                for carpeta_idx, carpeta in enumerate(carpetas_busqueda):
                     try:
-                        response = model.generate_content(prompt)
-                        res_text = response.text.strip()
-                        if "{" in res_text and "problema" in res_text:
-                            # Limpieza básica de JSON
-                            json_str = res_text[res_text.find('{'):res_text.rfind('}')+1]
-                            data_json = json.loads(json_str)
-                            data_json["asunto_correo"] = asunto
-                            data_json["fecha"] = msg["Date"]
-                            novedades_detectadas.append(data_json)
-                    except: pass
-                    
-                    progress.progress((i + 1) / min(len(msg_ids), 50))
+                        status_log.text(f"📂 Analizando carpeta: {carpeta}")
+                        mail.select(carpeta)
+                        
+                        # Buscar TODOS los correos desde la fecha límite
+                        _, msgs = mail.search(None, f'(SINCE "{date_limit}")')
+                        msg_ids = msgs[0].split()
+                        total_carpeta = len(msg_ids)
+                        total_correos += total_carpeta
+                        
+                        resumen_correos["por_carpeta"][carpeta] = total_carpeta
+                        
+                        # Procesar cada correo
+                        for i, num in enumerate(msg_ids):
+                            try:
+                                _, data = mail.fetch(num, '(RFC822)')
+                                msg = email.message_from_bytes(data[0][1])
+                                asunto = wilo_decode_header(msg["Subject"])
+                                cuerpo = wilo_extraer_cuerpo(msg)
+                                remitente = msg["From"]
+                                fecha = msg["Date"]
+                                
+                                # Análisis con IA mejorado
+                                problemas_correo = self.analizar_correo_con_ia(
+                                    asunto, cuerpo, remitente, fecha, 
+                                    tipos_problemas, model
+                                )
+                                
+                                if problemas_correo:
+                                    problemas_detectados.extend(problemas_correo)
+                                    resumen_correos["con_problemas"] += 1
+                                    
+                                    # Actualizar resumen por tipo
+                                    for problema in problemas_correo:
+                                        tipo = problema.get("tipo", "OTRO")
+                                        if tipo not in resumen_correos["por_tipo"]:
+                                            resumen_correos["por_tipo"][tipo] = 0
+                                        resumen_correos["por_tipo"][tipo] += 1
+                                
+                                total_procesados += 1
+                                
+                                # Actualizar progreso
+                                progress_global = (total_procesados / total_correos) if total_correos > 0 else 0
+                                progress_bar.progress(progress_global)
+                                
+                                # Actualizar métricas en tiempo real
+                                if total_procesados % 10 == 0:
+                                    metricas_container.markdown(f"""
+                                    **📊 Progreso:** {total_procesados}/{total_correos} correos procesados  
+                                    **⚠️ Problemas detectados:** {len(problemas_detectados)}  
+                                    **📅 Días analizados:** {dias_analisis}
+                                    """)
+                                
+                            except Exception as e:
+                                logger.error(f"Error procesando correo {num}: {e}")
+                                continue
+                                
+                    except Exception as e:
+                        logger.error(f"Error accediendo a carpeta {carpeta}: {e}")
+                        continue
                 
                 mail.logout()
                 
-                # Guardar Resultados
-                if novedades_detectadas:
-                    wilo_guardar_config(NOVEDADES_DB, novedades_detectadas)
-                    st.success(f"✅ Análisis Terminado. Se detectaron {len(novedades_detectadas)} novedades.")
-                else:
-                    st.warning("El análisis terminó sin detectar novedades críticas en los últimos correos.")
-                    
+                # Mostrar resultados
+                self.mostrar_resultados_exhaustivos(
+                    problemas_detectados, 
+                    resumen_correos, 
+                    dias_analisis
+                )
+                
             except Exception as e:
-                st.error(f"Error crítico en el núcleo: {e}")
+                st.error(f"❌ Error crítico en el análisis: {str(e)}")
+                logger.error(f"Error en análisis exhaustivo: {e}", exc_info=True)
 
-    with tab2:
-        if NOVEDADES_DB.exists():
-            data = json.load(open(NOVEDADES_DB))
-            if data:
-                df = pd.DataFrame(data)
+def analizar_correo_con_ia(self, asunto, cuerpo, remitente, fecha, tipos_problemas, model):
+    """Analiza un correo específico buscando problemas logísticos"""
+    
+    # Prompt optimizado para búsqueda exhaustiva
+    tipos_str = ", ".join(tipos_problemas)
+    
+    prompt = f"""
+    ANALIZA EXHAUSTIVAMENTE este correo de logística de Aeropostale buscando CUALQUIER problema operativo.
+    
+    **CORREO:**
+    - Asunto: {asunto}
+    - Remitente: {remitente}
+    - Fecha: {fecha}
+    - Cuerpo: {cuerpo[:3000]}
+    
+    **BUSCAR ESPECÍFICAMENTE:**
+    1. **FALTANTES/SOBRANTES:** "más prenda", "menos prenda", "falta", "sobra", "diferencia", "inventario"
+    2. **DAÑOS:** "mancha", "hueco", "roto", "dañado", "defectuoso", "imperfecto"
+    3. **ERRORES ETIQUETADO:** "etiqueta equivocada", "código incorrecto", "RFID", "escaneo"
+    4. **CRUCE DE CÓDIGOS:** "código diferente", "no coincide", "cruce", "inconsistencia"
+    5. **TRANSFERENCIAS:** "Jireh", "transferencia", "envío", "recepción"
+    6. **CALIDAD:** "calidad", "acabado", "tela", "costura"
+    7. **DEVOLUCIONES:** "devolución", "retorno", "rechazado"
+    8. **GARANTÍAS:** "garantía", "reclamo", "reembolso"
+    9. **PRIORIDADES:** "urgente", "inmediato", "prioridad", "rápido"
+    10. **INFORMACIÓN:** "consulta", "información", "solicitud", "duda"
+    
+    **FORMATO DE RESPUESTA:**
+    Si encuentras problemas, responde con un array JSON de objetos. Cada objeto debe tener:
+    {{
+        "tipo": "TIPO_PROBLEMA",
+        "gravedad": "ALTA|MEDIA|BAJA",
+        "descripcion": "Descripción clara del problema",
+        "referencias": ["códigos o referencias mencionadas"],
+        "accion_recomendada": "Acción a tomar",
+        "responsable": "Área/persona responsable"
+    }}
+    
+    Si NO hay problemas, responde: []
+    
+    **TIPO_PROBLEMA debe ser uno de:** {tipos_str}
+    """
+    
+    try:
+        response = model.generate_content(prompt)
+        response_text = response.text.strip()
+        
+        # Limpiar y parsear JSON
+        if response_text.startswith("[") and response_text.endswith("]"):
+            problemas = json.loads(response_text)
+            # Añadir metadatos del correo a cada problema
+            for problema in problemas:
+                problema["correo_asunto"] = asunto[:100]
+                problema["correo_remitente"] = remitente
+                problema["correo_fecha"] = fecha
+                problema["detectado_en"] = datetime.now().isoformat()
+            
+            return problemas
+        
+        return []
+        
+    except Exception as e:
+        logger.error(f"Error en análisis IA: {e}")
+        return []
+
+def mostrar_resultados_exhaustivos(self, problemas_detectados, resumen_correos, dias_analisis):
+    """Muestra los resultados del análisis exhaustivo"""
+    
+    st.markdown("<div class='dashboard-header'>", unsafe_allow_html=True)
+    st.markdown("<h1 class='header-title'>📊 Resultados del Análisis Exhaustivo</h1>")
+    st.markdown(f"<div class='header-subtitle'>Período: últimos {dias_analisis} días</div>")
+    st.markdown("</div>", unsafe_allow_html=True)
+    
+    # Métricas principales
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.metric("📧 Correos Analizados", resumen_correos["total"])
+    with col2:
+        st.metric("⚠️ Correos con Problemas", resumen_correos["con_problemas"])
+    with col3:
+        tasa_problemas = (resumen_correos["con_problemas"] / resumen_correos["total"] * 100) if resumen_correos["total"] > 0 else 0
+        st.metric("📈 Tasa de Problemas", f"{tasa_problemas:.1f}%")
+    with col4:
+        st.metric("🔍 Problemas Detectados", len(problemas_detectados))
+    
+    # Distribución por tipo de problema
+    st.markdown("<div class='dashboard-header'><h2>📋 Distribución por Tipo de Problema</h2></div>", unsafe_allow_html=True)
+    
+    if resumen_correos["por_tipo"]:
+        df_tipos = pd.DataFrame({
+            "Tipo": list(resumen_correos["por_tipo"].keys()),
+            "Cantidad": list(resumen_correos["por_tipo"].values())
+        }).sort_values("Cantidad", ascending=False)
+        
+        fig = px.bar(df_tipos, x="Tipo", y="Cantidad", 
+                    title="Problemas por Tipo",
+                    color="Cantidad",
+                    color_continuous_scale="reds")
+        st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.info("✅ No se detectaron problemas en el período analizado.")
+    
+    # Tabla detallada de problemas
+    if problemas_detectados:
+        st.markdown("<div class='dashboard-header'><h2>📝 Problemas Detectados (Detalle)</h2></div>", unsafe_allow_html=True)
+        
+        # Crear DataFrame para visualización
+        problemas_df = pd.DataFrame(problemas_detectados)
+        
+        # Columnas para mostrar
+        columnas_mostrar = ["tipo", "gravedad", "descripcion", "correo_asunto", "correo_remitente", "accion_recomendada"]
+        columnas_mostrar = [col for col in columnas_mostrar if col in problemas_df.columns]
+        
+        # Mostrar tabla con filtros
+        st.dataframe(
+            problemas_df[columnas_mostrar].sort_values("gravedad", ascending=False),
+            use_container_width=True,
+            height=400
+        )
+        
+        # Opciones de exportación
+        st.markdown("<div class='filter-panel'>", unsafe_allow_html=True)
+        st.markdown("<h3 class='filter-title'>💾 Exportar Resultados</h3>", unsafe_allow_html=True)
+        
+        col_exp1, col_exp2, col_exp3 = st.columns(3)
+        
+        with col_exp1:
+            # Exportar a Excel
+            output = io.BytesIO()
+            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                problemas_df.to_excel(writer, sheet_name='Problemas_Detectados', index=False)
                 
-                # Métricas
-                c1, c2, c3 = st.columns(3)
-                c1.metric("Total Novedades", len(df))
-                c2.metric("Alta Urgencia", len(df[df['urgencia'] == 'ALTA']))
-                c3.metric("Tiendas Afectadas", df['tienda'].nunique())
+                # Agregar hoja de resumen
+                resumen_df = pd.DataFrame([{
+                    "Total Correos": resumen_correos["total"],
+                    "Correos con Problemas": resumen_correos["con_problemas"],
+                    "Tasa Problemas": f"{tasa_problemas:.1f}%",
+                    "Período Analizado": f"{dias_analisis} días",
+                    "Fecha Análisis": datetime.now().strftime("%Y-%m-%d %H:%M")
+                }])
+                resumen_df.to_excel(writer, sheet_name='Resumen', index=False)
+            
+            excel_data = output.getvalue()
+            st.download_button(
+                label="📊 Descargar Excel",
+                data=excel_data,
+                file_name=f"analisis_correos_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True
+            )
+        
+        with col_exp2:
+            # Exportar a CSV
+            csv_data = problemas_df.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                label="📄 Descargar CSV",
+                data=csv_data,
+                file_name=f"problemas_detectados_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
+        
+        with col_exp3:
+            # Exportar a PDF
+            if st.button("🖨️ Generar Reporte PDF", use_container_width=True):
+                with st.spinner("Generando reporte PDF..."):
+                    pdf_data = self.generar_reporte_pdf(problemas_detectados, resumen_correos)
+                    st.download_button(
+                        label="⬇️ Descargar PDF",
+                        data=pdf_data,
+                        file_name=f"reporte_analisis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
+                        mime="application/pdf",
+                        use_container_width=True
+                    )
+        
+        st.markdown("</div>", unsafe_allow_html=True)
+        
+        # Análisis de tendencias
+        st.markdown("<div class='dashboard-header'><h2>📈 Análisis de Tendencias</h2></div>", unsafe_allow_html=True)
+        
+        # Agrupar por fecha si hay datos temporales
+        if "correo_fecha" in problemas_df.columns:
+            try:
+                problemas_df['fecha_parseada'] = pd.to_datetime(
+                    problemas_df['correo_fecha'], 
+                    errors='coerce',
+                    utc=True
+                ).dt.date
                 
-                # Gráficos
-                col_g1, col_g2 = st.columns(2)
-                with col_g1:
-                    st.caption("Por Tipo de Problema")
-                    st.bar_chart(df['tipo'].value_counts())
-                with col_g2:
-                    st.caption("Detalle Reciente")
-                    st.dataframe(df[['tienda', 'problema', 'urgencia']], hide_index=True)
-            else:
-                st.info("Base de datos de novedades vacía.")
-        else:
-            st.info("Aún no has ejecutado el análisis.")
+                problemas_por_dia = problemas_df.groupby('fecha_parseada').size().reset_index(name='problemas')
+                problemas_por_dia = problemas_por_dia.sort_values('fecha_parseada')
+                
+                fig = px.line(problemas_por_dia, 
+                            x='fecha_parseada', 
+                            y='problemas',
+                            title='Evolución de Problemas por Día',
+                            markers=True)
+                st.plotly_chart(fig, use_container_width=True)
+            except:
+                st.info("No se pudo generar el análisis de tendencias por fecha.")
+
+def generar_reporte_pdf(self, problemas_detectados, resumen_correos):
+    """Genera un reporte PDF detallado"""
+    try:
+        pdf = FPDF()
+        pdf.add_page()
+        
+        # Encabezado
+        pdf.set_fill_color(0, 45, 98)
+        pdf.rect(0, 0, 210, 30, style='F')
+        
+        pdf.set_text_color(255, 255, 255)
+        pdf.set_font("Helvetica", "B", 20)
+        pdf.set_xy(0, 5)
+        pdf.cell(210, 10, "AEROPOSTALE - REPORTE DE ANÁLISIS DE CORREOS", 0, 1, "C")
+        
+        pdf.set_font("Helvetica", "", 12)
+        pdf.set_xy(0, 15)
+        pdf.cell(210, 10, f"Generado: {datetime.now().strftime('%Y-%m-%d %H:%M')}", 0, 1, "C")
+        
+        pdf.set_text_color(0, 0, 0)
+        pdf.set_y(40)
+        
+        # Resumen
+        pdf.set_font("Helvetica", "B", 16)
+        pdf.cell(0, 10, "RESUMEN EJECUTIVO", 0, 1)
+        pdf.ln(5)
+        
+        pdf.set_font("Helvetica", "", 12)
+        pdf.cell(0, 8, f"Total correos analizados: {resumen_correos['total']}", 0, 1)
+        pdf.cell(0, 8, f"Correos con problemas: {resumen_correos['con_problemas']}", 0, 1)
+        pdf.cell(0, 8, f"Problemas detectados: {len(problemas_detectados)}", 0, 1)
+        
+        # Distribución por tipo
+        if resumen_correos["por_tipo"]:
+            pdf.ln(10)
+            pdf.set_font("Helvetica", "B", 14)
+            pdf.cell(0, 10, "DISTRIBUCIÓN POR TIPO DE PROBLEMA", 0, 1)
+            pdf.ln(5)
+            
+            pdf.set_font("Helvetica", "", 10)
+            for tipo, cantidad in resumen_correos["por_tipo"].items():
+                pdf.cell(0, 8, f"• {tipo}: {cantidad} problemas", 0, 1)
+        
+        # Problemas detallados
+        if problemas_detectados:
+            pdf.add_page()
+            pdf.set_font("Helvetica", "B", 16)
+            pdf.cell(0, 10, "PROBLEMAS DETECTADOS - DETALLE", 0, 1)
+            pdf.ln(5)
+            
+            pdf.set_font("Helvetica", "", 10)
+            for i, problema in enumerate(problemas_detectados[:50]):  # Límite de 50 para el PDF
+                pdf.set_font("Helvetica", "B", 11)
+                pdf.cell(0, 8, f"Problema #{i+1}: {problema.get('tipo', 'N/A')} - {problema.get('gravedad', 'N/A')}", 0, 1)
+                
+                pdf.set_font("Helvetica", "", 10)
+                pdf.multi_cell(0, 6, f"Descripción: {problema.get('descripcion', 'N/A')}")
+                pdf.multi_cell(0, 6, f"Correo: {problema.get('correo_asunto', 'N/A')}")
+                pdf.multi_cell(0, 6, f"Acción recomendada: {problema.get('accion_recomendada', 'N/A')}")
+                pdf.ln(5)
+        
+        return pdf.output(dest="S").encode("latin1")
+        
+    except Exception as e:
+        logger.error(f"Error generando PDF: {e}")
+        return b""
 
 # --- MÓDULO 2: TEMPO ANÁLISIS (Integrado) ---
 def modulo_tempo_analisis():
