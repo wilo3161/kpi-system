@@ -409,7 +409,7 @@ Ver dashboard: {link_dashboard}"""
             logger.error(f"Error enviando WhatsApp: {e}")
             # Fallback a email
             self.enviar_fallback_email(plantilla, datos)
-            class SistemaAprendizajeWilo:
+class SistemaAprendizajeWilo:
     def __init__(self):
         self.modelo_decisiones = None
         self.dataset_acciones = []
