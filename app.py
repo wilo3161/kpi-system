@@ -464,7 +464,7 @@ class SistemaAprendizajeWilo:
         # Re-entrenar periódicamente
         if len(self.dataset_acciones) % 50 == 0:
             self.entrenar_modelo_decisiones()
-            def mostrar_dashboard_wilo_ai():
+    def mostrar_dashboard_wilo_ai():
     """Dashboard central de inteligencia artificial"""
     st.markdown("""
     <div class='dashboard-header'>
