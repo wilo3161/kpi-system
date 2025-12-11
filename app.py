@@ -4235,7 +4235,281 @@ def wilo_guardar_config(archivo, data):
     with open(archivo, "w") as f: json.dump(data, f, indent=4)
 
 # --- MÓDULO 1: ANÁLISIS DE NOVEDADES (CORREOS + GEMINI) ---
-def modulo_novedades_correo():
+def modulo_novedades_correo(asunto, cuerpo, remitente, fecha, tipos_problemas, model):
+    # ==============================================================================
+# 🧠 MÓDULO MEJORADO DE ANÁLISIS DE CORREOS - BUSQUEDA EXHAUSTIVA
+# ==============================================================================
+
+def analizar_correo_con_ia_mejorado(asunto, cuerpo, remitente, fecha, tipos_problemas, model):
+    """Analiza un correo específico buscando problemas logísticos"""
+    
+    # Prompt optimizado para búsqueda exhaustiva
+    tipos_str = ", ".join(tipos_problemas)
+    
+    prompt = f"""
+    ANALIZA EXHAUSTIVAMENTE este correo de logística de Aeropostale buscando CUALQUIER problema operativo.
+    
+    **CORREO:**
+    - Asunto: {asunto}
+    - Remitente: {remitente}
+    - Fecha: {fecha}
+    - Cuerpo: {cuerpo[:3000]}
+    
+    **BUSCAR ESPECÍFICAMENTE:**
+    1. **FALTANTES/SOBRANTES:** "más prenda", "menos prenda", "falta", "sobra", "diferencia", "inventario"
+    2. **DAÑOS:** "mancha", "hueco", "roto", "dañado", "defectuoso", "imperfecto"
+    3. **ERRORES ETIQUETADO:** "etiqueta equivocada", "código incorrecto", "RFID", "escaneo"
+    4. **CRUCE DE CÓDIGOS:** "código diferente", "no coincide", "cruce", "inconsistencia"
+    5. **TRANSFERENCIAS:** "Jireh", "transferencia", "envío", "recepción"
+    6. **CALIDAD:** "calidad", "acabado", "tela", "costura"
+    7. **DEVOLUCIONES:** "devolución", "retorno", "rechazado"
+    8. **GARANTÍAS:** "garantía", "reclamo", "reembolso"
+    9. **PRIORIDADES:** "urgente", "inmediato", "prioridad", "rápido"
+    10. **INFORMACIÓN:** "consulta", "información", "solicitud", "duda"
+    
+    **FORMATO DE RESPUESTA:**
+    Si encuentras problemas, responde con un array JSON de objetos. Cada objeto debe tener:
+    {{
+        "tipo": "TIPO_PROBLEMA",
+        "gravedad": "ALTA|MEDIA|BAJA",
+        "descripcion": "Descripción clara del problema",
+        "referencias": ["códigos o referencias mencionadas"],
+        "accion_recomendada": "Acción a tomar",
+        "responsable": "Área/persona responsable"
+    }}
+    
+    Si NO hay problemas, responde: []
+    
+    **TIPO_PROBLEMA debe ser uno de:** {tipos_str}
+    """
+    
+    try:
+        response = model.generate_content(prompt)
+        response_text = response.text.strip()
+        
+        # Limpiar y parsear JSON
+        if response_text.startswith("[") and response_text.endswith("]"):
+            problemas = json.loads(response_text)
+            # Añadir metadatos del correo a cada problema
+            for problema in problemas:
+                problema["correo_asunto"] = asunto[:100]
+                problema["correo_remitente"] = remitente
+                problema["correo_fecha"] = fecha
+                problema["detectado_en"] = datetime.now().isoformat()
+            
+            return problemas
+        
+        return []
+        
+    except Exception as e:
+        logger.error(f"Error en análisis IA: {e}")
+        return []
+
+def mostrar_resultados_exhaustivos_mejorados(problemas_detectados, resumen_correos, dias_analisis):
+    """Muestra los resultados del análisis exhaustivo"""
+    
+    st.markdown("<div class='dashboard-header'>", unsafe_allow_html=True)
+    st.markdown("<h1 class='header-title'>📊 Resultados del Análisis Exhaustivo</h1>")
+    st.markdown(f"<div class='header-subtitle'>Período: últimos {dias_analisis} días</div>")
+    st.markdown("</div>", unsafe_allow_html=True)
+    
+    # Métricas principales
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.metric("📧 Correos Analizados", resumen_correos["total"])
+    with col2:
+        st.metric("⚠️ Correos con Problemas", resumen_correos["con_problemas"])
+    with col3:
+        tasa_problemas = (resumen_correos["con_problemas"] / resumen_correos["total"] * 100) if resumen_correos["total"] > 0 else 0
+        st.metric("📈 Tasa de Problemas", f"{tasa_problemas:.1f}%")
+    with col4:
+        st.metric("🔍 Problemas Detectados", len(problemas_detectados))
+    
+    # Distribución por tipo de problema
+    st.markdown("<div class='dashboard-header'><h2>📋 Distribución por Tipo de Problema</h2></div>", unsafe_allow_html=True)
+    
+    if resumen_correos["por_tipo"]:
+        df_tipos = pd.DataFrame({
+            "Tipo": list(resumen_correos["por_tipo"].keys()),
+            "Cantidad": list(resumen_correos["por_tipo"].values())
+        }).sort_values("Cantidad", ascending=False)
+        
+        fig = px.bar(df_tipos, x="Tipo", y="Cantidad", 
+                    title="Problemas por Tipo",
+                    color="Cantidad",
+                    color_continuous_scale="reds")
+        st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.info("✅ No se detectaron problemas en el período analizado.")
+    
+    # Tabla detallada de problemas
+    if problemas_detectados:
+        st.markdown("<div class='dashboard-header'><h2>📝 Problemas Detectados (Detalle)</h2></div>", unsafe_allow_html=True)
+        
+        # Crear DataFrame para visualización
+        problemas_df = pd.DataFrame(problemas_detectados)
+        
+        # Columnas para mostrar
+        columnas_mostrar = ["tipo", "gravedad", "descripcion", "correo_asunto", "correo_remitente", "accion_recomendada"]
+        columnas_mostrar = [col for col in columnas_mostrar if col in problemas_df.columns]
+        
+        # Mostrar tabla con filtros
+        st.dataframe(
+            problemas_df[columnas_mostrar].sort_values("gravedad", ascending=False),
+            use_container_width=True,
+            height=400
+        )
+        
+        # Opciones de exportación
+        st.markdown("<div class='filter-panel'>", unsafe_allow_html=True)
+        st.markdown("<h3 class='filter-title'>💾 Exportar Resultados</h3>", unsafe_allow_html=True)
+        
+        col_exp1, col_exp2, col_exp3 = st.columns(3)
+        
+        with col_exp1:
+            # Exportar a Excel
+            output = io.BytesIO()
+            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                problemas_df.to_excel(writer, sheet_name='Problemas_Detectados', index=False)
+                
+                # Agregar hoja de resumen
+                resumen_df = pd.DataFrame([{
+                    "Total Correos": resumen_correos["total"],
+                    "Correos con Problemas": resumen_correos["con_problemas"],
+                    "Tasa Problemas": f"{tasa_problemas:.1f}%",
+                    "Período Analizado": f"{dias_analisis} días",
+                    "Fecha Análisis": datetime.now().strftime("%Y-%m-%d %H:%M")
+                }])
+                resumen_df.to_excel(writer, sheet_name='Resumen', index=False)
+            
+            excel_data = output.getvalue()
+            st.download_button(
+                label="📊 Descargar Excel",
+                data=excel_data,
+                file_name=f"analisis_correos_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True
+            )
+        
+        with col_exp2:
+            # Exportar a CSV
+            csv_data = problemas_df.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                label="📄 Descargar CSV",
+                data=csv_data,
+                file_name=f"problemas_detectados_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
+        
+        with col_exp3:
+            # Exportar a PDF
+            if st.button("🖨️ Generar Reporte PDF", use_container_width=True):
+                with st.spinner("Generando reporte PDF..."):
+                    pdf_data = generar_reporte_pdf_mejorado(problemas_detectados, resumen_correos)
+                    st.download_button(
+                        label="⬇️ Descargar PDF",
+                        data=pdf_data,
+                        file_name=f"reporte_analisis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
+                        mime="application/pdf",
+                        use_container_width=True
+                    )
+        
+        st.markdown("</div>", unsafe_allow_html=True)
+        
+        # Análisis de tendencias
+        st.markdown("<div class='dashboard-header'><h2>📈 Análisis de Tendencias</h2></div>", unsafe_allow_html=True)
+        
+        # Agrupar por fecha si hay datos temporales
+        if "correo_fecha" in problemas_df.columns:
+            try:
+                problemas_df['fecha_parseada'] = pd.to_datetime(
+                    problemas_df['correo_fecha'], 
+                    errors='coerce',
+                    utc=True
+                ).dt.date
+                
+                problemas_por_dia = problemas_df.groupby('fecha_parseada').size().reset_index(name='problemas')
+                problemas_por_dia = problemas_por_dia.sort_values('fecha_parseada')
+                
+                fig = px.line(problemas_por_dia, 
+                            x='fecha_parseada', 
+                            y='problemas',
+                            title='Evolución de Problemas por Día',
+                            markers=True)
+                st.plotly_chart(fig, use_container_width=True)
+            except:
+                st.info("No se pudo generar el análisis de tendencias por fecha.")
+
+def generar_reporte_pdf_mejorado(problemas_detectados, resumen_correos):
+    """Genera un reporte PDF detallado"""
+    try:
+        pdf = FPDF()
+        pdf.add_page()
+        
+        # Encabezado
+        pdf.set_fill_color(0, 45, 98)
+        pdf.rect(0, 0, 210, 30, style='F')
+        
+        pdf.set_text_color(255, 255, 255)
+        pdf.set_font("Helvetica", "B", 20)
+        pdf.set_xy(0, 5)
+        pdf.cell(210, 10, "AEROPOSTALE - REPORTE DE ANÁLISIS DE CORREOS", 0, 1, "C")
+        
+        pdf.set_font("Helvetica", "", 12)
+        pdf.set_xy(0, 15)
+        pdf.cell(210, 10, f"Generado: {datetime.now().strftime('%Y-%m-%d %H:%M')}", 0, 1, "C")
+        
+        pdf.set_text_color(0, 0, 0)
+        pdf.set_y(40)
+        
+        # Resumen
+        pdf.set_font("Helvetica", "B", 16)
+        pdf.cell(0, 10, "RESUMEN EJECUTIVO", 0, 1)
+        pdf.ln(5)
+        
+        pdf.set_font("Helvetica", "", 12)
+        pdf.cell(0, 8, f"Total correos analizados: {resumen_correos['total']}", 0, 1)
+        pdf.cell(0, 8, f"Correos con problemas: {resumen_correos['con_problemas']}", 0, 1)
+        pdf.cell(0, 8, f"Problemas detectados: {len(problemas_detectados)}", 0, 1)
+        
+        # Distribución por tipo
+        if resumen_correos["por_tipo"]:
+            pdf.ln(10)
+            pdf.set_font("Helvetica", "B", 14)
+            pdf.cell(0, 10, "DISTRIBUCIÓN POR TIPO DE PROBLEMA", 0, 1)
+            pdf.ln(5)
+            
+            pdf.set_font("Helvetica", "", 10)
+            for tipo, cantidad in resumen_correos["por_tipo"].items():
+                pdf.cell(0, 8, f"• {tipo}: {cantidad} problemas", 0, 1)
+        
+        # Problemas detallados
+        if problemas_detectados:
+            pdf.add_page()
+            pdf.set_font("Helvetica", "B", 16)
+            pdf.cell(0, 10, "PROBLEMAS DETECTADOS - DETALLE", 0, 1)
+            pdf.ln(5)
+            
+            pdf.set_font("Helvetica", "", 10)
+            for i, problema in enumerate(problemas_detectados[:50]):  # Límite de 50 para el PDF
+                pdf.set_font("Helvetica", "B", 11)
+                pdf.cell(0, 8, f"Problema #{i+1}: {problema.get('tipo', 'N/A')} - {problema.get('gravedad', 'N/A')}", 0, 1)
+                
+                pdf.set_font("Helvetica", "", 10)
+                pdf.multi_cell(0, 6, f"Descripción: {problema.get('descripcion', 'N/A')}")
+                pdf.multi_cell(0, 6, f"Correo: {problema.get('correo_asunto', 'N/A')}")
+                pdf.multi_cell(0, 6, f"Acción recomendada: {problema.get('accion_recomendada', 'N/A')}")
+                pdf.ln(5)
+        
+        return pdf.output(dest="S").encode("latin1")
+        
+    except Exception as e:
+        logger.error(f"Error generando PDF: {e}")
+        return b""
+
+def modulo_novedades_correo_mejorado():
     """Módulo mejorado de análisis exhaustivo de correos"""
     st.header("🔍 Wilo AI: Análisis Exhaustivo de Correos")
     
@@ -4373,7 +4647,7 @@ def modulo_novedades_correo():
                                 fecha = msg["Date"]
                                 
                                 # Análisis con IA mejorado
-                                problemas_correo = self.analizar_correo_con_ia(
+                                problemas_correo = analizar_correo_con_ia_mejorado(
                                     asunto, cuerpo, remitente, fecha, 
                                     tipos_problemas, model
                                 )
@@ -4414,7 +4688,7 @@ def modulo_novedades_correo():
                 mail.logout()
                 
                 # Mostrar resultados
-                self.mostrar_resultados_exhaustivos(
+                mostrar_resultados_exhaustivos_mejorados(
                     problemas_detectados, 
                     resumen_correos, 
                     dias_analisis
@@ -4423,275 +4697,6 @@ def modulo_novedades_correo():
             except Exception as e:
                 st.error(f"❌ Error crítico en el análisis: {str(e)}")
                 logger.error(f"Error en análisis exhaustivo: {e}", exc_info=True)
-
-def analizar_correo_con_ia(self, asunto, cuerpo, remitente, fecha, tipos_problemas, model):
-    """Analiza un correo específico buscando problemas logísticos"""
-    
-    # Prompt optimizado para búsqueda exhaustiva
-    tipos_str = ", ".join(tipos_problemas)
-    
-    prompt = f"""
-    ANALIZA EXHAUSTIVAMENTE este correo de logística de Aeropostale buscando CUALQUIER problema operativo.
-    
-    **CORREO:**
-    - Asunto: {asunto}
-    - Remitente: {remitente}
-    - Fecha: {fecha}
-    - Cuerpo: {cuerpo[:3000]}
-    
-    **BUSCAR ESPECÍFICAMENTE:**
-    1. **FALTANTES/SOBRANTES:** "más prenda", "menos prenda", "falta", "sobra", "diferencia", "inventario"
-    2. **DAÑOS:** "mancha", "hueco", "roto", "dañado", "defectuoso", "imperfecto"
-    3. **ERRORES ETIQUETADO:** "etiqueta equivocada", "código incorrecto", "RFID", "escaneo"
-    4. **CRUCE DE CÓDIGOS:** "código diferente", "no coincide", "cruce", "inconsistencia"
-    5. **TRANSFERENCIAS:** "Jireh", "transferencia", "envío", "recepción"
-    6. **CALIDAD:** "calidad", "acabado", "tela", "costura"
-    7. **DEVOLUCIONES:** "devolución", "retorno", "rechazado"
-    8. **GARANTÍAS:** "garantía", "reclamo", "reembolso"
-    9. **PRIORIDADES:** "urgente", "inmediato", "prioridad", "rápido"
-    10. **INFORMACIÓN:** "consulta", "información", "solicitud", "duda"
-    
-    **FORMATO DE RESPUESTA:**
-    Si encuentras problemas, responde con un array JSON de objetos. Cada objeto debe tener:
-    {{
-        "tipo": "TIPO_PROBLEMA",
-        "gravedad": "ALTA|MEDIA|BAJA",
-        "descripcion": "Descripción clara del problema",
-        "referencias": ["códigos o referencias mencionadas"],
-        "accion_recomendada": "Acción a tomar",
-        "responsable": "Área/persona responsable"
-    }}
-    
-    Si NO hay problemas, responde: []
-    
-    **TIPO_PROBLEMA debe ser uno de:** {tipos_str}
-    """
-    
-    try:
-        response = model.generate_content(prompt)
-        response_text = response.text.strip()
-        
-        # Limpiar y parsear JSON
-        if response_text.startswith("[") and response_text.endswith("]"):
-            problemas = json.loads(response_text)
-            # Añadir metadatos del correo a cada problema
-            for problema in problemas:
-                problema["correo_asunto"] = asunto[:100]
-                problema["correo_remitente"] = remitente
-                problema["correo_fecha"] = fecha
-                problema["detectado_en"] = datetime.now().isoformat()
-            
-            return problemas
-        
-        return []
-        
-    except Exception as e:
-        logger.error(f"Error en análisis IA: {e}")
-        return []
-
-def mostrar_resultados_exhaustivos(self, problemas_detectados, resumen_correos, dias_analisis):
-    """Muestra los resultados del análisis exhaustivo"""
-    
-    st.markdown("<div class='dashboard-header'>", unsafe_allow_html=True)
-    st.markdown("<h1 class='header-title'>📊 Resultados del Análisis Exhaustivo</h1>")
-    st.markdown(f"<div class='header-subtitle'>Período: últimos {dias_analisis} días</div>")
-    st.markdown("</div>", unsafe_allow_html=True)
-    
-    # Métricas principales
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        st.metric("📧 Correos Analizados", resumen_correos["total"])
-    with col2:
-        st.metric("⚠️ Correos con Problemas", resumen_correos["con_problemas"])
-    with col3:
-        tasa_problemas = (resumen_correos["con_problemas"] / resumen_correos["total"] * 100) if resumen_correos["total"] > 0 else 0
-        st.metric("📈 Tasa de Problemas", f"{tasa_problemas:.1f}%")
-    with col4:
-        st.metric("🔍 Problemas Detectados", len(problemas_detectados))
-    
-    # Distribución por tipo de problema
-    st.markdown("<div class='dashboard-header'><h2>📋 Distribución por Tipo de Problema</h2></div>", unsafe_allow_html=True)
-    
-    if resumen_correos["por_tipo"]:
-        df_tipos = pd.DataFrame({
-            "Tipo": list(resumen_correos["por_tipo"].keys()),
-            "Cantidad": list(resumen_correos["por_tipo"].values())
-        }).sort_values("Cantidad", ascending=False)
-        
-        fig = px.bar(df_tipos, x="Tipo", y="Cantidad", 
-                    title="Problemas por Tipo",
-                    color="Cantidad",
-                    color_continuous_scale="reds")
-        st.plotly_chart(fig, use_container_width=True)
-    else:
-        st.info("✅ No se detectaron problemas en el período analizado.")
-    
-    # Tabla detallada de problemas
-    if problemas_detectados:
-        st.markdown("<div class='dashboard-header'><h2>📝 Problemas Detectados (Detalle)</h2></div>", unsafe_allow_html=True)
-        
-        # Crear DataFrame para visualización
-        problemas_df = pd.DataFrame(problemas_detectados)
-        
-        # Columnas para mostrar
-        columnas_mostrar = ["tipo", "gravedad", "descripcion", "correo_asunto", "correo_remitente", "accion_recomendada"]
-        columnas_mostrar = [col for col in columnas_mostrar if col in problemas_df.columns]
-        
-        # Mostrar tabla con filtros
-        st.dataframe(
-            problemas_df[columnas_mostrar].sort_values("gravedad", ascending=False),
-            use_container_width=True,
-            height=400
-        )
-        
-        # Opciones de exportación
-        st.markdown("<div class='filter-panel'>", unsafe_allow_html=True)
-        st.markdown("<h3 class='filter-title'>💾 Exportar Resultados</h3>", unsafe_allow_html=True)
-        
-        col_exp1, col_exp2, col_exp3 = st.columns(3)
-        
-        with col_exp1:
-            # Exportar a Excel
-            output = io.BytesIO()
-            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                problemas_df.to_excel(writer, sheet_name='Problemas_Detectados', index=False)
-                
-                # Agregar hoja de resumen
-                resumen_df = pd.DataFrame([{
-                    "Total Correos": resumen_correos["total"],
-                    "Correos con Problemas": resumen_correos["con_problemas"],
-                    "Tasa Problemas": f"{tasa_problemas:.1f}%",
-                    "Período Analizado": f"{dias_analisis} días",
-                    "Fecha Análisis": datetime.now().strftime("%Y-%m-%d %H:%M")
-                }])
-                resumen_df.to_excel(writer, sheet_name='Resumen', index=False)
-            
-            excel_data = output.getvalue()
-            st.download_button(
-                label="📊 Descargar Excel",
-                data=excel_data,
-                file_name=f"analisis_correos_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True
-            )
-        
-        with col_exp2:
-            # Exportar a CSV
-            csv_data = problemas_df.to_csv(index=False).encode('utf-8')
-            st.download_button(
-                label="📄 Descargar CSV",
-                data=csv_data,
-                file_name=f"problemas_detectados_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                mime="text/csv",
-                use_container_width=True
-            )
-        
-        with col_exp3:
-            # Exportar a PDF
-            if st.button("🖨️ Generar Reporte PDF", use_container_width=True):
-                with st.spinner("Generando reporte PDF..."):
-                    pdf_data = self.generar_reporte_pdf(problemas_detectados, resumen_correos)
-                    st.download_button(
-                        label="⬇️ Descargar PDF",
-                        data=pdf_data,
-                        file_name=f"reporte_analisis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
-                        mime="application/pdf",
-                        use_container_width=True
-                    )
-        
-        st.markdown("</div>", unsafe_allow_html=True)
-        
-        # Análisis de tendencias
-        st.markdown("<div class='dashboard-header'><h2>📈 Análisis de Tendencias</h2></div>", unsafe_allow_html=True)
-        
-        # Agrupar por fecha si hay datos temporales
-        if "correo_fecha" in problemas_df.columns:
-            try:
-                problemas_df['fecha_parseada'] = pd.to_datetime(
-                    problemas_df['correo_fecha'], 
-                    errors='coerce',
-                    utc=True
-                ).dt.date
-                
-                problemas_por_dia = problemas_df.groupby('fecha_parseada').size().reset_index(name='problemas')
-                problemas_por_dia = problemas_por_dia.sort_values('fecha_parseada')
-                
-                fig = px.line(problemas_por_dia, 
-                            x='fecha_parseada', 
-                            y='problemas',
-                            title='Evolución de Problemas por Día',
-                            markers=True)
-                st.plotly_chart(fig, use_container_width=True)
-            except:
-                st.info("No se pudo generar el análisis de tendencias por fecha.")
-
-def generar_reporte_pdf(self, problemas_detectados, resumen_correos):
-    """Genera un reporte PDF detallado"""
-    try:
-        pdf = FPDF()
-        pdf.add_page()
-        
-        # Encabezado
-        pdf.set_fill_color(0, 45, 98)
-        pdf.rect(0, 0, 210, 30, style='F')
-        
-        pdf.set_text_color(255, 255, 255)
-        pdf.set_font("Helvetica", "B", 20)
-        pdf.set_xy(0, 5)
-        pdf.cell(210, 10, "AEROPOSTALE - REPORTE DE ANÁLISIS DE CORREOS", 0, 1, "C")
-        
-        pdf.set_font("Helvetica", "", 12)
-        pdf.set_xy(0, 15)
-        pdf.cell(210, 10, f"Generado: {datetime.now().strftime('%Y-%m-%d %H:%M')}", 0, 1, "C")
-        
-        pdf.set_text_color(0, 0, 0)
-        pdf.set_y(40)
-        
-        # Resumen
-        pdf.set_font("Helvetica", "B", 16)
-        pdf.cell(0, 10, "RESUMEN EJECUTIVO", 0, 1)
-        pdf.ln(5)
-        
-        pdf.set_font("Helvetica", "", 12)
-        pdf.cell(0, 8, f"Total correos analizados: {resumen_correos['total']}", 0, 1)
-        pdf.cell(0, 8, f"Correos con problemas: {resumen_correos['con_problemas']}", 0, 1)
-        pdf.cell(0, 8, f"Problemas detectados: {len(problemas_detectados)}", 0, 1)
-        
-        # Distribución por tipo
-        if resumen_correos["por_tipo"]:
-            pdf.ln(10)
-            pdf.set_font("Helvetica", "B", 14)
-            pdf.cell(0, 10, "DISTRIBUCIÓN POR TIPO DE PROBLEMA", 0, 1)
-            pdf.ln(5)
-            
-            pdf.set_font("Helvetica", "", 10)
-            for tipo, cantidad in resumen_correos["por_tipo"].items():
-                pdf.cell(0, 8, f"• {tipo}: {cantidad} problemas", 0, 1)
-        
-        # Problemas detallados
-        if problemas_detectados:
-            pdf.add_page()
-            pdf.set_font("Helvetica", "B", 16)
-            pdf.cell(0, 10, "PROBLEMAS DETECTADOS - DETALLE", 0, 1)
-            pdf.ln(5)
-            
-            pdf.set_font("Helvetica", "", 10)
-            for i, problema in enumerate(problemas_detectados[:50]):  # Límite de 50 para el PDF
-                pdf.set_font("Helvetica", "B", 11)
-                pdf.cell(0, 8, f"Problema #{i+1}: {problema.get('tipo', 'N/A')} - {problema.get('gravedad', 'N/A')}", 0, 1)
-                
-                pdf.set_font("Helvetica", "", 10)
-                pdf.multi_cell(0, 6, f"Descripción: {problema.get('descripcion', 'N/A')}")
-                pdf.multi_cell(0, 6, f"Correo: {problema.get('correo_asunto', 'N/A')}")
-                pdf.multi_cell(0, 6, f"Acción recomendada: {problema.get('accion_recomendada', 'N/A')}")
-                pdf.ln(5)
-        
-        return pdf.output(dest="S").encode("latin1")
-        
-    except Exception as e:
-        logger.error(f"Error generando PDF: {e}")
-        return b""
 
 # --- MÓDULO 2: TEMPO ANÁLISIS (Integrado) ---
 def modulo_tempo_analisis():
