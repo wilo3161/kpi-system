@@ -5095,7 +5095,7 @@ def main():
             ("Ayuda y Contacto", "❓", mostrar_ayuda, "public"),
             
             # Módulos WILO específicos
-            ("📨 WILO: Novedades Correo", "📧", modulo_novedades_correo, "admin"),
+            ("📨 WILO: Novedades Correo", "📧", modulo_novedades_correo_mejorado, "admin"),
             ("⏱️ WILO: Tempo Análisis", "⏱️", modulo_tempo_analisis, "user"),
         ]
         
