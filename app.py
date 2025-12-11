@@ -212,7 +212,7 @@ class SistemaMonitorProactivo:
             return resultado
         except:
             return self.respuesta_por_defecto()
-    class MotorRespuestasAutomaticas:
+class MotorRespuestasAutomaticas:
     def __init__(self):
         self.templates = self.cargar_templates()
         self.historial_respuestas = []
