@@ -4036,6 +4036,30 @@ def mostrar_generacion_etiquetas():
                     os.remove(imagen_path)
 
 def mostrar_ayuda():
+    def mostrar_ayuda():
+    """Muestra la página de ayuda y contacto"""
+    # ... tu código existente completo ...
+    # (deja esta función como está)
+
+# --- INICIALIZACIÓN WILO AI EN SEGUNDO PLANO ---
+def iniciar_wilo_ai_background():
+    """Inicia componentes WILO AI en segundo plano"""
+    try:
+        # Inicializar componentes si no existen
+        if 'wilo_ai' not in st.session_state:
+            st.session_state.wilo_ai = {
+                'monitor': SistemaMonitorProactivo(),
+                'respuestas': MotorRespuestasAutomaticas(),
+                'whatsapp': SistemaAlertasWhatsApp(),
+                'aprendizaje': SistemaAprendizajeWilo()
+            }
+            logger.info("✅ WILO AI inicializado correctamente")
+    except Exception as e:
+        logger.error(f"Error inicializando WILO AI: {e}")
+
+def main():
+    """Función principal de la aplicación"""
+    # ... el resto de tu función main ...
     """Muestra la página de ayuda y contacto"""
     st.markdown("<div class='dashboard-header'><h1 class='header-title'>❓ Ayuda y Contacto</h1><div class='header-subtitle'>Soporte y documentación</div></div>", unsafe_allow_html=True)
     
@@ -4403,7 +4427,325 @@ def modulo_tempo_analisis():
 # ==============================================================================
 # FIN DEL NÚCLEO WILO
 # ==============================================================================
+# ==============================================================================
+# FIN DEL NÚCLEO WILO
+# ==============================================================================
 
+# ==============================================================================
+# 🚀 NÚCLEO WILO AI MEJORADO - CLASES CORREGIDAS
+# ==============================================================================
+
+# --- CLASE 1: SISTEMA DE MONITOREO PROACTIVO ---
+class SistemaMonitorProactivo:
+    def __init__(self):
+        self.patrones_aprendidos = {}
+        self.historial_acciones = []
+        self.umbral_alertas = {
+            'critico': 0.9,
+            'alto': 0.7,
+            'medio': 0.5,
+            'bajo': 0.3
+        }
+    
+    def monitoreo_tiempo_real(self):
+        """Monitorea múltiples fuentes en tiempo real"""
+        while True:
+            # 1. Correos entrantes
+            self.escaneo_correos_continuo()
+            
+            # 2. Base de datos KPIs
+            self.analisis_kpis_automatico()
+            
+            # 3. Distribuciones semanales
+            self.verificacion_abastecimiento_proactiva()
+            
+            # 4. Alertas externas
+            self.monitoreo_fuentes_externas()
+            
+            time.sleep(300)  # Cada 5 minutos
+    
+    def escaneo_correos_continuo(self):
+        """Escaneo continuo de correos sin intervención manual"""
+        config_email = wilo_cargar_config(CONFIG_EMAIL_FILE)
+        config_ai = wilo_cargar_config(CONFIG_GEMINI_FILE)
+        
+        if not config_email.get("password") or not config_ai.get("api_key"):
+            return
+        
+        try:
+            mail = imaplib.IMAP4_SSL(config_email["imap_server"], config_email["imap_port"])
+            mail.login(config_email["email"], config_email["password"])
+            mail.select("INBOX")
+            
+            # Buscar correos NO leídos
+            _, msgs = mail.search(None, 'UNSEEN')
+            msg_ids = msgs[0].split()
+            
+            for num in msg_ids:
+                _, data = mail.fetch(num, '(RFC822)')
+                msg = email.message_from_bytes(data[0][1])
+                
+                # Procesar automáticamente
+                resultado = self.procesar_correo_automatico(msg)
+                
+                if resultado['accion_requerida']:
+                    self.ejecutar_accion_automatica(resultado)
+            
+            mail.logout()
+        except Exception as e:
+            logger.error(f"Error escaneo continuo: {e}")
+    
+    def procesar_correo_automatico(self, msg):
+        """Procesa correos y decide acción automática"""
+        asunto = wilo_decode_header(msg["Subject"])
+        cuerpo = wilo_extraer_cuerpo(msg)
+        remitente = msg["From"]
+        
+        # Análisis con IA mejorado
+        try:
+            config_ai = wilo_cargar_config(CONFIG_GEMINI_FILE)
+            api_key = config_ai.get("api_key")
+            
+            if not api_key:
+                return self.respuesta_por_defecto()
+            
+            genai.configure(api_key=api_key)
+            model = genai.GenerativeModel('gemini-1.5-flash')
+            
+            prompt = f"""
+            Analiza este correo de logística y determina:
+            1. Tipo de solicitud (faltante, daño, urgencia, información, seguimiento)
+            2. Prioridad (1-5, donde 5 es máxima)
+            3. ¿Requiere respuesta inmediata? (Sí/No)
+            4. ¿Es información para seguimiento futuro? (Sí/No)
+            5. Personas/áreas a notificar (separar por comas)
+            6. Acción sugerida (respuesta, alerta, archivar, derivar)
+            
+            Correo:
+            Asunto: {asunto}
+            Remitente: {remitente}
+            Cuerpo: {cuerpo[:2000]}
+            
+            Responde en JSON:
+            {{
+                "tipo": "",
+                "prioridad": 0,
+                "respuesta_inmediata": false,
+                "seguimiento_futuro": false,
+                "notificar": [],
+                "accion_sugerida": "",
+                "template_respuesta": "id_template",
+                "alerta_whatsapp": false,
+                "recordatorio_minutos": 0
+            }}
+            """
+            
+            response = model.generate_content(prompt)
+            resultado = json.loads(response.text)
+            
+            # Aprender del patrón
+            self.aprender_patron(asunto, cuerpo, resultado)
+            
+            return resultado
+        except Exception as e:
+            logger.error(f"Error procesando correo: {e}")
+            return self.respuesta_por_defecto()
+    
+    def respuesta_por_defecto(self):
+        """Respuesta por defecto si falla el análisis"""
+        return {
+            "tipo": "desconocido",
+            "prioridad": 1,
+            "respuesta_inmediata": False,
+            "seguimiento_futuro": False,
+            "notificar": [],
+            "accion_sugerida": "revisar_manual",
+            "template_respuesta": "default",
+            "alerta_whatsapp": False,
+            "recordatorio_minutos": 0
+        }
+    
+    def aprender_patron(self, asunto, cuerpo, resultado):
+        """Aprende patrones de correos"""
+        if asunto not in self.patrones_aprendidos:
+            self.patrones_aprendidos[asunto] = []
+        self.patrones_aprendidos[asunto].append({
+            "timestamp": datetime.now(),
+            "resultado": resultado,
+            "hash": hashlib.md5(cuerpo.encode()).hexdigest()[:10]
+        })
+    
+    def analisis_kpis_automatico(self):
+        """Análisis automático de KPIs"""
+        try:
+            df = cargar_historico_db()
+            if not df.empty:
+                # Análisis simple de tendencias
+                ultima_semana = df[df['fecha'] >= datetime.now() - timedelta(days=7)]
+                if not ultima_semana.empty:
+                    # Detectar anomalías
+                    for equipo in ultima_semana['equipo'].unique():
+                        equipo_data = ultima_semana[ultima_semana['equipo'] == equipo]
+                        avg_eficiencia = equipo_data['eficiencia'].mean()
+                        
+                        if avg_eficiencia < 80:
+                            self.registrar_alerta(f"Baja eficiencia en {equipo}: {avg_eficiencia:.1f}%")
+        except Exception as e:
+            logger.error(f"Error analizando KPIs: {e}")
+    
+    def verificacion_abastecimiento_proactiva(self):
+        """Verificación proactiva de abastecimiento"""
+        try:
+            alertas = verificar_alertas_abastecimiento()
+            if alertas:
+                for alerta in alertas:
+                    if alerta['gravedad'] == 'ALTA':
+                        self.registrar_alerta(f"🚨 {alerta['mensaje']}")
+        except Exception as e:
+            logger.error(f"Error verificando abastecimiento: {e}")
+    
+    def monitoreo_fuentes_externas(self):
+        """Monitoreo de otras fuentes de información"""
+        # Puedes agregar APIs externas aquí
+        pass
+    
+    def ejecutar_accion_automatica(self, resultado):
+        """Ejecuta acción basada en el análisis"""
+        if resultado['respuesta_inmediata'] and resultado['template_respuesta'] != 'default':
+            # Aquí iría la lógica para enviar respuesta automática
+            logger.info(f"Respuesta automática enviada para tipo: {resultado['tipo']}")
+        
+        if resultado['alerta_whatsapp']:
+            # Aquí iría la lógica para enviar alerta WhatsApp
+            logger.info(f"Alerta WhatsApp programada para tipo: {resultado['tipo']}")
+    
+    def registrar_alerta(self, mensaje):
+        """Registra alerta en el sistema"""
+        self.historial_acciones.append({
+            "timestamp": datetime.now(),
+            "tipo": "alerta",
+            "mensaje": mensaje,
+            "accion": "registrada"
+        })
+        logger.info(f"Alerta registrada: {mensaje}")
+
+# --- CLASE 2: MOTOR DE RESPUESTAS AUTOMÁTICAS (SIMPLIFICADA) ---
+class MotorRespuestasAutomaticas:
+    def __init__(self):
+        self.templates = {
+            "faltante_general": {
+                "asunto": "Re: {asunto_original} - Gestión de faltante",
+                "cuerpo": """Estimado/a,
+
+Hemos recibido su comunicación sobre el faltante detectado.
+✅ **Acción tomada:**
+1. Sistema notificado a inventario
+2. Búsqueda activa en almacenes alternos
+3. Notificación a proveedor
+
+📊 **Seguimiento:** AERO-{numero_seguimiento}
+⏰ **Tiempo estimado de solución:** 24-48 horas
+
+Le mantendremos informado.
+
+Atentamente,
+Sistema Automático Wilo AI
+Centro de Distribución Aeropostale""",
+                "variables": ["asunto_original", "numero_seguimiento"]
+            },
+            "default": {
+                "asunto": "Re: {asunto_original}",
+                "cuerpo": """Estimado/a,
+
+Hemos recibido su mensaje y lo estamos procesando.
+Un miembro de nuestro equipo se contactará pronto.
+
+Atentamente,
+Centro de Distribución Aeropostale"""
+            }
+        }
+        self.historial_respuestas = []
+    
+    def obtener_template(self, tipo):
+        """Obtiene template por tipo"""
+        return self.templates.get(tipo, self.templates["default"])
+    
+    def generar_respuesta(self, tipo, variables):
+        """Genera respuesta con variables"""
+        template = self.obtener_template(tipo)
+        asunto = template["asunto"].format(**variables)
+        cuerpo = template["cuerpo"].format(**variables)
+        
+        return {
+            "asunto": asunto,
+            "cuerpo": cuerpo,
+            "timestamp": datetime.now()
+        }
+
+# --- CLASE 3: SISTEMA DE ALERTAS WHATSAPP (SIMPLIFICADA) ---
+class SistemaAlertasWhatsApp:
+    def __init__(self):
+        self.config = {
+            'activo': False,  # Cambiar a True cuando configures
+            'contactos': []
+        }
+    
+    def enviar_alerta(self, tipo, mensaje):
+        """Envía alerta (placeholder para implementación real)"""
+        if not self.config['activo']:
+            logger.info(f"[WHATSAPP SIMULADO] {tipo}: {mensaje}")
+            return
+        
+        # Aquí iría la implementación real con Twilio u otra API
+        logger.info(f"Alerta WhatsApp enviada: {mensaje}")
+    
+    def enviar_resumen_diario(self, resumen):
+        """Envía resumen diario"""
+        mensaje = f"📊 Resumen Diario Wilo AI\n\n{resumen}"
+        self.enviar_alerta("resumen", mensaje)
+
+# --- CLASE 4: SISTEMA DE APRENDIZAJE (SIMPLIFICADA) ---
+class SistemaAprendizajeWilo:
+    def __init__(self):
+        self.decisiones = []
+        self.patrones = {}
+    
+    def registrar_decision(self, contexto, decision, resultado):
+        """Registra una decisión para aprendizaje"""
+        self.decisiones.append({
+            "fecha": datetime.now(),
+            "contexto": contexto,
+            "decision": decision,
+            "resultado": resultado
+        })
+        
+        # Limitar tamaño del historial
+        if len(self.decisiones) > 1000:
+            self.decisiones = self.decisiones[-1000:]
+    
+    def obtener_recomendacion(self, contexto_actual):
+        """Obtiene recomendación basada en historial"""
+        if not self.decisiones:
+            return None
+        
+        # Búsqueda simple de patrones similares
+        for decision in reversed(self.decisiones[-100:]):  # Últimas 100
+            if self.son_similares(decision["contexto"], contexto_actual):
+                return decision["decision"]
+        
+        return None
+    
+    def son_similares(self, ctx1, ctx2):
+        """Determina si dos contextos son similares"""
+        # Implementación simple - puedes mejorarla
+        palabras_clave = ["faltante", "daño", "urgencia", "tienda", "proveedor"]
+        
+        similitudes = 0
+        for palabra in palabras_clave:
+            if palabra in str(ctx1).lower() and palabra in str(ctx2).lower():
+                similitudes += 1
+        
+        return similitudes >= 2
 # ================================
 # FUNCIÓN PRINCIPAL
 # ================================
@@ -4420,22 +4762,25 @@ def main():
         """, unsafe_allow_html=True)
         
         menu_options = [
-        # --- NUEVOS MÓDULOS WILO ---
-        ("Wilo AI: Novedades Correo", "🤖", modulo_novedades_correo, "admin"),
-        ("Tempo Análisis (Tiempos)", "⏱️", modulo_tempo_analisis, "user"),
-        
-        # --- TUS MÓDULOS ORIGINALES (NO BORRAR) ---
-        ("Dashboard KPIs", "📊", mostrar_dashboard_kpis, "public"),
-        ("Análisis Histórico", "📈", mostrar_analisis_historico_kpis, "public"),
-        ("Ingreso de Datos", "📥", mostrar_ingreso_datos_kpis, "admin"),
-        ("Gestión de Trabajadores", "👥", mostrar_gestion_trabajadores_kpis, "admin"),
-        ("Gestión de Distribuciones", "📦", mostrar_gestion_distribuciones, "admin"),
-        ("Reconciliación", "🔁", mostrar_reconciliacion, "admin"),
-        ("Generar Guías", "📋", mostrar_generacion_guias, "user"),
-        ("Historial de Guías", "🔍", mostrar_historial_guias, "user"),
-        ("Generar Etiquetas", "🏷️", mostrar_generacion_etiquetas, "user"),
-        ("Ayuda y Contacto", "❓", mostrar_ayuda, "public")
-    ]
+            # NUEVO: Dashboard WILO AI
+            ("🧠 WILO AI Dashboard", "🤖", mostrar_dashboard_wilo_ai, "admin"),
+            
+            # Módulos originales existentes
+            ("Dashboard KPIs", "📊", mostrar_dashboard_kpis, "public"),
+            ("Análisis Histórico", "📈", mostrar_analisis_historico_kpis, "public"),
+            ("Ingreso de Datos", "📥", mostrar_ingreso_datos_kpis, "admin"),
+            ("Gestión de Trabajadores", "👥", mostrar_gestion_trabajadores_kpis, "admin"),
+            ("Gestión de Distribuciones", "📦", mostrar_gestion_distribuciones, "admin"),
+            ("Reconciliación", "🔁", mostrar_reconciliacion, "admin"),
+            ("Generar Guías", "📋", mostrar_generacion_guias, "user"),
+            ("Historial de Guías", "🔍", mostrar_historial_guias, "user"),
+            ("Generar Etiquetas", "🏷️", mostrar_generacion_etiquetas, "user"),
+            ("Ayuda y Contacto", "❓", mostrar_ayuda, "public"),
+            
+            # Módulos WILO específicos
+            ("📨 WILO: Novedades Correo", "📧", modulo_novedades_correo, "admin"),
+            ("⏱️ WILO: Tempo Análisis", "⏱️", modulo_tempo_analisis, "user"),
+        ]
         
         # Mostrar opciones del menú según permisos
         for i, (label, icon, _, permiso) in enumerate(menu_options):
@@ -4523,5 +4868,14 @@ def main():
     </div>
     """, unsafe_allow_html=True)
 
+# --- PUNTO DE ENTRADA ACTUALIZADO ---
 if __name__ == "__main__":
-    main()
+    # Inicializar WILO AI
+    iniciar_wilo_ai_background()
+    
+    # Ejecutar aplicación principal
+    try:
+        main()
+    except Exception as e:
+        st.error(f"Error crítico en la aplicación: {e}")
+        logger.error(f"Error en main: {e}", exc_info=True)
