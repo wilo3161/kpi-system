@@ -477,14 +477,11 @@ def mostrar_dashboard_wilo_ai():
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
-        st.metric("🤖 IA Activa", "ONLINE", delta="24/7")
-    
+        st.metric("🤖 IA Activa", "ONLINE", delta="24/7")    
     with col2:
-        st.metric("📧 Correos Procesados", "1,247", delta="+12 hoy")
-    
+        st.metric("📧 Correos Procesados", "1,247", delta="+12 hoy")   
     with col3:
-        st.metric("✅ Decisiones Acertadas", "94%", delta="+2%")
-    
+        st.metric("✅ Decisiones Acertadas", "94%", delta="+2%")    
     with col4:
         st.metric("⏱️ Tiempo Ahorrado", "38h", delta="+5h")
     
