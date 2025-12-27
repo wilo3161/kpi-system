@@ -42,40 +42,156 @@ import unicodedata
 import google.generativeai as genai
 from google.generativeai.types import GenerationConfig
 from pathlib import Path
-warnings.filterwarnings('ignore')
+import streamlit as st
+import imaplib
+import email
+import re
+import pandas as pd
+import logging
+import streamlit as st
+import imaplib
+import email
+import re
+import pandas as pd
+import logging
+from datetime import datetime, timedelta
+from concurrent.futures import ThreadPoolExecutor
+from email.header import decode_header
+from tenacity import retry, stop_after_attempt, wait_exponential
+from typing import List, Dict, Optional
 
-# ================================
-# INICIALIZACIÓN DE SESSION STATE
-# ================================
-if 'user_type' not in st.session_state:
-    st.session_state.user_type = None
-if 'password_correct' not in st.session_state:
-    st.session_state.password_correct = False
-if 'selected_menu' not in st.session_state:
-    st.session_state.selected_menu = 0
-if 'show_login' not in st.session_state:
-    st.session_state.show_login = False
-
-# ================================
-# CONFIGURACIÓN INICIAL Y LOGGING
-# ================================
+# --- CONFIGURACIÓN DE LOGGING ---
 logging.basicConfig(
+    filename='logs/email_processing.log',
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    format='%(asctime)s - %(levelname)s - %(message)s'
 )
-logger = logging.getLogger(__name__)
 
-# Configuración de Supabase
-SUPABASE_URL = "https://nsgdyqoqzlcyyameccqn.supabase.co"
-SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5zZ2R5cW9xemxjeXlhbWVjY3FuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTYwMTA3MzksImV4cCI6MjA3MTU4NjczOX0.jA6sem9IMts6aPeYlMsldbtQaEaKAuQaQ1xf03TdWso"
-ADMIN_PASSWORD = "Wilo3161"
-USER_PASSWORD = "User1234"
+# --- PATRONES DE RETAIL (FASHION CLUB) ---
+NOVEDAD_PATTERNS = {
+    "PRENDA_MAS": r"(?:extra|adicional|demás|sobrante).{0,15}prenda[s]?",
+    "PRENDA_MENOS": r"(?:falta|faltante|no\s+recib[ío]|incompleto).{0,15}prenda[s]?",
+    "MANCHADA": r"manchad[ao]|stain(?:ed)?|suciedad",
+    "ROTA": r"rota|roto|desgarrad[ao]|torn|agujero",
+    "SUCIA": r"suci[ao]|dirty",
+    "CRUCE_CODIGO": r"cruce\s+de\s+c[óo]digos|SKU\s+mismatch|etiqueta\s+incorrecta"
+}
 
-# Configuración de directorios
-APP_DIR = os.path.dirname(os.path.abspath(__file__))
-IMAGES_DIR = os.path.join(APP_DIR, "images")
-os.makedirs(IMAGES_DIR, exist_ok=True)
+class WiloAIEngine:
+    def __init__(self):
+        # Credenciales desde Streamlit Secrets (Compliance GDPR)
+        self.imap_url = st.secrets["email"]["imap_server"]
+        self.email_user = st.secrets["email"]["username"]
+        self.email_pass = st.secrets["email"]["password"]
+        self.domain_filter = "@aeropostale.com"
 
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
+    def connect_imap(self):
+        """Conexión robusta con reintentos exponenciales"""
+        try:
+            mail = imaplib.IMAP4_SSL(self.imap_url, 993)
+            mail.login(self.email_user, self.email_pass)
+            return mail
+        except Exception as e:
+            logging.error(f"Error de conexión IMAP: {e}")
+            raise
+
+    def parse_metadata(self, msg: email.message.Message) -> Dict:
+        """Extracción de metadatos con validación de dominio"""
+        subject = self.decode_mime_header(msg.get("Subject", "Sin Asunto"))
+        sender = msg.get("From", "")
+        date_str = msg.get("Date")
+        
+        # Validación de Compliance: Solo procesar dominio interno
+        if self.domain_filter not in sender.lower():
+            return None
+
+        # Extracción de Tienda via Regex: [Tienda: MALL DEL SOL]
+        tienda_match = re.search(r"\[Tienda:\s*(.*?)\]", subject, re.IGNORECASE)
+        tienda = tienda_match.group(1).upper() if tienda_match else "CENTRAL/DESCONOCIDO"
+
+        return {
+            "fecha_reporte": email.utils.parsedate_to_datetime(date_str),
+            "tienda": tienda,
+            "remitente": sender,
+            "asunto": subject,
+            "mensaje_id": msg.get("Message-ID", "N/A")
+        }
+
+    def classify_novedad(self, body: str) -> str:
+        """NLP ligero: Clasificación basada en reglas de negocio"""
+        for label, pattern in NOVEDAD_PATTERNS.items():
+            if re.search(pattern, body, re.IGNORECASE):
+                return label
+        return "OTRO"
+
+    def process_folder(self, folder_name: str, limit: int):
+        """Procesa una carpeta específica de tienda"""
+        mail = self.connect_imap()
+        results = []
+        try:
+            mail.select(f'"{folder_name}"')
+            _, data = mail.search(None, 'ALL')
+            mail_ids = data[0].split()[-limit:] # Solo los últimos 'limit' correos
+
+            for m_id in mail_ids:
+                _, msg_data = mail.fetch(m_id, '(RFC822)')
+                msg = email.message_from_bytes(msg_data[0][1])
+                meta = self.parse_metadata(msg)
+                
+                if meta:
+                    body = self.get_email_body(msg)
+                    meta["tipo_novedad"] = self.classify_novedad(body)
+                    results.append(meta)
+            
+            mail.logout()
+            return results
+        except Exception as e:
+            logging.warning(f"Carpeta {folder_name} no pudo ser procesada: {e}")
+            return []
+
+    @staticmethod
+    def decode_mime_header(s):
+        decoded = decode_header(s)
+        header_content, encoding = decoded[0]
+        if isinstance(header_content, bytes):
+            return header_content.decode(encoding or 'utf-8')
+        return header_content
+
+    @staticmethod
+    def get_email_body(msg):
+        if msg.is_multipart():
+            for part in msg.walk():
+                if part.get_content_type() == "text/plain":
+                    return part.get_payload(decode=True).decode(errors='ignore')
+        return msg.get_payload(decode=True).decode(errors='ignore')
+
+# --- INTEGRACIÓN CON STREAMLIT ---
+@st.cache_data(ttl=3600)
+def get_novedades_dataframe(folders: List[str], limit_per_folder: int):
+    engine = WiloAIEngine()
+    all_data = []
+    
+    # Procesamiento Asíncrono: Una hebra por carpeta para maximizar throughput
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        futures = [executor.submit(engine.process_folder, f, limit_per_folder) for f in folders]
+        for future in futures:
+            all_data.extend(future.result())
+            
+    df = pd.DataFrame(all_data)
+    if not df.empty:
+        df['fecha_reporte'] = pd.to_datetime(df['fecha_reporte']).dt.tz_convert('America/Guayaquil')
+        df['tipo_novedad'] = df['tipo_novedad'].astype('category')
+        
+        # Priorización Logística
+        def calcular_urgencia(row):
+            if row["tipo_novedad"] in ["ROTA", "MANCHADA", "CRUCE_CODIGO"]: return "🚨 ALTA"
+            elif row["tipo_novedad"] in ["PRENDA_MAS", "PRENDA_MENOS"]: return "⚠️ MEDIA"
+            return "ℹ️ BAJA"
+            
+        df['urgencia'] = df.apply(calcular_urgencia, axis=1)
+    
+    return df
 # ================================
 # INICIALIZACIÓN DE SUPABASE
 # ================================
