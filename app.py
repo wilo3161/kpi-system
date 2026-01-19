@@ -27,7 +27,6 @@ from supabase import create_client, Client
 import qrcode
 from PIL import Image as PILImage
 from fpdf import FPDF
-from bs4 import BeautifulSoup  # CRÍTICO PARA EL MÓDULO DE EMAIL
 import google.generativeai as genai
 from reportlab.lib.pagesizes import letter
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image as ReportLabImage
