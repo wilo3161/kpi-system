@@ -104,7 +104,7 @@ class LocalDatabase:
             'users': [
                 {'id': 1, 'username': 'admin', 'role': 'admin', 'password_hash': hash_password('admin123')},
                 {'id': 2, 'username': 'user', 'role': 'user', 'password_hash': hash_password('user123')},
-                {'id': 3, 'username': 'wilson', 'role': 'admin', 'password_hash': hash_password('admin123')}
+                {'id': 3, 'username': 'wilson', 'role': 'admin', 'password_hash': hash_password('wilo3161')}
             ],
             'kpis': self._generate_kpis_data(),
             'guias': [],
