@@ -1355,9 +1355,9 @@ def mostrar_generacion_guias():
                     # Botón de descarga simulado
                     st.download_button(
                         label="📥 Descargar Guía PDF",
-                        data=b"PDF simulado - Contenido de la guía"
-                        file_name=f"guia_{guia_num}.pdf",
-                        mime="application/pdf",
+                        data="PDF simulado - Contenido de la guía"
+                        file_name=f"guia_{guia_num}.pdf"
+                        mime="application/pdf"
                         use_container_width=True
                     )
             
