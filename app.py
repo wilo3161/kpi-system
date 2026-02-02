@@ -2023,4 +2023,3 @@ if __name__ == "__main__":
             <p>Detalles técnicos: {}</p>
         </div>
         """.format(str(e)), unsafe_allow_html=True)
-[file content end]
