@@ -906,8 +906,8 @@ def identificar_tipo_tienda_v8(nombre):
 def mostrar_reconciliacion_v8():
     st.markdown("""
     <div class='dashboard-header header-reconciliation'>
-        <h1 class='header-title'>📦 Reconciliación Logística V8.0</h1>
-        <div class='header-subtitle'>Soporte avanzado para Piezas y Ventas Mayoristas (Jofre Santana)</div>
+        <h1 class='header-title'>📦 Reconciliación Logística </h1>
+        <div class='header-subtitle'>Soporte avanzado para cociliación de guías Laar Courier</div>
     </div>
     """, unsafe_allow_html=True)
 
