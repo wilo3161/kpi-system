@@ -1351,13 +1351,12 @@ def mostrar_generacion_guias():
                         """)
                     
                     st.markdown("</div>", unsafe_allow_html=True)
-                    
+                     
                     # Botón de descarga simulado
                     st.download_button(
-                        label="📥 Descargar Guía PDF",
-                        data="PDF simulado - Contenido de la guía"
+                        label="📥 Descargar Guía PDF"
                         file_name=f"guia_{guia_num}.pdf"
-                        mime="application/pdf"
+                        mime= "application/pdf"
                         use_container_width=True
                     )
             
