@@ -21,6 +21,7 @@ from pathlib import Path
 from io import BytesIO
 from typing import Dict, List, Optional, Any, Union
 from concurrent.futures import ThreadPoolExecutor
+from bs4 import BeautifulSoup
 
 # --- LIBRERÍAS DE TERCEROS ---
 import qrcode
@@ -104,7 +105,7 @@ class LocalDatabase:
             'users': [
                 {'id': 1, 'username': 'admin', 'role': 'admin', 'password_hash': hash_password('admin123')},
                 {'id': 2, 'username': 'user', 'role': 'user', 'password_hash': hash_password('user123')},
-                {'id': 3, 'username': 'wilson', 'role': 'admin', 'password_hash': hash_password('wilo3161')}
+                {'id': 3, 'username': 'wilson', 'role': 'admin', 'password_hash': hash_password('admin123')}
             ],
             'kpis': self._generate_kpis_data(),
             'guias': [],
@@ -116,7 +117,8 @@ class LocalDatabase:
             'distribuciones': [
                 {'id': 1, 'transporte': 'Tempo', 'guías': 45, 'estado': 'En ruta'},
                 {'id': 2, 'transporte': 'Luis Perugachi', 'guías': 32, 'estado': 'Entregado'}
-            ]
+            ],
+            'logistica_data': self._generate_logistica_data()  # Nuevo: datos logísticos
         }
     
     def _generate_kpis_data(self):
@@ -134,6 +136,29 @@ class LocalDatabase:
                 'costos': np.random.uniform(5000, 15000)
             })
         return kpis
+    
+    def _generate_logistica_data(self):
+        """Genera datos logísticos simulados"""
+        logistica = []
+        productos = ['Jeans AER-001', 'Camiseta FC-202', 'Chaqueta WN-456', 
+                    'Vestido SP-789', 'Polo MP-123', 'Accesorio AC-999']
+        bodegas = ['Mall del Sol', 'San Marino', 'Quicentro', 'Mall del Río', 
+                  'Plaza de las Américas', 'Riocentro Ceibos']
+        
+        today = datetime.now()
+        for i in range(100):
+            date = today - timedelta(days=np.random.randint(0, 30))
+            logistica.append({
+                'id': i,
+                'Fecha Transferencia': date.strftime('%Y-%m-%d'),
+                'Secuencial - Factura': f'FAC-{np.random.randint(1000, 9999)}',
+                'Bodega Recibe': np.random.choice(bodegas),
+                'Producto': np.random.choice(productos),
+                'Cantidad': np.random.randint(1, 100),
+                'Valor Unitario': np.random.uniform(10, 200),
+                'Estado': np.random.choice(['Completado', 'En tránsito', 'Pendiente', 'Rechazado'])
+            })
+        return logistica
     
     def query(self, table, filters=None):
         """Simula consulta a la base de datos"""
@@ -219,7 +244,7 @@ st.markdown("""
 /* Ocultar elementos por defecto de Streamlit */
 #MainMenu {visibility: hidden;}
 footer {visibility: hidden;}
-.stDeployButton {display: none;}
+.stDeployButton {display:none;}
 
 /* ============================================
    SIDEBAR MODERNO
@@ -365,6 +390,7 @@ footer {visibility: hidden;}
 
 /* Fondos específicos por módulo */
 .header-dashboard { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+.header-logistica { background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); }
 .header-reconciliation { background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); }
 .header-email { background: linear-gradient(135deg, #f46b45 0%, #eea849 100%); }
 .header-guias { background: linear-gradient(135deg, #8E2DE2 0%, #4A00E0 100%); }
@@ -442,6 +468,39 @@ footer {visibility: hidden;}
 
 .kpi-change.positive { background: rgba(0, 200, 83, 0.1); color: var(--success); }
 .kpi-change.negative { background: rgba(255, 61, 0, 0.1); color: var(--danger); }
+
+/* Tarjetas KPI más pequeñas para dashboard logístico */
+.metric-card {
+    background: white;
+    border-radius: var(--border-radius);
+    padding: 1.25rem;
+    box-shadow: var(--shadow);
+    text-align: center;
+    border-top: 4px solid var(--aeropostale-blue);
+}
+
+.metric-value {
+    font-size: 2.2rem;
+    font-weight: 800;
+    color: var(--aeropostale-dark);
+    margin-bottom: 0.25rem;
+}
+
+.metric-label {
+    font-size: 0.85rem;
+    color: #6B7280;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.sub-header {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: var(--aeropostale-dark);
+    margin: 1.5rem 0 1rem 0;
+    padding-bottom: 0.5rem;
+    border-bottom: 2px solid #F3F4F6;
+}
 
 /* ============================================
    BOTONES INTERACTIVOS MODERNOS
@@ -657,12 +716,372 @@ footer {visibility: hidden;}
     .header-title { font-size: 2rem; }
     .kpi-grid { grid-template-columns: 1fr; }
     .dashboard-header { padding: 1.5rem !important; }
+    .metric-value { font-size: 1.8rem; }
 }
 </style>
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# 3. MÓDULO CORREO WILO (CORREGIDO Y ROBUSTO)
+# 3. NUEVO MÓDULO: DASHBOARD LOGÍSTICO
+# ==============================================================================
+
+def _render_kpis():
+    """Renderiza KPIs principales para el dashboard logístico"""
+    st.markdown('<h3 class="sub-header">📈 KPIs Principales</h3>', unsafe_allow_html=True)
+    
+    # Obtener datos filtrados
+    filtered_data = st.session_state.get('logistica_filtered_data', pd.DataFrame())
+    
+    # Eliminar columnas duplicadas
+    if not filtered_data.empty:
+        filtered_data = filtered_data.loc[:, ~filtered_data.columns.duplicated()]
+    
+    if filtered_data.empty:
+        st.warning("⚠️ No hay datos disponibles después de aplicar los filtros.")
+        # Usar datos originales como fallback
+        original_data = st.session_state.get('logistica_current_data', pd.DataFrame())
+        if not original_data.empty:
+            original_data = original_data.loc[:, ~original_data.columns.duplicated()]
+            filtered_data = original_data
+    
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        if 'Cantidad' in filtered_data.columns and not filtered_data.empty:
+            # Asegurar que todas las cantidades sean enteros
+            total_units = int(filtered_data['Cantidad'].astype(int).sum())
+            st.markdown(f"""
+            <div class="metric-card">
+                <div class="metric-value">{total_units:,}</div>
+                <div class="metric-label">Unidades Totales</div>
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            st.markdown(f"""
+            <div class="metric-card">
+                <div class="metric-value">0</div>
+                <div class="metric-label">Unidades Totales</div>
+            </div>
+            """, unsafe_allow_html=True)
+    
+    with col2:
+        if 'Bodega Recibe' in filtered_data.columns and not filtered_data.empty:
+            warehouses = filtered_data['Bodega Recibe'].nunique()
+            st.markdown(f"""
+            <div class="metric-card">
+                <div class="metric-value">{warehouses:,}</div>
+                <div class="metric-label">Bodegas Destino</div>
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            st.markdown(f"""
+            <div class="metric-card">
+                <div class="metric-value">0</div>
+                <div class="metric-label">Bodegas Destino</div>
+            </div>
+            """, unsafe_allow_html=True)
+    
+    with col3:
+        if not filtered_data.empty:
+            if 'Secuencial - Factura' in filtered_data.columns:
+                transfers = filtered_data['Secuencial - Factura'].nunique()
+            else:
+                transfers = len(filtered_data)
+            st.markdown(f"""
+            <div class="metric-card">
+                <div class="metric-value">{transfers:,}</div>
+                <div class="metric-label">Transferencias</div>
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            st.markdown(f"""
+            <div class="metric-card">
+                <div class="metric-value">0</div>
+                <div class="metric-label">Transferencias</div>
+            </div>
+            """, unsafe_allow_html=True)
+    
+    with col4:
+        if 'Producto' in filtered_data.columns and not filtered_data.empty:
+            products = filtered_data['Producto'].nunique()
+            st.markdown(f"""
+            <div class="metric-card">
+                <div class="metric-value">{products:,}</div>
+                <div class="metric-label">Productos Únicos</div>
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            st.markdown(f"""
+            <div class="metric-card">
+                <div class="metric-value">0</div>
+                <div class="metric-label">Productos Únicos</div>
+            </div>
+            """, unsafe_allow_html=True)
+    
+    st.markdown("---")
+
+def mostrar_dashboard_logistico():
+    """Módulo principal del Dashboard Logístico"""
+    st.markdown("""
+    <div class='dashboard-header header-logistica'>
+        <h1 class='header-title'>🚚 Dashboard Logístico Integral</h1>
+        <div class='header-subtitle'>Monitorización en Tiempo Real de Transferencias y Distribución</div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Cargar datos de logística
+    if 'logistica_current_data' not in st.session_state:
+        logistica_data = local_db.query('logistica_data')
+        df_logistica = pd.DataFrame(logistica_data)
+        st.session_state.logistica_current_data = df_logistica
+        st.session_state.logistica_filtered_data = df_logistica
+    
+    # Panel de filtros
+    st.markdown("""
+    <div class='filter-panel'>
+        <h3 class='filter-title'>🔍 Filtros de Análisis</h3>
+    """, unsafe_allow_html=True)
+    
+    col_f1, col_f2, col_f3, col_f4 = st.columns(4)
+    
+    with col_f1:
+        fecha_inicio = st.date_input(
+            "Fecha Inicio",
+            datetime.now() - timedelta(days=30),
+            key="log_fecha_inicio"
+        )
+    
+    with col_f2:
+        fecha_fin = st.date_input(
+            "Fecha Fin",
+            datetime.now(),
+            key="log_fecha_fin"
+        )
+    
+    with col_f3:
+        bodegas = st.session_state.logistica_current_data['Bodega Recibe'].unique().tolist()
+        bodega_seleccionada = st.selectbox(
+            "Bodega Destino",
+            ["Todas"] + bodegas,
+            key="log_bodega"
+        )
+    
+    with col_f4:
+        estados = st.session_state.logistica_current_data['Estado'].unique().tolist()
+        estado_seleccionado = st.selectbox(
+            "Estado",
+            ["Todos"] + estados,
+            key="log_estado"
+        )
+    
+    col_btn1, col_btn2, col_btn3 = st.columns([1, 1, 2])
+    with col_btn1:
+        if st.button("🔍 Aplicar Filtros", use_container_width=True):
+            df = st.session_state.logistica_current_data.copy()
+            
+            # Aplicar filtro de fechas
+            if 'Fecha Transferencia' in df.columns:
+                df['Fecha Transferencia'] = pd.to_datetime(df['Fecha Transferencia'])
+                mask = (df['Fecha Transferencia'].dt.date >= fecha_inicio) & \
+                       (df['Fecha Transferencia'].dt.date <= fecha_fin)
+                df = df[mask]
+            
+            # Aplicar filtro de bodega
+            if bodega_seleccionada != "Todas":
+                df = df[df['Bodega Recibe'] == bodega_seleccionada]
+            
+            # Aplicar filtro de estado
+            if estado_seleccionado != "Todos":
+                df = df[df['Estado'] == estado_seleccionado]
+            
+            st.session_state.logistica_filtered_data = df
+            st.success(f"✅ Filtros aplicados: {len(df)} registros")
+            st.rerun()
+    
+    with col_btn2:
+        if st.button("🔄 Restablecer", use_container_width=True):
+            st.session_state.logistica_filtered_data = st.session_state.logistica_current_data
+            st.rerun()
+    
+    st.markdown("</div>", unsafe_allow_html=True)
+    
+    # Sección 1: KPIs Principales
+    _render_kpis()
+    
+    # Sección 2: Gráficos y Visualizaciones
+    st.markdown('<h3 class="sub-header">📊 Análisis Visual</h3>', unsafe_allow_html=True)
+    
+    if not st.session_state.logistica_filtered_data.empty:
+        df = st.session_state.logistica_filtered_data
+        
+        # Gráficos en pestañas
+        tab1, tab2, tab3 = st.tabs(["📈 Distribución por Bodega", "📦 Top Productos", "📅 Evolución Temporal"])
+        
+        with tab1:
+            col_g1, col_g2 = st.columns([3, 2])
+            with col_g1:
+                # Gráfico de barras por bodega
+                bodega_dist = df.groupby('Bodega Recibe')['Cantidad'].sum().reset_index()
+                bodega_dist = bodega_dist.sort_values('Cantidad', ascending=False)
+                
+                fig = px.bar(
+                    bodega_dist,
+                    x='Bodega Recibe',
+                    y='Cantidad',
+                    title='Unidades por Bodega Destino',
+                    color='Cantidad',
+                    color_continuous_scale='Viridis',
+                    text='Cantidad'
+                )
+                fig.update_layout(showlegend=False)
+                st.plotly_chart(fig, use_container_width=True)
+            
+            with col_g2:
+                # Gráfico de pastel por estado
+                estado_dist = df['Estado'].value_counts().reset_index()
+                estado_dist.columns = ['Estado', 'Cantidad']
+                
+                fig2 = px.pie(
+                    estado_dist,
+                    values='Cantidad',
+                    names='Estado',
+                    title='Distribución por Estado',
+                    hole=0.4,
+                    color_discrete_sequence=px.colors.qualitative.Set3
+                )
+                st.plotly_chart(fig2, use_container_width=True)
+        
+        with tab2:
+            # Top productos
+            top_productos = df.groupby('Producto')['Cantidad'].sum().nlargest(10).reset_index()
+            
+            fig3 = px.bar(
+                top_productos,
+                x='Producto',
+                y='Cantidad',
+                title='Top 10 Productos por Cantidad',
+                color='Cantidad',
+                color_continuous_scale='Blues',
+                text='Cantidad'
+            )
+            fig3.update_layout(xaxis_tickangle=-45)
+            st.plotly_chart(fig3, use_container_width=True)
+        
+        with tab3:
+            # Evolución temporal
+            if 'Fecha Transferencia' in df.columns:
+                temporal = df.copy()
+                temporal['Fecha Transferencia'] = pd.to_datetime(temporal['Fecha Transferencia'])
+                temporal['Fecha'] = temporal['Fecha Transferencia'].dt.date
+                
+                evolucion = temporal.groupby('Fecha')['Cantidad'].sum().reset_index()
+                
+                fig4 = px.line(
+                    evolucion,
+                    x='Fecha',
+                    y='Cantidad',
+                    title='Evolución de Transferencias Diarias',
+                    markers=True
+                )
+                fig4.update_traces(line=dict(color='#0033A0', width=3))
+                st.plotly_chart(fig4, use_container_width=True)
+        
+        # Sección 3: Tabla de datos
+        st.markdown('<h3 class="sub-header">📋 Datos Detallados</h3>', unsafe_allow_html=True)
+        
+        # Seleccionar columnas para mostrar
+        columnas_disponibles = df.columns.tolist()
+        columnas_seleccionadas = st.multiselect(
+            "Seleccionar columnas para mostrar:",
+            columnas_disponibles,
+            default=['Fecha Transferencia', 'Secuencial - Factura', 'Bodega Recibe', 
+                    'Producto', 'Cantidad', 'Valor Unitario', 'Estado']
+        )
+        
+        if columnas_seleccionadas:
+            st.dataframe(
+                df[columnas_seleccionadas],
+                use_container_width=True,
+                height=400
+            )
+        
+        # Sección 4: Métricas adicionales
+        st.markdown('<h3 class="sub-header">🧮 Métricas Avanzadas</h3>', unsafe_allow_html=True)
+        
+        col_m1, col_m2, col_m3, col_m4 = st.columns(4)
+        
+        with col_m1:
+            if 'Valor Unitario' in df.columns and 'Cantidad' in df.columns:
+                valor_total = (df['Valor Unitario'] * df['Cantidad']).sum()
+                st.metric("💰 Valor Total", f"${valor_total:,.2f}")
+        
+        with col_m2:
+            promedio_unidades = df['Cantidad'].mean()
+            st.metric("📊 Promedio por Transf.", f"{promedio_unidades:.1f}")
+        
+        with col_m3:
+            completados = len(df[df['Estado'] == 'Completado'])
+            st.metric("✅ Completados", f"{completados}")
+        
+        with col_m4:
+            tasa_completados = (completados / len(df) * 100) if len(df) > 0 else 0
+            st.metric("📈 Tasa de Éxito", f"{tasa_completados:.1f}%")
+        
+        # Sección 5: Exportación de datos
+        st.markdown('<h3 class="sub-header">💾 Exportar Resultados</h3>', unsafe_allow_html=True)
+        
+        col_exp1, col_exp2, col_exp3 = st.columns(3)
+        
+        with col_exp1:
+            # Exportar a Excel
+            buffer = BytesIO()
+            with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
+                df.to_excel(writer, sheet_name='Datos_Logistica', index=False)
+                
+                # Agregar resumen
+                resumen = pd.DataFrame({
+                    'Métrica': ['Total Unidades', 'Total Transferencias', 'Bodegas Únicas', 
+                               'Productos Únicos', 'Valor Total', 'Tasa Completados'],
+                    'Valor': [df['Cantidad'].sum(), len(df), df['Bodega Recibe'].nunique(),
+                             df['Producto'].nunique(), valor_total if 'Valor Unitario' in df.columns else 0,
+                             f"{tasa_completados:.1f}%"]
+                })
+                resumen.to_excel(writer, sheet_name='Resumen', index=False)
+            
+            st.download_button(
+                label="📊 Descargar Excel Completo",
+                data=buffer.getvalue(),
+                file_name=f"dashboard_logistica_{datetime.now().date()}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True
+            )
+        
+        with col_exp2:
+            # Exportar a CSV
+            csv = df.to_csv(index=False)
+            st.download_button(
+                label="📄 Descargar CSV",
+                data=csv,
+                file_name=f"dashboard_logistica_{datetime.now().date()}.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
+        
+        with col_exp3:
+            # Generar reporte PDF simulado
+            st.download_button(
+                label="📋 Descargar Reporte PDF",
+                data=b"Reporte PDF simulado",
+                file_name=f"reporte_logistica_{datetime.now().date()}.pdf",
+                mime="application/pdf",
+                use_container_width=True
+            )
+    
+    else:
+        st.info("📊 No hay datos para mostrar. Aplique filtros diferentes o cargue nuevos datos.")
+
+# ==============================================================================
+# 4. MÓDULO CORREO WILO (CORREGIDO Y ROBUSTO)
 # ==============================================================================
 
 class WiloEmailEngine:
@@ -873,7 +1292,7 @@ def mostrar_modulo_email_wilo():
                 col_c.metric("Detecciones", len(row['tipo'].split(', ')))
 
 # ==============================================================================
-# 4. MÓDULO RECONCILIACIÓN V8 (CORREGIDO Y ACTUALIZADO)
+# 5. MÓDULO RECONCILIACIÓN V8 (CORREGIDO Y ACTUALIZADO)
 # ==============================================================================
 
 def identificar_tipo_tienda_v8(nombre):
@@ -906,8 +1325,8 @@ def identificar_tipo_tienda_v8(nombre):
 def mostrar_reconciliacion_v8():
     st.markdown("""
     <div class='dashboard-header header-reconciliation'>
-        <h1 class='header-title'>📦 Reconciliación Logística </h1>
-        <div class='header-subtitle'>Soporte avanzado para cociliación de guías Laar Courier</div>
+        <h1 class='header-title'>📦 Reconciliación Logística V8.0</h1>
+        <div class='header-subtitle'>Soporte avanzado para Piezas y Ventas Mayoristas (Jofre Santana)</div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -1126,7 +1545,7 @@ def mostrar_reconciliacion_v8():
 
                     with tab3:
                         st.dataframe(
-                            df_final[['GUIA_CLEAN', 'DESTINATARIO_NORM', 'TIPO_TIENDA', 'GRUPO', 
+                            df_final[['GUIA_CLEAN', 'DESTINatARIO_NORM', 'TIPO_TIENDA', 'GRUPO', 
                                      'PIEZAS_CALC', 'VALOR_MANIFIESTO', 'VALOR_REAL']].head(50),
                             use_container_width=True
                         )
@@ -1167,10 +1586,10 @@ def mostrar_reconciliacion_v8():
         st.info("👆 Suba los archivos necesarios o active la opción de datos de demostración para comenzar.")
 
 # ==============================================================================
-# 5. MÓDULOS RESTANTES MEJORADOS
+# 6. MÓDULOS RESTANTES MEJORADOS
 # ==============================================================================
 
-# --- DASHBOARD KPIS ---
+# --- DASHBOARD KPIs ---
 def mostrar_dashboard_kpis():
     st.markdown("""
     <div class='dashboard-header header-dashboard'>
@@ -1706,28 +2125,33 @@ def mostrar_ayuda():
             
             ### 📊 Módulos Principales
             
-            #### 1. Dashboard KPIs
+            #### 1. Dashboard Logístico
+            - Monitoreo de transferencias en tiempo real
+            - KPIs de unidades, bodegas y productos
+            - Gráficos interactivos y filtros avanzados
+            
+            #### 2. Dashboard KPIs
             - Monitoreo en tiempo real de producción
             - Métricas de eficiencia y costos
             - Gráficos interactivos
             
-            #### 2. Reconciliación V8.0
+            #### 3. Reconciliación V8.0
             - Subir manifiestos y facturas
             - Clasificación automática de tiendas
             - Detección especial de "JOFRE SANTANA"
             - Exportación a Excel y CSV
             
-            #### 3. Email Wilo AI
+            #### 4. Email Wilo AI
             - Análisis automático de correos
             - Clasificación por urgencia
             - Detección de faltantes/sobrantes
             
-            #### 4. Generación de Guías
+            #### 5. Generación de Guías
             - Creación de guías de envío
             - Asignación a transportistas
             - Generación de PDF
             
-            #### 5. Etiquetas
+            #### 6. Etiquetas
             - Diseño personalizado de etiquetas
             - Inclusión de códigos QR
             - Exportación múltiple
@@ -1810,7 +2234,7 @@ def mostrar_ayuda():
         """, unsafe_allow_html=True)
 
 # ==============================================================================
-# 6. SISTEMA DE AUTENTICACIÓN Y NAVEGACIÓN MODERNO
+# 7. SISTEMA DE AUTENTICACIÓN Y NAVEGACIÓN MODERNO
 # ==============================================================================
 
 def mostrar_pagina_login(rol_target):
@@ -1846,7 +2270,7 @@ def mostrar_pagina_login(rol_target):
         if password == correct_password:
             st.session_state.user_type = rol_target
             st.session_state.show_login = False
-            st.session_state.current_page = "Dashboard KPIs"
+            st.session_state.current_page = "Dashboard Logístico"
             st.rerun()
         else:
             st.error("❌ Contraseña incorrecta. Intente nuevamente.")
@@ -1869,7 +2293,7 @@ def main():
     if 'login_target' not in st.session_state:
         st.session_state.login_target = None
     if 'current_page' not in st.session_state:
-        st.session_state.current_page = "Dashboard KPIs"
+        st.session_state.current_page = "Dashboard Logístico"
     
     # Configurar sidebar solo si no estamos en login
     if not st.session_state.show_login:
@@ -1894,6 +2318,7 @@ def main():
             
             # Menú de navegación
             menu_items = {
+                "Dashboard Logístico": {"icon": "🚚", "role": "admin"},
                 "Dashboard KPIs": {"icon": "📊", "role": "public"},
                 "Reconciliación V8": {"icon": "💰", "role": "admin"},
                 "Email Wilo AI": {"icon": "📧", "role": "admin"},
@@ -1932,7 +2357,7 @@ def main():
             if st.session_state.user_type:
                 if st.button("🚪 Cerrar Sesión", use_container_width=True):
                     st.session_state.user_type = None
-                    st.session_state.current_page = "Dashboard KPIs"
+                    st.session_state.current_page = "Dashboard Logístico"
                     st.rerun()
             else:
                 col_login1, col_login2 = st.columns(2)
@@ -1953,6 +2378,7 @@ def main():
         else:
             # Ejecutar el módulo correspondiente
             page_mapping = {
+                "Dashboard Logístico": mostrar_dashboard_logistico,
                 "Dashboard KPIs": mostrar_dashboard_kpis,
                 "Reconciliación V8": mostrar_reconciliacion_v8,
                 "Email Wilo AI": mostrar_modulo_email_wilo,
@@ -1967,6 +2393,7 @@ def main():
             if current_func:
                 # Verificación de permisos
                 page_roles = {
+                    "Dashboard Logístico": "admin",
                     "Dashboard KPIs": "public",
                     "Reconciliación V8": "admin",
                     "Email Wilo AI": "admin",
@@ -1990,7 +2417,7 @@ def main():
                     st.rerun()
             else:
                 st.error("Página no encontrada")
-                st.session_state.current_page = "Dashboard KPIs"
+                st.session_state.current_page = "Dashboard Logístico"
                 st.rerun()
         
         # --- FOOTER ---
