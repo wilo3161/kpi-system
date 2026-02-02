@@ -21,6 +21,7 @@ from pathlib import Path
 from io import BytesIO
 from typing import Dict, List, Optional, Any, Union
 from concurrent.futures import ThreadPoolExecutor
+from bs4 import BeautifulSoup
 
 # --- LIBRERÍAS DE TERCEROS ---
 import qrcode
@@ -116,8 +117,7 @@ class LocalDatabase:
             'distribuciones': [
                 {'id': 1, 'transporte': 'Tempo', 'guías': 45, 'estado': 'En ruta'},
                 {'id': 2, 'transporte': 'Luis Perugachi', 'guías': 32, 'estado': 'Entregado'}
-            ],
-            'logistica_data': self._generate_logistica_data()  # Nuevo: datos logísticos
+            ]
         }
     
     def _generate_kpis_data(self):
@@ -135,29 +135,6 @@ class LocalDatabase:
                 'costos': np.random.uniform(5000, 15000)
             })
         return kpis
-    
-    def _generate_logistica_data(self):
-        """Genera datos logísticos simulados"""
-        logistica = []
-        productos = ['Jeans AER-001', 'Camiseta FC-202', 'Chaqueta WN-456', 
-                    'Vestido SP-789', 'Polo MP-123', 'Accesorio AC-999']
-        bodegas = ['Mall del Sol', 'San Marino', 'Quicentro', 'Mall del Río', 
-                  'Plaza de las Américas', 'Riocentro Ceibos']
-        
-        today = datetime.now()
-        for i in range(100):
-            date = today - timedelta(days=np.random.randint(0, 30))
-            logistica.append({
-                'id': i,
-                'Fecha Transferencia': date.strftime('%Y-%m-%d'),
-                'Secuencial - Factura': f'FAC-{np.random.randint(1000, 9999)}',
-                'Bodega Recibe': np.random.choice(bodegas),
-                'Producto': np.random.choice(productos),
-                'Cantidad': np.random.randint(1, 100),
-                'Valor Unitario': np.random.uniform(10, 200),
-                'Estado': np.random.choice(['Completado', 'En tránsito', 'Pendiente', 'Rechazado'])
-            })
-        return logistica
     
     def query(self, table, filters=None):
         """Simula consulta a la base de datos"""
@@ -243,7 +220,7 @@ st.markdown("""
 /* Ocultar elementos por defecto de Streamlit */
 #MainMenu {visibility: hidden;}
 footer {visibility: hidden;}
-.stDeployButton {display:none;}
+.stDeployButton {display: none;}
 
 /* ============================================
    SIDEBAR MODERNO
@@ -389,13 +366,13 @@ footer {visibility: hidden;}
 
 /* Fondos específicos por módulo */
 .header-dashboard { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
-.header-logistica { background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); }
 .header-reconciliation { background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); }
 .header-email { background: linear-gradient(135deg, #f46b45 0%, #eea849 100%); }
 .header-guias { background: linear-gradient(135deg, #8E2DE2 0%, #4A00E0 100%); }
 .header-etiquetas { background: linear-gradient(135deg, #00b4db 0%, #0083b0 100%); }
 .header-trabajadores { background: linear-gradient(135deg, #f7971e 0%, #ffd200 100%); }
 .header-distribuciones { background: linear-gradient(135deg, #654ea3 0%, #eaafc8 100%); }
+.header-transferencias { background: linear-gradient(135deg, #9C27B0 0%, #673AB7 100%); }
 .header-ayuda { background: linear-gradient(135deg, #232526 0%, #414345 100%); }
 
 /* ============================================
@@ -467,39 +444,6 @@ footer {visibility: hidden;}
 
 .kpi-change.positive { background: rgba(0, 200, 83, 0.1); color: var(--success); }
 .kpi-change.negative { background: rgba(255, 61, 0, 0.1); color: var(--danger); }
-
-/* Tarjetas KPI más pequeñas para dashboard logístico */
-.metric-card {
-    background: white;
-    border-radius: var(--border-radius);
-    padding: 1.25rem;
-    box-shadow: var(--shadow);
-    text-align: center;
-    border-top: 4px solid var(--aeropostale-blue);
-}
-
-.metric-value {
-    font-size: 2.2rem;
-    font-weight: 800;
-    color: var(--aeropostale-dark);
-    margin-bottom: 0.25rem;
-}
-
-.metric-label {
-    font-size: 0.85rem;
-    color: #6B7280;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-}
-
-.sub-header {
-    font-size: 1.5rem;
-    font-weight: 600;
-    color: var(--aeropostale-dark);
-    margin: 1.5rem 0 1rem 0;
-    padding-bottom: 0.5rem;
-    border-bottom: 2px solid #F3F4F6;
-}
 
 /* ============================================
    BOTONES INTERACTIVOS MODERNOS
@@ -715,372 +659,135 @@ footer {visibility: hidden;}
     .header-title { font-size: 2rem; }
     .kpi-grid { grid-template-columns: 1fr; }
     .dashboard-header { padding: 1.5rem !important; }
-    .metric-value { font-size: 1.8rem; }
+}
+
+/* ============================================
+   ESTILOS ESPECÍFICOS PARA DASHBOARD TRANSFERENCIAS
+   ============================================ */
+.transferencias-container {
+    background-color: #f8f9fa;
+    padding: 20px;
+    border-radius: var(--border-radius);
+}
+
+.transferencias-metric-card {
+    background: white;
+    border-radius: 10px;
+    padding: 20px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    border-left: 5px solid;
+    margin-bottom: 20px;
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.transferencias-metric-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 15px rgba(0, 0, 0, 0.1);
+}
+
+.transferencias-metric-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #6c757d;
+    margin-bottom: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.transferencias-metric-value {
+    font-size: 32px;
+    font-weight: 700;
+    color: #212529;
+    margin-bottom: 5px;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.transferencias-metric-subtitle {
+    font-size: 12px;
+    color: #6c757d;
+}
+
+.transferencias-validation-card {
+    background: white;
+    border-radius: 8px;
+    padding: 15px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    text-align: center;
+    margin-bottom: 10px;
+}
+
+.transferencias-validation-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: #6c757d;
+    margin-bottom: 5px;
+}
+
+.transferencias-validation-value {
+    font-size: 24px;
+    font-weight: 700;
+}
+
+.transferencias-validation-good {
+    color: #2ca02c;
+}
+
+.transferencias-validation-warning {
+    color: #ff7f0e;
+}
+
+.transferencias-section-title {
+    font-size: 20px;
+    font-weight: 600;
+    color: #495057;
+    margin: 30px 0 20px 0;
+    padding-bottom: 10px;
+    border-bottom: 2px solid #e9ecef;
+}
+
+.transferencias-card-price-club {
+    border-left-color: #2ca02c;
+}
+
+.transferencias-card-tiendas {
+    border-left-color: #1f77b4;
+}
+
+.transferencias-card-ventas-mayor {
+    border-left-color: #ff7f0e;
+}
+
+.transferencias-card-tienda-web {
+    border-left-color: #9467bd;
+}
+
+.transferencias-card-fallas {
+    border-left-color: #8c564b;
+}
+
+.transferencias-card-fundas {
+    border-left-color: #d62728;
+}
+
+.transferencias-card-header {
+    border-left-color: #6f42c1;
+}
+
+.transferencias-dashboard-title {
+    font-size: 28px;
+    font-weight: 700;
+    margin-bottom: 5px;
+}
+
+.transferencias-dashboard-subtitle {
+    font-size: 16px;
+    opacity: 0.9;
 }
 </style>
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# 3. NUEVO MÓDULO: DASHBOARD LOGÍSTICO
-# ==============================================================================
-
-def _render_kpis():
-    """Renderiza KPIs principales para el dashboard logístico"""
-    st.markdown('<h3 class="sub-header">📈 KPIs Principales</h3>', unsafe_allow_html=True)
-    
-    # Obtener datos filtrados
-    filtered_data = st.session_state.get('logistica_filtered_data', pd.DataFrame())
-    
-    # Eliminar columnas duplicadas
-    if not filtered_data.empty:
-        filtered_data = filtered_data.loc[:, ~filtered_data.columns.duplicated()]
-    
-    if filtered_data.empty:
-        st.warning("⚠️ No hay datos disponibles después de aplicar los filtros.")
-        # Usar datos originales como fallback
-        original_data = st.session_state.get('logistica_current_data', pd.DataFrame())
-        if not original_data.empty:
-            original_data = original_data.loc[:, ~original_data.columns.duplicated()]
-            filtered_data = original_data
-    
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        if 'Cantidad' in filtered_data.columns and not filtered_data.empty:
-            # Asegurar que todas las cantidades sean enteros
-            total_units = int(filtered_data['Cantidad'].astype(int).sum())
-            st.markdown(f"""
-            <div class="metric-card">
-                <div class="metric-value">{total_units:,}</div>
-                <div class="metric-label">Unidades Totales</div>
-            </div>
-            """, unsafe_allow_html=True)
-        else:
-            st.markdown(f"""
-            <div class="metric-card">
-                <div class="metric-value">0</div>
-                <div class="metric-label">Unidades Totales</div>
-            </div>
-            """, unsafe_allow_html=True)
-    
-    with col2:
-        if 'Bodega Recibe' in filtered_data.columns and not filtered_data.empty:
-            warehouses = filtered_data['Bodega Recibe'].nunique()
-            st.markdown(f"""
-            <div class="metric-card">
-                <div class="metric-value">{warehouses:,}</div>
-                <div class="metric-label">Bodegas Destino</div>
-            </div>
-            """, unsafe_allow_html=True)
-        else:
-            st.markdown(f"""
-            <div class="metric-card">
-                <div class="metric-value">0</div>
-                <div class="metric-label">Bodegas Destino</div>
-            </div>
-            """, unsafe_allow_html=True)
-    
-    with col3:
-        if not filtered_data.empty:
-            if 'Secuencial - Factura' in filtered_data.columns:
-                transfers = filtered_data['Secuencial - Factura'].nunique()
-            else:
-                transfers = len(filtered_data)
-            st.markdown(f"""
-            <div class="metric-card">
-                <div class="metric-value">{transfers:,}</div>
-                <div class="metric-label">Transferencias</div>
-            </div>
-            """, unsafe_allow_html=True)
-        else:
-            st.markdown(f"""
-            <div class="metric-card">
-                <div class="metric-value">0</div>
-                <div class="metric-label">Transferencias</div>
-            </div>
-            """, unsafe_allow_html=True)
-    
-    with col4:
-        if 'Producto' in filtered_data.columns and not filtered_data.empty:
-            products = filtered_data['Producto'].nunique()
-            st.markdown(f"""
-            <div class="metric-card">
-                <div class="metric-value">{products:,}</div>
-                <div class="metric-label">Productos Únicos</div>
-            </div>
-            """, unsafe_allow_html=True)
-        else:
-            st.markdown(f"""
-            <div class="metric-card">
-                <div class="metric-value">0</div>
-                <div class="metric-label">Productos Únicos</div>
-            </div>
-            """, unsafe_allow_html=True)
-    
-    st.markdown("---")
-
-def mostrar_dashboard_logistico():
-    """Módulo principal del Dashboard Logístico"""
-    st.markdown("""
-    <div class='dashboard-header header-logistica'>
-        <h1 class='header-title'>🚚 Dashboard Logístico Integral</h1>
-        <div class='header-subtitle'>Monitorización en Tiempo Real de Transferencias y Distribución</div>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    # Cargar datos de logística
-    if 'logistica_current_data' not in st.session_state:
-        logistica_data = local_db.query('logistica_data')
-        df_logistica = pd.DataFrame(logistica_data)
-        st.session_state.logistica_current_data = df_logistica
-        st.session_state.logistica_filtered_data = df_logistica
-    
-    # Panel de filtros
-    st.markdown("""
-    <div class='filter-panel'>
-        <h3 class='filter-title'>🔍 Filtros de Análisis</h3>
-    """, unsafe_allow_html=True)
-    
-    col_f1, col_f2, col_f3, col_f4 = st.columns(4)
-    
-    with col_f1:
-        fecha_inicio = st.date_input(
-            "Fecha Inicio",
-            datetime.now() - timedelta(days=30),
-            key="log_fecha_inicio"
-        )
-    
-    with col_f2:
-        fecha_fin = st.date_input(
-            "Fecha Fin",
-            datetime.now(),
-            key="log_fecha_fin"
-        )
-    
-    with col_f3:
-        bodegas = st.session_state.logistica_current_data['Bodega Recibe'].unique().tolist()
-        bodega_seleccionada = st.selectbox(
-            "Bodega Destino",
-            ["Todas"] + bodegas,
-            key="log_bodega"
-        )
-    
-    with col_f4:
-        estados = st.session_state.logistica_current_data['Estado'].unique().tolist()
-        estado_seleccionado = st.selectbox(
-            "Estado",
-            ["Todos"] + estados,
-            key="log_estado"
-        )
-    
-    col_btn1, col_btn2, col_btn3 = st.columns([1, 1, 2])
-    with col_btn1:
-        if st.button("🔍 Aplicar Filtros", use_container_width=True):
-            df = st.session_state.logistica_current_data.copy()
-            
-            # Aplicar filtro de fechas
-            if 'Fecha Transferencia' in df.columns:
-                df['Fecha Transferencia'] = pd.to_datetime(df['Fecha Transferencia'])
-                mask = (df['Fecha Transferencia'].dt.date >= fecha_inicio) & \
-                       (df['Fecha Transferencia'].dt.date <= fecha_fin)
-                df = df[mask]
-            
-            # Aplicar filtro de bodega
-            if bodega_seleccionada != "Todas":
-                df = df[df['Bodega Recibe'] == bodega_seleccionada]
-            
-            # Aplicar filtro de estado
-            if estado_seleccionado != "Todos":
-                df = df[df['Estado'] == estado_seleccionado]
-            
-            st.session_state.logistica_filtered_data = df
-            st.success(f"✅ Filtros aplicados: {len(df)} registros")
-            st.rerun()
-    
-    with col_btn2:
-        if st.button("🔄 Restablecer", use_container_width=True):
-            st.session_state.logistica_filtered_data = st.session_state.logistica_current_data
-            st.rerun()
-    
-    st.markdown("</div>", unsafe_allow_html=True)
-    
-    # Sección 1: KPIs Principales
-    _render_kpis()
-    
-    # Sección 2: Gráficos y Visualizaciones
-    st.markdown('<h3 class="sub-header">📊 Análisis Visual</h3>', unsafe_allow_html=True)
-    
-    if not st.session_state.logistica_filtered_data.empty:
-        df = st.session_state.logistica_filtered_data
-        
-        # Gráficos en pestañas
-        tab1, tab2, tab3 = st.tabs(["📈 Distribución por Bodega", "📦 Top Productos", "📅 Evolución Temporal"])
-        
-        with tab1:
-            col_g1, col_g2 = st.columns([3, 2])
-            with col_g1:
-                # Gráfico de barras por bodega
-                bodega_dist = df.groupby('Bodega Recibe')['Cantidad'].sum().reset_index()
-                bodega_dist = bodega_dist.sort_values('Cantidad', ascending=False)
-                
-                fig = px.bar(
-                    bodega_dist,
-                    x='Bodega Recibe',
-                    y='Cantidad',
-                    title='Unidades por Bodega Destino',
-                    color='Cantidad',
-                    color_continuous_scale='Viridis',
-                    text='Cantidad'
-                )
-                fig.update_layout(showlegend=False)
-                st.plotly_chart(fig, use_container_width=True)
-            
-            with col_g2:
-                # Gráfico de pastel por estado
-                estado_dist = df['Estado'].value_counts().reset_index()
-                estado_dist.columns = ['Estado', 'Cantidad']
-                
-                fig2 = px.pie(
-                    estado_dist,
-                    values='Cantidad',
-                    names='Estado',
-                    title='Distribución por Estado',
-                    hole=0.4,
-                    color_discrete_sequence=px.colors.qualitative.Set3
-                )
-                st.plotly_chart(fig2, use_container_width=True)
-        
-        with tab2:
-            # Top productos
-            top_productos = df.groupby('Producto')['Cantidad'].sum().nlargest(10).reset_index()
-            
-            fig3 = px.bar(
-                top_productos,
-                x='Producto',
-                y='Cantidad',
-                title='Top 10 Productos por Cantidad',
-                color='Cantidad',
-                color_continuous_scale='Blues',
-                text='Cantidad'
-            )
-            fig3.update_layout(xaxis_tickangle=-45)
-            st.plotly_chart(fig3, use_container_width=True)
-        
-        with tab3:
-            # Evolución temporal
-            if 'Fecha Transferencia' in df.columns:
-                temporal = df.copy()
-                temporal['Fecha Transferencia'] = pd.to_datetime(temporal['Fecha Transferencia'])
-                temporal['Fecha'] = temporal['Fecha Transferencia'].dt.date
-                
-                evolucion = temporal.groupby('Fecha')['Cantidad'].sum().reset_index()
-                
-                fig4 = px.line(
-                    evolucion,
-                    x='Fecha',
-                    y='Cantidad',
-                    title='Evolución de Transferencias Diarias',
-                    markers=True
-                )
-                fig4.update_traces(line=dict(color='#0033A0', width=3))
-                st.plotly_chart(fig4, use_container_width=True)
-        
-        # Sección 3: Tabla de datos
-        st.markdown('<h3 class="sub-header">📋 Datos Detallados</h3>', unsafe_allow_html=True)
-        
-        # Seleccionar columnas para mostrar
-        columnas_disponibles = df.columns.tolist()
-        columnas_seleccionadas = st.multiselect(
-            "Seleccionar columnas para mostrar:",
-            columnas_disponibles,
-            default=['Fecha Transferencia', 'Secuencial - Factura', 'Bodega Recibe', 
-                    'Producto', 'Cantidad', 'Valor Unitario', 'Estado']
-        )
-        
-        if columnas_seleccionadas:
-            st.dataframe(
-                df[columnas_seleccionadas],
-                use_container_width=True,
-                height=400
-            )
-        
-        # Sección 4: Métricas adicionales
-        st.markdown('<h3 class="sub-header">🧮 Métricas Avanzadas</h3>', unsafe_allow_html=True)
-        
-        col_m1, col_m2, col_m3, col_m4 = st.columns(4)
-        
-        with col_m1:
-            if 'Valor Unitario' in df.columns and 'Cantidad' in df.columns:
-                valor_total = (df['Valor Unitario'] * df['Cantidad']).sum()
-                st.metric("💰 Valor Total", f"${valor_total:,.2f}")
-        
-        with col_m2:
-            promedio_unidades = df['Cantidad'].mean()
-            st.metric("📊 Promedio por Transf.", f"{promedio_unidades:.1f}")
-        
-        with col_m3:
-            completados = len(df[df['Estado'] == 'Completado'])
-            st.metric("✅ Completados", f"{completados}")
-        
-        with col_m4:
-            tasa_completados = (completados / len(df) * 100) if len(df) > 0 else 0
-            st.metric("📈 Tasa de Éxito", f"{tasa_completados:.1f}%")
-        
-        # Sección 5: Exportación de datos
-        st.markdown('<h3 class="sub-header">💾 Exportar Resultados</h3>', unsafe_allow_html=True)
-        
-        col_exp1, col_exp2, col_exp3 = st.columns(3)
-        
-        with col_exp1:
-            # Exportar a Excel
-            buffer = BytesIO()
-            with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
-                df.to_excel(writer, sheet_name='Datos_Logistica', index=False)
-                
-                # Agregar resumen
-                resumen = pd.DataFrame({
-                    'Métrica': ['Total Unidades', 'Total Transferencias', 'Bodegas Únicas', 
-                               'Productos Únicos', 'Valor Total', 'Tasa Completados'],
-                    'Valor': [df['Cantidad'].sum(), len(df), df['Bodega Recibe'].nunique(),
-                             df['Producto'].nunique(), valor_total if 'Valor Unitario' in df.columns else 0,
-                             f"{tasa_completados:.1f}%"]
-                })
-                resumen.to_excel(writer, sheet_name='Resumen', index=False)
-            
-            st.download_button(
-                label="📊 Descargar Excel Completo",
-                data=buffer.getvalue(),
-                file_name=f"dashboard_logistica_{datetime.now().date()}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True
-            )
-        
-        with col_exp2:
-            # Exportar a CSV
-            csv = df.to_csv(index=False)
-            st.download_button(
-                label="📄 Descargar CSV",
-                data=csv,
-                file_name=f"dashboard_logistica_{datetime.now().date()}.csv",
-                mime="text/csv",
-                use_container_width=True
-            )
-        
-        with col_exp3:
-            # Generar reporte PDF simulado
-            st.download_button(
-                label="📋 Descargar Reporte PDF",
-                data=b"Reporte PDF simulado",
-                file_name=f"reporte_logistica_{datetime.now().date()}.pdf",
-                mime="application/pdf",
-                use_container_width=True
-            )
-    
-    else:
-        st.info("📊 No hay datos para mostrar. Aplique filtros diferentes o cargue nuevos datos.")
-
-# ==============================================================================
-# 4. MÓDULO CORREO WILO (CORREGIDO Y ROBUSTO)
+# 3. MÓDULO CORREO WILO (CORREGIDO Y ROBUSTO)
 # ==============================================================================
 
 class WiloEmailEngine:
@@ -1291,7 +998,7 @@ def mostrar_modulo_email_wilo():
                 col_c.metric("Detecciones", len(row['tipo'].split(', ')))
 
 # ==============================================================================
-# 5. MÓDULO RECONCILIACIÓN V8 (CORREGIDO Y ACTUALIZADO)
+# 4. MÓDULO RECONCILIACIÓN V8 (CORREGIDO Y ACTUALIZADO)
 # ==============================================================================
 
 def identificar_tipo_tienda_v8(nombre):
@@ -1544,7 +1251,7 @@ def mostrar_reconciliacion_v8():
 
                     with tab3:
                         st.dataframe(
-                            df_final[['GUIA_CLEAN', 'DESTINatARIO_NORM', 'TIPO_TIENDA', 'GRUPO', 
+                            df_final[['GUIA_CLEAN', 'DESTINATARIO_NORM', 'TIPO_TIENDA', 'GRUPO', 
                                      'PIEZAS_CALC', 'VALOR_MANIFIESTO', 'VALOR_REAL']].head(50),
                             use_container_width=True
                         )
@@ -1585,10 +1292,588 @@ def mostrar_reconciliacion_v8():
         st.info("👆 Suba los archivos necesarios o active la opción de datos de demostración para comenzar.")
 
 # ==============================================================================
+# 5. MÓDULO DASHBOARD DE TRANSFERENCIAS (NUEVO MÓDULO INTEGRADO)
+# ==============================================================================
+
+# CONFIGURACIÓN DE PARÁMETROS PARA TRANSFERENCIAS
+TIENDAS_REGULARES = 42
+PRICE_CLUBS = 5
+TIENDA_WEB = 1
+VENTAS_POR_MAYOR = 1
+FALLAS = 1
+
+PRICE_KEYWORDS = ['PRICE', 'OIL']
+WEB_KEYWORDS = ['WEB', 'TIENDA MOVIL', 'MOVIL']
+FALLAS_KEYWORDS = ['FALLAS']
+VENTAS_MAYOR_KEYWORDS = ['MAYOR', 'MAYORISTA']
+
+TIENDAS_REGULARES_LISTA = [
+    'AERO CCI', 'AERO DAULE', 'AERO LAGO AGRIO', 'AERO MALL DEL RIO GYE',
+    'AERO PLAYAS', 'AEROPOSTALE 6 DE DICIEMBRE', 'AEROPOSTALE BOMBOLI',
+    'AEROPOSTALE CAYAMBE', 'AEROPOSTALE EL COCA', 'AEROPOSTALE PASAJE',
+    'AEROPOSTALE PEDERNALES', 'AMBATO', 'BABAHOYO', 'BAHIA DE CARAQUEZ',
+    'CARAPUNGO', 'CEIBOS', 'CONDADO SHOPPING', 'CUENCA', 'CUENCA CENTRO HISTORICO',
+    'DURAN', 'LA PLAZA SHOPPING', 'MACHALA', 'MAL DEL SUR', 'MALL DEL PACIFICO',
+    'MALL DEL SOL', 'MANTA', 'MILAGRO', 'MULTIPLAZA RIOBAMBA', 'PASEO AMBATO',
+    'PENINSULA', 'PORTOVIEJO', 'QUEVEDO', 'RIOBAMBA', 'RIOCENTRO EL DORADO',
+    'RIOCENTRO NORTE', 'SAN LUIS', 'SANTO DOMINGO'
+]
+
+def extraer_entero(valor):
+    """Extrae la parte entera de un valor y divide por 1,000,000 para obtener el número real de prendas."""
+    try:
+        if isinstance(valor, str):
+            valor = valor.replace('.', '')
+            if ',' in valor:
+                valor = valor.split(',')[0]
+        
+        if valor:
+            valor_entero = int(float(valor))
+            return valor_entero // 1000000
+        return 0
+    except:
+        return 0
+
+def clasificar_transferencia(row):
+    """Clasifica cada transferencia en una de las 6 categorías."""
+    sucursal = str(row['Sucursal Destino']).upper()
+    cantidad = row['Cantidad_Entera']
+    
+    if cantidad >= 500 and cantidad % 100 == 0:
+        return 'Fundas'
+    
+    for keyword in PRICE_KEYWORDS:
+        if keyword in sucursal:
+            return 'Price Club'
+    
+    for keyword in WEB_KEYWORDS:
+        if keyword in sucursal:
+            return 'Tienda Web'
+    
+    for keyword in FALLAS_KEYWORDS:
+        if keyword in sucursal:
+            return 'Fallas'
+    
+    for keyword in VENTAS_MAYOR_KEYWORDS:
+        if keyword in sucursal:
+            return 'Ventas por Mayor'
+    
+    for tienda in TIENDAS_REGULARES_LISTA:
+        if tienda.upper() in sucursal:
+            return 'Tiendas'
+    
+    tiendas_keywords = ['AERO', 'MALL', 'CENTRO', 'SHOPPING', 'PLAZA', 'RIOCENTRO']
+    for keyword in tiendas_keywords:
+        if keyword in sucursal:
+            return 'Tiendas'
+    
+    return 'Ventas por Mayor'
+
+def procesar_excel(df):
+    """Procesa el DataFrame de Excel y calcula los KPIs por categoría."""
+    df = df.dropna(subset=['Secuencial'])
+    df['Secuencial'] = df['Secuencial'].astype(str).str.strip()
+    df = df[df['Secuencial'] != '']
+    
+    df['Cantidad_Entera'] = df['Cantidad Prendas'].apply(extraer_entero)
+    df['Categoria'] = df.apply(clasificar_transferencia, axis=1)
+    
+    try:
+        if 'Fecha' in df.columns:
+            fecha_str = str(df['Fecha'].iloc[0])
+            fecha_str = fecha_str.strip('/').strip()
+            fecha = datetime.strptime(fecha_str, '%Y-%m-%d')
+        else:
+            fecha = datetime.now()
+    except:
+        fecha = datetime.now()
+    
+    transferencias = df['Secuencial'].nunique()
+    
+    categorias = ['Price Club', 'Tiendas', 'Ventas por Mayor', 'Tienda Web', 'Fallas', 'Fundas']
+    resultados_por_categoria = {}
+    
+    for categoria in categorias:
+        resultados_por_categoria[categoria] = df[df['Categoria'] == categoria]['Cantidad_Entera'].sum()
+    
+    detalle_por_categoria = {}
+    for categoria in categorias:
+        df_categoria = df[df['Categoria'] == categoria]
+        if not df_categoria.empty:
+            detalle_por_categoria[categoria] = {
+                'sucursales': df_categoria['Sucursal Destino'].unique().tolist(),
+                'cantidad_total': int(df_categoria['Cantidad_Entera'].sum()),
+                'num_transferencias': int(df_categoria['Secuencial'].nunique()),
+                'num_sucursales_unicas': int(df_categoria['Sucursal Destino'].nunique())
+            }
+    
+    conteo_sucursales_unicas = {}
+    for categoria in ['Price Club', 'Tiendas', 'Tienda Web', 'Ventas por Mayor', 'Fallas']:
+        if categoria in detalle_por_categoria:
+            conteo_sucursales_unicas[categoria] = detalle_por_categoria[categoria]['num_sucursales_unicas']
+        else:
+            conteo_sucursales_unicas[categoria] = 0
+    
+    return {
+        'fecha': fecha,
+        'transferencias': int(transferencias),
+        'resultados_categoria': resultados_por_categoria,
+        'detalle_categoria': detalle_por_categoria,
+        'conteo_sucursales': conteo_sucursales_unicas,
+        'df_procesado': df
+    }
+
+def create_metric_card_transferencias(title, value, subtitle="", color_class=""):
+    """Crea una tarjeta de métrica con estilo para transferencias"""
+    return f"""
+    <div class="transferencias-metric-card {color_class}">
+        <div class="transferencias-metric-title">{title}</div>
+        <div class="transferencias-metric-value">{value}</div>
+        <div class="transferencias-metric-subtitle">{subtitle}</div>
+    </div>
+    """
+
+def create_validation_card_transferencias(title, value, max_value, color_class=""):
+    """Crea una tarjeta de validación para transferencias"""
+    status = "✅" if value <= max_value else "⚠️"
+    color_class_actual = "transferencias-validation-good" if value <= max_value else "transferencias-validation-warning"
+    return f"""
+    <div class="transferencias-validation-card">
+        <div class="transferencias-validation-title">{title} {status}</div>
+        <div class="transferencias-validation-value {color_class_actual}">{value}/{max_value}</div>
+    </div>
+    """
+
+def mostrar_dashboard_transferencias():
+    st.markdown("""
+    <div class='dashboard-header header-transferencias'>
+        <h1 class='header-title'>📊 Dashboard de Transferencias Diarias</h1>
+        <div class='header-subtitle'>Monitoreo en tiempo real de transferencias por categoría</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Sidebar para Dashboard de Transferencias
+    with st.sidebar:
+        st.markdown("---")
+        st.markdown("#### ⚙️ Configuración Transferencias")
+        st.info(f"""
+        **Parámetros configurados:**
+        - **Tiendas Regulares:** {TIENDAS_REGULARES}
+        - **Price Clubs:** {PRICE_CLUBS}
+        - **Tienda Web:** {TIENDA_WEB}
+        - **Ventas por Mayor:** {VENTAS_POR_MAYOR}
+        - **Fallas:** {FALLAS}
+        """)
+
+    # Contenido principal
+    st.markdown('<div class="transferencias-container">', unsafe_allow_html=True)
+    
+    # Variable para controlar los datos procesados
+    datos_procesados = False
+    resultados = None
+    
+    # Sidebar para carga de archivos
+    with st.sidebar:
+        st.markdown("---")
+        st.markdown("#### 📤 Cargar Archivo")
+        
+        uso_ejemplo = st.checkbox(
+            "Usar datos de ejemplo", 
+            value=False,
+            key="checkbox_ejemplo_transferencias"
+        )
+        
+        uploaded_file = st.file_uploader(
+            "Sube archivo Excel de transferencias", 
+            type=['xlsx', 'xls'],
+            help="Archivo con columnas: Fecha, Sucursal Origen, Sucursal Destino, Secuencial, Bodega Destino, Cantidad Prendas",
+            key="file_uploader_transferencias"
+        )
+
+    # Si el usuario selecciona usar datos de ejemplo
+    if uso_ejemplo:
+        ejemplo_data = []
+        sucursales = TIENDAS_REGULARES_LISTA[:10] + ['PRICE CLUB GUAYAQUIL', 'OIL UNO', 
+                                                   'TIENDA MOVIL - WEB', 'VENTAS POR MAYOR CENTRAL',
+                                                   'FALLAS CENTRO']
+        
+        for i in range(1, 31):
+            cantidad_original = np.random.choice([
+                68000000, 232000000, 64000000, 500000000,
+                600000, 120000000, 1000000000, 30000000
+            ])
+            ejemplo_data.append({
+                'Fecha': datetime.now().strftime('%Y-%m-%d'),
+                'Sucursal Origen': 'MATRIZ',
+                'Sucursal Destino': sucursales[i % len(sucursales)],
+                'Secuencial': f'8100{i}',
+                'Bodega Destino': sucursales[i % len(sucursales)],
+                'Cantidad Prendas': cantidad_original
+            })
+        
+        df_ejemplo = pd.DataFrame(ejemplo_data)
+        
+        with st.expander("📋 Datos de ejemplo cargados", expanded=False):
+            st.dataframe(df_ejemplo)
+        
+        resultados = procesar_excel(df_ejemplo)
+        datos_procesados = True
+
+    # Si el usuario sube un archivo
+    elif uploaded_file is not None and not uso_ejemplo:
+        try:
+            df = pd.read_excel(uploaded_file)
+            
+            columnas_requeridas = ['Fecha', 'Sucursal Origen', 'Sucursal Destino', 
+                                  'Secuencial', 'Bodega Destino', 'Cantidad Prendas']
+            
+            columnas_faltantes = [col for col in columnas_requeridas if col not in df.columns]
+            
+            if columnas_faltantes:
+                st.error(f"❌ Faltan columnas requeridas: {', '.join(columnas_faltantes)}")
+                st.info("""
+                **Las columnas deben llamarse exactamente así:**
+                - Fecha
+                - Sucursal Origen  
+                - Sucursal Destino
+                - Secuencial
+                - Bodega Destino
+                - Cantidad Prendas
+                """)
+                
+                st.subheader("🔍 Columnas encontradas en tu archivo:")
+                st.write(df.columns.tolist())
+            else:
+                with st.expander("👁️ Vista previa de datos cargados", expanded=False):
+                    st.dataframe(df.head(10))
+                    st.caption(f"Total de filas: {len(df)}")
+                
+                with st.spinner('Procesando datos...'):
+                    resultados = procesar_excel(df)
+                    datos_procesados = True
+        
+        except Exception as e:
+            st.error(f"❌ Error al procesar el archivo: {str(e)}")
+            st.info("""
+            **Posibles soluciones:**
+            1. Verifica que el archivo sea un Excel válido
+            2. Asegúrate de que tenga las columnas requeridas
+            3. Revisa que los datos en 'Cantidad Prendas' sean números válidos
+            """)
+
+    # Si hay datos procesados, mostrar el dashboard
+    if datos_procesados and resultados:
+        st.success("✅ Datos procesados correctamente!")
+        
+        # CALCULAR TOTAL_UNIDADES AL PRINCIPIO PARA EVITAR ERRORES
+        total_unidades = sum(resultados['resultados_categoria'].values())
+        
+        # SECCIÓN 1: MÉTRICAS PRINCIPALES
+        st.markdown('<div class="transferencias-section-title">📈 Resumen del Día</div>', unsafe_allow_html=True)
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            st.markdown(create_metric_card_transferencias(
+                "Fecha de Reporte", 
+                resultados['fecha'].strftime('%d/%m/%Y'),
+                "Fecha de procesamiento",
+                "transferencias-card-header"
+            ), unsafe_allow_html=True)
+        
+        with col2:
+            st.markdown(create_metric_card_transferencias(
+                "Total Transferencias", 
+                f"{resultados['transferencias']:,}",
+                "Número de secuenciales únicos",
+                "transferencias-card-header"
+            ), unsafe_allow_html=True)
+        
+        with col3:
+            st.markdown(create_metric_card_transferencias(
+                "Total Unidades", 
+                f"{total_unidades:,}",
+                "Suma total de todas las categorías",
+                "transferencias-card-header"
+            ), unsafe_allow_html=True)
+        
+        # SECCIÓN 2: VALIDACIÓN DE PARÁMETROS
+        st.markdown('<div class="transferencias-section-title">✅ Validación de Parámetros</div>', unsafe_allow_html=True)
+        
+        col1, col2, col3, col4, col5 = st.columns(5)
+        
+        with col1:
+            esperado = TIENDAS_REGULARES
+            real = resultados['conteo_sucursales'].get('Tiendas', 0)
+            st.markdown(create_validation_card_transferencias("Tiendas Regulares", real, esperado), unsafe_allow_html=True)
+        
+        with col2:
+            esperado = PRICE_CLUBS
+            real = resultados['conteo_sucursales'].get('Price Club', 0)
+            st.markdown(create_validation_card_transferencias("Price Clubs", real, esperado), unsafe_allow_html=True)
+        
+        with col3:
+            esperado = TIENDA_WEB
+            real = resultados['conteo_sucursales'].get('Tienda Web', 0)
+            st.markdown(create_validation_card_transferencias("Tienda Web", real, esperado), unsafe_allow_html=True)
+        
+        with col4:
+            esperado = VENTAS_POR_MAYOR
+            real = resultados['conteo_sucursales'].get('Ventas por Mayor', 0)
+            st.markdown(create_validation_card_transferencias("Ventas x Mayor", real, esperado), unsafe_allow_html=True)
+        
+        with col5:
+            esperado = FALLAS
+            real = resultados['conteo_sucursales'].get('Fallas', 0)
+            st.markdown(create_validation_card_transferencias("Fallas", real, esperado), unsafe_allow_html=True)
+        
+        # SECCIÓN 3: KPIs POR CATEGORÍA
+        st.markdown('<div class="transferencias-section-title">📊 KPIs por Categoría</div>', unsafe_allow_html=True)
+        
+        # Fila 1 de KPIs
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            st.markdown(create_metric_card_transferencias(
+                "Price Club", 
+                f"{resultados['resultados_categoria']['Price Club']:,}",
+                f"{resultados['conteo_sucursales'].get('Price Club', 0)} sucursales | 5 esperadas",
+                "transferencias-card-price-club"
+            ), unsafe_allow_html=True)
+        
+        with col2:
+            st.markdown(create_metric_card_transferencias(
+                "Tiendas Regulares", 
+                f"{resultados['resultados_categoria']['Tiendas']:,}",
+                f"{resultados['conteo_sucursales'].get('Tiendas', 0)} sucursales | 42 esperadas",
+                "transferencias-card-tiendas"
+            ), unsafe_allow_html=True)
+        
+        with col3:
+            st.markdown(create_metric_card_transferencias(
+                "Ventas por Mayor", 
+                f"{resultados['resultados_categoria']['Ventas por Mayor']:,}",
+                f"{resultados['conteo_sucursales'].get('Ventas por Mayor', 0)} sucursales | 1 esperada",
+                "transferencias-card-ventas-mayor"
+            ), unsafe_allow_html=True)
+        
+        # Fila 2 de KPIs
+        col4, col5, col6 = st.columns(3)
+        
+        with col4:
+            st.markdown(create_metric_card_transferencias(
+                "Tienda Web", 
+                f"{resultados['resultados_categoria']['Tienda Web']:,}",
+                f"{resultados['conteo_sucursales'].get('Tienda Web', 0)} sucursales | 1 esperada",
+                "transferencias-card-tienda-web"
+            ), unsafe_allow_html=True)
+        
+        with col5:
+            st.markdown(create_metric_card_transferencias(
+                "Fallas", 
+                f"{resultados['resultados_categoria']['Fallas']:,}",
+                f"{resultados['conteo_sucursales'].get('Fallas', 0)} sucursales | 1 esperada",
+                "transferencias-card-fallas"
+            ), unsafe_allow_html=True)
+        
+        with col6:
+            st.markdown(create_metric_card_transferencias(
+                "Fundas", 
+                f"{resultados['resultados_categoria']['Fundas']:,}",
+                "Múltiplos de 100 ≥ 500 unidades",
+                "transferencias-card-fundas"
+            ), unsafe_allow_html=True)
+        
+        # SECCIÓN 4: VISUALIZACIÓN Y ESTADÍSTICAS
+        st.markdown('<div class="transferencias-section-title">📈 Análisis Visual</div>', unsafe_allow_html=True)
+        
+        col1, col2 = st.columns([2, 1])
+        
+        with col1:
+            # Gráfico de pastel para distribución
+            labels = []
+            values = []
+            colors_list = ['#2ca02c', '#1f77b4', '#ff7f0e', '#9467bd', '#8c564b']
+            
+            for categoria, color in zip(['Price Club', 'Tiendas', 'Ventas por Mayor', 'Tienda Web', 'Fallas'], colors_list):
+                valor = resultados['resultados_categoria'][categoria]
+                if valor > 0:
+                    labels.append(categoria)
+                    values.append(valor)
+            
+            if values:
+                fig = go.Figure(data=[go.Pie(
+                    labels=labels,
+                    values=values,
+                    hole=.3,
+                    textinfo='label+percent',
+                    marker=dict(colors=colors_list[:len(labels)])
+                )])
+                fig.update_layout(
+                    title="Distribución por Categoría (excluyendo Fundas)",
+                    height=400,
+                    showlegend=True,
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    plot_bgcolor='rgba(0,0,0,0)'
+                )
+                st.plotly_chart(fig, use_container_width=True)
+        
+        with col2:
+            # Estadísticas adicionales en tarjetas
+            st.markdown(create_metric_card_transferencias(
+                "Total General", 
+                f"{total_unidades:,}",
+                "Suma de todas las unidades",
+                "transferencias-card-header"
+            ), unsafe_allow_html=True)
+            
+            if resultados['transferencias'] > 0:
+                promedio = total_unidades / resultados['transferencias']
+                st.markdown(create_metric_card_transferencias(
+                    "Promedio x Transferencia", 
+                    f"{promedio:,.0f}",
+                    "Unidades por transferencia",
+                    "transferencias-card-header"
+                ), unsafe_allow_html=True)
+            
+            categorias_con_datos = sum(1 for v in resultados['resultados_categoria'].values() if v > 0)
+            st.markdown(create_metric_card_transferencias(
+                "Categorías Activas", 
+                f"{categorias_con_datos}/6",
+                "Categorías con datos",
+                "transferencias-card-header"
+            ), unsafe_allow_html=True)
+            
+            if total_unidades > 0:
+                porcentaje_fundas = (resultados['resultados_categoria']['Fundas'] / total_unidades) * 100
+                st.markdown(create_metric_card_transferencias(
+                    "% Fundas", 
+                    f"{porcentaje_fundas:.1f}%",
+                    "Porcentaje del total",
+                    "transferencias-card-header"
+                ), unsafe_allow_html=True)
+        
+        # SECCIÓN 5: DETALLES POR CATEGORÍA
+        st.markdown('<div class="transferencias-section-title">🔍 Detalles por Categoría</div>', unsafe_allow_html=True)
+        
+        categorias_orden = ['Price Club', 'Tiendas', 'Ventas por Mayor', 'Tienda Web', 'Fallas', 'Fundas']
+        
+        # Crear tabs para cada categoría
+        tabs = st.tabs([f"📋 {cat}" for cat in categorias_orden])
+        
+        for i, categoria in enumerate(categorias_orden):
+            with tabs[i]:
+                if categoria in resultados['detalle_categoria']:
+                    detalle = resultados['detalle_categoria'][categoria]
+                    
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.metric("📊 Transferencias", f"{detalle['num_transferencias']:,}")
+                    with col2:
+                        st.metric("📦 Unidades Totales", f"{detalle['cantidad_total']:,}")
+                    with col3:
+                        st.metric("🏪 Sucursales Únicas", f"{detalle['num_sucursales_unicas']:,}")
+                    
+                    if detalle['sucursales']:
+                        st.write("**Sucursales en esta categoría:**")
+                        cols = st.columns(3)
+                        for j, sucursal in enumerate(sorted(detalle['sucursales'])):
+                            with cols[j % 3]:
+                                st.write(f"• {sucursal}")
+                else:
+                    st.info(f"No hay datos para {categoria}")
+        
+        # SECCIÓN 6: DATOS PROCESADOS Y DESCARGA
+        st.markdown('<div class="transferencias-section-title">💾 Datos Procesados</div>', unsafe_allow_html=True)
+        
+        with st.expander("📊 Ver todos los datos procesados", expanded=False):
+            df_visual = resultados['df_procesado'].copy()
+            
+            st.dataframe(
+                df_visual[['Fecha', 'Sucursal Origen', 'Sucursal Destino', 
+                          'Secuencial', 'Cantidad Prendas', 'Cantidad_Entera', 
+                          'Categoria']].head(50),
+                use_container_width=True
+            )
+            
+            csv = resultados['df_procesado'].to_csv(index=False)
+            st.download_button(
+                label="📥 Descargar datos procesados (CSV)",
+                data=csv,
+                file_name=f"transferencias_procesadas_{resultados['fecha'].strftime('%Y%m%d')}.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
+        
+        # SECCIÓN 7: RESUMEN EJECUTIVO
+        st.markdown('<div class="transferencias-section-title">📋 Resumen Ejecutivo</div>', unsafe_allow_html=True)
+        
+        resumen_data = []
+        for categoria in categorias_orden:
+            valor = resultados['resultados_categoria'][categoria]
+            if categoria in resultados['detalle_categoria']:
+                num_transferencias = resultados['detalle_categoria'][categoria]['num_transferencias']
+                num_sucursales = resultados['detalle_categoria'][categoria]['num_sucursales_unicas']
+            else:
+                num_transferencias = 0
+                num_sucursales = 0
+            
+            porcentaje = (valor / total_unidades * 100) if total_unidades > 0 else 0
+            
+            resumen_data.append({
+                'Categoría': categoria,
+                'Unidades': f"{valor:,}",
+                'Transferencias': f"{num_transferencias:,}",
+                'Sucursales': f"{num_sucursales:,}",
+                'Porcentaje': f"{porcentaje:.1f}%",
+                'Promedio x Transf': f"{(valor/num_transferencias if num_transferencias > 0 else 0):.0f}"
+            })
+        
+        resumen_df = pd.DataFrame(resumen_data)
+        
+        st.dataframe(
+            resumen_df,
+            column_config={
+                "Categoría": st.column_config.TextColumn("Categoría", width="medium"),
+                "Unidades": st.column_config.TextColumn("Unidades", width="small"),
+                "Transferencias": st.column_config.TextColumn("Transferencias", width="small"),
+                "Sucursales": st.column_config.TextColumn("Sucursales", width="small"),
+                "Porcentaje": st.column_config.TextColumn("Porcentaje", width="small"),
+                "Promedio x Transf": st.column_config.TextColumn("Prom/Transf", width="small")
+            },
+            hide_index=True,
+            use_container_width=True
+        )
+
+    # Si no hay archivo subido ni datos de ejemplo activados
+    elif not datos_procesados and not uso_ejemplo and uploaded_file is None:
+        # Vista inicial sin archivo
+        st.info("👈 **Por favor, sube un archivo Excel usando el panel lateral o activa 'Usar datos de ejemplo'**")
+        
+        # Mostrar ejemplo de formato esperado
+        st.markdown('<div class="transferencias-section-title">📝 Formato Esperado del Archivo</div>', unsafe_allow_html=True)
+        
+        ejemplo_data = {
+            'Fecha': [datetime.now().strftime('%Y-%m-%d')] * 6,
+            'Sucursal Origen': ['MATRIZ'] * 6,
+            'Sucursal Destino': ['AERO CCI', 'PRICE CLUB GUAYAQUIL', 'TIENDA MOVIL - WEB', 
+                               'VENTAS POR MAYOR CENTRAL', 'FALLAS CENTRO', 'AMBATO'],
+            'Secuencial': [81012, 80999, 81016, 81000, 81004, 81001],
+            'Bodega Destino': ['AERO CCI', 'PRICE CLUB GUAYAQUIL', 'TIENDA MOVIL - WEB',
+                              'VENTAS POR MAYOR CENTRAL', 'FALLAS CENTRO', 'AMBATO'],
+            'Cantidad Prendas': [68000000, 232000000, 64000000, 144000000, 94000000, 500000000]
+        }
+        
+        ejemplo_df = pd.DataFrame(ejemplo_data)
+        st.dataframe(ejemplo_df, use_container_width=True)
+    
+    st.markdown('</div>', unsafe_allow_html=True)
+
+# ==============================================================================
 # 6. MÓDULOS RESTANTES MEJORADOS
 # ==============================================================================
 
-# --- DASHBOARD KPIs ---
+# --- DASHBOARD KPIS ---
 def mostrar_dashboard_kpis():
     st.markdown("""
     <div class='dashboard-header header-dashboard'>
@@ -2124,26 +2409,27 @@ def mostrar_ayuda():
             
             ### 📊 Módulos Principales
             
-            #### 1. Dashboard Logístico
-            - Monitoreo de transferencias en tiempo real
-            - KPIs de unidades, bodegas y productos
-            - Gráficos interactivos y filtros avanzados
-            
-            #### 2. Dashboard KPIs
+            #### 1. Dashboard KPIs
             - Monitoreo en tiempo real de producción
             - Métricas de eficiencia y costos
             - Gráficos interactivos
             
-            #### 3. Reconciliación V8.0
+            #### 2. Reconciliación V8.0
             - Subir manifiestos y facturas
             - Clasificación automática de tiendas
             - Detección especial de "JOFRE SANTANA"
             - Exportación a Excel y CSV
             
-            #### 4. Email Wilo AI
+            #### 3. Email Wilo AI
             - Análisis automático de correos
             - Clasificación por urgencia
             - Detección de faltantes/sobrantes
+            
+            #### 4. Dashboard Transferencias
+            - Análisis de transferencias diarias
+            - Clasificación por categorías (Price Club, Tiendas, etc.)
+            - Validación de parámetros configurados
+            - Reportes ejecutivos
             
             #### 5. Generación de Guías
             - Creación de guías de envío
@@ -2269,7 +2555,7 @@ def mostrar_pagina_login(rol_target):
         if password == correct_password:
             st.session_state.user_type = rol_target
             st.session_state.show_login = False
-            st.session_state.current_page = "Dashboard Logístico"
+            st.session_state.current_page = "Dashboard KPIs"
             st.rerun()
         else:
             st.error("❌ Contraseña incorrecta. Intente nuevamente.")
@@ -2292,7 +2578,7 @@ def main():
     if 'login_target' not in st.session_state:
         st.session_state.login_target = None
     if 'current_page' not in st.session_state:
-        st.session_state.current_page = "Dashboard Logístico"
+        st.session_state.current_page = "Dashboard KPIs"
     
     # Configurar sidebar solo si no estamos en login
     if not st.session_state.show_login:
@@ -2317,10 +2603,10 @@ def main():
             
             # Menú de navegación
             menu_items = {
-                "Dashboard Logístico": {"icon": "🚚", "role": "admin"},
                 "Dashboard KPIs": {"icon": "📊", "role": "public"},
                 "Reconciliación V8": {"icon": "💰", "role": "admin"},
                 "Email Wilo AI": {"icon": "📧", "role": "admin"},
+                "Dashboard Transferencias": {"icon": "📦", "role": "admin"},
                 "Generar Guías": {"icon": "📋", "role": "user"},
                 "Etiquetas": {"icon": "🏷️", "role": "user"},
                 "Trabajadores": {"icon": "👥", "role": "admin"},
@@ -2356,7 +2642,7 @@ def main():
             if st.session_state.user_type:
                 if st.button("🚪 Cerrar Sesión", use_container_width=True):
                     st.session_state.user_type = None
-                    st.session_state.current_page = "Dashboard Logístico"
+                    st.session_state.current_page = "Dashboard KPIs"
                     st.rerun()
             else:
                 col_login1, col_login2 = st.columns(2)
@@ -2377,10 +2663,10 @@ def main():
         else:
             # Ejecutar el módulo correspondiente
             page_mapping = {
-                "Dashboard Logístico": mostrar_dashboard_logistico,
                 "Dashboard KPIs": mostrar_dashboard_kpis,
                 "Reconciliación V8": mostrar_reconciliacion_v8,
                 "Email Wilo AI": mostrar_modulo_email_wilo,
+                "Dashboard Transferencias": mostrar_dashboard_transferencias,
                 "Generar Guías": mostrar_generacion_guias,
                 "Etiquetas": mostrar_generacion_etiquetas,
                 "Trabajadores": mostrar_gestion_trabajadores,
@@ -2392,10 +2678,10 @@ def main():
             if current_func:
                 # Verificación de permisos
                 page_roles = {
-                    "Dashboard Logístico": "admin",
                     "Dashboard KPIs": "public",
                     "Reconciliación V8": "admin",
                     "Email Wilo AI": "admin",
+                    "Dashboard Transferencias": "admin",
                     "Generar Guías": "user",
                     "Etiquetas": "user",
                     "Trabajadores": "admin",
@@ -2416,13 +2702,13 @@ def main():
                     st.rerun()
             else:
                 st.error("Página no encontrada")
-                st.session_state.current_page = "Dashboard Logístico"
+                st.session_state.current_page = "Dashboard KPIs"
                 st.rerun()
         
         # --- FOOTER ---
         st.markdown("""
         <div class="footer">
-            <span class="footer-logo">AEROPOSTALE ERP</span> v3.0 | © 2025 Todos los derechos reservados.<br>
+            <span class="footer-logo">AEROPOSTALE ERP</span> v3.1 | © 2025 Todos los derechos reservados.<br>
             Desarrollado con ❤️ para la optimización logística | <em>#EficienciaAeropostale</em>
         </div>
         """, unsafe_allow_html=True)
