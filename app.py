@@ -21,7 +21,6 @@ from pathlib import Path
 from io import BytesIO
 from typing import Dict, List, Optional, Any, Union
 from concurrent.futures import ThreadPoolExecutor
-from bs4 import BeautifulSoup
 
 # --- LIBRERÍAS DE TERCEROS ---
 import qrcode
