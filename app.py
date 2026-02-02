@@ -1,3 +1,5 @@
+[file name]: app.py
+[file content begin]
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -52,6 +54,46 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 warnings.filterwarnings('ignore')
+
+# ==============================================================================
+# 0. FUNCIONES AUXILIARES GLOBALES (MOVIDAS AL INICIO PARA EVITAR REFERENCIAS ANTICIPADAS)
+# ==============================================================================
+
+def normalizar_texto_wilo(texto):
+    """Normaliza texto: quita acentos, caracteres especiales y hace mayúsculas."""
+    if pd.isna(texto) or texto == '': return ''
+    texto = str(texto)
+    try:
+        texto = unicodedata.normalize('NFKD', texto).encode('ASCII', 'ignore').decode('ASCII')
+    except: pass
+    texto = re.sub(r'[^A-Za-z0-9\s]', ' ', texto.upper())
+    return re.sub(r'\s+', ' ', texto).strip()
+
+def procesar_subtotal_wilo(valor):
+    """Limpia y convierte valores monetarios (ej: $1,200.50 -> 1200.50)."""
+    if pd.isna(valor): return 0.0
+    try:
+        if isinstance(valor, (int, float)): return float(valor)
+        valor_str = str(valor).strip()
+        valor_str = re.sub(r'[^\d.,-]', '', valor_str)
+        if ',' in valor_str and '.' in valor_str:
+            if valor_str.rfind(',') > valor_str.rfind('.'): # 1.000,00
+                valor_str = valor_str.replace('.', '').replace(',', '.')
+            else: # 1,000.00
+                valor_str = valor_str.replace(',', '')
+        elif ',' in valor_str:
+            valor_str = valor_str.replace(',', '.')
+        return float(valor_str) if valor_str else 0.0
+    except: return 0.0
+
+def validar_fecha(fecha: str) -> bool:
+    try:
+        datetime.strptime(fecha, "%Y-%m-%d")
+        return True
+    except ValueError: return False
+
+def hash_password(pw: str) -> str:
+    return hashlib.sha256(pw.encode()).hexdigest()
 
 # ==============================================================================
 # 1. SIMULACIÓN DE BASE DE DATOS LOCAL (REEMPLAZO DE SUPABASE)
@@ -329,7 +371,7 @@ footer {visibility: hidden;}
 .header-reconciliation { background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); }
 .header-email { background: linear-gradient(135deg, #f46b45 0%, #eea849 100%); }
 .header-guias { background: linear-gradient(135deg, #8E2DE2 0%, #4A00E0 100%); }
--header-etiquetas { background: linear-gradient(135deg, #00b4db 0%, #0083b0 100%); }
+.header-etiquetas { background: linear-gradient(135deg, #00b4db 0%, #0083b0 100%); }
 .header-trabajadores { background: linear-gradient(135deg, #f7971e 0%, #ffd200 100%); }
 .header-distribuciones { background: linear-gradient(135deg, #654ea3 0%, #eaafc8 100%); }
 .header-ayuda { background: linear-gradient(135deg, #232526 0%, #414345 100%); }
@@ -623,47 +665,7 @@ footer {visibility: hidden;}
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# 3. FUNCIONES AUXILIARES GLOBALES
-# ==============================================================================
-
-def normalizar_texto_wilo(texto):
-    """Normaliza texto: quita acentos, caracteres especiales y hace mayúsculas."""
-    if pd.isna(texto) or texto == '': return ''
-    texto = str(texto)
-    try:
-        texto = unicodedata.normalize('NFKD', texto).encode('ASCII', 'ignore').decode('ASCII')
-    except: pass
-    texto = re.sub(r'[^A-Za-z0-9\s]', ' ', texto.upper())
-    return re.sub(r'\s+', ' ', texto).strip()
-
-def procesar_subtotal_wilo(valor):
-    """Limpia y convierte valores monetarios (ej: $1,200.50 -> 1200.50)."""
-    if pd.isna(valor): return 0.0
-    try:
-        if isinstance(valor, (int, float)): return float(valor)
-        valor_str = str(valor).strip()
-        valor_str = re.sub(r'[^\d.,-]', '', valor_str)
-        if ',' in valor_str and '.' in valor_str:
-            if valor_str.rfind(',') > valor_str.rfind('.'): # 1.000,00
-                valor_str = valor_str.replace('.', '').replace(',', '.')
-            else: # 1,000.00
-                valor_str = valor_str.replace(',', '')
-        elif ',' in valor_str:
-            valor_str = valor_str.replace(',', '.')
-        return float(valor_str) if valor_str else 0.0
-    except: return 0.0
-
-def validar_fecha(fecha: str) -> bool:
-    try:
-        datetime.strptime(fecha, "%Y-%m-%d")
-        return True
-    except ValueError: return False
-
-def hash_password(pw: str) -> str:
-    return hashlib.sha256(pw.encode()).hexdigest()
-
-# ==============================================================================
-# 4. MÓDULO CORREO WILO (CORREGIDO Y ROBUSTO)
+# 3. MÓDULO CORREO WILO (CORREGIDO Y ROBUSTO)
 # ==============================================================================
 
 class WiloEmailEngine:
@@ -798,7 +800,7 @@ def mostrar_modulo_email_wilo():
                     <div class='kpi-icon'>🚨</div>
                     <div class='kpi-title'>Alta Urgencia</div>
                     <div class='kpi-value'>{alta}</div>
-                    <div class='kpi-change {'negative' if alta > 3 else 'positive'}'>{'Requiere atención' if alta > 3 else 'Bajo control'}</div>
+                    <div class='kpi-change {'negative' if alta > 3 else 'positive'}">{'Requiere atención' if alta > 3 else 'Bajo control'}</div>
                 </div>
                 """, unsafe_allow_html=True)
             
@@ -874,7 +876,7 @@ def mostrar_modulo_email_wilo():
                 col_c.metric("Detecciones", len(row['tipo'].split(', ')))
 
 # ==============================================================================
-# 5. MÓDULO RECONCILIACIÓN V8 (CORREGIDO Y ACTUALIZADO)
+# 4. MÓDULO RECONCILIACIÓN V8 (CORREGIDO Y ACTUALIZADO)
 # ==============================================================================
 
 def identificar_tipo_tienda_v8(nombre):
@@ -997,7 +999,7 @@ def mostrar_reconciliacion_v8():
                     
                     # Lógica V8
                     df_final['DESTINATARIO_NORM'] = df_final[col_dest_m].fillna('DESCONOCIDO')
-                    df_final['TIPO_TIENDA'] = df_final['DESTINATARIO_NORM'].apply(identificar_tipo_tienda_v8)
+                    df_final['TIPO_TIENDA'] = df_final['DESTINATARio_NORM'].apply(identificar_tipo_tienda_v8)
                     
                     # Manejo de Piezas y Valores
                     df_final['PIEZAS_CALC'] = pd.to_numeric(df_final[col_piezas_m], errors='coerce').fillna(1)
@@ -1168,7 +1170,7 @@ def mostrar_reconciliacion_v8():
         st.info("👆 Suba los archivos necesarios o active la opción de datos de demostración para comenzar.")
 
 # ==============================================================================
-# 6. MÓDULOS RESTANTES MEJORADOS
+# 5. MÓDULOS RESTANTES MEJORADOS
 # ==============================================================================
 
 # --- DASHBOARD KPIS ---
@@ -1211,7 +1213,7 @@ def mostrar_dashboard_kpis():
                     <div class='kpi-icon'>🏭</div>
                     <div class='kpi-title'>Producción Promedio</div>
                     <div class='kpi-value'>{prod_prom:,.0f}</div>
-                    <div class='kpi-change {'positive' if prod_tend > 0 else 'negative'}'>{'📈' if prod_tend > 0 else '📉'} {prod_tend:.1f}%</div>
+                    <div class='kpi-change {'positive' if prod_tend > 0 else 'negative'}">{'📈' if prod_tend > 0 else '📉'} {prod_tend:.1f}%</div>
                 </div>
                 """, unsafe_allow_html=True)
             
@@ -1233,7 +1235,7 @@ def mostrar_dashboard_kpis():
                     <div class='kpi-icon'>🚨</div>
                     <div class='kpi-title'>Alertas Totales</div>
                     <div class='kpi-value'>{alert_total}</div>
-                    <div class='kpi-change {'negative' if alert_total > 10 else 'positive'}'>{'Revisar' if alert_total > 10 else 'Controlado'}</div>
+                    <div class='kpi-change {'negative' if alert_total > 10 else 'positive'}">{'Revisar' if alert_total > 10 else 'Controlado'}</div>
                 </div>
                 """, unsafe_allow_html=True)
             
@@ -1351,12 +1353,13 @@ def mostrar_generacion_guias():
                         """)
                     
                     st.markdown("</div>", unsafe_allow_html=True)
-                     
+                    
                     # Botón de descarga simulado
                     st.download_button(
-                        label="📥 Descargar Guía PDF"
-                        file_name=f"guia_{guia_num}.pdf"
-                        mime= "application/pdf"
+                        label="📥 Descargar Guía PDF",
+                        data=b"PDF simulado - Contenido de la guía",
+                        file_name=f"guia_{guia_num}.pdf",
+                        mime="application/pdf",
                         use_container_width=True
                     )
             
@@ -1810,7 +1813,7 @@ def mostrar_ayuda():
         """, unsafe_allow_html=True)
 
 # ==============================================================================
-# 7. SISTEMA DE AUTENTICACIÓN Y NAVEGACIÓN MODERNO
+# 6. SISTEMA DE AUTENTICACIÓN Y NAVEGACIÓN MODERNO
 # ==============================================================================
 
 def mostrar_pagina_login(rol_target):
