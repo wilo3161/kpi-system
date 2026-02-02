@@ -997,7 +997,7 @@ def mostrar_reconciliacion_v8():
                     
                     # Lógica V8
                     df_final['DESTINATARIO_NORM'] = df_final[col_dest_m].fillna('DESCONOCIDO')
-                    df_final['TIPO_TIENDA'] = df_final['DESTINATARio_NORM'].apply(identificar_tipo_tienda_v8)
+                    df_final['TIPO_TIENDA'] = df_final['DESTINATARIO_NORM'].apply(identificar_tipo_tienda_v8)
                     
                     # Manejo de Piezas y Valores
                     df_final['PIEZAS_CALC'] = pd.to_numeric(df_final[col_piezas_m], errors='coerce').fillna(1)
@@ -1352,10 +1352,10 @@ def mostrar_generacion_guias():
                     
                     st.markdown("</div>", unsafe_allow_html=True)
                     
-                    # Botón de descarga simulado
+                    # Botón de descarga simulado - CORREGIDO
                     st.download_button(
                         label="📥 Descargar Guía PDF",
-                        data=b"PDF simulado - Contenido de la guía",
+                        data=b"PDF simulated content",
                         file_name=f"guia_{guia_num}.pdf",
                         mime="application/pdf",
                         use_container_width=True
@@ -1446,14 +1446,14 @@ def mostrar_generacion_etiquetas():
                     except:
                         st.warning("No se pudo generar el código QR")
             
-            # Opciones de exportación
+            # Opciones de exportación - TODOS CORREGIDOS
             st.markdown("### 💾 Opciones de Exportación")
             col_e1, col_e2, col_e3 = st.columns(3)
             
             with col_e1:
                 st.download_button(
                     label="📄 Descargar PDF",
-                    data=b"Contenido PDF de etiquetas",
+                    data=b"PDF content",
                     file_name=f"etiquetas_{referencia}_{datetime.now().date()}.pdf",
                     mime="application/pdf",
                     use_container_width=True
@@ -1462,7 +1462,7 @@ def mostrar_generacion_etiquetas():
             with col_e2:
                 st.download_button(
                     label="🖼️ Descargar PNG",
-                    data=b"Contenido PNG de etiquetas",
+                    data=b"PNG content",
                     file_name=f"etiquetas_{referencia}_{datetime.now().date()}.png",
                     mime="image/png",
                     use_container_width=True
@@ -1471,7 +1471,7 @@ def mostrar_generacion_etiquetas():
             with col_e3:
                 st.download_button(
                     label="📊 Descargar Excel",
-                    data=b"Contenido Excel de etiquetas",
+                    data=b"Excel content",
                     file_name=f"etiquetas_{referencia}_{datetime.now().date()}.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     use_container_width=True
