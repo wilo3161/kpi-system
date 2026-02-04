@@ -3414,7 +3414,7 @@ def main():
             page_mapping = {
                 "Dashboard KPIs": mostrar_dashboard_kpis,
                 "Reconciliación V8": mostrar_reconciliacion_v8,
-                "Email Wilo AI": mostrar_modulo_email_wilo,
+                "Email Wilo AI": mostrar_WiloEmailEngine,
                 "Dashboard Transferencias": mostrar_dashboard_transferencias,
                 "Generar Guías": mostrar_generacion_guias,
                 "Trabajadores": mostrar_gestion_trabajadores,
