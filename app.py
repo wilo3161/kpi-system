@@ -2173,209 +2173,441 @@ def mostrar_dashboard_kpis():
     else:
         st.info("Cargando datos de KPIs...")
 
-# --- GENERACIÓN DE GUÍAS ---
+# --- GENERACIÓN DE GUÍAS UNIFICADO ---
 def mostrar_generacion_guias():
     st.markdown("""
     <div class='main-header'>
-        <h1 class='header-title'>📋 Generador de Guías de Envío</h1>
-        <div class='header-subtitle'>Creación automatizada de documentación de transporte</div>
+        <h1 class='header-title'>🚚 Centro de Distribución Fashion Club</h1>
+        <div class='header-subtitle'>Generador de Guías de Envío con QR y Tracking</div>
     </div>
     """, unsafe_allow_html=True)
+    
+    # Configuración inicial para el estado de sesión
+    if 'guias_registradas' not in st.session_state:
+        st.session_state.guias_registradas = []
+        st.session_state.contador_guias = 1000
+    
+    # Logos de las empresas (usando emojis como placeholder)
+    logos = {
+        "Fashion Club": "👔",
+        "Tempo": "🚚",
+        "Aeropostale": "🏷️"
+    }
     
     with st.form("guias_form", border=False):
         st.markdown("""
         <div class='filter-panel'>
-            <h3 class='filter-title'>📝 Información del Envío</h3>
+            <h3 class='filter-title'>📋 Información de la Guía</h3>
         """, unsafe_allow_html=True)
         
+        # Primera fila: Información de empresa y remitente
         col1, col2 = st.columns(2)
+        
         with col1:
-            marca = st.radio("🏷️ Marca", ["Fashion Club", "Tempo", "Aeropostale"], horizontal=True)
-            tienda = st.selectbox("🏪 Tienda Destino", 
-                                ["Mall del Sol", "San Marino", "Quicentro", "Mall del Río", 
-                                 "Plaza de las Américas", "Riocentro Ceibos"])
-            remitente = st.selectbox("👤 Remitente", ["Andrés Yépez", "Josué Imbacuán", "María González", "Carlos Pérez"])
+            st.subheader("🏢 Información de la Empresa")
+            marca = st.radio("**Seleccione la Marca:**", ["Fashion Club", "Tempo"], horizontal=True)
+            
+            # Mostrar logo según selección
+            logo = logos.get(marca, "🏢")
+            st.markdown(f"""
+            <div style='text-align: center; padding: 15px; background: #f8f9fa; border-radius: 10px; margin: 10px 0;'>
+                <div style='font-size: 3rem;'>{logo}</div>
+                <div style='font-weight: bold; font-size: 1.2rem; color: #0033A0;'>{marca}</div>
+            </div>
+            """, unsafe_allow_html=True)
         
         with col2:
-            num_piezas = st.number_input("📦 Número de Piezas", min_value=1, max_value=100, value=1)
-            peso = st.number_input("⚖️ Peso Aprox. (kg)", min_value=0.1, max_value=100.0, value=5.0)
-            valor_declarado = st.number_input("💰 Valor Declarado", min_value=0.0, value=100.0)
+            st.subheader("👤 Información del Remitente")
+            remitente = st.selectbox("**Seleccione Remitente:**", 
+                                   ["Josué Imbacuán", "Luis Perugachi", "Andrés Yépez", 
+                                    "Wilson Pérez", "Andrés Cadena", "Diana García", 
+                                    "Jessica Suárez", "Rocio Cadena", "Jhony Villa"])
+            
+            # Dirección del remitente (fija)
+            direccion_remitente = "San Roque, Barrio la Merced calle Santho Thomas y antigua via a cotacachi"
+            st.info(f"""
+            **Dirección del Remitente:**
+            📍 {direccion_remitente}
+            """)
         
-        url_pedido = st.text_input("🔗 URL del Pedido", value="https://pedidos.aeropostale.com/", placeholder="Ingrese la URL completa del pedido")
+        st.divider()
         
-        col_btn1, col_btn2 = st.columns(2)
+        # Segunda fila: Información del envío
+        st.subheader("📦 Detalles del Envío")
+        col3, col4 = st.columns(2)
+        
+        with col3:
+            num_piezas = st.number_input("**Número de Piezas:**", min_value=1, max_value=100, value=1, step=1)
+            peso = st.number_input("**Peso Aproximado (kg):**", min_value=0.1, max_value=100.0, value=5.0, step=0.1)
+            valor_declarado = st.number_input("**Valor Declarado (USD):**", min_value=0.0, value=100.0, step=10.0)
+        
+        with col4:
+            fecha_emision = st.date_input("**Fecha de Emisión:**", datetime.now())
+            fecha_estimada_entrega = st.date_input("**Fecha Estimada de Entrega:**", datetime.now() + timedelta(days=3))
+            tipo_servicio = st.selectbox("**Tipo de Servicio:**", ["Estándar", "Express", "Prioritario"])
+        
+        st.divider()
+        
+        # Tercera fila: Información del destinatario
+        st.subheader("🏪 Información del Destinatario")
+        col5, col6 = st.columns(2)
+        
+        with col5:
+            nombre_destinatario = st.text_input("**Nombre del Destinatario:**", placeholder="Ej: Juan Pérez")
+            telefono_destinatario = st.text_input("**Teléfono del Destinatario:**", placeholder="Ej: +593 99 999 9999")
+        
+        with col6:
+            direccion_destinatario = st.text_area("**Dirección del Destinatario:**", 
+                                                placeholder="Ej: Av. Principal #123, Ciudad, Provincia",
+                                                height=100)
+            tienda_destino = st.selectbox("**Tienda Destino (Opcional):**", 
+                                         ["", "Mall del Sol", "San Marino", "Quicentro", "Mall del Río", 
+                                          "Plaza de las Américas", "Riocentro Ceibos", "Otro"])
+        
+        st.divider()
+        
+        # Cuarta fila: URL y QR
+        st.subheader("🔗 Información Digital")
+        url_pedido = st.text_input("**URL del Pedido/Tracking:**", 
+                                 placeholder="https://pedidos.fashionclub.com/orden-12345",
+                                 value="https://pedidos.fashionclub.com/")
+        
+        # Generar código QR basado en URL
+        if url_pedido:
+            try:
+                qr = qrcode.QRCode(version=1, box_size=10, border=4)
+                qr.add_data(url_pedido)
+                qr.make(fit=True)
+                img_qr = qr.make_image(fill_color="black", back_color="white")
+                
+                # Convertir a bytes
+                img_byte_arr = io.BytesIO()
+                img_qr.save(img_byte_arr, format='PNG')
+                img_byte_arr.seek(0)
+                
+                # Mostrar QR
+                col_qr1, col_qr2, col_qr3 = st.columns([1, 2, 1])
+                with col_qr2:
+                    st.image(img_byte_arr, caption="Código QR Generado", width=200)
+                    st.caption(f"URL: {url_pedido[:50]}...")
+            except:
+                st.warning("⚠️ No se pudo generar el código QR. Verifique la URL.")
+        
+        st.divider()
+        
+        # Botones de acción
+        col_btn1, col_btn2, col_btn3 = st.columns(3)
         with col_btn1:
             submit = st.form_submit_button("🚀 Generar Guía PDF", use_container_width=True, type="primary")
         with col_btn2:
             preview = st.form_submit_button("👁️ Vista Previa", use_container_width=True)
+        with col_btn3:
+            reset = st.form_submit_button("🔄 Nuevo Formulario", use_container_width=True)
         
         st.markdown("</div>", unsafe_allow_html=True)
     
+    # Procesar la guía
     if submit or preview:
+        # Validaciones
+        errors = []
+        if not nombre_destinatario:
+            errors.append("❌ El nombre del destinatario es obligatorio")
+        if not direccion_destinatario:
+            errors.append("❌ La dirección del destinatario es obligatoria")
         if not url_pedido or len(url_pedido) < 10:
-            st.error("❌ Por favor, ingrese una URL válida para el pedido.")
+            errors.append("❌ Ingrese una URL válida para el pedido")
+        
+        if errors:
+            for error in errors:
+                st.error(error)
         else:
-            # Simulación de generación
-            guia_num = f"GUA-{datetime.now().strftime('%Y%m%d')}-{np.random.randint(1000, 9999)}"
+            # Generar número de guía único
+            guia_num = f"GFC-{st.session_state.contador_guias:04d}"
+            st.session_state.contador_guias += 1
+            
+            # Crear diccionario con datos de la guía
+            guia_data = {
+                "numero": guia_num,
+                "marca": marca,
+                "logo": logo,
+                "remitente": remitente,
+                "direccion_remitente": direccion_remitente,
+                "destinatario": nombre_destinatario,
+                "telefono_destinatario": telefono_destinatario,
+                "direccion_destinatario": direccion_destinatario,
+                "tienda_destino": tienda_destino if tienda_destino else "No especificada",
+                "piezas": num_piezas,
+                "peso": peso,
+                "valor_declarado": valor_declarado,
+                "fecha_emision": fecha_emision.strftime("%Y-%m-%d"),
+                "fecha_estimada_entrega": fecha_estimada_entrega.strftime("%Y-%m-%d"),
+                "tipo_servicio": tipo_servicio,
+                "url_pedido": url_pedido,
+                "estado": "Generada",
+                "fecha_creacion": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            }
+            
+            if preview:
+                # Vista previa
+                mostrar_vista_previa_guia(guia_data)
             
             if submit:
                 with st.spinner(f"Generando guía {guia_num}..."):
-                    time.sleep(2)
+                    time.sleep(1.5)
                     
-                    st.success(f"✅ Guía generada exitosamente para {tienda}")
+                    # Agregar a lista de guías
+                    st.session_state.guias_registradas.append(guia_data)
                     
-                    # Mostrar detalles
-                    st.markdown("""
-                    <div class='filter-panel'>
-                        <h4>📄 Resumen de la Guía Generada</h4>
-                    """, unsafe_allow_html=True)
+                    # Generar PDF
+                    pdf_bytes = generar_pdf_guia(guia_data)
                     
-                    col_d1, col_d2 = st.columns(2)
-                    with col_d1:
-                        st.markdown(f"""
-                        - **Número de Guía:** `{guia_num}`
-                        - **Marca:** {marca}
-                        - **Tienda Destino:** {tienda}
-                        - **Remitente:** {remitente}
-                        """)
+                    st.success(f"✅ Guía {guia_num} generada exitosamente!")
                     
-                    with col_d2:
-                        st.markdown(f"""
-                        - **Piezas:** {num_piezas}
-                        - **Peso:** {peso} kg
-                        - **Valor Declarado:** ${valor_declarado:,.2f}
-                        - **Fecha:** {datetime.now().strftime('%Y-%m-%d %H:%M')}
-                        """)
-                    
-                    st.markdown("</div>", unsafe_allow_html=True)
-                    
-                    # Botón de descarga
-                    st.download_button(
-                        label="📥 Descargar Guía PDF",
-                        data=b"PDF simulated content",
-                        file_name=f"guia_{guia_num}.pdf",
-                        mime="application/pdf",
-                        use_container_width=True
-                    )
-            
-            if preview:
-                st.info(f"**Vista previa para:** {tienda} - Guía: {guia_num}")
-
-# --- GENERACIÓN DE ETIQUETAS ---
-def mostrar_generacion_etiquetas():
-    st.markdown("""
-    <div class='main-header'>
-        <h1 class='header-title'>🏷️ Generador de Etiquetas Inteligente</h1>
-        <div class='header-subtitle'>Creación de etiquetas para inventario y logística</div>
-    </div>
-    """, unsafe_allow_html=True)
+                    # Mostrar resumen
+                    mostrar_resumen_guia(guia_data, pdf_bytes)
     
-    with st.form("etiqueta_form", border=False):
+    # Sección de guías registradas
+    if st.session_state.guias_registradas:
+        st.markdown("---")
         st.markdown("""
         <div class='filter-panel'>
-            <h3 class='filter-title'>🛠️ Configuración de Etiquetas</h3>
+            <h3 class='filter-title'>📋 Historial de Guías Generadas</h3>
         """, unsafe_allow_html=True)
         
-        col1, col2 = st.columns(2)
-        with col1:
-            referencia = st.text_input("🔤 Referencia/Modelo", placeholder="Ej: AP-JEANS-001")
-            tipo_prenda = st.selectbox("👕 Tipo de Prenda", ["Jeans", "Camiseta", "Polo", "Chaqueta", "Vestido", "Accesorio"])
-            temporada = st.selectbox("📅 Temporada", ["Verano 2024", "Invierno 2024", "Primavera 2024", "Otoño 2024"])
+        # Estadísticas
+        total_guias = len(st.session_state.guias_registradas)
+        guias_fashion = len([g for g in st.session_state.guias_registradas if g['marca'] == 'Fashion Club'])
+        guias_tempo = len([g for g in st.session_state.guias_registradas if g['marca'] == 'Tempo'])
         
-        with col2:
-            cantidad = st.number_input("🔢 Cantidad de Etiquetas", min_value=1, max_value=1000, value=10)
-            tamaño = st.selectbox("📏 Tamaño", ["Pequeño (5x3cm)", "Mediano (7x5cm)", "Grande (10x7cm)"])
-            color_etiqueta = st.color_picker("🎨 Color de Fondo", "#0033A0")
+        col_stats1, col_stats2, col_stats3 = st.columns(3)
+        with col_stats1:
+            st.markdown(f"""
+            <div class='metric-card'>
+                <div class='metric-title'>Total Guías</div>
+                <div class='metric-value'>{total_guias}</div>
+            </div>
+            """, unsafe_allow_html=True)
         
-        incluir_qr = st.checkbox("📱 Incluir Código QR", value=True)
-        if incluir_qr:
-            qr_data = st.text_area("📝 Datos para QR", value=f"https://aeropostale.com/ref/{referencia if referencia else 'MODELO'}")
+        with col_stats2:
+            st.markdown(f"""
+            <div class='metric-card'>
+                <div class='metric-title'>Fashion Club</div>
+                <div class='metric-value'>{guias_fashion}</div>
+            </div>
+            """, unsafe_allow_html=True)
         
-        col_btn1, col_btn2 = st.columns(2)
-        with col_btn1:
-            submit = st.form_submit_button("🖨️ Generar Etiquetas", use_container_width=True, type="primary")
-        with col_btn2:
-            reset = st.form_submit_button("🔄 Limpiar", use_container_width=True)
+        with col_stats3:
+            st.markdown(f"""
+            <div class='metric-card'>
+                <div class='metric-title'>Tempo</div>
+                <div class='metric-value'>{guias_tempo}</div>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        # Tabla de guías
+        df_guias = pd.DataFrame(st.session_state.guias_registradas)
+        
+        # Filtrar columnas para mostrar
+        columnas_mostrar = ['numero', 'marca', 'destinatario', 'tienda_destino', 
+                          'fecha_emision', 'estado', 'piezas']
+        
+        st.dataframe(
+            df_guias[columnas_mostrar].rename(columns={
+                'numero': 'Guía',
+                'marca': 'Marca',
+                'destinatario': 'Destinatario',
+                'tienda_destino': 'Tienda',
+                'fecha_emision': 'Fecha',
+                'estado': 'Estado',
+                'piezas': 'Piezas'
+            }),
+            use_container_width=True,
+            hide_index=True
+        )
+        
+        # Opción para descargar CSV
+        if not df_guias.empty:
+            csv = df_guias.to_csv(index=False)
+            st.download_button(
+                label="📥 Descargar CSV de Guías",
+                data=csv,
+                file_name=f"guias_fashion_club_{datetime.now().strftime('%Y%m%d')}.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
         
         st.markdown("</div>", unsafe_allow_html=True)
-    
-    if submit and referencia:
-        with st.spinner(f"Generando {cantidad} etiquetas..."):
-            time.sleep(1.5)
-            
-            st.success(f"✅ {cantidad} etiquetas generadas para '{referencia}'")
-            
-            # Mostrar preview
-            col_p1, col_p2 = st.columns(2)
-            with col_p1:
-                st.markdown("""
-                <div class='filter-panel'>
-                    <h4>📋 Vista Previa de Etiqueta</h4>
-                    <div style='border: 2px dashed #0033A0; padding: 20px; margin: 15px 0; border-radius: 8px; text-align: center;'>
-                        <h3 style='color: #0033A0;'>{}</h3>
-                        <p><strong>Tipo:</strong> {}</p>
-                        <p><strong>Temporada:</strong> {}</p>
-                        <p><strong>Tamaño:</strong> {}</p>
-                        {}
-                    </div>
-                </div>
-                """.format(
-                    referencia, 
-                    tipo_prenda, 
-                    temporada, 
-                    tamaño,
-                    "✅ Incluye QR" if incluir_qr else "❌ Sin QR"
-                ), unsafe_allow_html=True)
-            
-            with col_p2:
-                # Generar código QR
-                if incluir_qr:
-                    try:
-                        qr = qrcode.QRCode(version=1, box_size=6, border=2)
-                        qr.add_data(qr_data)
-                        qr.make(fit=True)
-                        img = qr.make_image(fill_color="black", back_color="white")
-                        
-                        # Convertir a bytes
-                        img_byte_arr = io.BytesIO()
-                        img.save(img_byte_arr, format='PNG')
-                        img_byte_arr = img_byte_arr.getvalue()
-                        
-                        st.image(img_byte_arr, caption="Código QR Generado", width=200)
-                    except:
-                        st.warning("No se pudo generar el código QR")
-            
-            # Opciones de exportación
-            st.markdown("### 💾 Opciones de Exportación")
-            col_e1, col_e2, col_e3 = st.columns(3)
-            
-            with col_e1:
-                st.download_button(
-                    label="📄 Descargar PDF",
-                    data=b"PDF content",
-                    file_name=f"etiquetas_{referencia}_{datetime.now().date()}.pdf",
-                    mime="application/pdf",
-                    use_container_width=True
-                )
-            
-            with col_e2:
-                st.download_button(
-                    label="🖼️ Descargar PNG",
-                    data=b"PNG content",
-                    file_name=f"etiquetas_{referencia}_{datetime.now().date()}.png",
-                    mime="image/png",
-                    use_container_width=True
-                )
-            
-            with col_e3:
-                st.download_button(
-                    label="📊 Descargar Excel",
-                    data=b"Excel content",
-                    file_name=f"etiquetas_{referencia}_{datetime.now().date()}.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    use_container_width=True
-                )
 
+def mostrar_vista_previa_guia(guia_data):
+    """Muestra una vista previa de la guía"""
+    st.markdown("""
+    <div class='filter-panel'>
+        <h4>👁️ Vista Previa de la Guía</h4>
+    """, unsafe_allow_html=True)
+    
+    col_v1, col_v2 = st.columns(2)
+    
+    with col_v1:
+        st.markdown(f"""
+        ### {guia_data['logo']} {guia_data['marca']}
+        **Guía:** `{guia_data['numero']}`
+        
+        **📅 Fecha Emisión:** {guia_data['fecha_emision']}
+        **📅 Estimada Entrega:** {guia_data['fecha_estimada_entrega']}
+        **📦 Tipo Servicio:** {guia_data['tipo_servicio']}
+        
+        **👤 Remitente:** {guia_data['remitente']}
+        **📍 Dirección:** {guia_data['direccion_remitente']}
+        
+        **📦 Detalles Envío:**
+        - Piezas: {guia_data['piezas']}
+        - Peso: {guia_data['peso']} kg
+        - Valor Declarado: ${guia_data['valor_declarado']:,.2f}
+        """)
+    
+    with col_v2:
+        st.markdown(f"""
+        ### 🏪 Destinatario
+        **👤 Nombre:** {guia_data['destinatario']}
+        **📞 Teléfono:** {guia_data['telefono_destinatario'] or 'No especificado'}
+        **🏪 Tienda:** {guia_data['tienda_destino']}
+        
+        **📍 Dirección de Entrega:**
+        {guia_data['direccion_destinatario']}
+        
+        **🔗 URL Tracking:**
+        `{guia_data['url_pedido'][:50]}...`
+        
+        **📋 Estado:** {guia_data['estado']}
+        **📅 Creado:** {guia_data['fecha_creacion']}
+        """)
+    
+    # Generar QR para vista previa
+    if guia_data['url_pedido']:
+        try:
+            qr = qrcode.QRCode(version=1, box_size=8, border=2)
+            qr.add_data(guia_data['url_pedido'])
+            qr.make(fit=True)
+            img_qr = qr.make_image(fill_color="black", back_color="white")
+            
+            img_byte_arr = io.BytesIO()
+            img_qr.save(img_byte_arr, format='PNG')
+            img_byte_arr.seek(0)
+            
+            st.image(img_byte_arr, caption="Código QR de Tracking", width=150)
+        except:
+            st.warning("QR no disponible en vista previa")
+    
+    st.markdown("</div>", unsafe_allow_html=True)
+
+def generar_pdf_guia(guia_data):
+    """Genera un PDF con la información de la guía"""
+    # Crear un documento en memoria
+    buffer = io.BytesIO()
+    
+    # En un entorno real, aquí se usaría una librería como ReportLab, FPDF, o WeasyPrint
+    # Para este ejemplo, simulamos un PDF con contenido básico
+    
+    contenido_pdf = f"""
+    GUÍA DE ENVÍO - CENTRO DE DISTRIBUCIÓN FASHION CLUB
+    ====================================================
+    
+    Número de Guía: {guia_data['numero']}
+    Fecha de Emisión: {guia_data['fecha_emision']}
+    Marca: {guia_data['marca']}
+    
+    INFORMACIÓN DEL REMITENTE
+    --------------------------
+    Nombre: {guia_data['remitente']}
+    Dirección: {guia_data['direccion_remitente']}
+    
+    INFORMACIÓN DEL DESTINATARIO
+    -----------------------------
+    Nombre: {guia_data['destinatario']}
+    Teléfono: {guia_data['telefono_destinatario'] or 'No especificado'}
+    Tienda: {guia_data['tienda_destino']}
+    Dirección: {guia_data['direccion_destinatario']}
+    
+    DETALLES DEL ENVÍO
+    -------------------
+    Piezas: {guia_data['piezas']}
+    Peso: {guia_data['peso']} kg
+    Valor Declarado: ${guia_data['valor_declarado']:,.2f}
+    Tipo de Servicio: {guia_data['tipo_servicio']}
+    Fecha Estimada de Entrega: {guia_data['fecha_estimada_entrega']}
+    
+    INFORMACIÓN DIGITAL
+    --------------------
+    URL de Tracking: {guia_data['url_pedido']}
+    Fecha de Creación: {guia_data['fecha_creacion']}
+    
+    INSTRUCCIONES
+    --------------
+    1. Esta guía debe acompañar el paquete en todo momento
+    2. El destinatario debe firmar al recibir
+    3. Conservar este documento para cualquier reclamo
+    4. Escanear el código QR para seguimiento en línea
+    
+    -----------------------------------------------------------------
+    Firma del Remitente: ______________________   Fecha: ___________
+    
+    Firma del Destinatario: ___________________   Fecha: ___________
+    
+    NOTAS: {guia_data['marca']} no se responsabiliza por daños durante el transporte.
+    """
+    
+    # Codificar contenido como bytes
+    buffer.write(contenido_pdf.encode('utf-8'))
+    buffer.seek(0)
+    
+    return buffer.getvalue()
+
+def mostrar_resumen_guia(guia_data, pdf_bytes):
+    """Muestra el resumen de la guía generada y opciones de descarga"""
+    st.markdown("""
+    <div class='filter-panel'>
+        <h4>📄 Guía Generada Exitosamente</h4>
+    """, unsafe_allow_html=True)
+    
+    col_r1, col_r2, col_r3 = st.columns(3)
+    
+    with col_r1:
+        # Descargar PDF
+        st.download_button(
+            label="📥 Descargar PDF",
+            data=pdf_bytes,
+            file_name=f"guia_{guia_data['numero']}.pdf",
+            mime="application/pdf",
+            use_container_width=True
+        )
+    
+    with col_r2:
+        # Descargar datos JSON
+        json_data = json.dumps(guia_data, indent=2, ensure_ascii=False)
+        st.download_button(
+            label="📋 Descargar JSON",
+            data=json_data,
+            file_name=f"guia_{guia_data['numero']}.json",
+            mime="application/json",
+            use_container_width=True
+        )
+    
+    with col_r3:
+        # Copiar número de guía
+        if st.button("📋 Copiar Número de Guía", use_container_width=True):
+            st.session_state.copied_guia = guia_data['numero']
+            st.success(f"✅ Número {guia_data['numero']} copiado al portapapeles")
+    
+    # Información adicional
+    st.markdown(f"""
+    **📌 Información Importante:**
+    - La guía **{guia_data['numero']}** ha sido registrada en el sistema
+    - Estado actual: **{guia_data['estado']}**
+    - Puede realizar seguimiento en: [{guia_data['url_pedido'][:50]}...]({guia_data['url_pedido']})
+    - Para cambiar el estado, contacte al administrador del sistema
+    """)
+    
+    st.markdown("</div>", unsafe_allow_html=True)
 # --- GESTIÓN DE TRABAJADORES ---
 def mostrar_gestion_trabajadores():
     st.markdown("""
