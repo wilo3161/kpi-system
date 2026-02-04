@@ -2104,7 +2104,145 @@ def generar_pdf_profesional(guia_data):
         alignment=TA_LEFT,
         spaceAfter=4
     ))
-    def mostrar_vista_previa_guia(guia_data):
+    
+    # Contenido del documento
+    contenido = []
+    
+    # CABECERA CON LOGO, QR Y TÍTULO A LA DERECHA
+    # ==========================================
+    
+    # Determinar logo según marca
+    logo_bytes = None
+    if guia_data['marca'] == 'Fashion Club':
+        logo_url = "https://raw.githubusercontent.com/wilo3161/kpi-system/main/images/Fashion.jpg"
+    else:
+        logo_url = "https://raw.githubusercontent.com/wilo3161/kpi-system/main/images/Tempo.jpg"
+    
+    # Descargar logo si no está en session_state
+    if guia_data['marca'] not in st.session_state.get('logos', {}):
+        logo_bytes = descargar_logo(logo_url)
+        if logo_bytes:
+            if 'logos' not in st.session_state:
+                st.session_state.logos = {}
+            st.session_state.logos[guia_data['marca']] = logo_bytes
+    else:
+        logo_bytes = st.session_state.logos[guia_data['marca']]
+    
+    # Crear tabla de cabecera con logo, QR y título
+    cabecera_data = []
+    
+    # Columna izquierda: Logo
+    if logo_bytes:
+        try:
+            logo_img = Image(io.BytesIO(logo_bytes), width=2*inch, height=1.2*inch)
+            logo_cell = logo_img
+        except:
+            logo_cell = Paragraph(f"<b>{guia_data['marca']}</b>", styles['Titulo'])
+    else:
+        logo_cell = Paragraph(f"<b>{guia_data['marca']}</b>", styles['Titulo'])
+    
+    # Columna central: QR
+    qr_cell = ""
+    if guia_data['url_pedido'] in st.session_state.qr_images:
+        try:
+            qr_bytes = st.session_state.qr_images[guia_data['url_pedido']]
+            qr_img = Image(io.BytesIO(qr_bytes), width=1.2*inch, height=1.2*inch)
+            qr_cell = qr_img
+        except:
+            qr_cell = Paragraph("QR no disponible", styles['Contenido'])
+    
+    # Columna derecha: Título (CENTRO DE DISTRIBUCIÓN a la derecha)
+    titulo_text = f"""
+    <b>CENTRO DE DISTRIBUCIÓN {guia_data['marca'].upper()}</b><br/>
+    <font size=10>GUÍA DE ENVÍO</font>
+    """
+    titulo_cell = Paragraph(titulo_text, styles['TituloDerecha'])
+    
+    # Crear tabla de cabecera
+    cabecera_table = Table([[logo_cell, qr_cell, titulo_cell]], 
+                           colWidths=[2.5*inch, 2.5*inch, 2.5*inch])
+    
+    cabecera_table.setStyle(TableStyle([
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('ALIGN', (0, 0), (0, 0), 'LEFT'),
+        ('ALIGN', (1, 0), (1, 0), 'CENTER'),
+        ('ALIGN', (2, 0), (2, 0), 'RIGHT'),
+        ('PADDING', (0, 0), (-1, -1), 5),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 10),
+    ]))
+    
+    contenido.append(cabecera_table)
+    contenido.append(Spacer(1, 0.1*inch))
+    
+    # Línea separadora
+    contenido.append(Paragraph("_" * 100, ParagraphStyle(name='Linea', fontSize=6)))
+    contenido.append(Spacer(1, 0.2*inch))
+    
+    # INFORMACIÓN DE LA GUÍA (EXACTAMENTE COMO EN LA IMAGEN)
+    # ==========================================
+    
+    # Número de guía, fecha y estado en una sola línea
+    info_guia = Table([
+        [Paragraph(f"<b>NÚMERO DE GUÍA:</b> {guia_data['numero']}", styles['ContenidoNegrita']),
+         Paragraph(f"<b>FECHA DE EMISIÓN:</b> {guia_data['fecha_emision']}", styles['ContenidoNegrita']),
+         Paragraph(f"<b>ESTADO:</b> {guia_data['estado']}", styles['ContenidoNegrita'])]
+    ], colWidths=[2.5*inch, 2.5*inch, 2.5*inch])
+    
+    info_guia.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, -1), HexColor('#F0F0F0')),
+        ('PADDING', (0, 0), (-1, -1), 8),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('BOX', (0, 0), (-1, -1), 0.5, HexColor('#CCCCCC')),
+    ]))
+    
+    contenido.append(info_guia)
+    contenido.append(Spacer(1, 0.2*inch))
+    
+    # INFORMACIÓN DE ENVÍO (EXACTAMENTE COMO EN LA IMAGEN)
+    # ==========================================
+    
+    contenido.append(Paragraph("INFORMACIÓN DE ENVÍO", styles['EncabezadoSeccion']))
+    
+    # Crear tabla con dos columnas para remitente y destinatario
+    datos_envio = [
+        # Encabezados
+        [Paragraph("<b>REMITENTE</b>", styles['ContenidoNegrita']), 
+         Paragraph("<b>DESTINATARIO</b>", styles['ContenidoNegrita'])],
+        
+        # Nombre
+        [Paragraph(f"<b>Nombre:</b> {guia_data['remitente']}", styles['Contenido']),
+         Paragraph(f"<b>Nombre:</b> {guia_data['destinatario']}", styles['Contenido'])],
+        
+        # Dirección (con más espacio)
+        [Paragraph(f"<b>Dirección:</b> {guia_data['direccion_remitente']}", styles['Contenido']),
+         Paragraph(f"<b>Dirección:</b> {guia_data['direccion_destinatario']}", styles['Contenido'])],
+        
+        # Teléfono y tienda (solo destinatario)
+        ["", Paragraph(f"<b>Teléfono:</b> {guia_data['telefono_destinatario']}", styles['Contenido'])],
+        
+        ["", Paragraph(f"<b>Tienda:</b> {guia_data['tienda_destino']}", styles['Contenido'])]
+    ]
+    
+    tabla_envio = Table(datos_envio, colWidths=[3.5*inch, 3.5*inch])
+    tabla_envio.setStyle(TableStyle([
+        ('GRID', (0, 0), (-1, -1), 0.5, HexColor('#CCCCCC')),
+        ('BACKGROUND', (0, 0), (-1, 0), HexColor('#E8E8E8')),
+        ('PADDING', (0, 0), (-1, -1), 8),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('SPAN', (0, 3), (0, 3)),
+        ('SPAN', (0, 4), (0, 4)),
+        ('BOTTOMPADDING', (0, 2), (1, 2), 12),
+    ]))
+    
+    contenido.append(tabla_envio)
+    
+    # Construir el PDF
+    doc.build(contenido)
+    buffer.seek(0)
+    return buffer.getvalue()
+
+def mostrar_vista_previa_guia(guia_data):
     """Muestra una vista previa de la guía sin generar PDF"""
     st.markdown("""
     <div class='filter-panel'>
@@ -2165,7 +2303,6 @@ def generar_pdf_profesional(guia_data):
             st.info(f"**URL completa:** {guia_data['url_pedido']}")
     
     st.markdown("</div>", unsafe_allow_html=True)
-
 
 def mostrar_resumen_guia(guia_data, pdf_bytes):
     """Muestra el resumen de la guía generada y opciones de descarga"""
@@ -2295,7 +2432,6 @@ Generado el: {guia_data['fecha_creacion']}
     """)
     
     st.markdown("</div>", unsafe_allow_html=True)
-
 
 def mostrar_generacion_guias():
     st.markdown("""
@@ -2526,142 +2662,7 @@ def mostrar_generacion_guias():
                     
                     # Mostrar resumen
                     mostrar_resumen_guia(guia_data, pdf_bytes)
-    # Contenido del documento
-    contenido = []
-    
-    # CABECERA CON LOGO, QR Y TÍTULO A LA DERECHA
-    # ==========================================
-    
-    # Determinar logo según marca
-    logo_bytes = None
-    if guia_data['marca'] == 'Fashion Club':
-        logo_url = "https://raw.githubusercontent.com/wilo3161/kpi-system/main/images/Fashion.jpg"
-    else:
-        logo_url = "https://raw.githubusercontent.com/wilo3161/kpi-system/main/images/Tempo.jpg"
-    
-    # Descargar logo si no está en session_state
-    if guia_data['marca'] not in st.session_state.get('logos', {}):
-        logo_bytes = descargar_logo(logo_url)
-        if logo_bytes:
-            if 'logos' not in st.session_state:
-                st.session_state.logos = {}
-            st.session_state.logos[guia_data['marca']] = logo_bytes
-    else:
-        logo_bytes = st.session_state.logos[guia_data['marca']]
-    
-    # Crear tabla de cabecera con logo, QR y título
-    cabecera_data = []
-    
-    # Columna izquierda: Logo
-    if logo_bytes:
-        try:
-            logo_img = Image(io.BytesIO(logo_bytes), width=2*inch, height=1.2*inch)
-            logo_cell = logo_img
-        except:
-            logo_cell = Paragraph(f"<b>{guia_data['marca']}</b>", styles['Titulo'])
-    else:
-        logo_cell = Paragraph(f"<b>{guia_data['marca']}</b>", styles['Titulo'])
-    
-    # Columna central: QR
-    qr_cell = ""
-    if guia_data['url_pedido'] in st.session_state.qr_images:
-        try:
-            qr_bytes = st.session_state.qr_images[guia_data['url_pedido']]
-            qr_img = Image(io.BytesIO(qr_bytes), width=1.2*inch, height=1.2*inch)
-            qr_cell = qr_img
-        except:
-            qr_cell = Paragraph("QR no disponible", styles['Contenido'])
-    
-    # Columna derecha: Título (CENTRO DE DISTRIBUCIÓN a la derecha)
-    titulo_text = f"""
-    <b>CENTRO DE DISTRIBUCIÓN {guia_data['marca'].upper()}</b><br/>
-    <font size=10>GUÍA DE ENVÍO</font>
-    """
-    titulo_cell = Paragraph(titulo_text, styles['TituloDerecha'])
-    
-    # Crear tabla de cabecera
-    cabecera_table = Table([[logo_cell, qr_cell, titulo_cell]], 
-                           colWidths=[2.5*inch, 2.5*inch, 2.5*inch])
-    
-    cabecera_table.setStyle(TableStyle([
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('ALIGN', (0, 0), (0, 0), 'LEFT'),
-        ('ALIGN', (1, 0), (1, 0), 'CENTER'),
-        ('ALIGN', (2, 0), (2, 0), 'RIGHT'),
-        ('PADDING', (0, 0), (-1, -1), 5),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 10),
-    ]))
-    
-    contenido.append(cabecera_table)
-    contenido.append(Spacer(1, 0.1*inch))
-    
-    # Línea separadora
-    contenido.append(Paragraph("_" * 100, ParagraphStyle(name='Linea', fontSize=6)))
-    contenido.append(Spacer(1, 0.2*inch))
-    
-    # INFORMACIÓN DE LA GUÍA (EXACTAMENTE COMO EN LA IMAGEN)
-    # ==========================================
-    
-    # Número de guía, fecha y estado en una sola línea
-    info_guia = Table([
-        [Paragraph(f"<b>NÚMERO DE GUÍA:</b> {guia_data['numero']}", styles['ContenidoNegrita']),
-         Paragraph(f"<b>FECHA DE EMISIÓN:</b> {guia_data['fecha_emision']}", styles['ContenidoNegrita']),
-         Paragraph(f"<b>ESTADO:</b> {guia_data['estado']}", styles['ContenidoNegrita'])]
-    ], colWidths=[2.5*inch, 2.5*inch, 2.5*inch])
-    
-    info_guia.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, -1), HexColor('#F0F0F0')),
-        ('PADDING', (0, 0), (-1, -1), 8),
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-        ('BOX', (0, 0), (-1, -1), 0.5, HexColor('#CCCCCC')),
-    ]))
-    
-    contenido.append(info_guia)
-    contenido.append(Spacer(1, 0.2*inch))
-    
-    # INFORMACIÓN DE ENVÍO (EXACTAMENTE COMO EN LA IMAGEN)
-    # ==========================================
-    
-    contenido.append(Paragraph("INFORMACIÓN DE ENVÍO", styles['EncabezadoSeccion']))
-    
-    # Crear tabla con dos columnas para remitente y destinatario
-    datos_envio = [
-        # Encabezados
-        [Paragraph("<b>REMITENTE</b>", styles['ContenidoNegrita']), 
-         Paragraph("<b>DESTINATARIO</b>", styles['ContenidoNegrita'])],
-        
-        # Nombre
-        [Paragraph(f"<b>Nombre:</b> {guia_data['remitente']}", styles['Contenido']),
-         Paragraph(f"<b>Nombre:</b> {guia_data['destinatario']}", styles['Contenido'])],
-        
-        # Dirección (con más espacio)
-        [Paragraph(f"<b>Dirección:</b> {guia_data['direccion_remitente']}", styles['Contenido']),
-         Paragraph(f"<b>Dirección:</b> {guia_data['direccion_destinatario']}", styles['Contenido'])],
-        
-        # Teléfono y tienda (solo destinatario)
-        ["", Paragraph(f"<b>Teléfono:</b> {guia_data['telefono_destinatario']}", styles['Contenido'])],
-        
-        ["", Paragraph(f"<b>Tienda:</b> {guia_data['tienda_destino']}", styles['Contenido'])]
-    ]
-    
-    tabla_envio = Table(datos_envio, colWidths=[3.5*inch, 3.5*inch])
-    tabla_envio.setStyle(TableStyle([
-        ('GRID', (0, 0), (-1, -1), 0.5, HexColor('#CCCCCC')),
-        ('BACKGROUND', (0, 0), (-1, 0), HexColor('#E8E8E8')),
-        ('PADDING', (0, 0), (-1, -1), 8),
-        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-        ('SPAN', (0, 3), (0, 3)),
-        ('SPAN', (0, 4), (0, 4)),
-        ('BOTTOMPADDING', (0, 2), (1, 2), 12),
-    ]))
-    
-    contenido.append(tabla_envio)
-    
-    # Construir el PDF
-    doc.build(contenido)
-    buffer.seek(0)
-    return buffer.getvalue()
+
 # ==============================================================================
 # 8. MÓDULO DASHBOARD DE KPIs
 # ==============================================================================
