@@ -15,23 +15,24 @@ import warnings
 from pathlib import Path
 from io import BytesIO
 from typing import Dict, List, Optional, Any, Union
-from concurrent.futures import ThreadPoolExecutor
-import pandas as pd
-import streamlit as st
-from datetime import datetime, timedelta
-from typing import List, Dict, Any
+import imaplib
+import email
+from email.header import decode_header
+import unicodedata
 
 # --- LIBRERÍAS DE TERCEROS ---
 import qrcode
 from PIL import Image as PILImage
 import xlsxwriter
 import base64
+import requests
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.units import inch
 from reportlab.lib.colors import HexColor
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+
 # --- CONFIGURACIÓN INICIAL DE PÁGINA ---
 st.set_page_config(
     layout="wide",
@@ -576,7 +577,7 @@ footer {visibility: hidden;}
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# 1. MOTOR DE AUDITORÍA (LÓGICA DE NEGOCIO)
+# 3. MOTOR DE AUDITORÍA (LÓGICA DE NEGOCIO)
 # ==============================================================================
 
 class WiloEmailEngine:
@@ -678,10 +679,11 @@ class WiloEmailEngine:
         return results
 
 # ==============================================================================
-# 2. INTERFAZ DE USUARIO (STREAMLIT)
+# 4. INTERFAZ DE AUDITORÍA DE CORREOS (CORREGIDA)
 # ==============================================================================
 
-def main():
+def mostrar_auditoria_correos():
+    """Interfaz para la auditoría de correos con Wilo AI"""
     st.set_page_config(page_title="Wilo AI Auditor", page_icon="📧", layout="wide")
 
     # Sidebar para Credenciales (Seguridad primero)
@@ -760,7 +762,7 @@ def main():
                 st.error(f"❌ Error durante la auditoría: {e}")
 
 # ==============================================================================
-# 4. MÓDULO RECONCILIACIÓN V8 (ESTILIZADO)
+# 5. MÓDULO RECONCILIACIÓN V8 (ESTILIZADO)
 # ==============================================================================
 
 def identificar_tipo_tienda_v8(nombre):
@@ -1066,7 +1068,7 @@ def mostrar_reconciliacion_v8():
         st.info("👆 Suba los archivos necesarios o active la opción de datos de demostración para comenzar.")
 
 # ==============================================================================
-# 5. MÓDULO DASHBOARD DE TRANSFERENCIAS (ACTUALIZADO Y MEJORADO)
+# 6. MÓDULO DASHBOARD DE TRANSFERENCIAS (ACTUALIZADO Y MEJORADO)
 # ==============================================================================
 
 # --- CONFIGURACIÓN DE PARÁMETROS ---
@@ -2015,143 +2017,8 @@ def mostrar_dashboard_transferencias():
                     """)
 
 # ==============================================================================
-# 6. MÓDULOS RESTANTES ESTILIZADOS
+# 7. MÓDULO GENERACIÓN DE GUÍAS UNIFICADO (ACTUALIZADO)
 # ==============================================================================
-
-# --- DASHBOARD KPIS ---
-def mostrar_dashboard_kpis():
-    st.markdown("""
-    <div class='main-header'>
-        <h1 class='header-title'>📊 Dashboard de KPIs en Tiempo Real</h1>
-        <div class='header-subtitle'>Monitorización Integral del Desempeño Operativo</div>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    # Filtros
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        fecha_inicio = st.date_input("📅 Fecha Inicio", datetime.now() - timedelta(days=30))
-    with col2:
-        fecha_fin = st.date_input("📅 Fecha Fin", datetime.now())
-    with col3:
-        tipo_kpi = st.selectbox("📈 Tipo de Métrica", ["Producción", "Eficiencia", "Costos", "Alertas"])
-    
-    # Obtener datos de la base de datos local
-    kpis_data = local_db.query('kpis')
-    df_kpis = pd.DataFrame(kpis_data)
-    
-    if not df_kpis.empty:
-        df_kpis['fecha'] = pd.to_datetime(df_kpis['fecha'])
-        mask = (df_kpis['fecha'].dt.date >= fecha_inicio) & (df_kpis['fecha'].dt.date <= fecha_fin)
-        df_filtered = df_kpis[mask]
-        
-        if not df_filtered.empty:
-            # KPIs Principales
-            st.markdown("<div class='stats-grid'>", unsafe_allow_html=True)
-            col_k1, col_k2, col_k3, col_k4 = st.columns(4)
-            
-            with col_k1:
-                prod_prom = df_filtered['produccion'].mean()
-                prod_tend = ((df_filtered['produccion'].iloc[-1] - df_filtered['produccion'].iloc[0]) / df_filtered['produccion'].iloc[0] * 100) if len(df_filtered) > 1 else 0
-                st.markdown(f"""
-                <div class='stat-card card-blue'>
-                    <div class='stat-icon'>🏭</div>
-                    <div class='stat-title'>Producción Promedio</div>
-                    <div class='stat-value'>{prod_prom:,.0f}</div>
-                    <div class='stat-change {'positive' if prod_tend > 0 else 'negative'}">{'📈' if prod_tend > 0 else '📉'} {prod_tend:.1f}%</div>
-                </div>
-                """, unsafe_allow_html=True)
-            
-            with col_k2:
-                efic_prom = df_filtered['eficiencia'].mean()
-                st.markdown(f"""
-                <div class='stat-card card-green'>
-                    <div class='stat-icon'>⚡</div>
-                    <div class='stat-title'>Eficiencia</div>
-                    <div class='stat-value'>{efic_prom:.1f}%</div>
-                    <div class='stat-change {'positive' if efic_prom > 90 else 'warning'}">{'Excelente' if efic_prom > 90 else 'Mejorable'}</div>
-                </div>
-                """, unsafe_allow_html=True)
-            
-            with col_k3:
-                alert_total = df_filtered['alertas'].sum()
-                st.markdown(f"""
-                <div class='stat-card card-red'>
-                    <div class='stat-icon'>🚨</div>
-                    <div class='stat-title'>Alertas Totales</div>
-                    <div class='stat-value'>{alert_total}</div>
-                    <div class='stat-change {'negative' if alert_total > 10 else 'positive'}">{'Revisar' if alert_total > 10 else 'Controlado'}</div>
-                </div>
-                """, unsafe_allow_html=True)
-            
-            with col_k4:
-                costo_prom = df_filtered['costos'].mean()
-                st.markdown(f"""
-                <div class='stat-card card-purple'>
-                    <div class='stat-icon'>💰</div>
-                    <div class='stat-title'>Costo Promedio</div>
-                    <div class='stat-value'>${costo_prom:,.0f}</div>
-                    <div class='stat-change'>Diario</div>
-                </div>
-                """, unsafe_allow_html=True)
-            st.markdown("</div>", unsafe_allow_html=True)
-            
-            # Gráficos
-            st.markdown('<div class="chart-container">', unsafe_allow_html=True)
-            fig = px.line(df_filtered, x='fecha', y='produccion', 
-                        title='Producción Diaria',
-                        labels={'produccion': 'Unidades', 'fecha': 'Fecha'},
-                        line_shape='spline')
-            fig.update_traces(line=dict(color='#0033A0', width=3))
-            st.plotly_chart(fig, use_container_width=True)
-            st.markdown('</div>', unsafe_allow_html=True)
-            
-            # Gráficos secundarios
-            col_ch1, col_ch2 = st.columns(2)
-            with col_ch1:
-                st.markdown('<div class="chart-container">', unsafe_allow_html=True)
-                fig2 = px.bar(df_filtered.tail(7), x=df_filtered.tail(7)['fecha'].dt.strftime('%a'), y='eficiencia',
-                            title='Eficiencia Semanal', 
-                            color='eficiencia',
-                            color_continuous_scale='Viridis')
-                st.plotly_chart(fig2, use_container_width=True)
-                st.markdown('</div>', unsafe_allow_html=True)
-            
-            with col_ch2:
-                st.markdown('<div class="chart-container">', unsafe_allow_html=True)
-                fig3 = px.scatter(df_filtered, x='produccion', y='costos',
-                                title='Relación Producción vs Costos',
-                                color='alertas',
-                                size='eficiencia',
-                                hover_data=['fecha'])
-                st.plotly_chart(fig3, use_container_width=True)
-                st.markdown('</div>', unsafe_allow_html=True)
-        else:
-            st.warning("No hay datos para el rango de fechas seleccionado.")
-    else:
-        st.info("Cargando datos de KPIs...")
-
-# ==============================================================================
-# 6. MÓDULO GENERACIÓN DE GUÍAS UNIFICADO (SIMPLIFICADO)
-# ==============================================================================
-
-# ==============================================================================
-# 6. MÓDULO GENERACIÓN DE GUÍAS UNIFICADO (ACTUALIZADO)
-# ==============================================================================
-
-import streamlit as st
-import io
-import json
-import time
-import qrcode
-import requests
-from datetime import datetime
-from reportlab.lib.pagesizes import letter
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image, PageBreak
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.units import inch
-from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_RIGHT
-from reportlab.lib.colors import HexColor
 
 def descargar_logo(url):
     """Descarga el logo desde la URL"""
@@ -2384,7 +2251,7 @@ def generar_pdf_profesional(guia_data):
     # INFORMACIÓN DE SEGUIMIENTO
     # ==========================================
     
-    contenido.append(Paragraph("INFORMACIÓN DE SEGUIMIENTO", styles['EncabezadoSeccion']))
+    contenido.append(Paragraph("INFORMACIÓN DE SEGUIMiento", styles['EncabezadoSeccion']))
     
     if guia_data['url_pedido']:
         tracking_table = Table([
@@ -2870,7 +2737,127 @@ def mostrar_generacion_guias():
                     
                     # Mostrar resumen
                     mostrar_resumen_guia(guia_data, pdf_bytes)
-# --- GESTIÓN DE TRABAJADORES ---
+
+# ==============================================================================
+# 8. MÓDULO DASHBOARD DE KPIs
+# ==============================================================================
+
+def mostrar_dashboard_kpis():
+    st.markdown("""
+    <div class='main-header'>
+        <h1 class='header-title'>📊 Dashboard de KPIs en Tiempo Real</h1>
+        <div class='header-subtitle'>Monitorización Integral del Desempeño Operativo</div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Filtros
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        fecha_inicio = st.date_input("📅 Fecha Inicio", datetime.now() - timedelta(days=30))
+    with col2:
+        fecha_fin = st.date_input("📅 Fecha Fin", datetime.now())
+    with col3:
+        tipo_kpi = st.selectbox("📈 Tipo de Métrica", ["Producción", "Eficiencia", "Costos", "Alertas"])
+    
+    # Obtener datos de la base de datos local
+    kpis_data = local_db.query('kpis')
+    df_kpis = pd.DataFrame(kpis_data)
+    
+    if not df_kpis.empty:
+        df_kpis['fecha'] = pd.to_datetime(df_kpis['fecha'])
+        mask = (df_kpis['fecha'].dt.date >= fecha_inicio) & (df_kpis['fecha'].dt.date <= fecha_fin)
+        df_filtered = df_kpis[mask]
+        
+        if not df_filtered.empty:
+            # KPIs Principales
+            st.markdown("<div class='stats-grid'>", unsafe_allow_html=True)
+            col_k1, col_k2, col_k3, col_k4 = st.columns(4)
+            
+            with col_k1:
+                prod_prom = df_filtered['produccion'].mean()
+                prod_tend = ((df_filtered['produccion'].iloc[-1] - df_filtered['produccion'].iloc[0]) / df_filtered['produccion'].iloc[0] * 100) if len(df_filtered) > 1 else 0
+                st.markdown(f"""
+                <div class='stat-card card-blue'>
+                    <div class='stat-icon'>🏭</div>
+                    <div class='stat-title'>Producción Promedio</div>
+                    <div class='stat-value'>{prod_prom:,.0f}</div>
+                    <div class='stat-change {'positive' if prod_tend > 0 else 'negative'}">{'📈' if prod_tend > 0 else '📉'} {prod_tend:.1f}%</div>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with col_k2:
+                efic_prom = df_filtered['eficiencia'].mean()
+                st.markdown(f"""
+                <div class='stat-card card-green'>
+                    <div class='stat-icon'>⚡</div>
+                    <div class='stat-title'>Eficiencia</div>
+                    <div class='stat-value'>{efic_prom:.1f}%</div>
+                    <div class='stat-change {'positive' if efic_prom > 90 else 'warning'}">{'Excelente' if efic_prom > 90 else 'Mejorable'}</div>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with col_k3:
+                alert_total = df_filtered['alertas'].sum()
+                st.markdown(f"""
+                <div class='stat-card card-red'>
+                    <div class='stat-icon'>🚨</div>
+                    <div class='stat-title'>Alertas Totales</div>
+                    <div class='stat-value'>{alert_total}</div>
+                    <div class='stat-change {'negative' if alert_total > 10 else 'positive'}">{'Revisar' if alert_total > 10 else 'Controlado'}</div>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with col_k4:
+                costo_prom = df_filtered['costos'].mean()
+                st.markdown(f"""
+                <div class='stat-card card-purple'>
+                    <div class='stat-icon'>💰</div>
+                    <div class='stat-title'>Costo Promedio</div>
+                    <div class='stat-value'>${costo_prom:,.0f}</div>
+                    <div class='stat-change'>Diario</div>
+                </div>
+                """, unsafe_allow_html=True)
+            st.markdown("</div>", unsafe_allow_html=True)
+            
+            # Gráficos
+            st.markdown('<div class="chart-container">', unsafe_allow_html=True)
+            fig = px.line(df_filtered, x='fecha', y='produccion', 
+                        title='Producción Diaria',
+                        labels={'produccion': 'Unidades', 'fecha': 'Fecha'},
+                        line_shape='spline')
+            fig.update_traces(line=dict(color='#0033A0', width=3))
+            st.plotly_chart(fig, use_container_width=True)
+            st.markdown('</div>', unsafe_allow_html=True)
+            
+            # Gráficos secundarios
+            col_ch1, col_ch2 = st.columns(2)
+            with col_ch1:
+                st.markdown('<div class="chart-container">', unsafe_allow_html=True)
+                fig2 = px.bar(df_filtered.tail(7), x=df_filtered.tail(7)['fecha'].dt.strftime('%a'), y='eficiencia',
+                            title='Eficiencia Semanal', 
+                            color='eficiencia',
+                            color_continuous_scale='Viridis')
+                st.plotly_chart(fig2, use_container_width=True)
+                st.markdown('</div>', unsafe_allow_html=True)
+            
+            with col_ch2:
+                st.markdown('<div class="chart-container">', unsafe_allow_html=True)
+                fig3 = px.scatter(df_filtered, x='produccion', y='costos',
+                                title='Relación Producción vs Costos',
+                                color='alertas',
+                                size='eficiencia',
+                                hover_data=['fecha'])
+                st.plotly_chart(fig3, use_container_width=True)
+                st.markdown('</div>', unsafe_allow_html=True)
+        else:
+            st.warning("No hay datos para el rango de fechas seleccionado.")
+    else:
+        st.info("Cargando datos de KPIs...")
+
+# ==============================================================================
+# 9. MÓDULO GESTIÓN DE TRABAJADORES
+# ==============================================================================
+
 def mostrar_gestion_trabajadores():
     st.markdown("""
     <div class='main-header'>
@@ -3008,7 +2995,10 @@ def mostrar_gestion_trabajadores():
             st.info("No hay datos para mostrar estadísticas.")
         st.markdown("</div>", unsafe_allow_html=True)
 
-# --- GESTIÓN DE DISTRIBUCIONES ---
+# ==============================================================================
+# 10. MÓDULO GESTIÓN DE DISTRIBUCIONES
+# ==============================================================================
+
 def mostrar_gestion_distribuciones():
     st.markdown("""
     <div class='main-header'>
@@ -3111,7 +3101,10 @@ def mostrar_gestion_distribuciones():
     else:
         st.info("Cargando datos de distribuciones...")
 
-# --- AYUDA Y SOPORTE ---
+# ==============================================================================
+# 11. MÓDULO AYUDA Y SOPORTE
+# ==============================================================================
+
 def mostrar_ayuda():
     st.markdown("""
     <div class='main-header'>
@@ -3242,7 +3235,7 @@ def mostrar_ayuda():
         """, unsafe_allow_html=True)
 
 # ==============================================================================
-# 7. SISTEMA DE AUTENTICACIÓN Y NAVEGACIÓN
+# 12. SISTEMA DE AUTENTICACIÓN Y NAVEGACIÓN
 # ==============================================================================
 
 def mostrar_pagina_login(rol_target):
@@ -3312,6 +3305,10 @@ def mostrar_pagina_login(rol_target):
         </div>
     </div>
     """, unsafe_allow_html=True)
+
+# ==============================================================================
+# 13. FUNCIÓN PRINCIPAL DE LA APLICACIÓN
+# ==============================================================================
 
 def main():
     # Inicializar estado de sesión
@@ -3414,7 +3411,7 @@ def main():
             page_mapping = {
                 "Dashboard KPIs": mostrar_dashboard_kpis,
                 "Reconciliación V8": mostrar_reconciliacion_v8,
-                "Email Wilo AI": mostrar_WiloEmailEngine,
+                "Email Wilo AI": mostrar_auditoria_correos,
                 "Dashboard Transferencias": mostrar_dashboard_transferencias,
                 "Generar Guías": mostrar_generacion_guias,
                 "Trabajadores": mostrar_gestion_trabajadores,
@@ -3431,7 +3428,6 @@ def main():
                     "Email Wilo AI": "admin",
                     "Dashboard Transferencias": "admin",
                     "Generar Guías": "user",
-                    "Etiquetas": "user",
                     "Trabajadores": "admin",
                     "Distribuciones": "admin",
                     "Ayuda": "public"
@@ -3470,7 +3466,7 @@ if __name__ == "__main__":
     except Exception as e:
         st.error(f"❌ Error crítico en la aplicación: {e}")
         logger.error(f"Crash: {e}", exc_info=True)
-        st.markdown("""
+        st.markdown(f"""
         <div class='filter-panel'>
             <h4>🆘 Sistema de Recuperación</h4>
             <p>La aplicación encontró un error. Por favor:</p>
@@ -3479,6 +3475,6 @@ if __name__ == "__main__":
                 <li>Verifique sus archivos de entrada</li>
                 <li>Contacte a soporte si el problema persiste</li>
             </ol>
-            <p>Detalles técnicos: {}</p>
+            <p>Detalles técnicos: {str(e)}</p>
         </div>
-        """.format(str(e)), unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
