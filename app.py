@@ -586,7 +586,7 @@ class WiloEmailEngine:
     def __init__(self, host: str, user: str, password: str):
         self.host = host
         self.user = user
-        self.password = pass
+        self.password = password
         self.mail = mail
 
     def _connect(self):
