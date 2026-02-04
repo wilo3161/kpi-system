@@ -36,7 +36,7 @@ from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
 # --- CONFIGURACIÓN INICIAL DE PÁGINA ---
 st.set_page_config(
     layout="wide",
-    page_title="Fashionly ERP | Sistema Integral",
+    page_title="AEROPOSTALE EC-ERP | Sistema Integral",
     page_icon="👔",
     initial_sidebar_state="expanded"
 )
@@ -180,7 +180,9 @@ ADMIN_PASSWORD = "admin123"
 USER_PASSWORD = "user123"
 
 # ==============================================================================
-# 2. ESTILOS CSS ULTRA-MODERNOS (ESTILO FASHIONLY)
+# 2. ESTILOS CSS ULTRA-MODERNOS (ESTILO AEROPOSTALE EC
+
+)
 # ==============================================================================
 st.markdown("""
 <style>
@@ -3429,7 +3431,7 @@ def mostrar_pagina_login(rol_target):
                     -webkit-background-clip: text;
                     -webkit-text-fill-color: transparent;
                     margin-bottom: 0.5rem;
-                '>FASHIONLY ERP</h1>
+                '>AEROPOSTALE EC ERP</h1>
                 <p style='color: #6B7280; font-size: 0.9rem;'>Sistema Integral v3.0</p>
             </div>
     """, unsafe_allow_html=True)
@@ -3616,7 +3618,7 @@ def main():
         # --- FOOTER ---
         st.markdown("""
         <div class="app-footer">
-            <span class="footer-logo">FASHIONLY ERP</span> v3.1 | © 2025 Todos los derechos reservados.<br>
+            <span class="footer-logo">AEROPOSTALE EC-ERP</span> v3.1 | © 2025 Todos los derechos reservados.<br>
             Desarrollado con ❤️ para la optimización logística | <em>#EficienciaOperativa</em>
         </div>
         """, unsafe_allow_html=True)
