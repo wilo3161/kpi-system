@@ -2273,12 +2273,7 @@ def mostrar_generacion_guias():
         
         st.divider()
         
-        # Cuarta fila: URL y QR
-        st.subheader("🔗 Información Digital")
-        url_pedido = st.text_input("**URL del Pedido/Tracking:**", 
-                                 placeholder="https://pedidos.fashionclub.com/orden-12345",
-                                 value="https://pedidos.fashionclub.com/")
-        
+    
         # Generar código QR basado en URL
         if url_pedido:
             try:
