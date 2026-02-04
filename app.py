@@ -11,11 +11,6 @@ import re
 import json
 import io
 import os
-import requests
-import smtplib
-import imaplib
-import email
-import unicodedata
 import warnings
 from pathlib import Path
 from io import BytesIO
@@ -25,18 +20,13 @@ from concurrent.futures import ThreadPoolExecutor
 # --- LIBRERÍAS DE TERCEROS ---
 import qrcode
 from PIL import Image as PILImage
-from fpdf import FPDF
-from reportlab.lib.pagesizes import letter
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image as ReportLabImage
-from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.lib import colors
 import xlsxwriter
 
 # --- CONFIGURACIÓN INICIAL DE PÁGINA ---
 st.set_page_config(
     layout="wide",
-    page_title="ERP Aeropostale | Sistema Integral",
-    page_icon="✈️",
+    page_title="Fashionly ERP | Sistema Integral",
+    page_icon="👔",
     initial_sidebar_state="expanded"
 )
 
@@ -53,7 +43,7 @@ logger = logging.getLogger(__name__)
 warnings.filterwarnings('ignore')
 
 # ==============================================================================
-# 0. FUNCIONES AUXILIARES GLOBALES (MOVIDAS AL INICIO PARA EVITAR REFERENCIAS ANTICIPADAS)
+# 0. FUNCIONES AUXILIARES GLOBALES
 # ==============================================================================
 
 def normalizar_texto_wilo(texto):
@@ -93,7 +83,7 @@ def hash_password(pw: str) -> str:
     return hashlib.sha256(pw.encode()).hexdigest()
 
 # ==============================================================================
-# 1. SIMULACIÓN DE BASE DE DATOS LOCAL (REEMPLAZO DE SUPABASE)
+# 1. SIMULACIÓN DE BASE DE DATOS LOCAL
 # ==============================================================================
 
 class LocalDatabase:
@@ -179,285 +169,216 @@ ADMIN_PASSWORD = "admin123"
 USER_PASSWORD = "user123"
 
 # ==============================================================================
-# 2. ESTILOS CSS MODERNO - INTERFAZ ERP AEROPOSTALE
+# 2. ESTILOS CSS ULTRA-MODERNOS (ESTILO FASHIONLY)
 # ==============================================================================
 st.markdown("""
 <style>
-/* ============================================
-   VARIABLES Y CONFIGURACIÓN GLOBAL
-   ============================================ */
+/* --- VARIABLES DE DISEÑO INSPIRADAS EN LAS IMÁGENES --- */
 :root {
-    /* Colores corporativos Aeropostale */
-    --aeropostale-blue: #0033A0;
-    --aeropostale-red: #E4002B;
-    --aeropostale-white: #FFFFFF;
-    --aeropostale-gray: #F5F7FA;
-    --aeropostale-dark: #1A1F36;
-    
-    /* Colores de acento */
-    --success: #00C853;
-    --warning: #FFB300;
-    --danger: #FF3D00;
-    --info: #2979FF;
-    --purple: #7B1FA2;
-    
-    /* Espaciado */
-    --border-radius: 12px;
-    --shadow: 0 8px 30px rgba(0, 51, 160, 0.08);
-    --shadow-hover: 0 15px 40px rgba(0, 51, 160, 0.15);
-    --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    --bg-main: #F0F2F5;
+    --glass-bg: rgba(255, 255, 255, 0.7);
+    --card-shadow: 0 20px 40px rgba(0, 0, 0, 0.05);
+    --accent-blue: #0033A0;
+    --accent-red: #E4002B;
+    --border-radius-lg: 30px;
+    --border-radius-md: 20px;
+    --border-radius-sm: 15px;
+    --text-dark: #1A1F36;
+    --text-gray: #6B7280;
+    --success: #10B981;
+    --warning: #F59E0B;
+    --danger: #EF4444;
+    --info: #3B82F6;
+    --purple: #8B5CF6;
 }
 
-/* ============================================
-   ESTRUCTURA PRINCIPAL
-   ============================================ */
+/* --- CONTENEDOR PRINCIPAL --- */
 .stApp {
-    background: linear-gradient(135deg, #f8fafc 0%, #eef2f7 100%);
-    font-family: 'Segoe UI', 'Roboto', 'Helvetica Neue', sans-serif;
+    background-color: var(--bg-main) !important;
+    font-family: 'Inter', 'Segoe UI', sans-serif !important;
 }
 
-/* Ocultar elementos por defecto de Streamlit */
+/* --- OCULTAR ELEMENTOS DE STREAMLIT --- */
 #MainMenu {visibility: hidden;}
 footer {visibility: hidden;}
-.stDeployButton {display: none;}
+.stDeployButton {display: none !important;}
+.reportview-container .main .block-container {padding-top: 1rem;}
 
-/* ============================================
-   SIDEBAR MODERNO
-   ============================================ */
+/* --- SIDEBAR MODERNO --- */
 [data-testid="stSidebar"] {
-    background: linear-gradient(180deg, var(--aeropostale-dark) 0%, #2D3748 100%);
-    border-right: none;
-    padding-top: 20px;
+    background: white !important;
+    border-right: 1px solid #EDF2F7 !important;
+    padding: 2rem 1rem !important;
 }
 
 [data-testid="stSidebar"] > div:first-child {
-    padding-top: 2rem;
+    padding-top: 0 !important;
 }
 
-/* Logo y marca */
 .sidebar-header {
     text-align: center;
-    padding: 0 1.5rem 2rem 1.5rem;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-    margin-bottom: 1.5rem;
+    padding: 0 1rem 2rem 1rem;
+    border-bottom: 1px solid #F1F5F9;
+    margin-bottom: 2rem;
 }
 
 .sidebar-logo {
-    font-size: 1.8rem;
+    font-size: 2.2rem;
     font-weight: 800;
-    background: linear-gradient(45deg, var(--aeropostale-white), #A0AEC0);
+    background: linear-gradient(45deg, var(--accent-blue), var(--accent-red));
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     margin-bottom: 0.5rem;
+    font-family: 'Inter', sans-serif;
 }
 
 .sidebar-subtitle {
-    color: rgba(255, 255, 255, 0.6);
-    font-size: 0.85rem;
+    color: var(--text-gray);
+    font-size: 0.9rem;
     letter-spacing: 1px;
-    text-transform: uppercase;
+    font-weight: 500;
 }
 
-/* Botones del sidebar */
+/* --- BOTONES DEL SIDEBAR --- */
 [data-testid="stSidebar"] button {
     background: transparent !important;
     border: none !important;
-    color: rgba(255, 255, 255, 0.7) !important;
+    color: var(--text-dark) !important;
     text-align: left;
-    padding: 0.85rem 1.5rem !important;
-    margin: 0.25rem 0.5rem !important;
-    border-radius: var(--border-radius) !important;
+    padding: 0.8rem 1.5rem !important;
+    margin: 0.3rem 0 !important;
+    border-radius: var(--border-radius-sm) !important;
     font-weight: 500 !important;
     font-size: 0.95rem !important;
-    width: calc(100% - 1rem) !important;
-    transition: var(--transition) !important;
-    position: relative;
-    overflow: hidden;
+    width: 100% !important;
+    transition: all 0.3s ease !important;
+    display: flex !important;
+    align-items: center !important;
 }
 
 [data-testid="stSidebar"] button:hover {
-    background: rgba(255, 255, 255, 0.1) !important;
-    color: var(--aeropostale-white) !important;
+    background: #F8FAFC !important;
+    color: var(--accent-blue) !important;
     transform: translateX(5px);
 }
 
-[data-testid="stSidebar"] button:active {
-    transform: translateX(5px) scale(0.98);
-}
-
-/* Botón activo */
 [data-testid="stSidebar"] button.active {
-    background: linear-gradient(45deg, var(--aeropostale-blue), var(--aeropostale-red)) !important;
+    background: linear-gradient(90deg, var(--accent-blue), #0066CC) !important;
     color: white !important;
-    box-shadow: 0 4px 15px rgba(0, 51, 160, 0.3);
+    box-shadow: 0 4px 15px rgba(0, 51, 160, 0.2);
 }
 
-/* Indicador de botón activo */
-[data-testid="stSidebar"] button.active::before {
-    content: '';
-    position: absolute;
-    left: 0;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 4px;
-    height: 60%;
-    background: var(--aeropostale-white);
-    border-radius: 0 4px 4px 0;
-}
-
-/* Iconos en botones */
-[data-testid="stSidebar"] button::after {
-    content: '→';
-    position: absolute;
-    right: 1.5rem;
-    opacity: 0;
-    transition: var(--transition);
-}
-
-[data-testid="stSidebar"] button:hover::after {
-    opacity: 1;
-    transform: translateX(3px);
-}
-
-/* ============================================
-   HEADER DE MÓDULO (FONDO DINÁMICO)
-   ============================================ */
-.dashboard-header {
-    background: linear-gradient(135deg, 
-        rgba(0, 51, 160, 0.9) 0%, 
-        rgba(228, 0, 43, 0.8) 100%);
-    padding: 2.5rem 3rem !important;
-    border-radius: var(--border-radius);
+/* --- HEADER PRINCIPAL --- */
+.main-header {
+    background: white;
+    padding: 2.5rem 3rem;
+    border-radius: var(--border-radius-lg);
     margin-bottom: 2rem;
-    color: white;
-    box-shadow: var(--shadow);
-    position: relative;
-    overflow: hidden;
-    border-left: 6px solid var(--aeropostale-white);
-}
-
-.dashboard-header::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" preserveAspectRatio="none" opacity="0.1"><path d="M0,0 L100,0 L100,100 Z" fill="white"/></svg>');
-    background-size: cover;
+    box-shadow: var(--card-shadow);
+    border-left: 6px solid var(--accent-blue);
 }
 
 .header-title {
-    font-size: 2.5rem;
+    font-size: 2.8rem;
     font-weight: 800;
-    margin: 0;
-    position: relative;
-    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    color: var(--text-dark);
+    margin-bottom: 0.5rem;
+    font-family: 'Inter', sans-serif;
 }
 
 .header-subtitle {
     font-size: 1.1rem;
-    opacity: 0.9;
-    margin-top: 0.5rem;
-    font-weight: 300;
-    position: relative;
+    color: var(--text-gray);
+    font-weight: 400;
 }
 
-/* Fondos específicos por módulo */
-.header-dashboard { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
-.header-reconciliation { background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); }
-.header-email { background: linear-gradient(135deg, #f46b45 0%, #eea849 100%); }
-.header-guias { background: linear-gradient(135deg, #8E2DE2 0%, #4A00E0 100%); }
-.header-etiquetas { background: linear-gradient(135deg, #00b4db 0%, #0083b0 100%); }
-.header-trabajadores { background: linear-gradient(135deg, #f7971e 0%, #ffd200 100%); }
-.header-distribuciones { background: linear-gradient(135deg, #654ea3 0%, #eaafc8 100%); }
-.header-transferencias { background: linear-gradient(135deg, #9C27B0 0%, #673AB7 100%); }
-.header-ayuda { background: linear-gradient(135deg, #232526 0%, #414345 100%); }
-
-/* ============================================
-   TARJETAS KPI MODERNAS
-   ============================================ */
-.kpi-grid {
+/* --- TARJETAS DE ESTADÍSTICAS --- */
+.stats-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
     gap: 1.5rem;
     margin: 2rem 0;
 }
 
-.kpi-card {
+.stat-card {
     background: white;
-    border-radius: var(--border-radius);
-    padding: 1.75rem;
-    box-shadow: var(--shadow);
-    transition: var(--transition);
-    border-top: 4px solid var(--aeropostale-blue);
+    border-radius: var(--border-radius-md);
+    padding: 1.5rem;
+    box-shadow: var(--card-shadow);
+    transition: all 0.3s ease;
+    border-top: 4px solid;
     position: relative;
     overflow: hidden;
 }
 
-.kpi-card:hover {
-    transform: translateY(-8px);
-    box-shadow: var(--shadow-hover);
+.stat-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 25px 50px rgba(0, 0, 0, 0.08);
 }
 
-.kpi-card::before {
+.stat-card::before {
     content: '';
     position: absolute;
     top: 0;
     left: 0;
     right: 0;
     height: 4px;
-    background: linear-gradient(90deg, var(--aeropostale-blue), var(--aeropostale-red));
+    background: linear-gradient(90deg, var(--accent-blue), var(--accent-red));
 }
 
-.kpi-icon {
-    font-size: 2.5rem;
+.stat-icon {
+    font-size: 2rem;
     margin-bottom: 1rem;
-    opacity: 0.8;
+    background: linear-gradient(45deg, var(--accent-blue), var(--accent-red));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    display: inline-block;
 }
 
-.kpi-title {
+.stat-title {
     font-size: 0.9rem;
-    color: #6B7280;
+    color: var(--text-gray);
     text-transform: uppercase;
     font-weight: 600;
     letter-spacing: 0.5px;
     margin-bottom: 0.5rem;
 }
 
-.kpi-value {
-    font-size: 2.5rem;
+.stat-value {
+    font-size: 2.2rem;
     font-weight: 800;
-    color: var(--aeropostale-dark);
+    color: var(--text-dark);
     margin: 0.5rem 0;
+    font-family: 'Inter', sans-serif;
 }
 
-.kpi-change {
-    font-size: 0.9rem;
+.stat-change {
+    font-size: 0.85rem;
     font-weight: 500;
-    padding: 0.25rem 0.75rem;
+    padding: 0.3rem 0.8rem;
     border-radius: 20px;
     display: inline-block;
     margin-top: 0.5rem;
+    background: rgba(16, 185, 129, 0.1);
+    color: var(--success);
 }
 
-.kpi-change.positive { background: rgba(0, 200, 83, 0.1); color: var(--success); }
-.kpi-change.negative { background: rgba(255, 61, 0, 0.1); color: var(--danger); }
+.stat-change.negative {
+    background: rgba(239, 68, 68, 0.1);
+    color: var(--danger);
+}
 
-/* ============================================
-   BOTONES INTERACTIVOS MODERNOS
-   ============================================ */
+/* --- BOTONES MODERNOS --- */
 .stButton > button {
-    background: linear-gradient(45deg, var(--aeropostale-blue), #0066CC) !important;
+    background: linear-gradient(45deg, var(--accent-blue), #0066CC) !important;
     color: white !important;
     border: none !important;
-    padding: 0.75rem 2rem !important;
-    border-radius: var(--border-radius) !important;
+    padding: 0.8rem 2rem !important;
+    border-radius: 50px !important;
     font-weight: 600 !important;
-    transition: var(--transition) !important;
+    font-size: 0.95rem !important;
+    transition: all 0.3s ease !important;
     box-shadow: 0 4px 15px rgba(0, 51, 160, 0.2) !important;
-    position: relative;
-    overflow: hidden;
 }
 
 .stButton > button:hover {
@@ -465,328 +386,187 @@ footer {visibility: hidden;}
     box-shadow: 0 8px 25px rgba(0, 51, 160, 0.3) !important;
 }
 
-.stButton > button:active {
-    transform: translateY(0);
-}
-
-.stButton > button::after {
-    content: '';
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    width: 5px;
-    height: 5px;
-    background: rgba(255, 255, 255, 0.5);
-    opacity: 0;
-    border-radius: 100%;
-    transform: scale(1, 1) translate(-50%);
-    transform-origin: 50% 50%;
-}
-
-.stButton > button:focus:not(:active)::after {
-    animation: ripple 1s ease-out;
-}
-
-@keyframes ripple {
-    0% { transform: scale(0, 0); opacity: 0.5; }
-    100% { transform: scale(40, 40); opacity: 0; }
-}
-
-/* Botones secundarios */
-.stButton > button.secondary {
-    background: linear-gradient(45deg, #6B7280, #9CA3AF) !important;
-}
-
-.stButton > button.success {
-    background: linear-gradient(45deg, var(--success), #00E676) !important;
-}
-
-.stButton > button.warning {
-    background: linear-gradient(45deg, var(--warning), #FFCA28) !important;
-}
-
-.stButton > button.danger {
-    background: linear-gradient(45deg, var(--danger), #FF5252) !important;
-}
-
-/* ============================================
-   PANELES DE FILTRO Y CONTENEDORES
-   ============================================ */
+/* --- PANELES DE FILTRO --- */
 .filter-panel {
     background: white;
     padding: 2rem;
-    border-radius: var(--border-radius);
+    border-radius: var(--border-radius-md);
     margin-bottom: 2rem;
-    box-shadow: var(--shadow);
-    border: 1px solid #E5E7EB;
+    box-shadow: var(--card-shadow);
 }
 
 .filter-title {
-    font-size: 1.25rem;
-    font-weight: 600;
-    color: var(--aeropostale-dark);
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: var(--text-dark);
     margin-bottom: 1.5rem;
-    padding-bottom: 0.75rem;
-    border-bottom: 2px solid #F3F4F6;
+    padding-bottom: 1rem;
+    border-bottom: 2px solid #F1F5F9;
 }
 
-/* ============================================
-   TABLAS ESTILIZADAS
-   ============================================ */
+/* --- TABLAS ESTILIZADAS --- */
 .stDataFrame {
-    border-radius: var(--border-radius) !important;
+    border-radius: var(--border-radius-md) !important;
     overflow: hidden !important;
-    box-shadow: var(--shadow) !important;
+    box-shadow: var(--card-shadow) !important;
 }
 
-/* ============================================
-   FORMULARIOS MODERNOS
-   ============================================ */
+/* --- FORMULARIOS MODERNOS --- */
 .stTextInput > div > div > input,
 .stSelectbox > div > div > select,
 .stDateInput > div > div > input,
 .stNumberInput > div > div > input {
-    border-radius: var(--border-radius) !important;
+    border-radius: var(--border-radius-sm) !important;
     border: 2px solid #E5E7EB !important;
     padding: 0.75rem 1rem !important;
-    transition: var(--transition) !important;
+    font-size: 0.95rem !important;
+    transition: all 0.3s ease !important;
 }
 
 .stTextInput > div > div > input:focus,
 .stSelectbox > div > div > select:focus,
 .stDateInput > div > div > input:focus,
 .stNumberInput > div > div > input:focus {
-    border-color: var(--aeropostale-blue) !important;
+    border-color: var(--accent-blue) !important;
     box-shadow: 0 0 0 3px rgba(0, 51, 160, 0.1) !important;
 }
 
-/* ============================================
-   PÁGINA DE LOGIN MODERNA
-   ============================================ */
-.login-container {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    min-height: 80vh;
-    padding: 2rem;
+/* --- PESTAÑAS MODERNAS --- */
+.stTabs [data-baseweb="tab-list"] {
+    gap: 8px;
+    background-color: transparent;
 }
 
-.login-card {
-    background: white;
-    border-radius: var(--border-radius);
-    padding: 3rem;
-    box-shadow: 0 20px 60px rgba(0, 51, 160, 0.15);
-    width: 100%;
-    max-width: 450px;
-    border-top: 6px solid var(--aeropostale-blue);
+.stTabs [data-baseweb="tab"] {
+    background-color: white;
+    border-radius: var(--border-radius-sm);
+    padding: 0.8rem 1.5rem;
+    font-weight: 500;
+    border: 1px solid #E5E7EB;
+    transition: all 0.3s ease;
 }
 
-.login-logo {
+.stTabs [data-baseweb="tab"]:hover {
+    background-color: #F8FAFC;
+    border-color: var(--accent-blue);
+}
+
+.stTabs [aria-selected="true"] {
+    background-color: var(--accent-blue) !important;
+    color: white !important;
+    border-color: var(--accent-blue) !important;
+}
+
+/* --- ALERTAS Y NOTIFICACIONES --- */
+.stAlert {
+    border-radius: var(--border-radius-sm) !important;
+    border: none !important;
+    box-shadow: var(--card-shadow) !important;
+}
+
+/* --- FOOTER MODERNO --- */
+.app-footer {
     text-align: center;
-    margin-bottom: 2rem;
+    padding: 2rem;
+    margin-top: 4rem;
+    color: var(--text-gray);
+    font-size: 0.9rem;
+    background: white;
+    border-radius: var(--border-radius-lg) var(--border-radius-lg) 0 0;
+    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.05);
 }
 
-.login-logo h1 {
-    font-size: 2.5rem;
+.footer-logo {
     font-weight: 800;
-    background: linear-gradient(45deg, var(--aeropostale-blue), var(--aeropostale-red));
+    font-size: 1.2rem;
+    background: linear-gradient(45deg, var(--accent-blue), var(--accent-red));
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     margin-bottom: 0.5rem;
 }
 
-.login-logo p {
-    color: #6B7280;
-    font-size: 0.9rem;
-}
-
-.login-input {
-    margin-bottom: 1.5rem;
-}
-
-.login-button {
-    width: 100%;
-    margin-top: 1rem;
-}
-
-/* ============================================
-   ALERTAS Y NOTIFICACIONES
-   ============================================ */
-.stAlert {
-    border-radius: var(--border-radius) !important;
-    border: none !important;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1) !important;
-}
-
-/* ============================================
-   FOOTER MODERNO
-   ============================================ */
-.footer {
-    text-align: center;
-    padding: 2rem;
-    margin-top: 4rem;
-    color: #6B7280;
-    border-top: 1px solid #E5E7EB;
-    font-size: 0.85rem;
+/* --- GRÁFICOS PERSONALIZADOS --- */
+.chart-container {
     background: white;
-    border-radius: var(--border-radius) var(--border-radius) 0 0;
-    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.05);
+    padding: 1.5rem;
+    border-radius: var(--border-radius-md);
+    box-shadow: var(--card-shadow);
+    margin-bottom: 2rem;
 }
 
-.footer-logo {
-    color: var(--aeropostale-blue);
-    font-weight: 700;
-    font-size: 1.1rem;
+/* --- CARD DE MÉTRICAS ESPECIALES --- */
+.metric-card {
+    background: white;
+    border-radius: var(--border-radius-md);
+    padding: 1.5rem;
+    box-shadow: var(--card-shadow);
+    text-align: center;
+    transition: all 0.3s ease;
+    border: 1px solid #F1F5F9;
 }
 
-/* ============================================
-   EFECTOS DE CARGA Y ANIMACIONES
-   ============================================ */
-@keyframes fadeIn {
-    from { opacity: 0; transform: translateY(20px); }
-    to { opacity: 1; transform: translateY(0); }
+.metric-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 15px 30px rgba(0, 0, 0, 0.1);
+}
+
+.metric-title {
+    font-size: 0.85rem;
+    color: var(--text-gray);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 0.8rem;
+}
+
+.metric-value {
+    font-size: 2.5rem;
+    font-weight: 800;
+    color: var(--text-dark);
+    margin: 0.5rem 0;
+    font-family: 'Inter', sans-serif;
+}
+
+.metric-subtitle {
+    font-size: 0.85rem;
+    color: var(--text-gray);
+    margin-top: 0.5rem;
+}
+
+/* --- COLORES PARA TARJETAS --- */
+.card-blue { border-top-color: var(--accent-blue); }
+.card-red { border-top-color: var(--accent-red); }
+.card-green { border-top-color: var(--success); }
+.card-orange { border-top-color: var(--warning); }
+.card-purple { border-top-color: var(--purple); }
+
+/* --- RESPONSIVE DESIGN --- */
+@media (max-width: 768px) {
+    .header-title { font-size: 2rem; }
+    .stats-grid { grid-template-columns: 1fr; }
+    .main-header { padding: 1.5rem !important; }
+}
+
+/* --- ANIMACIONES --- */
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 .dashboard-content {
-    animation: fadeIn 0.5s ease-out;
-}
-
-/* ============================================
-   RESPONSIVE DESIGN
-   ============================================ */
-@media (max-width: 768px) {
-    .header-title { font-size: 2rem; }
-    .kpi-grid { grid-template-columns: 1fr; }
-    .dashboard-header { padding: 1.5rem !important; }
-}
-
-/* ============================================
-   ESTILOS ESPECÍFICOS PARA DASHBOARD TRANSFERENCIAS
-   ============================================ */
-.transferencias-container {
-    background-color: #f8f9fa;
-    padding: 20px;
-    border-radius: var(--border-radius);
-}
-
-.transferencias-metric-card {
-    background: white;
-    border-radius: 10px;
-    padding: 20px;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-    border-left: 5px solid;
-    margin-bottom: 20px;
-    transition: transform 0.3s ease, box-shadow 0.3s ease;
-}
-
-.transferencias-metric-card:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 8px 15px rgba(0, 0, 0, 0.1);
-}
-
-.transferencias-metric-title {
-    font-size: 14px;
-    font-weight: 600;
-    color: #6c757d;
-    margin-bottom: 10px;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-}
-
-.transferencias-metric-value {
-    font-size: 32px;
-    font-weight: 700;
-    color: #212529;
-    margin-bottom: 5px;
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-}
-
-.transferencias-metric-subtitle {
-    font-size: 12px;
-    color: #6c757d;
-}
-
-.transferencias-validation-card {
-    background: white;
-    border-radius: 8px;
-    padding: 15px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-    text-align: center;
-    margin-bottom: 10px;
-}
-
-.transferencias-validation-title {
-    font-size: 12px;
-    font-weight: 600;
-    color: #6c757d;
-    margin-bottom: 5px;
-}
-
-.transferencias-validation-value {
-    font-size: 24px;
-    font-weight: 700;
-}
-
-.transferencias-validation-good {
-    color: #2ca02c;
-}
-
-.transferencias-validation-warning {
-    color: #ff7f0e;
-}
-
-.transferencias-section-title {
-    font-size: 20px;
-    font-weight: 600;
-    color: #495057;
-    margin: 30px 0 20px 0;
-    padding-bottom: 10px;
-    border-bottom: 2px solid #e9ecef;
-}
-
-.transferencias-card-price-club {
-    border-left-color: #2ca02c;
-}
-
-.transferencias-card-tiendas {
-    border-left-color: #1f77b4;
-}
-
-.transferencias-card-ventas-mayor {
-    border-left-color: #ff7f0e;
-}
-
-.transferencias-card-tienda-web {
-    border-left-color: #9467bd;
-}
-
-.transferencias-card-fallas {
-    border-left-color: #8c564b;
-}
-
-.transferencias-card-fundas {
-    border-left-color: #d62728;
-}
-
-.transferencias-card-header {
-    border-left-color: #6f42c1;
-}
-
-.transferencias-dashboard-title {
-    font-size: 28px;
-    font-weight: 700;
-    margin-bottom: 5px;
-}
-
-.transferencias-dashboard-subtitle {
-    font-size: 16px;
-    opacity: 0.9;
+    animation: fadeInUp 0.5s ease-out;
 }
 </style>
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# 3. MÓDULO CORREO WILO (CORREGIDO Y ROBUSTO)
+# 3. MÓDULO CORREO WILO (ESTILIZADO)
 # ==============================================================================
 
 class WiloEmailEngine:
@@ -875,12 +655,13 @@ Atentamente,
 
 def mostrar_modulo_email_wilo():
     st.markdown("""
-    <div class='dashboard-header header-email'>
+    <div class='main-header'>
         <h1 class='header-title'>📧 Auditoría de Correos Wilo AI</h1>
         <div class='header-subtitle'>Análisis Inteligente de Novedades en Tiempo Real</div>
     </div>
     """, unsafe_allow_html=True)
     
+    # Barra de herramientas superior
     col1, col2, col3 = st.columns([2, 1, 1])
     with col1:
         st.info("🔍 Este módulo analiza automáticamente correos para detectar novedades logísticas.")
@@ -892,7 +673,7 @@ def mostrar_modulo_email_wilo():
     if scan_btn or auto_scan:
         engine = WiloEmailEngine()
         with st.spinner("🔍 Conectando con servidor de correo y analizando..."):
-            time.sleep(1.5)  # Simulación de procesamiento
+            time.sleep(1.5)
             emails = engine.fetch_emails(10)
         
         if not emails:
@@ -900,52 +681,53 @@ def mostrar_modulo_email_wilo():
         else:
             df = pd.DataFrame(emails)
             
-            # KPIs Rápidos con diseño moderno
-            st.markdown("<div class='kpi-grid'>", unsafe_allow_html=True)
+            # KPIs en tarjetas modernas
+            st.markdown("<div class='stats-grid'>", unsafe_allow_html=True)
             col1, col2, col3, col4 = st.columns(4)
             
             with col1:
                 total = len(df)
                 st.markdown(f"""
-                <div class='kpi-card'>
-                    <div class='kpi-icon'>📨</div>
-                    <div class='kpi-title'>Correos Analizados</div>
-                    <div class='kpi-value'>{total}</div>
+                <div class='stat-card card-blue'>
+                    <div class='stat-icon'>📨</div>
+                    <div class='stat-title'>Correos Analizados</div>
+                    <div class='stat-value'>{total}</div>
                 </div>
                 """, unsafe_allow_html=True)
             
             with col2:
                 alta = len(df[df['urgencia'] == 'ALTA'])
                 st.markdown(f"""
-                <div class='kpi-card'>
-                    <div class='kpi-icon'>🚨</div>
-                    <div class='kpi-title'>Alta Urgencia</div>
-                    <div class='kpi-value'>{alta}</div>
-                    <div class='kpi-change {'negative' if alta > 3 else 'positive'}">{'Requiere atención' if alta > 3 else 'Bajo control'}</div>
+                <div class='stat-card card-red'>
+                    <div class='stat-icon'>🚨</div>
+                    <div class='stat-title'>Alta Urgencia</div>
+                    <div class='stat-value'>{alta}</div>
+                    <div class='stat-change {'negative' if alta > 3 else 'positive'}">{'Requiere atención' if alta > 3 else 'Bajo control'}</div>
                 </div>
                 """, unsafe_allow_html=True)
             
             with col3:
                 faltantes = len(df[df['tipo'].str.contains('FALTANTE')])
                 st.markdown(f"""
-                <div class='kpi-card'>
-                    <div class='kpi-icon'>📦</div>
-                    <div class='kpi-title'>Faltantes</div>
-                    <div class='kpi-value'>{faltantes}</div>
+                <div class='stat-card card-green'>
+                    <div class='stat-icon'>📦</div>
+                    <div class='stat-title'>Faltantes</div>
+                    <div class='stat-value'>{faltantes}</div>
                 </div>
                 """, unsafe_allow_html=True)
             
             with col4:
                 sobrantes = len(df[df['tipo'].str.contains('SOBRANTE')])
                 st.markdown(f"""
-                <div class='kpi-card'>
-                    <div class='kpi-icon'>👔</div>
-                    <div class='kpi-title'>Sobrantes</div>
-                    <div class='kpi-value'>{sobrantes}</div>
+                <div class='stat-card card-purple'>
+                    <div class='stat-icon'>👔</div>
+                    <div class='stat-title'>Sobrantes</div>
+                    <div class='stat-value'>{sobrantes}</div>
                 </div>
                 """, unsafe_allow_html=True)
             st.markdown("</div>", unsafe_allow_html=True)
             
+            # Tabla de correos
             st.markdown("### 📋 Bandeja de Entrada Analizada")
             st.dataframe(
                 df[['fecha', 'remitente', 'asunto', 'tipo', 'urgencia']], 
@@ -963,6 +745,7 @@ def mostrar_modulo_email_wilo():
                 }
             )
             
+            # Detalles del correo seleccionado
             st.markdown("---")
             st.markdown("### 🔍 Inspector de Contenido Detallado")
             sel_id = st.selectbox("Seleccione un correo para ver detalles:", df['id'], format_func=lambda x: f"Correo #{x}")
@@ -972,16 +755,18 @@ def mostrar_modulo_email_wilo():
                 
                 col1, col2 = st.columns([1, 1])
                 with col1:
-                    st.markdown(f"""
+                    st.markdown("""
                     <div class='filter-panel'>
                         <h4>📋 Información del Correo</h4>
-                        <p><strong>De:</strong> {row['remitente']}</p>
-                        <p><strong>Asunto:</strong> {row['asunto']}</p>
-                        <p><strong>Fecha:</strong> {row['fecha']}</p>
-                        <p><strong>Clasificación:</strong> <span style='color: {'#FF3D00' if row['urgencia'] == 'ALTA' else '#2979FF'}'>{row['tipo']}</span></p>
-                        <p><strong>Urgencia:</strong> <span style='color: {'#FF3D00' if row['urgencia'] == 'ALTA' else '#FFB300' if row['urgencia'] == 'MEDIA' else '#00C853'}'>{row['urgencia']}</span></p>
-                    </div>
                     """, unsafe_allow_html=True)
+                    st.markdown(f"""
+                    <p><strong>De:</strong> {row['remitente']}</p>
+                    <p><strong>Asunto:</strong> {row['asunto']}</p>
+                    <p><strong>Fecha:</strong> {row['fecha']}</p>
+                    <p><strong>Clasificación:</strong> <span style='color: {'#EF4444' if row['urgencia'] == 'ALTA' else '#3B82F6'}'>{row['tipo']}</span></p>
+                    <p><strong>Urgencia:</strong> <span style='color: {'#EF4444' if row['urgencia'] == 'ALTA' else '#F59E0B' if row['urgencia'] == 'MEDIA' else '#10B981'}'>{row['urgencia']}</span></p>
+                    """)
+                    st.markdown("</div>", unsafe_allow_html=True)
                 
                 with col2:
                     st.text_area("**Cuerpo del Correo:**", row['cuerpo'], height=200)
@@ -992,12 +777,32 @@ def mostrar_modulo_email_wilo():
                 sentences = len(re.split(r'[.!?]+', row['cuerpo']))
                 
                 col_a, col_b, col_c = st.columns(3)
-                col_a.metric("Palabras", words)
-                col_b.metric("Oraciones", sentences)
-                col_c.metric("Detecciones", len(row['tipo'].split(', ')))
+                with col_a:
+                    st.markdown(f"""
+                    <div class='metric-card'>
+                        <div class='metric-title'>Palabras</div>
+                        <div class='metric-value'>{words}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                
+                with col_b:
+                    st.markdown(f"""
+                    <div class='metric-card'>
+                        <div class='metric-title'>Oraciones</div>
+                        <div class='metric-value'>{sentences}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                
+                with col_c:
+                    st.markdown(f"""
+                    <div class='metric-card'>
+                        <div class='metric-title'>Detecciones</div>
+                        <div class='metric-value'>{len(row['tipo'].split(', '))}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
 
 # ==============================================================================
-# 4. MÓDULO RECONCILIACIÓN V8 (CORREGIDO Y ACTUALIZADO)
+# 4. MÓDULO RECONCILIACIÓN V8 (ESTILIZADO)
 # ==============================================================================
 
 def identificar_tipo_tienda_v8(nombre):
@@ -1029,18 +834,24 @@ def identificar_tipo_tienda_v8(nombre):
 
 def mostrar_reconciliacion_v8():
     st.markdown("""
-    <div class='dashboard-header header-reconciliation'>
+    <div class='main-header'>
         <h1 class='header-title'>📦 Reconciliación Logística V8.0</h1>
         <div class='header-subtitle'>Soporte avanzado para Piezas y Ventas Mayoristas (Jofre Santana)</div>
     </div>
     """, unsafe_allow_html=True)
 
+    # Panel de carga de archivos
+    st.markdown("""
+    <div class='filter-panel'>
+        <h3 class='filter-title'>📂 Carga de Archivos</h3>
+    """, unsafe_allow_html=True)
+    
     col1, col2 = st.columns(2)
     with col1:
-        f_manifiesto = st.file_uploader("📂 Subir Manifiesto (Debe tener columna PIEZAS)", type=['xlsx', 'xls', 'csv'])
+        f_manifiesto = st.file_uploader("Subir Manifiesto (Debe tener columna PIEZAS)", type=['xlsx', 'xls', 'csv'])
     with col2:
-        f_facturas = st.file_uploader("📂 Subir Facturas (Debe tener VALORES)", type=['xlsx', 'xls', 'csv'])
-
+        f_facturas = st.file_uploader("Subir Facturas (Debe tener VALORES)", type=['xlsx', 'xls', 'csv'])
+    
     # Datos de ejemplo para demostración
     use_sample = st.checkbox("Usar datos de demostración", value=True)
     
@@ -1079,6 +890,7 @@ def mostrar_reconciliacion_v8():
                 df_m = pd.read_excel(f_manifiesto) if f_manifiesto.name.endswith(('xlsx', 'xls')) else pd.read_csv(f_manifiesto)
                 df_f = pd.read_excel(f_facturas) if f_facturas.name.endswith(('xlsx', 'xls')) else pd.read_csv(f_facturas)
 
+            # Configuración de columnas
             st.markdown("""
             <div class='filter-panel'>
                 <h3 class='filter-title'>⚙️ Configuración de Columnas</h3>
@@ -1109,6 +921,7 @@ def mostrar_reconciliacion_v8():
                 col_valor_f = st.selectbox("Columna Valor Cobrado", cols_f, index=idx_val_f, key='f_val')
             st.markdown("</div>", unsafe_allow_html=True)
 
+            # Botón de ejecución
             if st.button("🚀 EJECUTAR RECONCILIACIÓN V8.0", type="primary", use_container_width=True):
                 with st.spinner("🔄 Ejecutando algoritmo V8.0..."):
                     # Procesamiento
@@ -1139,7 +952,7 @@ def mostrar_reconciliacion_v8():
 
                     # --- RESULTADOS ---
                     st.markdown("""
-                    <div class='dashboard-header'>
+                    <div class='main-header'>
                         <h2>📊 Resultados del Análisis V8.0</h2>
                     </div>
                     """, unsafe_allow_html=True)
@@ -1150,49 +963,49 @@ def mostrar_reconciliacion_v8():
                     sin_factura = df_final[df_final['VALOR_REAL'] == 0].shape[0]
                     
                     # KPIs modernos
-                    st.markdown("<div class='kpi-grid'>", unsafe_allow_html=True)
+                    st.markdown("<div class='stats-grid'>", unsafe_allow_html=True)
                     k1, k2, k3, k4 = st.columns(4)
                     
                     with k1:
                         st.markdown(f"""
-                        <div class='kpi-card'>
-                            <div class='kpi-icon'>💰</div>
-                            <div class='kpi-title'>Total Facturado</div>
-                            <div class='kpi-value'>${total_facturado:,.2f}</div>
+                        <div class='stat-card card-blue'>
+                            <div class='stat-icon'>💰</div>
+                            <div class='stat-title'>Total Facturado</div>
+                            <div class='stat-value'>${total_facturado:,.0f}</div>
                         </div>
                         """, unsafe_allow_html=True)
                     
                     with k2:
                         st.markdown(f"""
-                        <div class='kpi-card'>
-                            <div class='kpi-icon'>📦</div>
-                            <div class='kpi-title'>Total Piezas</div>
-                            <div class='kpi-value'>{total_piezas:,.0f}</div>
+                        <div class='stat-card card-green'>
+                            <div class='stat-icon'>📦</div>
+                            <div class='stat-title'>Total Piezas</div>
+                            <div class='stat-value'>{total_piezas:,.0f}</div>
                         </div>
                         """, unsafe_allow_html=True)
                     
                     with k3:
                         st.markdown(f"""
-                        <div class='kpi-card'>
-                            <div class='kpi-icon'>✅</div>
-                            <div class='kpi-title'>Guías Conciliadas</div>
-                            <div class='kpi-value'>{con_factura}</div>
-                            <div class='kpi-change positive'>+{con_factura/len(df_final)*100:.1f}%</div>
+                        <div class='stat-card card-purple'>
+                            <div class='stat-icon'>✅</div>
+                            <div class='stat-title'>Guías Conciliadas</div>
+                            <div class='stat-value'>{con_factura}</div>
+                            <div class='stat-change positive'>+{con_factura/len(df_final)*100:.1f}%</div>
                         </div>
                         """, unsafe_allow_html=True)
                     
                     with k4:
                         st.markdown(f"""
-                        <div class='kpi-card'>
-                            <div class='kpi-icon'>⚠️</div>
-                            <div class='kpi-title'>Guías Sin Factura</div>
-                            <div class='kpi-value'>{sin_factura}</div>
-                            <div class='kpi-change {'negative' if sin_factura > 5 else 'positive'}">{'Revisar' if sin_factura > 5 else 'OK'}</div>
+                        <div class='stat-card card-red'>
+                            <div class='stat-icon'>⚠️</div>
+                            <div class='stat-title'>Guías Sin Factura</div>
+                            <div class='stat-value'>{sin_factura}</div>
+                            <div class='stat-change {'negative' if sin_factura > 5 else 'positive'}">{'Revisar' if sin_factura > 5 else 'OK'}</div>
                         </div>
                         """, unsafe_allow_html=True)
                     st.markdown("</div>", unsafe_allow_html=True)
                     
-                    # Tablas
+                    # Tabs para diferentes vistas
                     tab1, tab2, tab3 = st.tabs(["📈 Resumen por Canal", "📋 Detalle por Grupo", "🔍 Datos Completos"])
                     
                     with tab1:
@@ -1217,15 +1030,20 @@ def mostrar_reconciliacion_v8():
                         # Gráficos
                         col_chart1, col_chart2 = st.columns(2)
                         with col_chart1:
+                            st.markdown('<div class="chart-container">', unsafe_allow_html=True)
                             fig = px.pie(resumen, values='Valor Facturado', names='Canal', 
                                        title="Distribución por Canal", 
-                                       color_discrete_sequence=px.colors.qualitative.Set3)
+                                       color_discrete_sequence=['#0033A0', '#E4002B', '#10B981', '#8B5CF6'])
                             st.plotly_chart(fig, use_container_width=True)
+                            st.markdown('</div>', unsafe_allow_html=True)
                         
                         with col_chart2:
+                            st.markdown('<div class="chart-container">', unsafe_allow_html=True)
                             fig2 = px.bar(resumen, x='Canal', y='Guías', color='Canal',
-                                        title="Guías por Canal", text='Guías')
+                                        title="Guías por Canal", text='Guías',
+                                        color_discrete_sequence=['#0033A0', '#E4002B', '#10B981', '#8B5CF6'])
                             st.plotly_chart(fig2, use_container_width=True)
+                            st.markdown('</div>', unsafe_allow_html=True)
 
                     with tab2:
                         detalle = df_final.groupby('GRUPO').agg({
@@ -1286,48 +1104,12 @@ def mostrar_reconciliacion_v8():
 
         except Exception as e:
             st.error(f"❌ Error en el procesamiento: {str(e)}")
-            st.exception(e)
     else:
         st.info("👆 Suba los archivos necesarios o active la opción de datos de demostración para comenzar.")
 
 # ==============================================================================
-# 5. MÓDULO DASHBOARD DE TRANSFERENCIAS (NUEVO MÓDULO INTEGRADO)
+# 5. MÓDULO DASHBOARD DE TRANSFERENCIAS (ESTILIZADO)
 # ==============================================================================
-
-import streamlit as st
-import pandas as pd
-import numpy as np
-import plotly.graph_objects as go
-import plotly.express as px
-from datetime import datetime
-import io
-import matplotlib.pyplot as plt
-
-# --- CONFIGURACIÓN DE PARÁMETROS ---
-TIENDAS_REGULARES = 42
-PRICE_CLUBS = 5
-TIENDA_WEB = 1
-VENTAS_POR_MAYOR = 1
-FALLAS = 1
-
-PRICE_KEYWORDS = ['PRICE', 'OIL']
-WEB_KEYWORDS = ['WEB', 'TIENDA MOVIL', 'MOVIL']
-FALLAS_KEYWORDS = ['FALLAS']
-VENTAS_MAYOR_KEYWORDS = ['MAYOR', 'MAYORISTA']
-
-TIENDAS_REGULARES_LISTA = [
-    'AERO CCI', 'AERO DAULE', 'AERO LAGO AGRIO', 'AERO MALL DEL RIO GYE',
-    'AERO PLAYAS', 'AEROPOSTALE 6 DE DICIEMBRE', 'AEROPOSTALE BOMBOLI',
-    'AEROPOSTALE CAYAMBE', 'AEROPOSTALE EL COCA', 'AEROPOSTALE PASAJE',
-    'AEROPOSTALE PEDERNALES', 'AMBATO', 'BABAHOYO', 'BAHIA DE CARAQUEZ',
-    'CARAPUNGO', 'CEIBOS', 'CONDADO SHOPPING', 'CUENCA', 'CUENCA CENTRO HISTORICO',
-    'DURAN', 'LA PLAZA SHOPPING', 'MACHALA', 'MAL DEL SUR', 'MALL DEL PACIFICO',
-    'MALL DEL SOL', 'MANTA', 'MILAGRO', 'MULTIPLAZA RIOBAMBA', 'PASEO AMBATO',
-    'PENINSULA', 'PORTOVIEJO', 'QUEVEDO', 'RIOBAMBA', 'RIOCENTRO EL DORADO',
-    'RIOCENTRO NORTE', 'SAN LUIS', 'SANTO DOMINGO'
-]
-
-# --- FUNCIONES DE SOPORTE ---
 
 def extraer_entero(valor):
     try:
@@ -1346,6 +1128,24 @@ def clasificar_transferencia(row):
     cantidad = row.get('Cantidad_Entera', 0)
     if cantidad >= 500 and cantidad % 100 == 0:
         return 'Fundas'
+    
+    # Listas de palabras clave
+    PRICE_KEYWORDS = ['PRICE', 'OIL']
+    WEB_KEYWORDS = ['WEB', 'TIENDA MOVIL', 'MOVIL']
+    FALLAS_KEYWORDS = ['FALLAS']
+    VENTAS_MAYOR_KEYWORDS = ['MAYOR', 'MAYORISTA']
+    TIENDAS_REGULARES_LISTA = [
+        'AERO CCI', 'AERO DAULE', 'AERO LAGO AGRIO', 'AERO MALL DEL RIO GYE',
+        'AERO PLAYAS', 'AEROPOSTALE 6 DE DICIEMBRE', 'AEROPOSTALE BOMBOLI',
+        'AEROPOSTALE CAYAMBE', 'AEROPOSTALE EL COCA', 'AEROPOSTALE PASAJE',
+        'AEROPOSTALE PEDERNALES', 'AMBATO', 'BABAHOYO', 'BAHIA DE CARAQUEZ',
+        'CARAPUNGO', 'CEIBOS', 'CONDADO SHOPPING', 'CUENCA', 'CUENCA CENTRO HISTORICO',
+        'DURAN', 'LA PLAZA SHOPPING', 'MACHALA', 'MAL DEL SUR', 'MALL DEL PACIFICO',
+        'MALL DEL SOL', 'MANTA', 'MILAGRO', 'MULTIPLAZA RIOBAMBA', 'PASEO AMBATO',
+        'PENINSULA', 'PORTOVIEJO', 'QUEVEDO', 'RIOBAMBA', 'RIOCENTRO EL DORADO',
+        'RIOCENTRO NORTE', 'SAN LUIS', 'SANTO DOMINGO'
+    ]
+    
     if any(kw in sucursal for kw in PRICE_KEYWORDS): return 'Price Club'
     if any(kw in sucursal for kw in WEB_KEYWORDS): return 'Tienda Web'
     if any(kw in sucursal for kw in FALLAS_KEYWORDS): return 'Fallas'
@@ -1389,121 +1189,74 @@ def procesar_transferencias_diarias(df):
             res['conteo_sucursales'][cat] = 0
     return res
 
-def normalizar_codigo(df, columnas_posibles):
-    """Normaliza la columna de código a string y elimina espacios"""
-    for col in columnas_posibles:
-        if col in df.columns:
-            df[col] = df[col].astype(str).str.strip()
-            return df, col
-    return df, None
-
-def clasificar_genero(texto):
-    """Clasifica el texto en categorías de género"""
-    if pd.isna(texto):
-        return 'NO CLASIFICADO'
-    
-    texto_str = str(texto).upper()
-    
-    # Palabras clave para cada categoría
-    guy_keywords = ['GUY', 'HOMBRE', 'MEN', 'MAN', 'MALE', 'BOY', 'BOYS']
-    girls_keywords = ['GIRL', 'GIRLS', 'MUJER', 'WOMEN', 'WOMAN', 'FEMALE', 'DAMA', 'DAMAS']
-    accesorios_keywords = ['ACCESORIO', 'ACCESORIOS', 'ACCESSORY', 'ACCESSORIES', 'COMPLEMENTO', 'COMPLEMENTOS']
-    
-    # Verificar si contiene alguna palabra clave
-    for keyword in guy_keywords:
-        if keyword in texto_str:
-            return 'GUY'
-    
-    for keyword in girls_keywords:
-        if keyword in texto_str:
-            return 'GIRLS'
-    
-    for keyword in accesorios_keywords:
-        if keyword in texto_str:
-            return 'ACCESORIOS'
-    
-    # Si no coincide con ninguna, intentar inferir del departamento
-    dept_keywords = {
-        'GUY': ['CAMISA', 'PANTALON', 'BERMUDA', 'SHORT', 'POLO', 'JEAN'],
-        'GIRLS': ['BLUSA', 'VESTIDO', 'FALDA', 'TOP', 'LEGGING', 'ENTERIZO'],
-        'ACCESORIOS': ['BOLSO', 'CARTERA', 'CINTURON', 'GORRA', 'LENTES', 'BISUTERIA']
-    }
-    
-    for categoria, keywords in dept_keywords.items():
-        for keyword in keywords:
-            if keyword in texto_str:
-                return categoria
-    
-    return 'OTROS'
-
-# --- UI HELPERS ---
-
-def metric_card_kpi(title, value, subtitle="", color="#1f77b4"):
-    """Para KPIs por categoría"""
-    st.markdown(f"""
-    <div style="
-        background-color: white; 
-        padding: 20px; 
-        border-radius: 10px; 
-        border: 1px solid #e0e0e0;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-        margin-bottom: 15px;
-        height: 150px;
-        display: flex;
-        flex-direction: column;
-        justify-content: space-between;">
-        <div style="font-size: 0.9em; color: #6c757d; font-weight: 600; text-transform: uppercase;">{title}</div>
-        <div style="font-size: 2.2em; font-weight: 800; color: #212529; margin: 5px 0;">{value}</div>
-        <div style="font-size: 0.85em; color: #495057;">{subtitle}</div>
+def mostrar_dashboard_transferencias():
+    st.markdown("""
+    <div class='main-header'>
+        <h1 class='header-title'>📊 Dashboard de Transferencias Diarias</h1>
+        <div class='header-subtitle'>Análisis de distribución por categorías y sucursales</div>
     </div>
     """, unsafe_allow_html=True)
-
-def metric_card_general(title, value, subtitle=""):
-    """Para KPIs generales"""
-    st.markdown(f"""
-    <div style="
-        background-color: white; 
-        padding: 15px; 
-        border-radius: 8px; 
-        border: 1px solid #e0e0e0;
-        margin-bottom: 10px;">
-        <div style="font-size: 0.8em; color: #6c757d; font-weight: 600;">{title}</div>
-        <div style="font-size: 1.8em; font-weight: 700; color: #212529; margin: 5px 0;">{value}</div>
-        <div style="font-size: 0.75em; color: #495057;">{subtitle}</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-def to_excel(df):
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        df.to_excel(writer, index=False, sheet_name='Detalle_Secuencial')
-    return output.getvalue()
-
-# --- CONFIGURACIÓN DE PÁGINA ---
-st.set_page_config(page_title="Grok Analytics - Dashboard de Transferencias", layout="wide")
-st.title("📊 Dashboard de Transferencias Diarias")
-
-# --- SIDEBAR ---
-with st.sidebar:
-    st.header("📂 Carga de Datos")
-    file_diario = st.file_uploader("Subir archivo diario (xlsx)", type=['xlsx'], key="diario_up")
     
-    if st.button("🔄 Limpiar y Recargar"):
-        st.rerun()
-
-# --- PESTAÑAS PRINCIPALES ---
-tab1, tab2, tab3 = st.tabs(["📊 Transferencias Diarias", "📦 Mercadería en Tránsito", "📈 Análisis de Stock"])
-
-# --- PESTAÑA 1: TRANSFERENCIAS DIARIAS ---
-with tab1:
+    # Sidebar para carga de datos
+    with st.sidebar:
+        st.markdown("""
+        <div class='filter-panel'>
+            <h4>📂 Carga de Datos</h4>
+        """, unsafe_allow_html=True)
+        file_diario = st.file_uploader("Subir archivo diario (xlsx)", type=['xlsx'], key="diario_up")
+        if st.button("🔄 Limpiar y Recargar", use_container_width=True):
+            st.rerun()
+        st.markdown("</div>", unsafe_allow_html=True)
+    
+    # Contenido principal
     if file_diario:
         df_diario = pd.read_excel(file_diario)
         res = procesar_transferencias_diarias(df_diario)
         
-        # --- SECCIÓN 1: KPIs POR CATEGORÍA ---
-        st.header("📈 KPIs por Categoría")
+        # KPIs principales
+        st.markdown("<div class='stats-grid'>", unsafe_allow_html=True)
+        col1, col2, col3, col4 = st.columns(4)
         
-        # Mapeo de nombres de categorías para display
+        with col1:
+            st.markdown(f"""
+            <div class='stat-card card-blue'>
+                <div class='stat-icon'>📦</div>
+                <div class='stat-title'>Total Unidades</div>
+                <div class='stat-value'>{res['total_unidades']:,}</div>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with col2:
+            st.markdown(f"""
+            <div class='stat-card card-green'>
+                <div class='stat-icon'>🔄</div>
+                <div class='stat-title'>Transferencias</div>
+                <div class='stat-value'>{res['transferencias']}</div>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with col3:
+            st.markdown(f"""
+            <div class='stat-card card-purple'>
+                <div class='stat-icon'>🏪</div>
+                <div class='stat-title'>Sucursales Activas</div>
+                <div class='stat-value'>{len(res['df_procesado']['Sucursal Destino'].unique())}</div>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with col4:
+            promedio = res['total_unidades'] / res['transferencias'] if res['transferencias'] > 0 else 0
+            st.markdown(f"""
+            <div class='stat-card card-orange'>
+                <div class='stat-icon'>📊</div>
+                <div class='stat-title'>Promedio/Transf</div>
+                <div class='stat-value'>{promedio:,.0f}</div>
+            </div>
+            """, unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)
+        
+        # KPIs por categoría
+        st.markdown("### 📈 KPIs por Categoría")
         categorias_display = {
             'Price Club': 'PRICE CLUB',
             'Tiendas': 'TIENDAS REGULARES',
@@ -1513,871 +1266,137 @@ with tab1:
             'Fundas': 'FUNDAS'
         }
         
-        # Mapeo de sucursales esperadas por categoría
-        sucursales_esperadas = {
-            'Price Club': PRICE_CLUBS,
-            'Tiendas': TIENDAS_REGULARES,
-            'Ventas por Mayor': VENTAS_POR_MAYOR,
-            'Tienda Web': TIENDA_WEB,
-            'Fallas': FALLAS,
-            'Fundas': None
-        }
-        
-        # Crear columnas para las tarjetas (2x3 grid)
         cols = st.columns(3)
         for i, (cat, cat_display) in enumerate(categorias_display.items()):
             cantidad = res['por_categoria'].get(cat, 0)
             sucursales_activas = res['conteo_sucursales'].get(cat, 0)
-            esperadas = sucursales_esperadas.get(cat)
             
             with cols[i % 3]:
-                if cat == 'Fundas':
-                    metric_card_kpi(
-                        cat_display,
-                        f"{cantidad:,}",
-                        "Múltiplos de 100 ≥ 500 unidades"
-                    )
-                else:
-                    metric_card_kpi(
-                        cat_display,
-                        f"{cantidad:,}",
-                        f"{sucursales_activas} sucursales | {esperadas} esperadas"
-                    )
+                color_class = ['card-blue', 'card-green', 'card-purple', 'card-orange', 'card-red', 'card-blue'][i % 6]
+                st.markdown(f"""
+                <div class='stat-card {color_class}'>
+                    <div class='stat-title'>{cat_display}</div>
+                    <div class='stat-value'>{cantidad:,}</div>
+                    <div class='stat-subtitle'>{sucursales_activas} sucursales activas</div>
+                </div>
+                """, unsafe_allow_html=True)
             
-            if i == 2:  # Crear nuevas columnas después de 3 elementos
+            if i == 2:
                 cols = st.columns(3)
         
-        st.divider()
+        # Gráficos
+        st.markdown("### 📊 Análisis Visual")
+        col_chart1, col_chart2 = st.columns(2)
         
-        # --- SECCIÓN 2: GRÁFICO DE PASTEL Y ANÁLISIS VISUAL ---
-        st.header("📊 Análisis Visual")
-        
-        col1, col2 = st.columns([2, 1])
-        
-        with col1:
-            # Gráfico de pastel con todas las categorías
+        with col_chart1:
+            st.markdown('<div class="chart-container">', unsafe_allow_html=True)
+            # Gráfico de pastel
             categorias_pie = list(res['por_categoria'].keys())
             valores_pie = list(res['por_categoria'].values())
             
-            # Crear DataFrame para el gráfico
             df_pie = pd.DataFrame({
                 'Categoría': categorias_pie,
                 'Unidades': valores_pie
             })
-            
-            # Filtrar categorías con valor 0
             df_pie = df_pie[df_pie['Unidades'] > 0]
             
             if not df_pie.empty:
-                # Crear gráfico de pastel
                 fig_pie = px.pie(
                     df_pie,
                     values='Unidades',
                     names='Categoría',
-                    title="Distribución por Categoría (Gráfico de Pastel)",
-                    color_discrete_sequence=px.colors.qualitative.Set3,
-                    hole=0.3
+                    title="Distribución por Categoría",
+                    color_discrete_sequence=['#0033A0', '#E4002B', '#10B981', '#8B5CF6', '#F59E0B', '#3B82F6']
                 )
-                
-                fig_pie.update_traces(
-                    textposition='inside',
-                    textinfo='percent+label',
-                    hovertemplate='<b>%{label}</b><br>Unidades: %{value:,}<br>Porcentaje: %{percent}'
-                )
-                
-                fig_pie.update_layout(
-                    height=500,
-                    showlegend=True,
-                    legend=dict(
-                        orientation="h",
-                        yanchor="bottom",
-                        y=-0.2,
-                        xanchor="center",
-                        x=0.5
-                    )
-                )
-                
+                fig_pie.update_traces(textposition='inside', textinfo='percent+label')
                 st.plotly_chart(fig_pie, use_container_width=True)
-            else:
-                st.info("No hay datos para mostrar el gráfico de pastel")
+            st.markdown('</div>', unsafe_allow_html=True)
         
-        with col2:
-            # KPIs generales
-            st.subheader("TOTAL GENERAL")
-            metric_card_general(
-                "", 
-                f"{res['total_unidades']:,}",
-                "Suma de todas las unidades"
-            )
-            
-            # PROMEDIO X TRANSFERENCIA
-            promedio = res['total_unidades'] / res['transferencias'] if res['transferencias'] > 0 else 0
-            metric_card_general(
-                "PROMEDIO X TRANSFERENCIA",
-                f"{promedio:,.0f}",
-                "Unidades por transferencia"
-            )
-            
-            # CATEGORÍAS ACTIVAS
-            categorias_activas = sum(1 for cat in res['por_categoria'].values() if cat > 0)
-            metric_card_general(
-                "CATEGORÍAS ACTIVAS",
-                f"{categorias_activas}/6",
-                "Categorías con datos"
-            )
-            
-            # % FUNDAS
-            porcentaje_fundas = (res['por_categoria'].get('Fundas', 0) / res['total_unidades']) * 100 if res['total_unidades'] > 0 else 0
-            metric_card_general(
-                "% FUNDAS",
-                f"{porcentaje_fundas:.1f}%",
-                "Porcentaje del total"
-            )
-        
-        st.divider()
-        
-        # --- SECCIÓN 3: DISTRIBUCIÓN EXCLUYENDO FUNDAS ---
-        st.header("📊 Distribución Excluyendo Fundas")
-        
-        # Preparar datos excluyendo Fundas
-        categorias_excl_fundas = ['Price Club', 'Tiendas', 'Ventas por Mayor', 'Tienda Web', 'Fallas']
-        valores_excl_fundas = [res['por_categoria'].get(cat, 0) for cat in categorias_excl_fundas]
-        total_excl_fundas = sum(valores_excl_fundas)
-        
-        if total_excl_fundas > 0:
-            # Crear DataFrame para el gráfico de barras
+        with col_chart2:
+            st.markdown('<div class="chart-container">', unsafe_allow_html=True)
+            # Gráfico de barras
             df_barras = pd.DataFrame({
-                'Categoría': ['Tienda Web', 'Price Club', 'Ventas por Mayor', 'Tiendas', 'Fallas'],
+                'Categoría': ['Price Club', 'Tiendas', 'Ventas por Mayor', 'Tienda Web', 'Fallas'],
                 'Unidades': [
-                    res['por_categoria'].get('Tienda Web', 0),
                     res['por_categoria'].get('Price Club', 0),
-                    res['por_categoria'].get('Ventas por Mayor', 0),
                     res['por_categoria'].get('Tiendas', 0),
+                    res['por_categoria'].get('Ventas por Mayor', 0),
+                    res['por_categoria'].get('Tienda Web', 0),
                     res['por_categoria'].get('Fallas', 0)
                 ]
             })
             
-            # Calcular porcentajes
-            df_barras['Porcentaje'] = (df_barras['Unidades'] / total_excl_fundas) * 100
+            total_excl_fundas = sum(df_barras['Unidades'])
+            df_barras['Porcentaje'] = (df_barras['Unidades'] / total_excl_fundas * 100) if total_excl_fundas > 0 else 0
             
-            # Crear gráfico de barras
             fig_barras = go.Figure(data=[
                 go.Bar(
                     x=df_barras['Categoría'],
                     y=df_barras['Porcentaje'],
                     text=[f"{p:.1f}%" for p in df_barras['Porcentaje']],
                     textposition='auto',
-                    marker_color=['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7']
+                    marker_color=['#0033A0', '#E4002B', '#10B981', '#8B5CF6', '#F59E0B']
                 )
             ])
             
             fig_barras.update_layout(
-                title="Distribución por Categoría (excluyendo Fundas)",
-                yaxis_title="Porcentaje (%)",
+                title="Distribución por Categoría (%)",
+                yaxis_title="Porcentaje",
                 xaxis_title="Categoría",
-                template="plotly_white",
-                height=400
+                template="plotly_white"
             )
-            
             st.plotly_chart(fig_barras, use_container_width=True)
-            
-            # Mostrar tabla con porcentajes
-            st.dataframe(
-                df_barras[['Categoría', 'Unidades', 'Porcentaje']].sort_values('Porcentaje', ascending=False),
-                use_container_width=True
-            )
-        else:
-            st.info("No hay datos para mostrar la distribución (excluyendo Fundas)")
+            st.markdown('</div>', unsafe_allow_html=True)
         
-        st.divider()
-        
-        # --- SECCIÓN 4: DETALLE Y EXPORTACIÓN ---
-        st.header("📄 Detalle por Secuencial")
-        
+        # Tabla detallada
+        st.markdown("### 📋 Detalle por Secuencial")
         df_detalle = res['df_procesado'][['Sucursal Destino', 'Secuencial', 'Cantidad_Entera', 'Categoria']].copy()
-        
-        # Mostrar resumen estadístico
-        with st.expander("📋 Resumen Estadístico", expanded=True):
-            st.dataframe(
-                pd.DataFrame.from_dict(res['detalle_categoria'], orient='index')
-                .reset_index()
-                .rename(columns={'index': 'Categoría', 'cantidad': 'Unidades', 'transf': 'Transferencias', 'unicas': 'Sucursales Únicas'}),
-                use_container_width=True
-            )
-        
-        # Botón de descarga
-        col_d1, col_d2 = st.columns([1, 4])
-        with col_d1:
-            excel_data = to_excel(df_detalle)
-            st.download_button(
-                label="📥 Descargar Excel",
-                data=excel_data,
-                file_name=f"detalle_transferencias_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
-        
-        # Mostrar tabla detallada
         st.dataframe(
             df_detalle.rename(columns={
                 'Sucursal Destino': 'Sucursal',
                 'Cantidad_Entera': 'Cantidad',
                 'Categoria': 'Categoría'
             }),
-            use_container_width=True,
-            height=400
+            use_container_width=True
         )
-    
-    else:
-        # Pantalla de bienvenida cuando no hay archivo cargado
-        st.info("👈 Por favor, sube un archivo Excel desde la barra lateral para comenzar el análisis.")
         
-        col_welcome = st.columns(3)
+        # Exportación
+        st.markdown("### 💾 Exportar Datos")
+        buffer = BytesIO()
+        with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
+            df_detalle.to_excel(writer, sheet_name='Detalle', index=False)
+            pd.DataFrame.from_dict(res['detalle_categoria'], orient='index').to_excel(writer, sheet_name='Resumen')
         
-        with col_welcome[0]:
-            metric_card_general("Archivo Esperado", "322026.xlsx", "Formato diario de transferencias")
-        
-        with col_welcome[1]:
-            metric_card_general("Columnas Requeridas", "Secuencial, Sucursal Destino, Cantidad Prendas", "Estructura básica")
-        
-        with col_welcome[2]:
-            metric_card_general("Categorías", "6", "Price Club, Tiendas, Mayor, Web, Fallas, Fundas")
-        
-        st.divider()
-        
-        # Ejemplo de cómo se verán los datos
-        st.subheader("📋 Ejemplo de la estructura esperada:")
-        
-        ejemplo_data = pd.DataFrame({
-            'Secuencial': ['TR001', 'TR002', 'TR003'],
-            'Sucursal Destino': ['PRICE CLUB QUITO', 'AERO MALL DEL SOL', 'VENTAS POR MAYOR'],
-            'Cantidad Prendas': [1500, 245, 5000],
-            'Bodega Destino': ['BODEGA CENTRAL', 'BODEGA NORTE', 'BODEGA CENTRAL']
-        })
-        
-        st.dataframe(ejemplo_data, use_container_width=True)
-
-# --- PESTAÑA 2: MERCADERÍA EN TRÁNSITO ---
-with tab2:
-    st.header("📦 Análisis de Mercadería en Tránsito")
-    st.info("Este módulo requiere el 'Archivo Base' y el 'Archivo de Comparación' para agrupar por Departamento.")
-    
-    col_a, col_b = st.columns(2)
-    with col_a:
-        f_base = st.file_uploader("1. Cargar Stock Inicial (Base)", type=['xlsx', 'csv'], key="base_tr")
-    with col_b:
-        f_comp = st.file_uploader("2. Cargar Tránsito (Comparación)", type=['xlsx', 'csv'], key="comp_tr")
-    
-    if f_base and f_comp:
-        try:
-            # Leer archivos
-            df_b = pd.read_excel(f_base) if f_base.name.endswith('.xlsx') else pd.read_csv(f_base)
-            df_c = pd.read_excel(f_comp) if f_comp.name.endswith('.xlsx') else pd.read_csv(f_comp)
-            
-            # Mostrar información de columnas para debugging
-            with st.expander("🔍 Ver información de columnas cargadas"):
-                col_debug1, col_debug2 = st.columns(2)
-                with col_debug1:
-                    st.write("**Archivo Base - Columnas:**")
-                    st.write(list(df_b.columns))
-                with col_debug2:
-                    st.write("**Archivo Comparación - Columnas:**")
-                    st.write(list(df_c.columns))
-            
-            # CORRECCIÓN PRINCIPAL: Normalizar nombres de columnas y tipos de datos
-            columnas_codigo_posibles_base = ['CODIGO', 'Código', 'CÓDIGO', 'codigo', 'SKU', 'Producto']
-            columnas_codigo_posibles_comp = ['Codigo Producto', 'CODIGO', 'Código Producto', 'SKU', 'Producto', 'Código']
-            columnas_departamento_posibles = ['DEPARTAMENTO', 'Departamento', 'departamento', 'DEPT', 'Depto']
-            columnas_cantidad_posibles = ['Cantidad', 'CANTIDAD', 'cantidad', 'Unidades', 'QTY', 'Quantity']
-            
-            # Nueva: Columnas para clasificación por género
-            columnas_genero_posibles = ['GÉNERO', 'Genero', 'genero', 'GENDER', 'Gender', 'gender', 
-                                       'CATEGORÍA', 'Categoría', 'categoría', 'CATEGORIA', 'Categoria', 'categoria']
-            
-            # Encontrar y normalizar columna de código en base
-            df_b, col_codigo_base = normalizar_codigo(df_b, columnas_codigo_posibles_base)
-            
-            # Encontrar y normalizar columna de código en comparación
-            df_c, col_codigo_comp = normalizar_codigo(df_c, columnas_codigo_posibles_comp)
-            
-            if col_codigo_base is None:
-                st.error("❌ No se encontró columna de código en el archivo base")
-                st.stop()
-            
-            if col_codigo_comp is None:
-                st.error("❌ No se encontró columna de código en el archivo de comparación")
-                st.stop()
-            
-            # Renombrar columnas para consistencia
-            df_b = df_b.rename(columns={col_codigo_base: 'CODIGO'})
-            df_c = df_c.rename(columns={col_codigo_comp: 'CODIGO'})
-            
-            # Encontrar columna de departamento en base
-            col_depto = None
-            for col in columnas_departamento_posibles:
-                if col in df_b.columns:
-                    col_depto = col
-                    break
-            
-            if col_depto is None:
-                st.error("❌ No se encontró columna de departamento en el archivo base")
-                st.stop()
-            
-            df_b = df_b.rename(columns={col_depto: 'DEPARTAMENTO'})
-            
-            # Encontrar columna de cantidad en comparación
-            col_cantidad = None
-            for col in columnas_cantidad_posibles:
-                if col in df_c.columns:
-                    col_cantidad = col
-                    break
-            
-            if col_cantidad is None:
-                st.error("❌ No se encontró columna de cantidad en el archivo de comparación")
-                st.stop()
-            
-            df_c = df_c.rename(columns={col_cantidad: 'CANTIDAD'})
-            
-            # Encontrar columna de género en base (opcional)
-            col_genero = None
-            for col in columnas_genero_posibles:
-                if col in df_b.columns:
-                    col_genero = col
-                    break
-            
-            # Asegurar que las columnas CODIGO sean del mismo tipo (string)
-            df_b['CODIGO'] = df_b['CODIGO'].astype(str).str.strip()
-            df_c['CODIGO'] = df_c['CODIGO'].astype(str).str.strip()
-            
-            # Limpiar códigos que puedan tener decimales (.0)
-            df_b['CODIGO'] = df_b['CODIGO'].str.replace(r'\.0$', '', regex=True)
-            df_c['CODIGO'] = df_c['CODIGO'].str.replace(r'\.0$', '', regex=True)
-            
-            # Verificar columnas requeridas
-            st.success(f"✅ Columnas identificadas correctamente:")
-            st.info(f"- Base: CODIGO, DEPARTAMENTO")
-            st.info(f"- Comparación: CODIGO, CANTIDAD")
-            
-            # Procesar datos
-            map_dept = df_b[['CODIGO', 'DEPARTAMENTO']].drop_duplicates(subset=['CODIGO'])
-            
-            # Si existe columna de género, agregarla al mapeo
-            if col_genero:
-                map_dept = df_b[['CODIGO', 'DEPARTAMENTO', col_genero]].drop_duplicates(subset=['CODIGO'])
-                df_b = df_b.rename(columns={col_genero: 'GENERO_ORIGINAL'})
-                map_dept = map_dept.rename(columns={col_genero: 'GENERO_ORIGINAL'})
-                st.success(f"✅ Columna de género encontrada: {col_genero}")
-            
-            # Mostrar preview del mapeo
-            with st.expander("🔍 Ver mapeo de códigos a departamentos"):
-                st.dataframe(map_dept.head(20), use_container_width=True)
-            
-            # Realizar el merge - CORRECCIÓN DEL ERROR
-            df_c = pd.merge(df_c, map_dept, on='CODIGO', how='left')
-            
-            df_c['DEPARTAMENTO'] = df_c['DEPARTAMENTO'].fillna('SIN CLASIFICAR')
-            df_c['CANTIDAD_REAL'] = df_c['CANTIDAD'].apply(extraer_entero)
-            
-            # Agrupación por departamento
-            resumen_dept = df_c.groupby('DEPARTAMENTO').agg({
-                'CANTIDAD_REAL': 'sum',
-                'CODIGO': 'count'
-            }).rename(columns={'CANTIDAD_REAL': 'Unidades en Tránsito', 'CODIGO': 'Total SKUs'}).sort_values('Unidades en Tránsito', ascending=False)
-            
-            # Mostrar resultados
-            st.subheader("📊 Mercadería en Tránsito por Departamento")
-            
-            # Métricas totales
-            col_total1, col_total2, col_total3 = st.columns(3)
-            with col_total1:
-                metric_card_general(
-                    "Total Unidades",
-                    f"{resumen_dept['Unidades en Tránsito'].sum():,}",
-                    "Unidades totales en tránsito"
-                )
-            with col_total2:
-                metric_card_general(
-                    "Total SKUs",
-                    f"{resumen_dept['Total SKUs'].sum():,}",
-                    "SKUs diferentes en tránsito"
-                )
-            with col_total3:
-                metric_card_general(
-                    "Departamentos",
-                    f"{len(resumen_dept)}",
-                    "Departamentos con mercadería en tránsito"
-                )
-            
-            # --- NUEVO: ANÁLISIS POR GÉNERO ---
-            if 'GENERO_ORIGINAL' in df_c.columns:
-                st.subheader("👕 Análisis por Género/Clasificación")
-                
-                # Crear clasificación de género
-                df_c['GENERO_CLASIFICADO'] = df_c['GENERO_ORIGINAL'].apply(clasificar_genero)
-                
-                # Agrupar por género clasificado
-                resumen_genero = df_c.groupby('GENERO_CLASIFICADO').agg({
-                    'CANTIDAD_REAL': 'sum',
-                    'CODIGO': 'nunique'
-                }).rename(columns={'CANTIDAD_REAL': 'Unidades', 'CODIGO': 'SKUs Únicos'}).sort_values('Unidades', ascending=False)
-                
-                # Métricas por género
-                col_gen1, col_gen2, col_gen3 = st.columns(3)
-                with col_gen1:
-                    metric_card_general(
-                        "GUY",
-                        f"{resumen_genero.loc['GUY', 'Unidades'] if 'GUY' in resumen_genero.index else 0:,}",
-                        f"{resumen_genero.loc['GUY', 'SKUs Únicos'] if 'GUY' in resumen_genero.index else 0} SKUs"
-                    )
-                with col_gen2:
-                    metric_card_general(
-                        "GIRLS",
-                        f"{resumen_genero.loc['GIRLS', 'Unidades'] if 'GIRLS' in resumen_genero.index else 0:,}",
-                        f"{resumen_genero.loc['GIRLS', 'SKUs Únicos'] if 'GIRLS' in resumen_genero.index else 0} SKUs"
-                    )
-                with col_gen3:
-                    metric_card_general(
-                        "ACCESORIOS",
-                        f"{resumen_genero.loc['ACCESORIOS', 'Unidades'] if 'ACCESORIOS' in resumen_genero.index else 0:,}",
-                        f"{resumen_genero.loc['ACCESORIOS', 'SKUs Únicos'] if 'ACCESORIOS' in resumen_genero.index else 0} SKUs"
-                    )
-                
-                # Gráfico de pastel por género
-                if not resumen_genero.empty:
-                    df_genero_pie = resumen_genero.reset_index().rename(columns={'index': 'GÉNERO'})
-                    
-                    # Colores específicos para cada género
-                    color_map = {
-                        'GUY': '#3498db',  # Azul
-                        'GIRLS': '#e74c3c',  # Rojo
-                        'ACCESORIOS': '#2ecc71',  # Verde
-                        'OTROS': '#f39c12',  # Naranja
-                        'NO CLASIFICADO': '#95a5a6'  # Gris
-                    }
-                    
-                    # Asignar colores basados en los géneros presentes
-                    colors = [color_map.get(gen, '#95a5a6') for gen in df_genero_pie['GÉNERO']]
-                    
-                    fig_genero = go.Figure(data=[
-                        go.Pie(
-                            labels=df_genero_pie['GÉNERO'],
-                            values=df_genero_pie['Unidades'],
-                            textinfo='percent+label+value',
-                            hovertemplate='<b>%{label}</b><br>Unidades: %{value:,}<br>Porcentaje: %{percent}',
-                            marker=dict(colors=colors)
-                        )
-                    ])
-                    
-                    fig_genero.update_layout(
-                        title="Distribución por Género/Clasificación",
-                        height=500,
-                        showlegend=True
-                    )
-                    
-                    st.plotly_chart(fig_genero, use_container_width=True)
-                    
-                    # Mostrar tabla con datos de género
-                    st.dataframe(
-                        resumen_genero.sort_values('Unidades', ascending=False),
-                        use_container_width=True
-                    )
-                    
-                    # Gráfico de barras por género
-                    fig_genero_bar = go.Figure(data=[
-                        go.Bar(
-                            x=df_genero_pie['GÉNERO'],
-                            y=df_genero_pie['Unidades'],
-                            text=df_genero_pie['Unidades'],
-                            textposition='auto',
-                            marker_color=colors
-                        )
-                    ])
-                    
-                    fig_genero_bar.update_layout(
-                        title="Unidades por Género/Clasificación",
-                        xaxis_title="Género",
-                        yaxis_title="Unidades",
-                        template="plotly_white",
-                        height=400
-                    )
-                    
-                    st.plotly_chart(fig_genero_bar, use_container_width=True)
-                else:
-                    st.info("No hay datos suficientes para el análisis por género")
-            else:
-                st.info("ℹ️ No se encontró columna de género en el archivo base. Para ver el análisis por género, asegúrate de que el archivo base contenga una columna 'GÉNERO' o similar.")
-            
-            st.divider()
-            
-            # Gráfico de barras por departamento
-            if not resumen_dept.empty:
-                st.subheader("📊 Distribución por Departamento")
-                
-                # Limitar a top 10 departamentos si hay muchos
-                if len(resumen_dept) > 10:
-                    df_top = resumen_dept.head(10)
-                    df_otros = pd.DataFrame({
-                        'Unidades en Tránsito': [resumen_dept['Unidades en Tránsito'].iloc[10:].sum()],
-                        'Total SKUs': [resumen_dept['Total SKUs'].iloc[10:].sum()]
-                    }, index=['OTROS'])
-                    resumen_display = pd.concat([df_top, df_otros])
-                else:
-                    resumen_display = resumen_dept
-                
-                fig_dept = go.Figure(data=[
-                    go.Bar(
-                        x=resumen_display.index,
-                        y=resumen_display['Unidades en Tránsito'],
-                        text=resumen_display['Unidades en Tránsito'],
-                        textposition='auto',
-                        marker_color='#2E8B57'
-                    )
-                ])
-                
-                fig_dept.update_layout(
-                    title="Unidades en Tránsito por Departamento",
-                    xaxis_title="Departamento",
-                    yaxis_title="Unidades",
-                    template="plotly_white",
-                    height=400
-                )
-                
-                st.plotly_chart(fig_dept, use_container_width=True)
-                
-                # Gráfico de pastel por departamento
-                df_pie = resumen_display.reset_index().rename(columns={'index': 'DEPARTAMENTO'})
-                
-                fig_pie_dept = px.pie(
-                    df_pie,
-                    values='Unidades en Tránsito',
-                    names='DEPARTAMENTO',
-                    title="Distribución de Mercadería por Departamento",
-                    color_discrete_sequence=px.colors.qualitative.Pastel
-                )
-                
-                st.plotly_chart(fig_pie_dept, use_container_width=True)
-            
-            # Tabla detallada
-            st.subheader("📋 Detalle por Departamento")
-            st.dataframe(
-                resumen_dept.style.background_gradient(cmap='Greens', subset=['Unidades en Tránsito']),
+        col_exp1, col_exp2 = st.columns(2)
+        with col_exp1:
+            st.download_button(
+                label="📥 Descargar Excel",
+                data=buffer.getvalue(),
+                file_name=f"transferencias_{datetime.now().date()}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 use_container_width=True
             )
-            
-            # Mostrar detalle por SKU
-            with st.expander("📋 Ver Detalle por SKU"):
-                # Buscar columna de descripción del producto
-                columnas_descripcion = ['Producto', 'PRODUCTO', 'Descripción', 'DESCRIPCION', 'Nombre', 'NOMBRE']
-                col_descripcion = None
-                for col in columnas_descripcion:
-                    if col in df_c.columns:
-                        col_descripcion = col
-                        break
-                
-                columnas_detalle = ['CODIGO', 'DEPARTAMENTO', 'CANTIDAD_REAL']
-                if col_descripcion:
-                    columnas_detalle.insert(1, col_descripcion)
-                if 'GENERO_CLASIFICADO' in df_c.columns:
-                    columnas_detalle.append('GENERO_CLASIFICADO')
-                
-                st.dataframe(
-                    df_c[columnas_detalle].rename(columns={'CANTIDAD_REAL': 'Cantidad'}),
-                    use_container_width=True,
-                    height=300
-                )
-            
-            # Estadísticas adicionales
-            with st.expander("📊 Estadísticas Adicionales"):
-                col_stats1, col_stats2 = st.columns(2)
-                with col_stats1:
-                    st.metric("Promedio por SKU", 
-                             f"{df_c['CANTIDAD_REAL'].mean():.1f}" if len(df_c) > 0 else "0")
-                    st.metric("SKUs sin clasificar", 
-                             f"{len(df_c[df_c['DEPARTAMENTO'] == 'SIN CLASIFICAR'])}")
-                with col_stats2:
-                    st.metric("SKU con mayor cantidad", 
-                             f"{df_c['CANTIDAD_REAL'].max() if len(df_c) > 0 else 0}")
-                    st.metric("Departamento Top", 
-                             f"{resumen_dept.index[0] if len(resumen_dept) > 0 else 'N/A'}")
         
-        except Exception as e:
-            st.error(f"❌ Error al procesar los archivos: {str(e)}")
-            st.info("""
-            **Posibles causas del error:**
-            1. Las columnas de código no tienen el mismo formato en ambos archivos
-            2. Los archivos tienen formatos diferentes a los esperados
-            3. Problemas con caracteres especiales en los nombres de columnas
-            
-            **Solución sugerida:**
-            1. Verifica que ambos archivos tengan una columna con códigos de producto
-            2. El archivo base debe tener una columna con departamentos
-            3. El archivo de comparación debe tener una columna con cantidades
-            """)
-    
+        with col_exp2:
+            csv = df_detalle.to_csv(index=False)
+            st.download_button(
+                label="📄 Descargar CSV",
+                data=csv,
+                file_name=f"transferencias_{datetime.now().date()}.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
     else:
-        st.info("👈 Por favor, carga ambos archivos para realizar el análisis de mercadería en tránsito.")
-        
-        with st.expander("📋 Instrucciones para los archivos"):
-            st.markdown("""
-            **Archivo Base (Stock Inicial):**
-            - Debe contener al menos 2 columnas:
-              1. **CODIGO**: Código del producto (ej: "12345", "P-001")
-              2. **DEPARTAMENTO**: Categoría del producto (ej: "CAMISETAS", "PANTALONES")
-            
-            **Recomendado para análisis de género:**
-            - **GÉNERO**: Clasificación por género (ej: "GUY", "GIRLS", "ACCESORIOS")
-            
-            **Archivo de Comparación (Tránsito):**
-            - Debe contener al menos 2 columnas:
-              1. **CODIGO**: Código del producto (debe coincidir con el archivo base)
-              2. **CANTIDAD**: Cantidad de unidades en tránsito
-            
-            **Ejemplo de estructura:**
-            
-            | Archivo Base | Archivo Comparación |
-            |--------------|---------------------|
-            | CODIGO | DEPARTAMENTO | GÉNERO | Codigo Producto | Cantidad |
-            |-------|--------------|--------|----------------|----------|
-            | 12345 | CAMISETAS    | GUY    | 12345          | 100      |
-            | 67890 | VESTIDOS     | GIRLS  | 67890          | 50       |
-            | 99999 | BOLSOS       | ACCESORIOS | 99999       | 30       |
-            """)
-
-# --- PESTAÑA 3: ANÁLISIS DE STOCK ---
-with tab3:
-    st.header("📈 Análisis de Stock y Ventas")
-    
-    # Contenedor principal
-    container = st.container()
-    
-    with container:
-        # Sección de carga de datos
-        st.subheader("📂 Carga de Datos para Análisis")
-        
-        col_stock1, col_stock2 = st.columns(2)
-        with col_stock1:
-            stock_file = st.file_uploader("Archivo de Stock Actual", type=['xlsx', 'csv'], key="stock_file")
-        with col_stock2:
-            ventas_file = st.file_uploader("Archivo Histórico de Ventas", type=['xlsx', 'csv'], key="ventas_file")
-        
-        if stock_file and ventas_file:
-            try:
-                # Leer archivos
-                df_stock = pd.read_excel(stock_file) if stock_file.name.endswith('.xlsx') else pd.read_csv(stock_file)
-                df_ventas = pd.read_excel(ventas_file) if ventas_file.name.endswith('.xlsx') else pd.read_csv(ventas_file)
-                
-                # Métricas rápidas
-                st.subheader("📊 Métricas Rápidas")
-                
-                col_metrics1, col_metrics2, col_metrics3, col_metrics4 = st.columns(4)
-                
-                with col_metrics1:
-                    metric_card_general(
-                        "Total SKUs",
-                        f"{len(df_stock):,}",
-                        "Productos en stock"
-                    )
-                
-                with col_metrics2:
-                    if 'Stock' in df_stock.columns:
-                        total_stock = df_stock['Stock'].sum() if 'Stock' in df_stock.columns else 0
-                        metric_card_general(
-                            "Total Unidades",
-                            f"{total_stock:,}",
-                            "Unidades en inventario"
-                        )
-                    else:
-                        st.info("Columna 'Stock' no encontrada")
-                
-                with col_metrics3:
-                    if 'VENTAS' in df_ventas.columns:
-                        total_ventas = df_ventas['VENTAS'].sum()
-                        metric_card_general(
-                            "Ventas Totales",
-                            f"{total_ventas:,}",
-                            "Unidades vendidas"
-                        )
-                    else:
-                        st.info("Columna 'VENTAS' no encontrada")
-                
-                with col_metrics4:
-                    if 'FECHA' in df_ventas.columns:
-                        df_ventas['FECHA'] = pd.to_datetime(df_ventas['FECHA'], errors='coerce')
-                        dias_analizados = df_ventas['FECHA'].nunique()
-                        metric_card_general(
-                            "Días Analizados",
-                            f"{dias_analizados}",
-                            "Período de ventas"
-                        )
-                    else:
-                        st.info("Columna 'FECHA' no encontrada")
-                
-                # Análisis ABC
-                st.subheader("📊 Análisis ABC de Stock")
-                
-                if 'Stock' in df_stock.columns and 'CODIGO' in df_stock.columns:
-                    # Calcular valor acumulado
-                    df_stock_sorted = df_stock.sort_values('Stock', ascending=False)
-                    df_stock_sorted['Stock_Acumulado'] = df_stock_sorted['Stock'].cumsum()
-                    total_stock_val = df_stock_sorted['Stock'].sum()
-                    df_stock_sorted['Porcentaje_Acumulado'] = (df_stock_sorted['Stock_Acumulado'] / total_stock_val) * 100
-                    
-                    # Clasificar ABC
-                    df_stock_sorted['Clasificacion_ABC'] = pd.cut(
-                        df_stock_sorted['Porcentaje_Acumulado'],
-                        bins=[0, 80, 95, 100],
-                        labels=['A', 'B', 'C']
-                    )
-                    
-                    # Resumen ABC
-                    resumen_abc = df_stock_sorted.groupby('Clasificacion_ABC').agg({
-                        'CODIGO': 'count',
-                        'Stock': 'sum'
-                    }).rename(columns={'CODIGO': 'SKUs', 'Stock': 'Unidades'})
-                    
-                    # Gráfico de pastel ABC
-                    fig_abc = px.pie(
-                        resumen_abc.reset_index(),
-                        values='Unidades',
-                        names='Clasificacion_ABC',
-                        title="Distribución ABC del Stock",
-                        color_discrete_sequence=px.colors.qualitative.Set2,
-                        hole=0.4
-                    )
-                    
-                    fig_abc.update_traces(
-                        textposition='inside',
-                        textinfo='percent+label',
-                        hovertemplate='<b>Categoría %{label}</b><br>Unidades: %{value:,}<br>Porcentaje: %{percent}'
-                    )
-                    
-                    col_abc1, col_abc2 = st.columns([2, 1])
-                    
-                    with col_abc1:
-                        st.plotly_chart(fig_abc, use_container_width=True)
-                    
-                    with col_abc2:
-                        st.dataframe(resumen_abc, use_container_width=True)
-                
-                else:
-                    st.warning("Para el análisis ABC se requieren las columnas 'CODIGO' y 'Stock' en el archivo de stock")
-                
-                # Análisis de rotación
-                st.subheader("🔄 Análisis de Rotación")
-                
-                if 'VENTAS' in df_ventas.columns and 'CODIGO' in df_ventas.columns:
-                    # Calcular ventas por producto
-                    ventas_por_producto = df_ventas.groupby('CODIGO')['VENTAS'].sum().reset_index()
-                    
-                    # Cruce con stock
-                    if 'CODIGO' in df_stock.columns and 'Stock' in df_stock.columns:
-                        df_rotacion = pd.merge(
-                            df_stock[['CODIGO', 'Stock']],
-                            ventas_por_producto,
-                            on='CODIGO',
-                            how='left'
-                        )
-                        
-                        df_rotacion['VENTAS'] = df_rotacion['VENTAS'].fillna(0)
-                        df_rotacion['Rotacion'] = df_rotacion.apply(
-                            lambda x: x['VENTAS'] / x['Stock'] if x['Stock'] > 0 else 0,
-                            axis=1
-                        )
-                        
-                        # Clasificar por rotación
-                        df_rotacion['Nivel_Rotacion'] = pd.cut(
-                            df_rotacion['Rotacion'],
-                            bins=[-1, 0.1, 0.5, 1, 10, float('inf')],
-                            labels=['Muy Baja', 'Baja', 'Media', 'Alta', 'Muy Alta']
-                        )
-                        
-                        # Resumen de rotación
-                        resumen_rotacion = df_rotacion.groupby('Nivel_Rotacion').agg({
-                            'CODIGO': 'count',
-                            'Stock': 'sum',
-                            'VENTAS': 'sum'
-                        }).rename(columns={'CODIGO': 'SKUs', 'Stock': 'Stock_Total', 'VENTAS': 'Ventas_Total'})
-                        
-                        st.dataframe(
-                            resumen_rotacion,
-                            use_container_width=True
-                        )
-                        
-                        # Gráfico de rotación
-                        fig_rotacion = go.Figure(data=[
-                            go.Bar(
-                                x=resumen_rotacion.index,
-                                y=resumen_rotacion['SKUs'],
-                                text=resumen_rotacion['SKUs'],
-                                textposition='auto',
-                                marker_color='#FFA07A'
-                            )
-                        ])
-                        
-                        fig_rotacion.update_layout(
-                            title="SKUs por Nivel de Rotación",
-                            xaxis_title="Nivel de Rotación",
-                            yaxis_title="Cantidad de SKUs",
-                            template="plotly_white",
-                            height=400
-                        )
-                        
-                        st.plotly_chart(fig_rotacion, use_container_width=True)
-                
-                else:
-                    st.info("Para el análisis de rotación se requieren las columnas 'CODIGO' y 'VENTAS' en el archivo de ventas")
-                
-                # Sección de predicción (placeholder)
-                st.subheader("🔮 Predicción con Random Forest")
-                st.info("""
-                **Funcionalidad en Desarrollo:**
-                - Entrenamiento de modelo Random Forest para predecir ventas futuras
-                - Clustering de productos por comportamiento de ventas
-                - Recomendaciones de reposición automática
-                
-                *Esta funcionalidad estará disponible en la próxima versión.*
-                """)
-                
-                # Mostrar datos crudos
-                with st.expander("📋 Ver Datos Cargados"):
-                    col_raw1, col_raw2 = st.columns(2)
-                    with col_raw1:
-                        st.write("**Datos de Stock:**")
-                        st.dataframe(df_stock.head(20), use_container_width=True)
-                    
-                    with col_raw2:
-                        st.write("**Datos de Ventas:**")
-                        st.dataframe(df_ventas.head(20), use_container_width=True)
-            
-            except Exception as e:
-                st.error(f"Error al procesar los archivos: {str(e)}")
-        
-        else:
-            st.info("👈 Por favor, carga ambos archivos para realizar el análisis de stock y ventas.")
-            
-            # Información de ejemplo
-            with st.expander("ℹ️ Información sobre los archivos requeridos"):
-                st.markdown("""
-                **Archivo de Stock Actual debe contener:**
-                - CODIGO: Código del producto
-                - PRODUCTO: Descripción del producto
-                - Stock: Cantidad disponible
-                - DEPARTAMENTO: Categoría del producto
-                
-                **Archivo Histórico de Ventas debe contener:**
-                - CODIGO: Código del producto
-                - FECHA: Fecha de la venta
-                - VENTAS: Cantidad vendida
-                - SUCURSAL: Sucursal donde se realizó la venta
-                """)
+        st.info("👈 Por favor, sube un archivo Excel desde la barra lateral para comenzar el análisis.")
 
 # ==============================================================================
-# 6. MÓDULOS RESTANTES MEJORADOS
+# 6. MÓDULOS RESTANTES ESTILIZADOS
 # ==============================================================================
 
 # --- DASHBOARD KPIS ---
 def mostrar_dashboard_kpis():
     st.markdown("""
-    <div class='dashboard-header header-dashboard'>
+    <div class='main-header'>
         <h1 class='header-title'>📊 Dashboard de KPIs en Tiempo Real</h1>
         <div class='header-subtitle'>Monitorización Integral del Desempeño Operativo</div>
     </div>
@@ -2403,77 +1422,85 @@ def mostrar_dashboard_kpis():
         
         if not df_filtered.empty:
             # KPIs Principales
-            st.markdown("<div class='kpi-grid'>", unsafe_allow_html=True)
+            st.markdown("<div class='stats-grid'>", unsafe_allow_html=True)
             col_k1, col_k2, col_k3, col_k4 = st.columns(4)
             
             with col_k1:
                 prod_prom = df_filtered['produccion'].mean()
                 prod_tend = ((df_filtered['produccion'].iloc[-1] - df_filtered['produccion'].iloc[0]) / df_filtered['produccion'].iloc[0] * 100) if len(df_filtered) > 1 else 0
                 st.markdown(f"""
-                <div class='kpi-card'>
-                    <div class='kpi-icon'>🏭</div>
-                    <div class='kpi-title'>Producción Promedio</div>
-                    <div class='kpi-value'>{prod_prom:,.0f}</div>
-                    <div class='kpi-change {'positive' if prod_tend > 0 else 'negative'}">{'📈' if prod_tend > 0 else '📉'} {prod_tend:.1f}%</div>
+                <div class='stat-card card-blue'>
+                    <div class='stat-icon'>🏭</div>
+                    <div class='stat-title'>Producción Promedio</div>
+                    <div class='stat-value'>{prod_prom:,.0f}</div>
+                    <div class='stat-change {'positive' if prod_tend > 0 else 'negative'}">{'📈' if prod_tend > 0 else '📉'} {prod_tend:.1f}%</div>
                 </div>
                 """, unsafe_allow_html=True)
             
             with col_k2:
                 efic_prom = df_filtered['eficiencia'].mean()
                 st.markdown(f"""
-                <div class='kpi-card'>
-                    <div class='kpi-icon'>⚡</div>
-                    <div class='kpi-title'>Eficiencia</div>
-                    <div class='kpi-value'>{efic_prom:.1f}%</div>
-                    <div class='kpi-change {'positive' if efic_prom > 90 else 'warning'}">{'Excelente' if efic_prom > 90 else 'Mejorable'}</div>
+                <div class='stat-card card-green'>
+                    <div class='stat-icon'>⚡</div>
+                    <div class='stat-title'>Eficiencia</div>
+                    <div class='stat-value'>{efic_prom:.1f}%</div>
+                    <div class='stat-change {'positive' if efic_prom > 90 else 'warning'}">{'Excelente' if efic_prom > 90 else 'Mejorable'}</div>
                 </div>
                 """, unsafe_allow_html=True)
             
             with col_k3:
                 alert_total = df_filtered['alertas'].sum()
                 st.markdown(f"""
-                <div class='kpi-card'>
-                    <div class='kpi-icon'>🚨</div>
-                    <div class='kpi-title'>Alertas Totales</div>
-                    <div class='kpi-value'>{alert_total}</div>
-                    <div class='kpi-change {'negative' if alert_total > 10 else 'positive'}">{'Revisar' if alert_total > 10 else 'Controlado'}</div>
+                <div class='stat-card card-red'>
+                    <div class='stat-icon'>🚨</div>
+                    <div class='stat-title'>Alertas Totales</div>
+                    <div class='stat-value'>{alert_total}</div>
+                    <div class='stat-change {'negative' if alert_total > 10 else 'positive'}">{'Revisar' if alert_total > 10 else 'Controlado'}</div>
                 </div>
                 """, unsafe_allow_html=True)
             
             with col_k4:
                 costo_prom = df_filtered['costos'].mean()
                 st.markdown(f"""
-                <div class='kpi-card'>
-                    <div class='kpi-icon'>💰</div>
-                    <div class='kpi-title'>Costo Promedio</div>
-                    <div class='kpi-value'>${costo_prom:,.0f}</div>
-                    <div class='kpi-change'>Diario</div>
+                <div class='stat-card card-purple'>
+                    <div class='stat-icon'>💰</div>
+                    <div class='stat-title'>Costo Promedio</div>
+                    <div class='stat-value'>${costo_prom:,.0f}</div>
+                    <div class='stat-change'>Diario</div>
                 </div>
                 """, unsafe_allow_html=True)
             st.markdown("</div>", unsafe_allow_html=True)
             
             # Gráficos
-            tab1, tab2 = st.tabs(["📈 Tendencia Temporal", "📊 Distribución"])
+            st.markdown('<div class="chart-container">', unsafe_allow_html=True)
+            fig = px.line(df_filtered, x='fecha', y='produccion', 
+                        title='Producción Diaria',
+                        labels={'produccion': 'Unidades', 'fecha': 'Fecha'},
+                        line_shape='spline')
+            fig.update_traces(line=dict(color='#0033A0', width=3))
+            st.plotly_chart(fig, use_container_width=True)
+            st.markdown('</div>', unsafe_allow_html=True)
             
-            with tab1:
-                fig = px.line(df_filtered, x='fecha', y='produccion', 
-                            title='Producción Diaria',
-                            labels={'produccion': 'Unidades', 'fecha': 'Fecha'})
-                fig.update_traces(line=dict(color='#0033A0', width=3))
-                st.plotly_chart(fig, use_container_width=True)
+            # Gráficos secundarios
+            col_ch1, col_ch2 = st.columns(2)
+            with col_ch1:
+                st.markdown('<div class="chart-container">', unsafe_allow_html=True)
+                fig2 = px.bar(df_filtered.tail(7), x=df_filtered.tail(7)['fecha'].dt.strftime('%a'), y='eficiencia',
+                            title='Eficiencia Semanal', 
+                            color='eficiencia',
+                            color_continuous_scale='Viridis')
+                st.plotly_chart(fig2, use_container_width=True)
+                st.markdown('</div>', unsafe_allow_html=True)
             
-            with tab2:
-                col_ch1, col_ch2 = st.columns(2)
-                with col_ch1:
-                    fig2 = px.pie(df_filtered.tail(10), values='produccion', names=df_filtered.tail(10)['fecha'].dt.strftime('%Y-%m-%d'),
-                                title='Distribución Últimos 10 Días')
-                    st.plotly_chart(fig2, use_container_width=True)
-                
-                with col_ch2:
-                    fig3 = px.bar(df_filtered.tail(7), x=df_filtered.tail(7)['fecha'].dt.strftime('%a'), y='eficiencia',
-                                title='Eficiencia Semanal', color='eficiencia',
-                                color_continuous_scale='Viridis')
-                    st.plotly_chart(fig3, use_container_width=True)
+            with col_ch2:
+                st.markdown('<div class="chart-container">', unsafe_allow_html=True)
+                fig3 = px.scatter(df_filtered, x='produccion', y='costos',
+                                title='Relación Producción vs Costos',
+                                color='alertas',
+                                size='eficiencia',
+                                hover_data=['fecha'])
+                st.plotly_chart(fig3, use_container_width=True)
+                st.markdown('</div>', unsafe_allow_html=True)
         else:
             st.warning("No hay datos para el rango de fechas seleccionado.")
     else:
@@ -2482,15 +1509,17 @@ def mostrar_dashboard_kpis():
 # --- GENERACIÓN DE GUÍAS ---
 def mostrar_generacion_guias():
     st.markdown("""
-    <div class='dashboard-header header-guias'>
+    <div class='main-header'>
         <h1 class='header-title'>📋 Generador de Guías de Envío</h1>
         <div class='header-subtitle'>Creación automatizada de documentación de transporte</div>
     </div>
     """, unsafe_allow_html=True)
     
     with st.form("guias_form", border=False):
-        st.markdown("<div class='filter-panel'>", unsafe_allow_html=True)
-        st.markdown("<h3 class='filter-title'>📝 Información del Envío</h3>", unsafe_allow_html=True)
+        st.markdown("""
+        <div class='filter-panel'>
+            <h3 class='filter-title'>📝 Información del Envío</h3>
+        """, unsafe_allow_html=True)
         
         col1, col2 = st.columns(2)
         with col1:
@@ -2526,9 +1555,7 @@ def mostrar_generacion_guias():
                 with st.spinner(f"Generando guía {guia_num}..."):
                     time.sleep(2)
                     
-                    # Simular creación de PDF
                     st.success(f"✅ Guía generada exitosamente para {tienda}")
-                    st.balloons()
                     
                     # Mostrar detalles
                     st.markdown("""
@@ -2555,7 +1582,7 @@ def mostrar_generacion_guias():
                     
                     st.markdown("</div>", unsafe_allow_html=True)
                     
-                    # Botón de descarga simulado - CORREGIDO
+                    # Botón de descarga
                     st.download_button(
                         label="📥 Descargar Guía PDF",
                         data=b"PDF simulated content",
@@ -2570,15 +1597,17 @@ def mostrar_generacion_guias():
 # --- GENERACIÓN DE ETIQUETAS ---
 def mostrar_generacion_etiquetas():
     st.markdown("""
-    <div class='dashboard-header header-etiquetas'>
+    <div class='main-header'>
         <h1 class='header-title'>🏷️ Generador de Etiquetas Inteligente</h1>
         <div class='header-subtitle'>Creación de etiquetas para inventario y logística</div>
     </div>
     """, unsafe_allow_html=True)
     
     with st.form("etiqueta_form", border=False):
-        st.markdown("<div class='filter-panel'>", unsafe_allow_html=True)
-        st.markdown("<h3 class='filter-title'>🛠️ Configuración de Etiquetas</h3>", unsafe_allow_html=True)
+        st.markdown("""
+        <div class='filter-panel'>
+            <h3 class='filter-title'>🛠️ Configuración de Etiquetas</h3>
+        """, unsafe_allow_html=True)
         
         col1, col2 = st.columns(2)
         with col1:
@@ -2613,9 +1642,9 @@ def mostrar_generacion_etiquetas():
             col_p1, col_p2 = st.columns(2)
             with col_p1:
                 st.markdown("""
-                <div class='filter-panel' style='text-align: center;'>
+                <div class='filter-panel'>
                     <h4>📋 Vista Previa de Etiqueta</h4>
-                    <div style='border: 2px dashed #0033A0; padding: 20px; margin: 15px 0; border-radius: 8px;'>
+                    <div style='border: 2px dashed #0033A0; padding: 20px; margin: 15px 0; border-radius: 8px; text-align: center;'>
                         <h3 style='color: #0033A0;'>{}</h3>
                         <p><strong>Tipo:</strong> {}</p>
                         <p><strong>Temporada:</strong> {}</p>
@@ -2632,7 +1661,7 @@ def mostrar_generacion_etiquetas():
                 ), unsafe_allow_html=True)
             
             with col_p2:
-                # Generar código QR simple
+                # Generar código QR
                 if incluir_qr:
                     try:
                         qr = qrcode.QRCode(version=1, box_size=6, border=2)
@@ -2649,7 +1678,7 @@ def mostrar_generacion_etiquetas():
                     except:
                         st.warning("No se pudo generar el código QR")
             
-            # Opciones de exportación - TODOS CORREGIDOS
+            # Opciones de exportación
             st.markdown("### 💾 Opciones de Exportación")
             col_e1, col_e2, col_e3 = st.columns(3)
             
@@ -2683,17 +1712,19 @@ def mostrar_generacion_etiquetas():
 # --- GESTIÓN DE TRABAJADORES ---
 def mostrar_gestion_trabajadores():
     st.markdown("""
-    <div class='dashboard-header header-trabajadores'>
+    <div class='main-header'>
         <h1 class='header-title'>👥 Gestión de Personal</h1>
-        <div class='header-subtitle'>Administración del equipo de trabajo Aeropostale</div>
+        <div class='header-subtitle'>Administración del equipo de trabajo</div>
     </div>
     """, unsafe_allow_html=True)
     
     tab1, tab2, tab3 = st.tabs(["📋 Lista de Personal", "➕ Agregar Nuevo", "📊 Estadísticas"])
     
     with tab1:
-        st.markdown("<div class='filter-panel'>", unsafe_allow_html=True)
-        st.markdown("<h4>👤 Personal Activo</h4>", unsafe_allow_html=True)
+        st.markdown("""
+        <div class='filter-panel'>
+            <h4>👤 Personal Activo</h4>
+        """, unsafe_allow_html=True)
         
         # Obtener trabajadores de la base de datos local
         trabajadores = local_db.query('trabajadores')
@@ -2717,19 +1748,38 @@ def mostrar_gestion_trabajadores():
             # Estadísticas rápidas
             col_s1, col_s2, col_s3 = st.columns(3)
             with col_s1:
-                st.metric("Total Personal", len(df_trabajadores))
+                st.markdown(f"""
+                <div class='metric-card'>
+                    <div class='metric-title'>Total Personal</div>
+                    <div class='metric-value'>{len(df_trabajadores)}</div>
+                </div>
+                """, unsafe_allow_html=True)
+            
             with col_s2:
                 activos = len(df_trabajadores[df_trabajadores['estado'] == 'Activo'])
-                st.metric("Activos", activos)
+                st.markdown(f"""
+                <div class='metric-card'>
+                    <div class='metric-title'>Activos</div>
+                    <div class='metric-value'>{activos}</div>
+                </div>
+                """, unsafe_allow_html=True)
+            
             with col_s3:
-                st.metric("Diferentes Cargos", df_trabajadores['cargo'].nunique())
+                st.markdown(f"""
+                <div class='metric-card'>
+                    <div class='metric-title'>Diferentes Cargos</div>
+                    <div class='metric-value'>{df_trabajadores['cargo'].nunique()}</div>
+                </div>
+                """, unsafe_allow_html=True)
         else:
             st.info("No hay trabajadores registrados.")
         st.markdown("</div>", unsafe_allow_html=True)
     
     with tab2:
-        st.markdown("<div class='filter-panel'>", unsafe_allow_html=True)
-        st.markdown("<h4>📝 Registrar Nuevo Personal</h4>", unsafe_allow_html=True)
+        st.markdown("""
+        <div class='filter-panel'>
+            <h4>📝 Registrar Nuevo Personal</h4>
+        """, unsafe_allow_html=True)
         
         with st.form("nuevo_trabajador"):
             col_f1, col_f2 = st.columns(2)
@@ -2766,24 +1816,33 @@ def mostrar_gestion_trabajadores():
         st.markdown("</div>", unsafe_allow_html=True)
     
     with tab3:
-        st.markdown("<div class='filter-panel'>", unsafe_allow_html=True)
-        st.markdown("<h4>📊 Estadísticas del Personal</h4>", unsafe_allow_html=True)
+        st.markdown("""
+        <div class='filter-panel'>
+            <h4>📊 Estadísticas del Personal</h4>
+        """, unsafe_allow_html=True)
         
         if not df_trabajadores.empty:
             # Gráficos
             col_g1, col_g2 = st.columns(2)
             
             with col_g1:
+                st.markdown('<div class="chart-container">', unsafe_allow_html=True)
                 dist_cargo = df_trabajadores['cargo'].value_counts()
                 fig1 = px.pie(values=dist_cargo.values, names=dist_cargo.index, 
-                            title="Distribución por Cargo")
+                            title="Distribución por Cargo",
+                            color_discrete_sequence=['#0033A0', '#E4002B', '#10B981', '#8B5CF6', '#F59E0B'])
                 st.plotly_chart(fig1, use_container_width=True)
+                st.markdown('</div>', unsafe_allow_html=True)
             
             with col_g2:
+                st.markdown('<div class="chart-container">', unsafe_allow_html=True)
                 fig2 = px.bar(x=dist_cargo.index, y=dist_cargo.values,
                             title="Personal por Cargo",
-                            labels={'x': 'Cargo', 'y': 'Cantidad'})
+                            labels={'x': 'Cargo', 'y': 'Cantidad'},
+                            color=dist_cargo.values,
+                            color_continuous_scale='Viridis')
                 st.plotly_chart(fig2, use_container_width=True)
+                st.markdown('</div>', unsafe_allow_html=True)
         else:
             st.info("No hay datos para mostrar estadísticas.")
         st.markdown("</div>", unsafe_allow_html=True)
@@ -2791,9 +1850,9 @@ def mostrar_gestion_trabajadores():
 # --- GESTIÓN DE DISTRIBUCIONES ---
 def mostrar_gestion_distribuciones():
     st.markdown("""
-    <div class='dashboard-header header-distribuciones'>
+    <div class='main-header'>
         <h1 class='header-title'>🚚 Gestión de Distribuciones</h1>
-        <div class='header-subtitle'>Control y seguimiento de transportes: Tempo vs Luis Perugachi</div>
+        <div class='header-subtitle'>Control y seguimiento de transportes</div>
     </div>
     """, unsafe_allow_html=True)
     
@@ -2803,7 +1862,7 @@ def mostrar_gestion_distribuciones():
     
     if not df_dist.empty:
         # KPIs de transporte
-        st.markdown("<div class='kpi-grid'>", unsafe_allow_html=True)
+        st.markdown("<div class='stats-grid'>", unsafe_allow_html=True)
         col_t1, col_t2, col_t3 = st.columns(3)
         
         total_guias = df_dist['guías'].sum()
@@ -2811,33 +1870,33 @@ def mostrar_gestion_distribuciones():
         with col_t1:
             tempo = df_dist[df_dist['transporte'] == 'Tempo']['guías'].sum()
             st.markdown(f"""
-            <div class='kpi-card'>
-                <div class='kpi-icon'>🚛</div>
-                <div class='kpi-title'>Tempo</div>
-                <div class='kpi-value'>{tempo}</div>
-                <div class='kpi-title'>{tempo/total_guias*100:.1f}% del total</div>
+            <div class='stat-card card-blue'>
+                <div class='stat-icon'>🚛</div>
+                <div class='stat-title'>Tempo</div>
+                <div class='stat-value'>{tempo}</div>
+                <div class='stat-subtitle'>{tempo/total_guias*100:.1f}% del total</div>
             </div>
             """, unsafe_allow_html=True)
         
         with col_t2:
             luis = df_dist[df_dist['transporte'] == 'Luis Perugachi']['guías'].sum()
             st.markdown(f"""
-            <div class='kpi-card'>
-                <div class='kpi-icon'>🚚</div>
-                <div class='kpi-title'>Luis Perugachi</div>
-                <div class='kpi-value'>{luis}</div>
-                <div class='kpi-title'>{luis/total_guias*100:.1f}% del total</div>
+            <div class='stat-card card-green'>
+                <div class='stat-icon'>🚚</div>
+                <div class='stat-title'>Luis Perugachi</div>
+                <div class='stat-value'>{luis}</div>
+                <div class='stat-subtitle'>{luis/total_guias*100:.1f}% del total</div>
             </div>
             """, unsafe_allow_html=True)
         
         with col_t3:
             entregados = len(df_dist[df_dist['estado'] == 'Entregado'])
             st.markdown(f"""
-            <div class='kpi-card'>
-                <div class='kpi-icon'>✅</div>
-                <div class='kpi-title'>Entregados</div>
-                <div class='kpi-value'>{entregados}</div>
-                <div class='kpi-title'>{entregados/len(df_dist)*100:.1f}% completado</div>
+            <div class='stat-card card-purple'>
+                <div class='stat-icon'>✅</div>
+                <div class='stat-title'>Entregados</div>
+                <div class='stat-value'>{entregados}</div>
+                <div class='stat-subtitle'>{entregados/len(df_dist)*100:.1f}% completado</div>
             </div>
             """, unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
@@ -2860,10 +1919,13 @@ def mostrar_gestion_distribuciones():
         
         # Gráfico comparativo
         st.markdown("### 📊 Comparativa de Desempeño")
+        st.markdown('<div class="chart-container">', unsafe_allow_html=True)
         fig = px.bar(df_dist, x='transporte', y='guías', color='estado',
                     title="Distribución por Transporte y Estado",
-                    barmode='group')
+                    barmode='group',
+                    color_discrete_sequence=['#0033A0', '#E4002B', '#10B981', '#8B5CF6'])
         st.plotly_chart(fig, use_container_width=True)
+        st.markdown('</div>', unsafe_allow_html=True)
         
         # Agregar nueva distribución
         st.markdown("### ➕ Agregar Nueva Distribución")
@@ -2891,9 +1953,9 @@ def mostrar_gestion_distribuciones():
 # --- AYUDA Y SOPORTE ---
 def mostrar_ayuda():
     st.markdown("""
-    <div class='dashboard-header header-ayuda'>
+    <div class='main-header'>
         <h1 class='header-title'>❓ Ayuda y Soporte Técnico</h1>
-        <div class='header-subtitle'>Asistencia para el uso del Sistema ERP Aeropostale</div>
+        <div class='header-subtitle'>Asistencia para el uso del Sistema ERP</div>
     </div>
     """, unsafe_allow_html=True)
     
@@ -2928,8 +1990,7 @@ def mostrar_ayuda():
             
             #### 4. Dashboard Transferencias
             - Análisis de transferencias diarias
-            - Clasificación por categorías (Price Club, Tiendas, etc.)
-            - Validación de parámetros configurados
+            - Clasificación por categorías
             - Reportes ejecutivos
             
             #### 5. Generación de Guías
@@ -3020,17 +2081,38 @@ def mostrar_ayuda():
         """, unsafe_allow_html=True)
 
 # ==============================================================================
-# 7. SISTEMA DE AUTENTICACIÓN Y NAVEGACIÓN MODERNO
+# 7. SISTEMA DE AUTENTICACIÓN Y NAVEGACIÓN
 # ==============================================================================
 
 def mostrar_pagina_login(rol_target):
     """Página de login moderna"""
     st.markdown("""
-    <div class='login-container'>
-        <div class='login-card'>
-            <div class='login-logo'>
-                <h1>AEROPOSTALE</h1>
-                <p>Sistema ERP Integral</p>
+    <div style='
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 80vh;
+        padding: 2rem;
+    '>
+        <div style='
+            background: white;
+            border-radius: 20px;
+            padding: 3rem;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.1);
+            width: 100%;
+            max-width: 450px;
+            border-top: 6px solid #0033A0;
+        '>
+            <div style='text-align: center; margin-bottom: 2rem;'>
+                <h1 style='
+                    font-size: 2.5rem;
+                    font-weight: 800;
+                    background: linear-gradient(45deg, #0033A0, #E4002B);
+                    -webkit-background-clip: text;
+                    -webkit-text-fill-color: transparent;
+                    margin-bottom: 0.5rem;
+                '>FASHIONLY ERP</h1>
+                <p style='color: #6B7280; font-size: 0.9rem;'>Sistema Integral v3.0</p>
             </div>
     """, unsafe_allow_html=True)
     
@@ -3088,8 +2170,8 @@ def main():
             # Encabezado del sidebar
             st.markdown("""
             <div class='sidebar-header'>
-                <div class='sidebar-logo'>AEROPOSTALE</div>
-                <div class='sidebar-subtitle'>ERP Integral v3.0</div>
+                <div class='sidebar-logo'>FASHIONLY ERP</div>
+                <div class='sidebar-subtitle'>Sistema Integral v3.0</div>
             </div>
             """, unsafe_allow_html=True)
             
@@ -3097,8 +2179,15 @@ def main():
             if st.session_state.user_type:
                 user_badge = "🛡️ ADMIN" if st.session_state.user_type == "admin" else "👤 USER"
                 st.markdown(f"""
-                <div style='background: rgba(255,255,255,0.1); padding: 10px; border-radius: 8px; margin: 10px; text-align: center;'>
-                    <strong style='color: white;'>{user_badge}</strong>
+                <div style='
+                    background: rgba(0, 51, 160, 0.1); 
+                    padding: 10px; 
+                    border-radius: 8px; 
+                    margin: 10px; 
+                    text-align: center;
+                    border: 1px solid rgba(0, 51, 160, 0.2);
+                '>
+                    <strong style='color: #0033A0;'>{user_badge}</strong>
                 </div>
                 """, unsafe_allow_html=True)
             
@@ -3117,13 +2206,12 @@ def main():
             
             for page_name, page_info in menu_items.items():
                 is_active = st.session_state.current_page == page_name
-                button_class = "active" if is_active else ""
                 
-                # Crear botón personalizado
                 if st.button(
                     f"{page_info['icon']} {page_name}",
                     key=f"btn_{page_name}",
-                    use_container_width=True
+                    use_container_width=True,
+                    type="primary" if is_active else "secondary"
                 ):
                     # Verificar permisos
                     if page_info['role'] == "public" or \
@@ -3208,9 +2296,9 @@ def main():
         
         # --- FOOTER ---
         st.markdown("""
-        <div class="footer">
-            <span class="footer-logo">AEROPOSTALE ERP</span> v3.1 | © 2025 Todos los derechos reservados.<br>
-            Desarrollado con ❤️ para la optimización logística | <em>#EficienciaAeropostale</em>
+        <div class="app-footer">
+            <span class="footer-logo">FASHIONLY ERP</span> v3.1 | © 2025 Todos los derechos reservados.<br>
+            Desarrollado con ❤️ para la optimización logística | <em>#EficienciaOperativa</em>
         </div>
         """, unsafe_allow_html=True)
     else:
