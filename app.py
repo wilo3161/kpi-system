@@ -2104,7 +2104,428 @@ def generar_pdf_profesional(guia_data):
         alignment=TA_LEFT,
         spaceAfter=4
     ))
+    def mostrar_vista_previa_guia(guia_data):
+    """Muestra una vista previa de la guía sin generar PDF"""
+    st.markdown("""
+    <div class='filter-panel'>
+        <h4>👁️ Vista Previa de la Guía</h4>
+    """, unsafe_allow_html=True)
     
+    # Mostrar logo según marca
+    col_logo, col_info = st.columns([1, 3])
+    
+    with col_logo:
+        if guia_data['marca'] == 'Fashion Club':
+            logo_url = "https://raw.githubusercontent.com/wilo3161/kpi-system/main/images/Fashion.jpg"
+        else:
+            logo_url = "https://raw.githubusercontent.com/wilo3161/kpi-system/main/images/Tempo.jpg"
+        
+        try:
+            st.image(logo_url, caption=guia_data['marca'], width=150)
+        except:
+            st.markdown(f"**{guia_data['marca']}**")
+    
+    with col_info:
+        st.markdown("**📋 Información de la Guía**")
+        st.write(f"**Número:** {guia_data['numero']}")
+        st.write(f"**Estado:** {guia_data['estado']}")
+        st.write(f"**Fecha:** {guia_data['fecha_emision']}")
+    
+    st.divider()
+    
+    # Información de envío
+    col_rem, col_dest = st.columns(2)
+    
+    with col_rem:
+        st.markdown("**👤 Remitente**")
+        st.write(f"**Nombre:** {guia_data['remitente']}")
+        st.write(f"**Dirección:** {guia_data['direccion_remitente']}")
+    
+    with col_dest:
+        st.markdown("**🏪 Destinatario**")
+        st.write(f"**Nombre:** {guia_data['destinatario']}")
+        st.write(f"**Teléfono:** {guia_data['telefono_destinatario']}")
+        st.write(f"**Dirección:** {guia_data['direccion_destinatario']}")
+        if guia_data['tienda_destino'] != "No especificada":
+            st.write(f"**Tienda:** {guia_data['tienda_destino']}")
+    
+    st.divider()
+    
+    # Seguimiento
+    st.markdown("**🔗 Seguimiento**")
+    st.write(f"**URL:** {guia_data['url_pedido']}")
+    
+    # Mostrar QR si está disponible
+    if guia_data['url_pedido'] in st.session_state.qr_images:
+        col_qr, col_url = st.columns([1, 3])
+        with col_qr:
+            qr_bytes = st.session_state.qr_images[guia_data['url_pedido']]
+            st.image(qr_bytes, caption="Código QR", width=120)
+        with col_url:
+            st.info(f"**URL completa:** {guia_data['url_pedido']}")
+    
+    st.markdown("</div>", unsafe_allow_html=True)
+
+
+def mostrar_resumen_guia(guia_data, pdf_bytes):
+    """Muestra el resumen de la guía generada y opciones de descarga"""
+    st.markdown("""
+    <div class='filter-panel'>
+        <h4>✅ Guía Generada Exitosamente</h4>
+    """, unsafe_allow_html=True)
+    
+    # Mostrar información de la guía
+    col_logo, col_info = st.columns([1, 3])
+    
+    with col_logo:
+        if guia_data['marca'] == 'Fashion Club':
+            logo_url = "https://raw.githubusercontent.com/wilo3161/kpi-system/main/images/Fashion.jpg"
+        else:
+            logo_url = "https://raw.githubusercontent.com/wilo3161/kpi-system/main/images/Tempo.jpg"
+        
+        try:
+            st.image(logo_url, caption=guia_data['marca'], width=120)
+        except:
+            st.markdown(f"**{guia_data['marca']}**")
+    
+    with col_info:
+        st.markdown("**📋 Información de la Guía**")
+        st.write(f"**Número:** {guia_data['numero']}")
+        st.write(f"**Estado:** {guia_data['estado']}")
+        st.write(f"**Fecha:** {guia_data['fecha_creacion']}")
+    
+    st.divider()
+    
+    # Información del destinatario
+    col_det1, col_det2 = st.columns(2)
+    
+    with col_det1:
+        st.markdown("**🏪 Destinatario**")
+        st.write(f"**Nombre:** {guia_data['destinatario']}")
+        st.write(f"**Teléfono:** {guia_data['telefono_destinatario']}")
+    
+    with col_det2:
+        st.markdown("**📍 Dirección**")
+        st.write(guia_data['direccion_destinatario'])
+        if guia_data['tienda_destino'] != "No especificada":
+            st.write(f"**Tienda:** {guia_data['tienda_destino']}")
+    
+    # Mostrar QR si está disponible
+    if guia_data['url_pedido'] in st.session_state.qr_images:
+        st.divider()
+        col_qr, col_url = st.columns([1, 3])
+        
+        with col_qr:
+            qr_bytes = st.session_state.qr_images[guia_data['url_pedido']]
+            st.image(qr_bytes, caption="Código QR", width=100)
+        
+        with col_url:
+            st.markdown("**🔗 URL de Seguimiento**")
+            st.write(f"[{guia_data['url_pedido']}]({guia_data['url_pedido']})")
+            st.caption("Escanee el código QR para rastrear el envío")
+    
+    st.divider()
+    
+    # Botones de descarga
+    st.markdown("**💾 Opciones de Descarga:**")
+    
+    col_r1, col_r2, col_r3 = st.columns(3)
+    
+    with col_r1:
+        # Descargar PDF
+        st.download_button(
+            label="📥 Descargar PDF",
+            data=pdf_bytes,
+            file_name=f"guia_{guia_data['numero']}.pdf",
+            mime="application/pdf",
+            use_container_width=True,
+            type="primary"
+        )
+    
+    with col_r2:
+        # Descargar JSON
+        json_data = json.dumps(guia_data, indent=2, ensure_ascii=False)
+        st.download_button(
+            label="📋 Descargar JSON",
+            data=json_data,
+            file_name=f"guia_{guia_data['numero']}.json",
+            mime="application/json",
+            use_container_width=True
+        )
+    
+    with col_r3:
+        # Descargar Texto (simplificado)
+        info_text = f"""GUÍA DE ENVÍO - {guia_data['marca'].upper()}
+CENTRO DE DISTRIBUCIÓN {guia_data['marca'].upper()}
+
+NÚMERO: {guia_data['numero']}
+FECHA: {guia_data['fecha_emision']}
+ESTADO: {guia_data['estado']}
+
+REMITENTE:
+Nombre: {guia_data['remitente']}
+Dirección: {guia_data['direccion_remitente']}
+
+DESTINATARIO:
+Nombre: {guia_data['destinatario']}
+Teléfono: {guia_data['telefono_destinatario']}
+Tienda: {guia_data['tienda_destino']}
+Dirección: {guia_data['direccion_destinatario']}
+
+SEGUIMIENTO:
+URL: {guia_data['url_pedido']}
+
+Generado el: {guia_data['fecha_creacion']}
+"""
+        
+        st.download_button(
+            label="📄 Descargar Texto",
+            data=info_text,
+            file_name=f"guia_{guia_data['numero']}.txt",
+            mime="text/plain",
+            use_container_width=True
+        )
+    
+    # Información adicional
+    st.markdown(f"""
+    **📌 Información Importante:**
+    - La guía **{guia_data['numero']}** ha sido registrada en el sistema
+    - Estado actual: **{guia_data['estado']}**
+    - Puede realizar seguimiento en: [{guia_data['url_pedido'][:50]}...]({guia_data['url_pedido']})
+    """)
+    
+    st.markdown("</div>", unsafe_allow_html=True)
+
+
+def mostrar_generacion_guias():
+    st.markdown("""
+    <div class='main-header'>
+        <h1 class='header-title'>🚚 Centro de Distribución Fashion Club</h1>
+        <div class='header-subtitle'>Generador de Guías de Envío con QR y Tracking</div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Configuración inicial para el estado de sesión
+    if 'guias_registradas' not in st.session_state:
+        st.session_state.guias_registradas = []
+        st.session_state.contador_guias = 1000
+        st.session_state.qr_images = {}
+        st.session_state.logos = {}
+    
+    # URLs de logos desde GitHub
+    url_fashion_logo = "https://raw.githubusercontent.com/wilo3161/kpi-system/main/images/Fashion.jpg"
+    url_tempo_logo = "https://raw.githubusercontent.com/wilo3161/kpi-system/main/images/Tempo.jpg"
+    
+    # Listas de tiendas y remitentes
+    tiendas = [
+        "Aero Matriz", "Aero Zona Franca", "Aero Servicios Y Otros", "Aero Bod Donaciones", "Price Club", 
+        "Aero Trans Toma Fisica", "Aero Oil Uno", "Aero La Plaza", "Aero Milagro", "Aero Condado Shopping",
+        "Aero Multiplaza Riobamba", "Aero Santo Domingo", "Aero Quevedo", "Aero Manta", "Aero Portoviejo", 
+        "Price Club Portoviejo", "Aero Rio Centro Norte", "Aero Duran", "Price Club City Mall", "Aero Mall Del Sur",
+        "Aero Los Ceibos", "Aero Ambato", "Aero Carapungo", "Aero Peninsula", "Aero Paseo Ambato", "Aero Mall Del Sol", 
+        "Aero Babahoyo", "Aero Riobamba", "Aero Mall Del Pacifico", "Aero San Luis", "Aero Machala",
+        "Aero Ventas Por Mayor", "Aero Cuenca Centro Historico", "Aero Cuenca", "Aero Tienda Movil - Web",
+        "Aero Playas", "Aero Bod San Roque", "Aero Bomboli", "Aero Mall Del Rio Gye", "Aero Urban Ambato", 
+        "Aero Riocentro El Dorado", "Aero Pasaje", "Aero El Coca", "Aero 6 De Diciembre", "Aero Lago Agrio",
+        "Aero Pedernales", "Price Club Machala", "Price Club Guayaquil", "Aero Bodega Fallas", "Aero Regional Costa",
+        "Aero CCi", "Aero Cayambe", "Aero Bahia De Caraquez", "Aero Daule", "Aero Jagi El Dorado"
+    ]
+    
+    remitentes = [
+        {"nombre": "Josué Imbacuán", "direccion": "San Roque, Calle Santo Thomas y antigua via a Cotacachi"},
+        {"nombre": "Luis Perugachi", "direccion": "San Roque, Calle Santo Thomas y antigua via a Cotacachi"},
+        {"nombre": "Andrés Yépez", "direccion": "San Roque, Calle Santo Thomas y antigua via a Cotacachi"},
+        {"nombre": "Wilson Pérez", "direccion": "San Roque, Calle Santo Thomas y antigua via a Cotacachi"},
+        {"nombre": "Andrés Cadena", "direccion": "San Roque, Calle Santo Thomas y antigua via a Cotacachi"},
+        {"nombre": "Diana García", "direccion": "San Roque, Calle Santo Thomas y antigua via a Cotacachi"},
+        {"nombre": "Jessica Suárez", "direccion": "San Roque, Calle Santo Thomas y antigua via a Cotacachi"},
+        {"nombre": "Rocio Cadena", "direccion": "San Roque, Calle Santo Thomas y antigua via a Cotacachi"},
+        {"nombre": "Jhony Villa", "direccion": "San Roque, Calle Santo Thomas y antigua via a Cotacachi"}
+    ]
+    
+    with st.form("guias_form", border=False):
+        st.markdown("""
+        <div class='filter-panel'>
+            <h3 class='filter-title'>📋 Información de la Guía</h3>
+        """, unsafe_allow_html=True)
+        
+        # Primera fila: Información de empresa y remitente
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.subheader("🏢 Información de la Empresa")
+            marca = st.radio("**Seleccione la Marca:**", ["Fashion Club", "Tempo"], horizontal=True)
+            
+            # Mostrar imagen según selección
+            if marca == "Tempo":
+                try:
+                    st.image(url_tempo_logo, caption=marca, use_container_width=True)
+                except:
+                    st.markdown(f"""
+                    <div style='text-align: center; padding: 15px; background: #f8f9fa; border-radius: 10px; margin: 10px 0;'>
+                        <div style='font-size: 3rem;'>🚚</div>
+                        <div style='font-weight: bold; font-size: 1.2rem; color: #0033A0;'>{marca}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+            else:  # Fashion Club
+                try:
+                    st.image(url_fashion_logo, caption=marca, use_container_width=True)
+                except:
+                    st.markdown(f"""
+                    <div style='text-align: center; padding: 15px; background: #f8f9fa; border-radius: 10px; margin: 10px 0;'>
+                        <div style='font-size: 3rem;'>👔</div>
+                        <div style='font-weight: bold; font-size: 1.2rem; color: #0033A0;'>{marca}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+        
+        with col2:
+            st.subheader("👤 Información del Remitente")
+            remitente_nombre = st.selectbox("**Seleccione Remitente:**", [r["nombre"] for r in remitentes])
+            
+            # Dirección del remitente
+            remitente_direccion = next((r["direccion"] for r in remitentes if r["nombre"] == remitente_nombre), "")
+            st.info(f"""
+            **Dirección del Remitente:**
+            📍 {remitente_direccion}
+            """)
+        
+        
+        st.divider()
+        
+        # Tercera fila: Información del destinatario
+        st.subheader("🏪 Información del Destinatario")
+        col5, col6 = st.columns(2)
+        
+        with col5:
+            nombre_destinatario = st.text_input("**Nombre del Destinatario:**", placeholder="Ej: Pepito Paez")
+            telefono_destinatario = st.text_input("**Teléfono del Destinatario:**", placeholder="Ej: +593 99 999 9999")
+        
+        with col6:
+            direccion_destinatario = st.text_area("**Dirección del Destinatario:**", 
+                                                placeholder="Ej: Av. Principal #123, Ciudad, Provincia",
+                                                height=100)
+            tienda_destino = st.selectbox("**Tienda Destino (Opcional):**", [""] + tiendas)
+        
+        st.divider()
+        
+        # Cuarta fila: URL y QR
+        st.subheader("🔗 Información Digital")
+        url_pedido = st.text_input("**URL del Pedido/Tracking:**", 
+                                 placeholder="https://pedidos.fashionclub.com/orden-12345",
+                                 value="https://pedidos.fashionclub.com/")
+        
+        # Generar código QR basado en URL
+        if url_pedido and url_pedido.startswith(('http://', 'https://')):
+            try:
+                qr = qrcode.QRCode(version=1, box_size=8, border=2)
+                qr.add_data(url_pedido)
+                qr.make(fit=True)
+                img_qr = qr.make_image(fill_color="black", back_color="white")
+                
+                # Convertir a bytes
+                img_byte_arr = io.BytesIO()
+                img_qr.save(img_byte_arr, format='PNG')
+                img_byte_arr.seek(0)
+                
+                # Guardar QR en session state para usarlo en el PDF
+                st.session_state.qr_images[url_pedido] = img_byte_arr.getvalue()
+                
+                # Mostrar QR
+                col_qr1, col_qr2, col_qr3 = st.columns([1, 2, 1])
+                with col_qr2:
+                    st.image(img_byte_arr, caption="Código QR Generado", width=150)
+                    st.caption(f"URL: {url_pedido[:50]}...")
+            except:
+                st.warning("⚠️ No se pudo generar el código QR. Verifique la URL.")
+        elif url_pedido:
+            st.warning("⚠️ La URL debe comenzar con http:// o https://")
+        
+        st.divider()
+        
+        # Botones de acción
+        col_btn1, col_btn2, col_btn3 = st.columns(3)
+        with col_btn1:
+            submit = st.form_submit_button("🚀 Generar Guía PDF", use_container_width=True, type="primary")
+        with col_btn2:
+            preview = st.form_submit_button("👁️ Vista Previa", use_container_width=True)
+        with col_btn3:
+            reset = st.form_submit_button("🔄 Nuevo Formulario", use_container_width=True)
+        
+        st.markdown("</div>", unsafe_allow_html=True)
+    
+    # Procesar la guía
+    if submit or preview:
+        # Validaciones
+        errors = []
+        if not nombre_destinatario:
+            errors.append("❌ El nombre del destinatario es obligatorio")
+        if not direccion_destinatario:
+            errors.append("❌ La dirección del destinatario es obligatoria")
+        if not url_pedido or len(url_pedido) < 10:
+            errors.append("❌ Ingrese una URL válida para el pedido")
+        elif not url_pedido.startswith(('http://', 'https://')):
+            errors.append("❌ La URL debe comenzar con http:// o https://")
+        
+        if errors:
+            for error in errors:
+                st.error(error)
+        else:
+            # Generar número de guía único
+            guia_num = f"GFC-{st.session_state.contador_guias:04d}"
+            st.session_state.contador_guias += 1
+            
+            # Descargar logo si no está en cache
+            if marca not in st.session_state.logos:
+                logo_url = url_fashion_logo if marca == "Fashion Club" else url_tempo_logo
+                logo_bytes = descargar_logo(logo_url)
+                if logo_bytes:
+                    st.session_state.logos[marca] = logo_bytes
+            
+            # Obtener bytes del QR
+            qr_bytes = st.session_state.qr_images.get(url_pedido)
+            
+            # Crear diccionario con datos de la guía
+            guia_data = {
+                "numero": guia_num,
+                "marca": marca,
+                "remitente": remitente_nombre,
+                "direccion_remitente": remitente_direccion,
+                "destinatario": nombre_destinatario,
+                "telefono_destinatario": telefono_destinatario or "No especificado",
+                "direccion_destinatario": direccion_destinatario,
+                "tienda_destino": tienda_destino if tienda_destino else "No especificada",
+                "url_pedido": url_pedido,
+                "estado": "Generada",
+                "fecha_emision": datetime.now().strftime("%Y-%m-%d"),
+                "fecha_creacion": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "qr_bytes": qr_bytes
+            }
+            
+            if preview:
+                # Vista previa
+                mostrar_vista_previa_guia(guia_data)
+            
+            if submit:
+                with st.spinner(f"Generando guía {guia_num}..."):
+                    time.sleep(1.5)
+                    
+                    # Agregar a lista de guías
+                    st.session_state.guias_registradas.append(guia_data)
+                    
+                    # También guardar en la base de datos local (si existe)
+                    try:
+                        if 'local_db' in globals():
+                            local_db.insert('guias', guia_data)
+                    except:
+                        pass
+                    
+                    # Generar PDF mejorado con logo y QR
+                    pdf_bytes = generar_pdf_profesional(guia_data)
+                    
+                    st.success(f"✅ Guía {guia_num} generada exitosamente!")
+                    
+                    # Mostrar resumen
+                    mostrar_resumen_guia(guia_data, pdf_bytes)
     # Contenido del documento
     contenido = []
     
