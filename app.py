@@ -2179,9 +2179,12 @@ def mostrar_dashboard_kpis():
     else:
         st.info("Cargando datos de KPIs...")
 
-# --- GENERACIÓN DE GUÍAS UNIFICADO ---
+# ==============================================================================
+# 6. MÓDULO GENERACIÓN DE GUÍAS UNIFICADO (SIMPLIFICADO)
+# ==============================================================================
+
 def generar_pdf_profesional(guia_data):
-    """Genera un PDF profesional con diseño mejorado"""
+    """Genera un PDF profesional simplificado sin detalles de envío ni instrucciones"""
     buffer = io.BytesIO()
     
     # Configurar el documento
@@ -2251,7 +2254,7 @@ def generar_pdf_profesional(guia_data):
     contenido = []
     
     # Título principal
-    contenido.append(Paragraph("GUÍA DE ENVÍO CENTRO DE DISTRIBUCIÓN", styles['Titulo']))
+    contenido.append(Paragraph("GUÍA DE ENVÍO", styles['Titulo']))
     contenido.append(Paragraph(f"{guia_data['marca'].upper()}", styles['Subtitulo']))
     
     # Línea separadora
@@ -2287,7 +2290,7 @@ def generar_pdf_profesional(guia_data):
          Paragraph(f"<b>Nombre:</b><br/>{guia_data['destinatario']}", styles['Contenido'])],
         [Paragraph(f"<b>Dirección:</b><br/>{guia_data['direccion_remitente']}", styles['Contenido']),
          Paragraph(f"<b>Dirección:</b><br/>{guia_data['direccion_destinatario']}", styles['Contenido'])],
-        ["", Paragraph(f"<b>Teléfono:</b> {guia_data['telefono_destinatario'] or 'No especificado'}", styles['Contenido'])],
+        ["", Paragraph(f"<b>Teléfono:</b> {guia_data['telefono_destinatario']}", styles['Contenido'])],
         ["", Paragraph(f"<b>Tienda:</b> {guia_data['tienda_destino']}", styles['Contenido'])]
     ]
     
@@ -2302,31 +2305,9 @@ def generar_pdf_profesional(guia_data):
     ]))
     
     contenido.append(tabla_envio)
-    contenido.append(Spacer(1, 0.2*inch))
+    contenido.append(Spacer(1, 0.3*inch))
     
-    # Detalles del envío (piezas, peso, valor) - usando valores por defecto
-    contenido.append(Paragraph("DETALLES DEL ENVÍO", styles['Encabezado']))
-    
-    detalles_envio = [
-        [Paragraph("<b>Concepto</b>", styles['ContenidoNegrita']), Paragraph("<b>Valor</b>", styles['ContenidoNegrita'])],
-        [Paragraph("Piezas", styles['Contenido']), Paragraph("1", styles['Contenido'])],
-        [Paragraph("Peso (kg)", styles['Contenido']), Paragraph("1.0", styles['Contenido'])],
-        [Paragraph("Valor Declarado", styles['Contenido']), Paragraph("$0.00", styles['Contenido'])]
-    ]
-    
-    tabla_detalles = Table(detalles_envio, colWidths=[4*inch, 3*inch])
-    tabla_detalles.setStyle(TableStyle([
-        ('GRID', (0, 0), (-1, -1), 0.5, HexColor('#CCCCCC')),
-        ('BACKGROUND', (0, 0), (-1, 0), HexColor('#F0F8FF')),
-        ('PADDING', (0, 0), (-1, -1), 8),
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('ALIGN', (1, 1), (1, -1), 'RIGHT'),
-    ]))
-    
-    contenido.append(tabla_detalles)
-    contenido.append(Spacer(1, 0.2*inch))
-    
-    # Código QR y URL
+    # Código QR y URL (sección principal)
     contenido.append(Paragraph("INFORMACIÓN DE SEGUIMIENTO", styles['Encabezado']))
     
     # Intentar agregar el código QR si está en session_state
@@ -2355,7 +2336,6 @@ def generar_pdf_profesional(guia_data):
                 ('PADDING', (0, 0), (-1, -1), 10),
             ]))
             
-            contenido.append(Spacer(1, 0.1*inch))
             contenido.append(qr_final_table)
         except:
             contenido.append(Paragraph(f"URL: {guia_data['url_pedido']}", styles['Contenido']))
@@ -2364,25 +2344,11 @@ def generar_pdf_profesional(guia_data):
     
     contenido.append(Spacer(1, 0.3*inch))
     
-    # Instrucciones y notas
-    contenido.append(Paragraph("INSTRUCCIONES Y NOTAS", styles['Encabezado']))
-    instrucciones = [
-        "1. Esta guía debe ser adjuntada al paquete de manera visible.",
-        "2. El remitente es responsable de la veracidad de la información.",
-        "3. El destinatario debe verificar el estado del paquete al recibirlo.",
-        "4. Para reclamos, presentar esta guía en un plazo no mayor a 7 días."
-    ]
-    
-    for instruccion in instrucciones:
-        contenido.append(Paragraph(instruccion, styles['Contenido']))
-    
-    contenido.append(Spacer(1, 0.2*inch))
-    
-    # Firma y sello
+    # Firma y sello (simplificado)
     contenido.append(Paragraph("FIRMA Y SELLO", styles['Encabezado']))
     firma_table = Table([
-        [Paragraph("________________________________", styles['Contenido']),
-         Paragraph("________________________________", styles['Contenido'])],
+        [Paragraph("_________________________", styles['Contenido']),
+         Paragraph("_________________________", styles['Contenido'])],
         [Paragraph("Firma del Remitente", ParagraphStyle(name='Firma', fontSize=9, alignment=TA_CENTER)),
          Paragraph("Sello de la Empresa", ParagraphStyle(name='Firma', fontSize=9, alignment=TA_CENTER))]
     ], colWidths=[3.5*inch, 3.5*inch])
@@ -2394,17 +2360,15 @@ def generar_pdf_profesional(guia_data):
     ]))
     
     contenido.append(firma_table)
-    contenido.append(Spacer(1, 0.2*inch))
+    contenido.append(Spacer(1, 0.3*inch))
     
-    # Pie de página
+    # Pie de página (simplificado)
     contenido.append(Spacer(1, 0.1*inch))
     contenido.append(Paragraph("_" * 100, ParagraphStyle(name='Linea', fontSize=8)))
     contenido.append(Spacer(1, 0.1*inch))
     
     pie_texto = f"""
-    Documento generado automáticamente por el Centro de Distribución Fashion Club | 
-    Guía: {guia_data['numero']} | Fecha: {guia_data['fecha_creacion']} | 
-    {guia_data['marca']} no se responsabiliza por daños durante el transporte
+    Documento generado automáticamente | Guía: {guia_data['numero']} | Fecha: {guia_data['fecha_creacion']}
     """
     contenido.append(Paragraph(pie_texto, styles['Pie']))
     
@@ -2424,24 +2388,25 @@ def mostrar_vista_previa_guia(guia_data):
     col1, col2 = st.columns(2)
     
     with col1:
-        st.markdown("**Información de la Guía**")
+        st.markdown("**📋 Información de la Guía**")
         st.write(f"**Número:** {guia_data['numero']}")
         st.write(f"**Marca:** {guia_data['marca']}")
         st.write(f"**Estado:** {guia_data['estado']}")
-        st.write(f"**Fecha de Emisión:** {guia_data['fecha_emision']}")
+        st.write(f"**Fecha:** {guia_data['fecha_emision']}")
     
     with col2:
-        st.markdown("**Remitente**")
+        st.markdown("**👤 Remitente**")
         st.write(f"**Nombre:** {guia_data['remitente']}")
         st.write(f"**Dirección:** {guia_data['direccion_remitente']}")
     
-    st.markdown("**Destinatario**")
+    st.markdown("**🏪 Destinatario**")
     st.write(f"**Nombre:** {guia_data['destinatario']}")
     st.write(f"**Teléfono:** {guia_data['telefono_destinatario']}")
     st.write(f"**Dirección:** {guia_data['direccion_destinatario']}")
-    st.write(f"**Tienda Destino:** {guia_data['tienda_destino']}")
+    if guia_data['tienda_destino'] != "No especificada":
+        st.write(f"**Tienda:** {guia_data['tienda_destino']}")
     
-    st.markdown("**Seguimiento**")
+    st.markdown("**🔗 Seguimiento**")
     st.write(f"**URL:** {guia_data['url_pedido']}")
     
     # Mostrar QR si está disponible
@@ -2456,7 +2421,7 @@ def mostrar_resumen_guia(guia_data, pdf_bytes):
     """Muestra el resumen de la guía generada y opciones de descarga"""
     st.markdown("""
     <div class='filter-panel'>
-        <h4>📄 Guía Generada Exitosamente</h4>
+        <h4>✅ Guía Generada Exitosamente</h4>
     """, unsafe_allow_html=True)
     
     # Mostrar información de la guía
@@ -2470,10 +2435,11 @@ def mostrar_resumen_guia(guia_data, pdf_bytes):
         st.write(f"**Fecha:** {guia_data['fecha_creacion']}")
     
     with col_info2:
-        st.markdown("**👤 Destinatario**")
+        st.markdown("**🏪 Destinatario**")
         st.write(f"**Nombre:** {guia_data['destinatario']}")
         st.write(f"**Teléfono:** {guia_data['telefono_destinatario']}")
-        st.write(f"**Tienda:** {guia_data['tienda_destino']}")
+        if guia_data['tienda_destino'] != "No especificada":
+            st.write(f"**Tienda:** {guia_data['tienda_destino']}")
     
     # Mostrar QR si está disponible
     if guia_data['url_pedido'] in st.session_state.qr_images:
@@ -2513,7 +2479,7 @@ def mostrar_resumen_guia(guia_data, pdf_bytes):
         )
     
     with col_r3:
-        # Descargar Texto
+        # Descargar Texto (simplificado)
         info_text = f"""GUÍA DE ENVÍO - {guia_data['marca'].upper()}
 Número: {guia_data['numero']}
 Fecha: {guia_data['fecha_emision']}
@@ -2525,7 +2491,7 @@ Dirección: {guia_data['direccion_remitente']}
 
 DESTINATARIO:
 Nombre: {guia_data['destinatario']}
-Teléfono: {guia_data['telefono_destinatario'] or 'No especificado'}
+Teléfono: {guia_data['telefono_destinatario']}
 Tienda: {guia_data['tienda_destino']}
 Dirección: {guia_data['direccion_destinatario']}
 
@@ -2549,7 +2515,6 @@ Generado el: {guia_data['fecha_creacion']}
     - La guía **{guia_data['numero']}** ha sido registrada en el sistema
     - Estado actual: **{guia_data['estado']}**
     - Puede realizar seguimiento en: [{guia_data['url_pedido'][:50]}...]({guia_data['url_pedido']})
-    - Para cambiar el estado, contacte al administrador del sistema
     """)
     
     st.markdown("</div>", unsafe_allow_html=True)
