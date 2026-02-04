@@ -179,34 +179,112 @@ ADMIN_PASSWORD = "admin123"
 USER_PASSWORD = "user123"
 
 # ==============================================================================
-# 2. ESTILOS CSS MODERNO - INTERFAZ ERP AEROPOSTALE
+# 2. ESTILOS CSS ULTRA-MODERNOS (ESTILO FASHIONLY)
 # ==============================================================================
 st.markdown("""
 <style>
-/* ============================================
-   VARIABLES Y CONFIGURACIÓN GLOBAL
-   ============================================ */
+/* --- VARIABLES DE DISEÑO INSPIRADAS EN LAS IMÁGENES --- */
 :root {
-    /* Colores corporativos Aeropostale */
-    --aeropostale-blue: #0033A0;
-    --aeropostale-red: #E4002B;
-    --aeropostale-white: #FFFFFF;
-    --aeropostale-gray: #F5F7FA;
-    --aeropostale-dark: #1A1F36;
-    
-    /* Colores de acento */
-    --success: #00C853;
-    --warning: #FFB300;
-    --danger: #FF3D00;
-    --info: #2979FF;
-    --purple: #7B1FA2;
-    
-    /* Espaciado */
-    --border-radius: 12px;
-    --shadow: 0 8px 30px rgba(0, 51, 160, 0.08);
-    --shadow-hover: 0 15px 40px rgba(0, 51, 160, 0.15);
-    --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    --bg-main: #F0F2F5;
+    --glass-bg: rgba(255, 255, 255, 0.7);
+    --card-shadow: 0 20px 40px rgba(0, 0, 0, 0.05);
+    --accent-blue: #0033A0;
+    --accent-red: #E4002B;
+    --border-radius-lg: 30px;
+    --border-radius-md: 20px;
 }
+
+/* --- CONTENEDOR PRINCIPAL --- */
+.stApp {
+    background-color: var(--bg-main);
+    font-family: 'Inter', sans-serif;
+}
+
+/* --- TARJETAS ESTILO 'REVENUE DATA' --- */
+.kpi-card-modern {
+    background: white;
+    border-radius: var(--border-radius-md);
+    padding: 25px;
+    box-shadow: var(--card-shadow);
+    border: 1px solid rgba(255,255,255,0.8);
+    transition: transform 0.3s ease;
+    height: 100%;
+}
+
+.kpi-card-modern:hover {
+    transform: translateY(-5px);
+}
+
+/* --- DECORACIONES DE GRADIENTE (Como en las imágenes) --- */
+.gradient-circle-blue {
+    background: linear-gradient(135deg, #7F7FD5, #86A8E7, #91EAE4);
+    opacity: 0.6;
+    filter: blur(20px);
+    border-radius: 50%;
+    position: absolute;
+    width: 100px;
+    height: 100px;
+    top: -20px;
+    right: -20px;
+    z-index: 0;
+}
+
+/* --- CABECERAS DE MÓDULO ESTILO DASHBOARD --- */
+.dashboard-header-modern {
+    background: white;
+    padding: 40px;
+    border-radius: var(--border-radius-lg);
+    margin-bottom: 30px;
+    box-shadow: var(--card-shadow);
+}
+
+.header-title-modern {
+    font-size: 3rem;
+    font-weight: 800;
+    color: #1A1F36;
+    margin-bottom: 5px;
+    letter-spacing: -1px;
+}
+
+/* --- BOTONES REDONDEADOS TIPO 'STATISTIC' --- */
+.stButton > button {
+    border-radius: 50px !important;
+    padding: 12px 30px !important;
+    background: #1A1F36 !important;
+    color: white !important;
+    font-weight: 500 !important;
+    border: none !important;
+    transition: all 0.3s ease !important;
+}
+
+.stButton > button:hover {
+    background: var(--accent-blue) !important;
+    box-shadow: 0 10px 20px rgba(0, 51, 160, 0.2) !important;
+}
+
+/* --- INPUTS ESTILO GLASS --- */
+.stTextInput > div > div > input, .stSelectbox > div > div > select {
+    border-radius: 15px !important;
+    border: 1px solid #E2E8F0 !important;
+    background: white !important;
+    padding: 10px 15px !important;
+}
+
+/* --- SIDEBAR MODERNO --- */
+[data-testid="stSidebar"] {
+    background-color: white !important;
+    border-right: 1px solid #EDF2F7 !important;
+}
+
+/* --- ESTILO PARA GRÁFICOS (Contenedor) --- */
+.chart-container {
+    background: white;
+    padding: 20px;
+    border-radius: var(--border-radius-md);
+    box-shadow: var(--card-shadow);
+}
+</style>
+""", unsafe_allow_html=True)
 
 /* ============================================
    ESTRUCTURA PRINCIPAL
