@@ -1,5 +1,5 @@
 import streamlit as st
-import pandas as pd
+import pandas as pd 
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
@@ -16,6 +16,10 @@ from pathlib import Path
 from io import BytesIO
 from typing import Dict, List, Optional, Any, Union
 from concurrent.futures import ThreadPoolExecutor
+import pandas as pd
+import streamlit as st
+from datetime import datetime, timedelta
+from typing import List, Dict, Any
 
 # --- LIBRERÍAS DE TERCEROS ---
 import qrcode
@@ -572,240 +576,188 @@ footer {visibility: hidden;}
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# 3. MÓDULO CORREO WILO (ESTILIZADO)
+# 1. MOTOR DE AUDITORÍA (LÓGICA DE NEGOCIO)
 # ==============================================================================
 
 class WiloEmailEngine:
-    def __init__(self):
-        self.imap_url = "mail.fashionclub.com.ec"
-        self.email_user = ""
-        self.email_pass = ""
-        
-        # Datos simulados para demo
-        self.sample_emails = self._generate_sample_emails()
-
-    def _generate_sample_emails(self):
-        """Genera correos de ejemplo para demostración"""
-        sample_data = []
-        subjects = [
-            "URGENTE: Faltante en envío #4567",
-            "Confirmación de recepción pedido #1234",
-            "Problema con etiquetas en lote #789",
-            "Sobrante detectado en inventario",
-            "Daño reportado en mercancía",
-            "Consulta sobre guía de transporte"
-        ]
-        
-        senders = [
-            "almacen@tienda.com",
-            "cliente@empresa.com",
-            "transporte@logistica.com",
-            "auditoria@aeropostale.com",
-            "soporte@aeropostale.com"
-        ]
-        
-        for i in range(6):
-            subject = subjects[i % len(subjects)]
-            sender = senders[i % len(senders)]
-            date = (datetime.now() - timedelta(days=i, hours=np.random.randint(1, 12))).strftime("%a, %d %b %Y %H:%M:%S")
-            
-            # Determinar tipo basado en contenido
-            if "Faltante" in subject:
-                tipo = "📦 FALTANTE"
-                urgencia = "ALTA"
-            elif "Sobrante" in subject:
-                tipo = "👔 SOBRANTE"
-                urgencia = "MEDIA"
-            elif "Daño" in subject:
-                tipo = "⚠️ DAÑO"
-                urgencia = "ALTA"
-            elif "etiquetas" in subject.lower():
-                tipo = "🏷️ ETIQUETA"
-                urgencia = "MEDIA"
-            elif "transporte" in subject.lower():
-                tipo = "🚚 ENVÍO"
-                urgencia = "BAJA"
-            else:
-                tipo = "ℹ️ GENERAL"
-                urgencia = "BAJA"
-            
-            sample_data.append({
-                "id": str(i + 1000),
-                "fecha": date,
-                "remitente": f"{sender}",
-                "asunto": subject,
-                "cuerpo": f"""Estimado equipo,
-
-Se reporta un incidente con referencia al pedido #4567.
-
-Detalles:
-- Tipo de incidencia: {'Faltante' if 'Faltante' in subject else 'General'}
-- Cantidad afectada: {np.random.randint(1, 10)} unidades
-- Tienda destino: {'Mall del Sol' if i % 2 == 0 else 'San Marino'}
-- Fecha de detección: {(datetime.now() - timedelta(days=i)).strftime('%Y-%m-%d')}
-
-Por favor, tomar las acciones correctivas necesarias.
-
-Atentamente,
-{sender.split('@')[0].title()}
-                """,
-                "tipo": tipo,
-                "urgencia": urgencia
-            })
-        
-        return sample_data
-
-    def fetch_emails(self, limit=15):
-        """Versión simulada para trabajar localmente"""
-        return self.sample_emails[:limit]
-
-def mostrar_modulo_email_wilo():
-    st.markdown("""
-    <div class='main-header'>
-        <h1 class='header-title'>📧 Auditoría de Correos Wilo AI</h1>
-        <div class='header-subtitle'>Análisis Inteligente de Novedades en Tiempo Real</div>
-    </div>
-    """, unsafe_allow_html=True)
+    """Motor real para extracción y análisis de correos logísticos."""
     
-    # Barra de herramientas superior
-    col1, col2, col3 = st.columns([2, 1, 1])
-    with col1:
-        st.info("🔍 Este módulo analiza automáticamente correos para detectar novedades logísticas.")
-    with col2:
-        scan_btn = st.button("🔄 Escanear Ahora", use_container_width=True, type="primary")
-    with col3:
-        auto_scan = st.checkbox("Escaneo automático", value=False)
+    def __init__(self, host: str, user: str, password: str):
+        self.host = host
+        self.user = user
+        self.password = password
+        self.mail = None
 
-    if scan_btn or auto_scan:
-        engine = WiloEmailEngine()
-        with st.spinner("🔍 Conectando con servidor de correo y analizando..."):
-            time.sleep(1.5)
-            emails = engine.fetch_emails(10)
+    def _connect(self):
+        """Establece conexión segura SSL con el servidor de Fashion Club."""
+        try:
+            self.mail = imaplib.IMAP4_SSL(self.host)
+            self.mail.login(self.user, self.password)
+            self.mail.select("inbox")
+        except Exception as e:
+            raise ConnectionError(f"Error de conexión: Verifica tu usuario/pass. Detalle: {e}")
+
+    def _decode_utf8(self, header_part) -> str:
+        """Decodifica encabezados de correo (asuntos, nombres)."""
+        if not header_part: return ""
+        decoded = decode_header(header_part)
+        content = ""
+        for part, encoding in decoded:
+            if isinstance(part, bytes):
+                content += part.decode(encoding or "utf-8", errors="ignore")
+            else:
+                content += part
+        return content
+
+    def classify_email(self, subject: str, body: str) -> Dict[str, str]:
+        """Analiza texto para detectar tipo de novedad y urgencia."""
+        text = (subject + " " + body).lower()
         
-        if not emails:
-            st.warning("⚠️ No se encontraron correos o hubo un error de conexión.")
-        else:
-            df = pd.DataFrame(emails)
-            
-            # KPIs en tarjetas modernas
-            st.markdown("<div class='stats-grid'>", unsafe_allow_html=True)
-            col1, col2, col3, col4 = st.columns(4)
-            
-            with col1:
-                total = len(df)
-                st.markdown(f"""
-                <div class='stat-card card-blue'>
-                    <div class='stat-icon'>📨</div>
-                    <div class='stat-title'>Correos Analizados</div>
-                    <div class='stat-value'>{total}</div>
-                </div>
-                """, unsafe_allow_html=True)
-            
-            with col2:
-                alta = len(df[df['urgencia'] == 'ALTA'])
-                st.markdown(f"""
-                <div class='stat-card card-red'>
-                    <div class='stat-icon'>🚨</div>
-                    <div class='stat-title'>Alta Urgencia</div>
-                    <div class='stat-value'>{alta}</div>
-                    <div class='stat-change {'negative' if alta > 3 else 'positive'}">{'Requiere atención' if alta > 3 else 'Bajo control'}</div>
-                </div>
-                """, unsafe_allow_html=True)
-            
-            with col3:
-                faltantes = len(df[df['tipo'].str.contains('FALTANTE')])
-                st.markdown(f"""
-                <div class='stat-card card-green'>
-                    <div class='stat-icon'>📦</div>
-                    <div class='stat-title'>Faltantes</div>
-                    <div class='stat-value'>{faltantes}</div>
-                </div>
-                """, unsafe_allow_html=True)
-            
-            with col4:
-                sobrantes = len(df[df['tipo'].str.contains('SOBRANTE')])
-                st.markdown(f"""
-                <div class='stat-card card-purple'>
-                    <div class='stat-icon'>👔</div>
-                    <div class='stat-title'>Sobrantes</div>
-                    <div class='stat-value'>{sobrantes}</div>
-                </div>
-                """, unsafe_allow_html=True)
-            st.markdown("</div>", unsafe_allow_html=True)
-            
-            # Tabla de correos
-            st.markdown("### 📋 Bandeja de Entrada Analizada")
-            st.dataframe(
-                df[['fecha', 'remitente', 'asunto', 'tipo', 'urgencia']], 
-                use_container_width=True,
-                column_config={
-                    "urgencia": st.column_config.TextColumn(
-                        "Prioridad",
-                        help="Nivel de urgencia detectado",
-                        width="small"
-                    ),
-                    "tipo": st.column_config.TextColumn(
-                        "Categoría",
-                        width="medium"
-                    )
-                }
-            )
-            
-            # Detalles del correo seleccionado
-            st.markdown("---")
-            st.markdown("### 🔍 Inspector de Contenido Detallado")
-            sel_id = st.selectbox("Seleccione un correo para ver detalles:", df['id'], format_func=lambda x: f"Correo #{x}")
-            
-            if sel_id:
-                row = df[df['id'] == sel_id].iloc[0]
+        # Diccionario de búsqueda semántica simple
+        if any(w in text for w in ["faltante", "no llego", "menos", "falta"]):
+            return {"tipo": "📦 FALTANTE", "urgencia": "ALTA"}
+        elif any(w in text for w in ["sobrante", "demas", "extra", "sobra"]):
+            return {"tipo": "👔 SOBRANTE", "urgencia": "MEDIA"}
+        elif any(w in text for w in ["daño", "roto", "manchado", "averia", "mojado"]):
+            return {"tipo": "⚠️ DAÑO", "urgencia": "ALTA"}
+        elif "etiqueta" in text:
+            return {"tipo": "🏷️ ETIQUETA", "urgencia": "BAJA"}
+        
+        return {"tipo": "ℹ️ GENERAL", "urgencia": "BAJA"}
+
+    def get_latest_news(self, limit: int = 20) -> List[Dict[str, Any]]:
+        """Busca y procesa los correos más recientes en la bandeja real."""
+        self._connect()
+        
+        # Filtro: Solo correos de los últimos 30 días para no saturar el servidor
+        date_filter = (datetime.now() - timedelta(days=30)).strftime("%d-%b-%Y")
+        _, messages = self.mail.search(None, f'(SINCE "{date_filter}")')
+        
+        ids = messages[0].split()
+        latest_ids = ids[-limit:]  # Tomar los últimos N correos
+        
+        results = []
+        for e_id in reversed(latest_ids):
+            _, msg_data = self.mail.fetch(e_id, '(RFC822)')
+            for response_part in msg_data:
+                if isinstance(response_part, tuple):
+                    msg = email.message_from_bytes(response_part[1])
+                    subject = self._decode_utf8(msg["Subject"])
+                    sender = self._decode_utf8(msg["From"])
+                    date_ = msg["Date"]
+                    
+                    # Extraer cuerpo del mensaje
+                    body = ""
+                    if msg.is_multipart():
+                        for part in msg.walk():
+                            if part.get_content_type() == "text/plain":
+                                body = part.get_payload(decode=True).decode(errors="ignore")
+                                break
+                    else:
+                        body = msg.get_payload(decode=True).decode(errors="ignore")
+
+                    # Inteligencia de Clasificación
+                    analysis = self.classify_email(subject, body)
+                    
+                    # Intentar extraer ID de pedido (ej: #12345)
+                    order_match = re.search(r'#(\d+)', subject)
+                    order_id = order_match.group(1) if order_match else "N/A"
+
+                    results.append({
+                        "id": e_id.decode(),
+                        "fecha": date_,
+                        "remitente": sender,
+                        "asunto": subject,
+                        "cuerpo": body,
+                        "tipo": analysis["tipo"],
+                        "urgencia": analysis["urgencia"],
+                        "pedido": order_id
+                    })
+        
+        self.mail.logout()
+        return results
+
+# ==============================================================================
+# 2. INTERFAZ DE USUARIO (STREAMLIT)
+# ==============================================================================
+
+def main():
+    st.set_page_config(page_title="Wilo AI Auditor", page_icon="📧", layout="wide")
+
+    # Sidebar para Credenciales (Seguridad primero)
+    st.sidebar.title("🔐 Acceso Seguro")
+    mail_user = st.sidebar.text_input("Correo", value="wperez@fashionclub.com.ec")
+    mail_pass = st.sidebar.text_input("Contraseña", value="2wperez*", type="password")
+    imap_host = "mail.fashionclub.com.ec"
+    
+    st.title("📧 Auditoría de Correos Wilo AI")
+    st.markdown("---")
+
+    col_info, col_btn = st.columns([3, 1])
+    with col_info:
+        st.info(f"**Usuario:** {mail_user} | **Servidor:** {imap_host}")
+    
+    with col_btn:
+        run_audit = st.button("🚀 Iniciar Auditoría Real", use_container_width=True, type="primary")
+
+    if run_audit:
+        if not mail_pass:
+            st.error("Por favor ingresa tu contraseña en la barra lateral.")
+            return
+
+        engine = WiloEmailEngine(imap_host, mail_user, mail_pass)
+        
+        with st.spinner("Conectando con Fashion Club y analizando novedades..."):
+            try:
+                data = engine.get_latest_news(limit=30)
+                if not data:
+                    st.warning("No se encontraron novedades en los últimos 30 días.")
+                    return
+
+                df = pd.DataFrame(data)
+
+                # --- DASHBOARD DE MÉTRICAS ---
+                m1, m2, m3, m4 = st.columns(4)
+                m1.metric("Analizados", len(df))
+                m2.metric("Críticos 🚨", len(df[df['urgencia'] == 'ALTA']))
+                m3.metric("Faltantes 📦", len(df[df['tipo'].str.contains('FALTANTE')]))
+                m4.metric("Detecciones", df['pedido'].nunique() - (1 if 'N/A' in df['pedido'].values else 0))
+
+                # --- TABLA DE RESULTADOS ---
+                st.subheader("📋 Bandeja de Entrada Analizada")
+                st.dataframe(
+                    df[['fecha', 'remitente', 'asunto', 'tipo', 'urgencia', 'pedido']],
+                    use_container_width=True,
+                    column_config={
+                        "urgencia": st.column_config.TextColumn("Prioridad"),
+                        "tipo": st.column_config.TextColumn("Categoría"),
+                        "pedido": st.column_config.TextColumn("ID Pedido")
+                    }
+                )
+
+                # --- INSPECTOR DETALLADO ---
+                st.markdown("---")
+                st.subheader("🔍 Inspector de Contenido")
+                selected_idx = st.selectbox(
+                    "Selecciona un correo para leer el análisis completo:",
+                    df.index,
+                    format_func=lambda x: f"[{df.iloc[x]['tipo']}] - {df.iloc[x]['asunto'][:50]}..."
+                )
                 
-                col1, col2 = st.columns([1, 1])
-                with col1:
-                    st.markdown("""
-                    <div class='filter-panel'>
-                        <h4>📋 Información del Correo</h4>
-                    """, unsafe_allow_html=True)
+                detail = df.iloc[selected_idx]
+                c1, c2 = st.columns([1, 1])
+                with c1:
                     st.markdown(f"""
-                    <p><strong>De:</strong> {row['remitente']}</p>
-                    <p><strong>Asunto:</strong> {row['asunto']}</p>
-                    <p><strong>Fecha:</strong> {row['fecha']}</p>
-                    <p><strong>Clasificación:</strong> <span style='color: {'#EF4444' if row['urgencia'] == 'ALTA' else '#3B82F6'}'>{row['tipo']}</span></p>
-                    <p><strong>Urgencia:</strong> <span style='color: {'#EF4444' if row['urgencia'] == 'ALTA' else '#F59E0B' if row['urgencia'] == 'MEDIA' else '#10B981'}'>{row['urgencia']}</span></p>
+                    **Detalles Técnicos:**
+                    - **Remitente:** {detail['remitente']}
+                    - **Fecha:** {detail['fecha']}
+                    - **Pedido Detectado:** `{detail['pedido']}`
                     """)
-                    st.markdown("</div>", unsafe_allow_html=True)
-                
-                with col2:
-                    st.text_area("**Cuerpo del Correo:**", row['cuerpo'], height=200)
-                
-                # Análisis adicional
-                st.markdown("#### 📊 Análisis Semántico")
-                words = len(row['cuerpo'].split())
-                sentences = len(re.split(r'[.!?]+', row['cuerpo']))
-                
-                col_a, col_b, col_c = st.columns(3)
-                with col_a:
-                    st.markdown(f"""
-                    <div class='metric-card'>
-                        <div class='metric-title'>Palabras</div>
-                        <div class='metric-value'>{words}</div>
-                    </div>
-                    """, unsafe_allow_html=True)
-                
-                with col_b:
-                    st.markdown(f"""
-                    <div class='metric-card'>
-                        <div class='metric-title'>Oraciones</div>
-                        <div class='metric-value'>{sentences}</div>
-                    </div>
-                    """, unsafe_allow_html=True)
-                
-                with col_c:
-                    st.markdown(f"""
-                    <div class='metric-card'>
-                        <div class='metric-title'>Detecciones</div>
-                        <div class='metric-value'>{len(row['tipo'].split(', '))}</div>
-                    </div>
-                    """, unsafe_allow_html=True)
+                with c2:
+                    st.text_area("Cuerpo del Correo:", detail['cuerpo'], height=200)
+
+            except Exception as e:
+                st.error(f"❌ Error durante la auditoría: {e}")
 
 # ==============================================================================
 # 4. MÓDULO RECONCILIACIÓN V8 (ESTILIZADO)
