@@ -2231,25 +2231,12 @@ def mostrar_generacion_guias():
                                     "Jessica Suárez", "Rocio Cadena", "Jhony Villa"])
             
             # Dirección del remitente (fija)
-            direccion_remitente = "San Roque, Barrio la Merced calle Santho Thomas y antigua via a cotacachi"
+            direccion_remitente = "San Roque,Calle Santo Thomas y antigua via a Cotacachi"
             st.info(f"""
             **Dirección del Remitente:**
             📍 {direccion_remitente}
             """)
         
-        st.divider()
-        
-        # Segunda fila: Información del envío
-        st.subheader("📦 Detalles del Envío")
-        col3, col4 = st.columns(2)
-        
-        with col3:
-            num_piezas = st.number_input("**Número de Piezas:**", min_value=1, max_value=100, value=1, step=1)
-            peso = st.number_input("**Peso Aproximado (kg):**", min_value=0.1, max_value=100.0, value=5.0, step=0.1)
-            valor_declarado = st.number_input("**Valor Declarado (USD):**", min_value=0.0, value=100.0, step=10.0)
-        
-        with col4:
-            fecha_emision = st.date_input("**Fecha de Emisión:**", datetime.now())
         
         st.divider()
         
@@ -2258,7 +2245,7 @@ def mostrar_generacion_guias():
         col5, col6 = st.columns(2)
         
         with col5:
-            nombre_destinatario = st.text_input("**Nombre del Destinatario:**", placeholder="Ej: Juan Pérez")
+            nombre_destinatario = st.text_input("**Nombre del Destinatario:**", placeholder="Ej: Pepito Paez")
             telefono_destinatario = st.text_input("**Teléfono del Destinatario:**", placeholder="Ej: +593 99 999 9999")
         
         with col6:
@@ -2266,8 +2253,17 @@ def mostrar_generacion_guias():
                                                 placeholder="Ej: Av. Principal #123, Ciudad, Provincia",
                                                 height=100)
             tienda_destino = st.selectbox("**Tienda Destino (Opcional):**", 
-                                         ["", "Mall del Sol", "San Marino", "Quicentro", "Mall del Río", 
-                                          "Plaza de las Américas", "Riocentro Ceibos", "Otro"])
+                                         ["", "Aero Matriz", "Aero Zona Franca", "Aero Servicios Y Otros", "Aero Bod Donaciones", "Price Club", 
+                                          "Aero Trans Toma Fisica", "Aero Oil Uno", "Aero La Plaza", "Aero Milagro", "Aero Condado Shopping",
+                                          "Aero Multiplaza Riobamba", "Aero Santo Domingo", "Aero Quevedo", "Aero Manta", "Aero Portoviejo", 
+                                          "Price Club Portoviejo", "Aero Rio Centro Norte", "Aero Duran", "Price Club City Mall", "Aero Mall Del Sur",
+                                          "Aero Los Ceibos", "Aero Ambato", "Aero Carapungo", "Aero Peninsula", "Aero Paseo Ambato", "Aero Mall Del Sol", 
+                                          "Aero Babahoyo", "Aero Riobamba", "Aero Mall Del Pacifico", "Aero San Luis", "Aero Machala",
+                                          "Aero Ventas Por Mayor", "Aero Cuenca Centro Historico", "Aero Cuenca", "Aero Tienda Movil - Web",
+                                          "Aero Playas", "Aero Bod San Roque", "Aero Bomboli", "Aero Mall Del Rio Gye", "Aero Urban Ambato", 
+                                          "Aero Riocentro El Dorado", "Aero Pasaje", "Aero El Coca", "Aero 6 De Diciembre", "Aero Lago Agrio",
+                                          "Aero Pedernales", "Price Club Machala", "Price Club Guayaquil", "Aero Bodega Fallas", "Aero Regional Costa",
+                                          "Aero CCi", "Aero Cayambe", "Aero Bahia De Caraquez", "Aero Daule", "Aero Jagi El Dorado" ])
         
         st.divider()
         
@@ -2343,11 +2339,6 @@ def mostrar_generacion_guias():
                 "telefono_destinatario": telefono_destinatario,
                 "direccion_destinatario": direccion_destinatario,
                 "tienda_destino": tienda_destino if tienda_destino else "No especificada",
-                "piezas": num_piezas,
-                "peso": peso,
-                "valor_declarado": valor_declarado,
-                "fecha_emision": fecha_emision.strftime("%Y-%m-%d"),
-                "url_pedido": url_pedido,
                 "estado": "Generada",
                 "fecha_creacion": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             }
@@ -2452,7 +2443,7 @@ def generar_pdf_profesional(guia_data):
     contenido = []
     
     # Título principal
-    contenido.append(Paragraph("GUÍA DE ENVÍO", styles['Titulo']))
+    contenido.append(Paragraph("GUÍA DE ENVÍO CENTRO DE DISTRIBUCION", styles['Titulo']))
     contenido.append(Paragraph(f"{guia_data['marca'].upper()}", styles['Subtitulo']))
     
     # Línea separadora
@@ -2521,17 +2512,7 @@ def generar_pdf_profesional(guia_data):
     contenido.append(tabla_envio)
     contenido.append(Spacer(1, 0.2*inch))
     
-    # Detalles del envío
-    contenido.append(Paragraph("DETALLES DEL ENVÍO", styles['Encabezado']))
-    
-    detalles_envio = [
-        [Paragraph("<b>Concepto</b>", styles['ContenidoNegrita']), 
-         Paragraph("<b>Valor</b>", styles['ContenidoNegrita'])],
-        ["Número de Piezas", str(guia_data['piezas'])],
-        ["Peso Aproximado (kg)", f"{guia_data['peso']} kg"],
-        ["Valor Declarado", f"${guia_data['valor_declarado']:,.2f} USD"],
-    ]
-    
+  
     tabla_detalles = Table(detalles_envio, colWidths=[4*inch, 3*inch])
     tabla_detalles.setStyle(TableStyle([
         ('GRID', (0, 0), (-1, -1), 0.5, HexColor('#CCCCCC')),
@@ -2544,32 +2525,7 @@ def generar_pdf_profesional(guia_data):
     contenido.append(tabla_detalles)
     contenido.append(Spacer(1, 0.2*inch))
     
-    # Información de seguimiento
-    contenido.append(Paragraph("INFORMACIÓN DE SEGUIMIENTO", styles['Encabezado']))
-    contenido.append(Paragraph(f"<b>URL de Tracking:</b> {guia_data['url_pedido']}", styles['Contenido']))
-    
-    # Agregar código QR si está disponible
-    if guia_data['url_pedido'] in st.session_state.qr_images:
-        try:
-            from reportlab.lib.utils import ImageReader
-            qr_bytes = st.session_state.qr_images[guia_data['url_pedido']]
-            qr_image = ImageReader(io.BytesIO(qr_bytes))
-            
-            # Crear tabla para QR y texto
-            qr_table_data = [
-                [Paragraph("<b>CÓDIGO QR DE SEGUIMIENTO</b>", styles['ContenidoNegrita']), ""],
-                ["", ""],
-                [Paragraph("Escanee este código para<br/>acceder al seguimiento<br/>en línea del pedido", styles['Contenido']), 
-                 Paragraph(f"URL: {guia_data['url_pedido'][:50]}...", styles['Contenido'])]
-            ]
-            
-            qr_table = Table(qr_table_data, colWidths=[3*inch, 4*inch])
-            qr_table.setStyle(TableStyle([
-                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-                ('SPAN', (0, 1), (0, 2)),
-                ('ALIGN', (0, 1), (0, 1), 'CENTER'),
-            ]))
-            
+               
             # Crear una tabla con imagen de QR
             from reportlab.platypus import Image
             qr_img = Image(io.BytesIO(qr_bytes), width=2*inch, height=2*inch)
@@ -2588,46 +2544,7 @@ def generar_pdf_profesional(guia_data):
     
     contenido.append(Spacer(1, 0.3*inch))
     
-    # Instrucciones y firmas
-    instrucciones = [
-        [Paragraph("<b>INSTRUCCIONES Y FIRMAS</b>", styles['ContenidoNegrita'])],
-        [Paragraph("1. Esta guía debe acompañar el paquete en todo momento.", styles['Contenido'])],
-        [Paragraph("2. El destinatario debe firmar al recibir el paquete.", styles['Contenido'])],
-        [Paragraph("3. Conservar este documento para cualquier consulta o reclamo.", styles['Contenido'])],
-        [Paragraph("4. Para seguimiento en línea, escanee el código QR o visite la URL indicada.", styles['Contenido'])],
-    ]
-    
-    tabla_instrucciones = Table(instrucciones, colWidths=[7*inch])
-    tabla_instrucciones.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), HexColor('#F5F5F5')),
-        ('PADDING', (0, 0), (-1, -1), 8),
-        ('BOX', (0, 0), (-1, -1), 0.5, HexColor('#CCCCCC')),
-    ]))
-    
-    contenido.append(tabla_instrucciones)
-    contenido.append(Spacer(1, 0.3*inch))
-    
-    # Firmas
-    firmas_data = [
-        [Paragraph("<b>Firma del Remitente</b>", styles['ContenidoNegrita']), 
-         Paragraph("<b>Firma del Destinatario</b>", styles['ContenidoNegrita'])],
-        ["_________________________", "_________________________"],
-        [Paragraph(f"Nombre: {guia_data['remitente']}", styles['Contenido']),
-         Paragraph(f"Nombre: {guia_data['destinatario']}", styles['Contenido'])],
-        [Paragraph(f"Fecha: __________________", styles['Contenido']),
-         Paragraph(f"Fecha: __________________", styles['Contenido'])],
-    ]
-    
-    tabla_firmas = Table(firmas_data, colWidths=[3.5*inch, 3.5*inch])
-    tabla_firmas.setStyle(TableStyle([
-        ('PADDING', (0, 0), (-1, -1), 10),
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-    ]))
-    
-    contenido.append(tabla_firmas)
-    contenido.append(Spacer(1, 0.2*inch))
-    
+       
     # Pie de página
     contenido.append(Spacer(1, 0.1*inch))
     contenido.append(Paragraph("_" * 100, ParagraphStyle(name='Linea', fontSize=8)))
