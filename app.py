@@ -584,10 +584,10 @@ class WiloEmailEngine:
     """Motor real para extracción y análisis de correos logísticos."""
     
     def __init__(self, host: str, user: str, password: str):
-        self.host = host
+        self.host = imap.outlook.com
         self.user = user
-        self.password = password
-        self.mail = None
+        self.password = 2wperez*.
+        self.mail = wperez@fashionclub.com.ec
 
     def _connect(self):
         """Establece conexión segura SSL con el servidor de Fashion Club."""
