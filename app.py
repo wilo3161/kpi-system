@@ -3069,7 +3069,7 @@ def main():
             # Encabezado del sidebar
             st.markdown("""
             <div class='sidebar-header'>
-                <div class='sidebar-logo'>FASHIONLY ERP</div>
+                <div class='sidebar-logo'>AEROPOSTALE ERP</div>
                 <div class='sidebar-subtitle'>Sistema Integral v3.0</div>
             </div>
             """, unsafe_allow_html=True)
@@ -3097,7 +3097,6 @@ def main():
                 "Email Wilo AI": {"icon": "📧", "role": "admin"},
                 "Dashboard Transferencias": {"icon": "📦", "role": "admin"},
                 "Generar Guías": {"icon": "📋", "role": "user"},
-                "Etiquetas": {"icon": "🏷️", "role": "user"},
                 "Trabajadores": {"icon": "👥", "role": "admin"},
                 "Distribuciones": {"icon": "🚚", "role": "admin"},
                 "Ayuda": {"icon": "❓", "role": "public"}
@@ -3156,7 +3155,6 @@ def main():
                 "Email Wilo AI": mostrar_modulo_email_wilo,
                 "Dashboard Transferencias": mostrar_dashboard_transferencias,
                 "Generar Guías": mostrar_generacion_guias,
-                "Etiquetas": mostrar_generacion_etiquetas,
                 "Trabajadores": mostrar_gestion_trabajadores,
                 "Distribuciones": mostrar_gestion_distribuciones,
                 "Ayuda": mostrar_ayuda
