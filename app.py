@@ -2187,13 +2187,6 @@ def mostrar_generacion_guias():
         st.session_state.guias_registradas = []
         st.session_state.contador_guias = 1000
     
-    # Logos de las empresas (usando emojis como placeholder)
-    logos = {
-        "Fashion Club": "👔",
-        "Tempo": "🚚",
-        "Aeropostale": "🏷️"
-    }
-    
     with st.form("guias_form", border=False):
         st.markdown("""
         <div class='filter-panel'>
@@ -2207,14 +2200,28 @@ def mostrar_generacion_guias():
             st.subheader("🏢 Información de la Empresa")
             marca = st.radio("**Seleccione la Marca:**", ["Fashion Club", "Tempo"], horizontal=True)
             
-            # Mostrar logo según selección
-            logo = logos.get(marca, "🏢")
-            st.markdown(f"""
-            <div style='text-align: center; padding: 15px; background: #f8f9fa; border-radius: 10px; margin: 10px 0;'>
-                <div style='font-size: 3rem;'>{logo}</div>
-                <div style='font-weight: bold; font-size: 1.2rem; color: #0033A0;'>{marca}</div>
-            </div>
-            """, unsafe_allow_html=True)
+            # Mostrar imagen según selección
+            if marca == "Tempo":
+                try:
+                    st.image("tempo.png", caption=marca, width=150)
+                except:
+                    st.markdown("""
+                    <div style='text-align: center; padding: 15px; background: #f8f9fa; border-radius: 10px; margin: 10px 0;'>
+                        <div style='font-size: 3rem;'>🚚</div>
+                        <div style='font-weight: bold; font-size: 1.2rem; color: #0033A0;'>Tempo</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+            else:  # Fashion Club
+                try:
+                    # Asegúrate de tener una imagen llamada "fashion.png" en el mismo directorio
+                    st.image("fashion.png", caption=marca, width=150)
+                except:
+                    st.markdown("""
+                    <div style='text-align: center; padding: 15px; background: #f8f9fa; border-radius: 10px; margin: 10px 0;'>
+                        <div style='font-size: 3rem;'>👔</div>
+                        <div style='font-weight: bold; font-size: 1.2rem; color: #0033A0;'>Fashion Club</div>
+                    </div>
+                    """, unsafe_allow_html=True)
         
         with col2:
             st.subheader("👤 Información del Remitente")
@@ -2243,8 +2250,8 @@ def mostrar_generacion_guias():
         
         with col4:
             fecha_emision = st.date_input("**Fecha de Emisión:**", datetime.now())
-            fecha_estimada_entrega = st.date_input("**Fecha Estimada de Entrega:**", datetime.now() + timedelta(days=3))
-            tipo_servicio = st.selectbox("**Tipo de Servicio:**", ["Estándar", "Express", "Prioritario"])
+            # Campos eliminados según solicitud
+            # fecha_estimada_entrega y tipo_servicio removidos
         
         st.divider()
         
@@ -2329,7 +2336,6 @@ def mostrar_generacion_guias():
             guia_data = {
                 "numero": guia_num,
                 "marca": marca,
-                "logo": logo,
                 "remitente": remitente,
                 "direccion_remitente": direccion_remitente,
                 "destinatario": nombre_destinatario,
@@ -2340,8 +2346,6 @@ def mostrar_generacion_guias():
                 "peso": peso,
                 "valor_declarado": valor_declarado,
                 "fecha_emision": fecha_emision.strftime("%Y-%m-%d"),
-                "fecha_estimada_entrega": fecha_estimada_entrega.strftime("%Y-%m-%d"),
-                "tipo_servicio": tipo_servicio,
                 "url_pedido": url_pedido,
                 "estado": "Generada",
                 "fecha_creacion": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -2358,85 +2362,14 @@ def mostrar_generacion_guias():
                     # Agregar a lista de guías
                     st.session_state.guias_registradas.append(guia_data)
                     
-                    # Generar PDF
-                    pdf_bytes = generar_pdf_guia(guia_data)
+                    # Generar PDF mejorado
+                    pdf_bytes = generar_pdf_mejorado(guia_data)
                     
                     st.success(f"✅ Guía {guia_num} generada exitosamente!")
                     
                     # Mostrar resumen
                     mostrar_resumen_guia(guia_data, pdf_bytes)
-    
-    # Sección de guías registradas
-    if st.session_state.guias_registradas:
-        st.markdown("---")
-        st.markdown("""
-        <div class='filter-panel'>
-            <h3 class='filter-title'>📋 Historial de Guías Generadas</h3>
-        """, unsafe_allow_html=True)
-        
-        # Estadísticas
-        total_guias = len(st.session_state.guias_registradas)
-        guias_fashion = len([g for g in st.session_state.guias_registradas if g['marca'] == 'Fashion Club'])
-        guias_tempo = len([g for g in st.session_state.guias_registradas if g['marca'] == 'Tempo'])
-        
-        col_stats1, col_stats2, col_stats3 = st.columns(3)
-        with col_stats1:
-            st.markdown(f"""
-            <div class='metric-card'>
-                <div class='metric-title'>Total Guías</div>
-                <div class='metric-value'>{total_guias}</div>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        with col_stats2:
-            st.markdown(f"""
-            <div class='metric-card'>
-                <div class='metric-title'>Fashion Club</div>
-                <div class='metric-value'>{guias_fashion}</div>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        with col_stats3:
-            st.markdown(f"""
-            <div class='metric-card'>
-                <div class='metric-title'>Tempo</div>
-                <div class='metric-value'>{guias_tempo}</div>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        # Tabla de guías
-        df_guias = pd.DataFrame(st.session_state.guias_registradas)
-        
-        # Filtrar columnas para mostrar
-        columnas_mostrar = ['numero', 'marca', 'destinatario', 'tienda_destino', 
-                          'fecha_emision', 'estado', 'piezas']
-        
-        st.dataframe(
-            df_guias[columnas_mostrar].rename(columns={
-                'numero': 'Guía',
-                'marca': 'Marca',
-                'destinatario': 'Destinatario',
-                'tienda_destino': 'Tienda',
-                'fecha_emision': 'Fecha',
-                'estado': 'Estado',
-                'piezas': 'Piezas'
-            }),
-            use_container_width=True,
-            hide_index=True
-        )
-        
-        # Opción para descargar CSV
-        if not df_guias.empty:
-            csv = df_guias.to_csv(index=False)
-            st.download_button(
-                label="📥 Descargar CSV de Guías",
-                data=csv,
-                file_name=f"guias_fashion_club_{datetime.now().strftime('%Y%m%d')}.csv",
-                mime="text/csv",
-                use_container_width=True
-            )
-        
-        st.markdown("</div>", unsafe_allow_html=True)
+
 
 def mostrar_vista_previa_guia(guia_data):
     """Muestra una vista previa de la guía"""
@@ -2448,13 +2381,20 @@ def mostrar_vista_previa_guia(guia_data):
     col_v1, col_v2 = st.columns(2)
     
     with col_v1:
-        st.markdown(f"""
-        ### {guia_data['logo']} {guia_data['marca']}
-        **Guía:** `{guia_data['numero']}`
+        # Mostrar logo según marca
+        if guia_data['marca'] == "Tempo":
+            try:
+                st.image("tempo.png", width=100)
+            except:
+                st.markdown("### 🚚 Tempo")
+        else:
+            try:
+                st.image("fashion.png", width=100)
+            except:
+                st.markdown("### 👔 Fashion Club")
         
-        **📅 Fecha Emisión:** {guia_data['fecha_emision']}
-        **📅 Estimada Entrega:** {guia_data['fecha_estimada_entrega']}
-        **📦 Tipo Servicio:** {guia_data['tipo_servicio']}
+        st.markdown(f"""
+        **Guía:** `{guia_data['numero']}`
         
         **👤 Remitente:** {guia_data['remitente']}
         **📍 Dirección:** {guia_data['direccion_remitente']}
@@ -2500,67 +2440,109 @@ def mostrar_vista_previa_guia(guia_data):
     
     st.markdown("</div>", unsafe_allow_html=True)
 
-def generar_pdf_guia(guia_data):
-    """Genera un PDF con la información de la guía"""
-    # Crear un documento en memoria
+
+def generar_pdf_mejorado(guia_data):
+    """Genera un PDF mejorado con formato profesional"""
     buffer = io.BytesIO()
     
-    # En un entorno real, aquí se usaría una librería como ReportLab, FPDF, o WeasyPrint
-    # Para este ejemplo, simulamos un PDF con contenido básico
+    # Crear documento PDF
+    from reportlab.lib.pagesizes import letter
+    from reportlab.pdfgen import canvas
+    from reportlab.lib.units import inch
+    from reportlab.lib.colors import Color, black, white
     
-    contenido_pdf = f"""
-    GUÍA DE ENVÍO - CENTRO DE DISTRIBUCIÓN FASHION CLUB
-    ====================================================
+    c = canvas.Canvas(buffer, pagesize=letter)
+    width, height = letter
     
-    Número de Guía: {guia_data['numero']}
-    Fecha de Emisión: {guia_data['fecha_emision']}
-    Marca: {guia_data['marca']}
+    # Configuración inicial
+    c.setFont("Helvetica-Bold", 16)
     
-    INFORMACIÓN DEL REMITENTE
-    --------------------------
-    Nombre: {guia_data['remitente']}
-    Dirección: {guia_data['direccion_remitente']}
+    # Encabezado
+    c.drawString(1*inch, height-1*inch, f"GUÍA DE ENVÍO - {guia_data['marca'].upper()}")
+    c.setFont("Helvetica", 10)
+    c.drawString(1*inch, height-1.2*inch, f"Número: {guia_data['numero']}")
+    c.drawString(4*inch, height-1.2*inch, f"Fecha: {guia_data['fecha_emision']}")
     
-    INFORMACIÓN DEL DESTINATARIO
-    -----------------------------
-    Nombre: {guia_data['destinatario']}
-    Teléfono: {guia_data['telefono_destinatario'] or 'No especificado'}
-    Tienda: {guia_data['tienda_destino']}
-    Dirección: {guia_data['direccion_destinatario']}
+    # Línea separadora
+    c.line(1*inch, height-1.4*inch, 7.5*inch, height-1.4*inch)
     
-    DETALLES DEL ENVÍO
-    -------------------
-    Piezas: {guia_data['piezas']}
-    Peso: {guia_data['peso']} kg
-    Valor Declarado: ${guia_data['valor_declarado']:,.2f}
-    Tipo de Servicio: {guia_data['tipo_servicio']}
-    Fecha Estimada de Entrega: {guia_data['fecha_estimada_entrega']}
+    # Sección 1: Remitente
+    y = height - 1.8*inch
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(1*inch, y, "REMITENTE")
+    c.setFont("Helvetica", 10)
+    y -= 0.2*inch
+    c.drawString(1*inch, y, f"Nombre: {guia_data['remitente']}")
+    y -= 0.2*inch
+    c.drawString(1*inch, y, f"Dirección: {guia_data['direccion_remitente']}")
     
-    INFORMACIÓN DIGITAL
-    --------------------
-    URL de Tracking: {guia_data['url_pedido']}
-    Fecha de Creación: {guia_data['fecha_creacion']}
+    # Sección 2: Destinatario
+    y -= 0.4*inch
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(1*inch, y, "DESTINATARIO")
+    c.setFont("Helvetica", 10)
+    y -= 0.2*inch
+    c.drawString(1*inch, y, f"Nombre: {guia_data['destinatario']}")
+    y -= 0.2*inch
+    c.drawString(1*inch, y, f"Teléfono: {guia_data['telefono_destinatario'] or 'No especificado'}")
+    y -= 0.2*inch
+    c.drawString(1*inch, y, f"Tienda: {guia_data['tienda_destino']}")
+    y -= 0.2*inch
+    c.drawString(1*inch, y, f"Dirección: {guia_data['direccion_destinatario']}")
     
-    INSTRUCCIONES
-    --------------
-    1. Esta guía debe acompañar el paquete en todo momento
-    2. El destinatario debe firmar al recibir
-    3. Conservar este documento para cualquier reclamo
-    4. Escanear el código QR para seguimiento en línea
+    # Sección 3: Detalles del Envío
+    y -= 0.4*inch
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(1*inch, y, "DETALLES DEL ENVÍO")
+    c.setFont("Helvetica", 10)
+    y -= 0.2*inch
+    c.drawString(1*inch, y, f"Piezas: {guia_data['piezas']}")
+    y -= 0.2*inch
+    c.drawString(1*inch, y, f"Peso: {guia_data['peso']} kg")
+    y -= 0.2*inch
+    c.drawString(1*inch, y, f"Valor Declarado: ${guia_data['valor_declarado']:,.2f}")
     
-    -----------------------------------------------------------------
-    Firma del Remitente: ______________________   Fecha: ___________
+    # Sección 4: Información Digital
+    y -= 0.4*inch
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(1*inch, y, "INFORMACIÓN DIGITAL")
+    c.setFont("Helvetica", 10)
+    y -= 0.2*inch
+    c.drawString(1*inch, y, f"URL Tracking: {guia_data['url_pedido']}")
+    y -= 0.2*inch
+    c.drawString(1*inch, y, f"Fecha Generación: {guia_data['fecha_creacion']}")
     
-    Firma del Destinatario: ___________________   Fecha: ___________
+    # Sección para código QR (si es posible)
+    y -= 0.4*inch
+    try:
+        # Generar QR
+        qr = qrcode.QRCode(version=1, box_size=4, border=1)
+        qr.add_data(guia_data['url_pedido'])
+        qr.make(fit=True)
+        qr_img = qr.make_image(fill_color="black", back_color="white")
+        
+        # Guardar QR temporalmente
+        qr_buffer = io.BytesIO()
+        qr_img.save(qr_buffer, format='PNG')
+        qr_buffer.seek(0)
+        
+        # Dibujar QR en PDF
+        c.drawImage(qr_buffer, 5*inch, y-1*inch, width=1.5*inch, height=1.5*inch)
+        c.drawString(5*inch, y-1.2*inch, "Código QR de Seguimiento")
+    except:
+        pass
     
-    NOTAS: {guia_data['marca']} no se responsabiliza por daños durante el transporte.
-    """
+    # Pie de página
+    y = 0.5*inch
+    c.setFont("Helvetica-Oblique", 8)
+    c.drawString(1*inch, y, "Documento generado automáticamente - Centro de Distribución Fashion Club")
+    y -= 0.2*inch
+    c.drawString(1*inch, y, "Conserve este documento para cualquier consulta o reclamo")
     
-    # Codificar contenido como bytes
-    buffer.write(contenido_pdf.encode('utf-8'))
+    c.save()
     buffer.seek(0)
-    
     return buffer.getvalue()
+
 
 def mostrar_resumen_guia(guia_data, pdf_bytes):
     """Muestra el resumen de la guía generada y opciones de descarga"""
@@ -2572,7 +2554,7 @@ def mostrar_resumen_guia(guia_data, pdf_bytes):
     col_r1, col_r2, col_r3 = st.columns(3)
     
     with col_r1:
-        # Descargar PDF
+        # Descargar PDF mejorado
         st.download_button(
             label="📥 Descargar PDF",
             data=pdf_bytes,
@@ -2582,21 +2564,29 @@ def mostrar_resumen_guia(guia_data, pdf_bytes):
         )
     
     with col_r2:
-        # Descargar datos JSON
-        json_data = json.dumps(guia_data, indent=2, ensure_ascii=False)
-        st.download_button(
-            label="📋 Descargar JSON",
-            data=json_data,
-            file_name=f"guia_{guia_data['numero']}.json",
-            mime="application/json",
-            use_container_width=True
-        )
+        # Vista previa del PDF en el navegador
+        import base64
+        pdf_base64 = base64.b64encode(pdf_bytes).decode('utf-8')
+        pdf_display = f'<iframe src="data:application/pdf;base64,{pdf_base64}" width="100%" height="600" type="application/pdf"></iframe>'
+        st.markdown("**Vista previa del PDF:**")
+        st.markdown(pdf_display, unsafe_allow_html=True)
     
     with col_r3:
-        # Copiar número de guía
-        if st.button("📋 Copiar Número de Guía", use_container_width=True):
-            st.session_state.copied_guia = guia_data['numero']
-            st.success(f"✅ Número {guia_data['numero']} copiado al portapapeles")
+        # Copiar información
+        info_text = f"""Guía: {guia_data['numero']}
+Marca: {guia_data['marca']}
+Remitente: {guia_data['remitente']}
+Destinatario: {guia_data['destinatario']}
+Dirección: {guia_data['direccion_destinatario']}
+URL Seguimiento: {guia_data['url_pedido']}"""
+        
+        st.download_button(
+            label="📋 Descargar Texto",
+            data=info_text,
+            file_name=f"guia_{guia_data['numero']}.txt",
+            mime="text/plain",
+            use_container_width=True
+        )
     
     # Información adicional
     st.markdown(f"""
