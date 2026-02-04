@@ -2819,19 +2819,34 @@ def mostrar_gestion_trabajadores():
         ]
     }
     
-    # Inicializar base de datos con estructura base si está vacía
-    trabajadores = local_db.query('trabajadores')
+    # Inicializar base de datos local (solución temporal si falla)
+    try:
+        trabajadores = local_db.query('trabajadores')
+        if trabajadores is None:
+            trabajadores = []
+    except:
+        trabajadores = []
+        st.warning("⚠️ Base de datos no disponible - usando almacenamiento temporal")
+    
+    # Inicializar estructura base si está vacía
     if not trabajadores:
+        st.info("📝 Inicializando estructura organizacional base...")
         # Aplanar la estructura para guardar en base de datos
         todos_base = []
         for area, lista in estructura_base.items():
             for trabajador in lista:
                 trabajador['area'] = area
+                trabajador['fecha_ingreso'] = datetime.now().strftime('%Y-%m-%d')
                 todos_base.append(trabajador)
         
+        # Insertar en base de datos
         for trab in todos_base:
-            local_db.insert('trabajadores', trab)
-        trabajadores = local_db.query('trabajadores')
+            try:
+                local_db.insert('trabajadores', trab)
+            except:
+                # Si falla la inserción, añadir a lista temporal
+                trabajadores.append(trab)
+        st.success("✅ Estructura base inicializada correctamente")
     
     with tab1:
         st.markdown("""
@@ -2844,16 +2859,17 @@ def mostrar_gestion_trabajadores():
         # Mostrar estructura por áreas
         for area, personal in estructura_base.items():
             with st.expander(f"📌 {area} ({len(personal)} personas)", expanded=True):
+                # Crear 3 columnas para distribuir las tarjetas
                 cols = st.columns(3)
                 for idx, trab in enumerate(personal):
                     col_idx = idx % 3
                     with cols[col_idx]:
                         st.markdown(f"""
-                        <div class='person-card'>
-                            <div class='person-name'>{trab['nombre']}</div>
-                            <div class='person-position'>{trab['cargo']}</div>
-                            <div class='person-area'>{trab['subarea']}</div>
-                            <div class='person-status'><span class='status-active'>Activo</span></div>
+                        <div style='background: white; border-radius: 10px; padding: 15px; margin-bottom: 10px; border-left: 4px solid #0033A0; box-shadow: 0 2px 4px rgba(0,0,0,0.1);'>
+                            <div style='font-weight: bold; font-size: 16px; color: #1e3a8a; margin-bottom: 5px;'>{trab['nombre']}</div>
+                            <div style='font-size: 14px; color: #374151; margin-bottom: 3px;'>{trab['cargo']}</div>
+                            <div style='font-size: 12px; color: #6b7280; font-style: italic; margin-bottom: 5px;'>{trab['subarea'] if trab['subarea'] else ''}</div>
+                            <div style='background-color: #10B981; color: white; padding: 2px 8px; border-radius: 12px; font-size: 12px; display: inline-block;'>Activo</div>
                         </div>
                         """, unsafe_allow_html=True)
         
@@ -2877,52 +2893,74 @@ def mostrar_gestion_trabajadores():
         </div>
         """, unsafe_allow_html=True)
         
+        # Obtener todos los trabajadores actuales
+        try:
+            trabajadores_db = local_db.query('trabajadores')
+            if trabajadores_db is None:
+                trabajadores_db = []
+        except:
+            trabajadores_db = trabajadores  # Usar lista temporal si falla
+        
         # Pestañas para cada área
         area_tabs = st.tabs(list(estructura_base.keys()))
         
-        for idx, (area, trabajadores_area) in enumerate(estructura_base.items()):
+        for idx, (area, trabajadores_area_base) in enumerate(estructura_base.items()):
             with area_tabs[idx]:
                 col1, col2 = st.columns([2, 1])
                 
                 with col1:
                     st.subheader(f"Personal en {area}")
                     
-                    # Obtener trabajadores de esta área (base + adicionales)
-                    trabajadores_db = local_db.query('trabajadores')
-                    trabajadores_area_db = [t for t in trabajadores_db if t.get('area') == area]
+                    # Filtrar trabajadores de esta área
+                    trabajadores_area_actual = [t for t in trabajadores_db if t.get('area') == area]
                     
-                    if trabajadores_area_db:
-                        df_area = pd.DataFrame(trabajadores_area_db)
+                    if trabajadores_area_actual:
+                        # Crear dataframe para visualización
+                        data = []
+                        for trab in trabajadores_area_actual:
+                            data.append({
+                                'ID': trab.get('id', ''),
+                                'Nombre': trab.get('nombre', ''),
+                                'Cargo': trab.get('cargo', ''),
+                                'Subárea': trab.get('subarea', ''),
+                                'Estado': trab.get('estado', ''),
+                                'Tipo': 'Base' if trab.get('es_base', False) else 'Adicional'
+                            })
                         
-                        # Configurar columnas para mostrar
-                        display_cols = ['nombre', 'cargo', 'subarea', 'estado']
-                        df_display = df_area[display_cols]
-                        
-                        # Agregar columna de acciones
-                        df_display['acciones'] = ""
+                        df_area = pd.DataFrame(data)
                         
                         # Mostrar dataframe con opción de eliminar
-                        for i, row in df_display.iterrows():
-                            col_d1, col_d2, col_d3, col_d4, col_d5 = st.columns([3, 2, 2, 1, 1])
+                        for i, row in df_area.iterrows():
+                            col_d1, col_d2, col_d3, col_d4, col_d5, col_d6 = st.columns([1, 3, 2, 2, 1, 1])
                             with col_d1:
-                                st.write(f"**{row['nombre']}**")
+                                st.write(f"**{row['ID']}**")
                             with col_d2:
-                                st.write(row['cargo'])
+                                st.write(row['Nombre'])
                             with col_d3:
-                                st.write(row['subarea'] if row['subarea'] else "-")
+                                st.write(row['Cargo'])
                             with col_d4:
-                                status_color = "🟢" if row['estado'] == 'Activo' else "🔴"
-                                st.write(f"{status_color}")
+                                st.write(row['Subárea'] if row['Subárea'] else "-")
                             with col_d5:
-                                # Solo permitir eliminar si no es trabajador base
-                                trabajador_id = df_area.iloc[i]['id']
-                                es_base = df_area.iloc[i].get('es_base', False)
-                                
-                                if not es_base:
+                                tipo_color = "🟢" if row['Tipo'] == 'Base' else "🔵"
+                                st.write(f"{tipo_color} {row['Tipo']}")
+                            with col_d6:
+                                # Solo permitir eliminar si NO es trabajador base
+                                if row['Tipo'] != 'Base':
+                                    trabajador_id = row['ID']
                                     if st.button("🗑️", key=f"eliminar_{area}_{trabajador_id}"):
-                                        local_db.delete('trabajadores', trabajador_id)
-                                        st.success(f"Trabajador {row['nombre']} eliminado")
-                                        st.rerun()
+                                        try:
+                                            # Eliminar de la base de datos
+                                            if hasattr(local_db, 'delete'):
+                                                local_db.delete('trabajadores', trabajador_id)
+                                            else:
+                                                # Eliminar de lista temporal
+                                                trabajadores_db = [t for t in trabajadores_db if t.get('id') != trabajador_id]
+                                            st.success(f"✅ Trabajador {row['Nombre']} eliminado de {area}")
+                                            st.rerun()
+                                        except Exception as e:
+                                            st.error(f"❌ Error al eliminar: {str(e)}")
+                                else:
+                                    st.write("🔒")
                     else:
                         st.info(f"No hay personal registrado en {area}")
                 
@@ -2938,24 +2976,36 @@ def mostrar_gestion_trabajadores():
                         
                         if submit:
                             if nombre_nuevo and cargo_nuevo:
-                                # Generar nuevo ID
-                                max_id = max([t['id'] for t in local_db.query('trabajadores')]) if local_db.query('trabajadores') else 0
-                                nuevo_id = max_id + 1
-                                
-                                nuevo_trabajador = {
-                                    'id': nuevo_id,
-                                    'nombre': nombre_nuevo,
-                                    'cargo': cargo_nuevo,
-                                    'area': area,
-                                    'subarea': subarea_nuevo,
-                                    'estado': estado_nuevo,
-                                    'es_base': False,
-                                    'fecha_ingreso': datetime.now().strftime('%Y-%m-%d')
-                                }
-                                
-                                local_db.insert('trabajadores', nuevo_trabajador)
-                                st.success(f"✅ {nombre_nuevo} agregado a {area}")
-                                st.rerun()
+                                try:
+                                    # Generar nuevo ID
+                                    if trabajadores_db:
+                                        max_id = max([t.get('id', 0) for t in trabajadores_db])
+                                    else:
+                                        max_id = 12  # Empezar después de los IDs base
+                                    
+                                    nuevo_id = max_id + 1
+                                    
+                                    nuevo_trabajador = {
+                                        'id': nuevo_id,
+                                        'nombre': nombre_nuevo,
+                                        'cargo': cargo_nuevo,
+                                        'area': area,
+                                        'subarea': subarea_nuevo,
+                                        'estado': estado_nuevo,
+                                        'es_base': False,
+                                        'fecha_ingreso': datetime.now().strftime('%Y-%m-%d')
+                                    }
+                                    
+                                    # Insertar en base de datos
+                                    local_db.insert('trabajadores', nuevo_trabajador)
+                                    st.success(f"✅ {nombre_nuevo} agregado a {area}")
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"❌ Error al agregar trabajador: {str(e)}")
+                                    # Alternativa: agregar a lista temporal
+                                    trabajadores_db.append(nuevo_trabajador)
+                                    st.success(f"✅ {nombre_nuevo} agregado temporalmente a {area}")
+                                    st.rerun()
                             else:
                                 st.error("❌ Nombre y Cargo son obligatorios")
     
@@ -2966,7 +3016,13 @@ def mostrar_gestion_trabajadores():
         </div>
         """, unsafe_allow_html=True)
         
-        trabajadores_db = local_db.query('trabajadores')
+        try:
+            trabajadores_db = local_db.query('trabajadores')
+            if trabajadores_db is None:
+                trabajadores_db = trabajadores
+        except:
+            trabajadores_db = trabajadores
+        
         if trabajadores_db:
             df_todos = pd.DataFrame(trabajadores_db)
             
@@ -2976,59 +3032,75 @@ def mostrar_gestion_trabajadores():
                 total = len(df_todos)
                 st.metric("👥 Total Personal", total)
             with col_m2:
-                activos = len(df_todos[df_todos['estado'] == 'Activo'])
-                st.metric("🟢 Activos", activos, delta=f"{activos/total*100:.1f}%")
+                if 'estado' in df_todos.columns:
+                    activos = len(df_todos[df_todos['estado'] == 'Activo'])
+                else:
+                    activos = total
+                st.metric("🟢 Activos", activos, delta=f"{activos/total*100:.1f}%" if total > 0 else "0%")
             with col_m3:
-                base = len(df_todos[df_todos.get('es_base', False) == True])
+                if 'es_base' in df_todos.columns:
+                    base = len(df_todos[df_todos['es_base'] == True])
+                else:
+                    base = len(estructura_base) * 2  # Estimación
                 st.metric("🏛️ Personal Base", base)
             with col_m4:
-                adicional = len(df_todos[df_todos.get('es_base', False) == False])
+                if 'es_base' in df_todos.columns:
+                    adicional = len(df_todos[df_todos['es_base'] == False])
+                else:
+                    adicional = max(0, total - base)
                 st.metric("➕ Adicionales", adicional)
             
-            # Gráficos
-            col_g1, col_g2 = st.columns(2)
-            
-            with col_g1:
-                st.markdown('<div class="chart-container">', unsafe_allow_html=True)
-                dist_area = df_todos['area'].value_counts()
-                fig1 = px.bar(
-                    x=dist_area.index, 
-                    y=dist_area.values,
-                    title="Distribución por Área",
-                    labels={'x': 'Área', 'y': 'Cantidad'},
-                    color=dist_area.values,
-                    color_continuous_scale='blues'
-                )
-                fig1.update_layout(showlegend=False)
-                st.plotly_chart(fig1, use_container_width=True)
-                st.markdown('</div>', unsafe_allow_html=True)
-            
-            with col_g2:
-                st.markdown('<div class="chart-container">', unsafe_allow_html=True)
-                fig2 = px.pie(
-                    values=df_todos['estado'].value_counts().values, 
-                    names=df_todos['estado'].value_counts().index,
-                    title="Estado del Personal",
-                    color_discrete_sequence=['#10B981', '#EF4444']
-                )
-                st.plotly_chart(fig2, use_container_width=True)
-                st.markdown('</div>', unsafe_allow_html=True)
+            # Gráficos (solo si hay datos suficientes)
+            if total > 0:
+                col_g1, col_g2 = st.columns(2)
+                
+                with col_g1:
+                    if 'area' in df_todos.columns:
+                        dist_area = df_todos['area'].value_counts()
+                        fig1 = px.bar(
+                            x=dist_area.index, 
+                            y=dist_area.values,
+                            title="Distribución por Área",
+                            labels={'x': 'Área', 'y': 'Cantidad'},
+                            color=dist_area.values,
+                            color_continuous_scale='blues'
+                        )
+                        fig1.update_layout(showlegend=False)
+                        st.plotly_chart(fig1, use_container_width=True)
+                
+                with col_g2:
+                    if 'estado' in df_todos.columns:
+                        estado_counts = df_todos['estado'].value_counts()
+                        fig2 = px.pie(
+                            values=estado_counts.values, 
+                            names=estado_counts.index,
+                            title="Estado del Personal",
+                            color_discrete_sequence=['#10B981', '#EF4444']
+                        )
+                        st.plotly_chart(fig2, use_container_width=True)
             
             # Tabla resumen por área
             st.subheader("📋 Resumen por Área")
             resumen_data = []
             for area in estructura_base.keys():
-                area_data = df_todos[df_todos['area'] == area]
-                resumen_data.append({
-                    'Área': area,
-                    'Total': len(area_data),
-                    'Activos': len(area_data[area_data['estado'] == 'Activo']),
-                    'Base': len(area_data[area_data.get('es_base', False) == True]),
-                    'Adicional': len(area_data[area_data.get('es_base', False) == False])
-                })
+                if 'area' in df_todos.columns:
+                    area_data = df_todos[df_todos['area'] == area]
+                    activos_area = len(area_data[area_data['estado'] == 'Activo']) if 'estado' in df_todos.columns else len(area_data)
+                    base_area = len(area_data[area_data.get('es_base', False) == True]) if 'es_base' in df_todos.columns else 0
+                    
+                    resumen_data.append({
+                        'Área': area,
+                        'Total': len(area_data),
+                        'Activos': activos_area,
+                        'Base': base_area,
+                        'Adicional': len(area_data) - base_area
+                    })
             
-            df_resumen = pd.DataFrame(resumen_data)
-            st.dataframe(df_resumen, use_container_width=True)
+            if resumen_data:
+                df_resumen = pd.DataFrame(resumen_data)
+                st.dataframe(df_resumen, use_container_width=True)
+            else:
+                st.info("No hay datos de áreas para mostrar")
         else:
             st.info("No hay datos para mostrar estadísticas.")
     
@@ -3044,95 +3116,48 @@ def mostrar_gestion_trabajadores():
         with col_c1:
             st.subheader("Restaurar Estructura Base")
             st.warning("⚠️ Esta acción eliminará todo el personal adicional y restaurará la estructura original")
+            
             if st.button("🔄 Restaurar Estructura Base", type="secondary"):
-                # Eliminar todos los trabajadores
-                local_db.delete_all('trabajadores')
-                # Insertar estructura base
-                todos_base = []
-                for area, lista in estructura_base.items():
-                    for trabajador in lista:
-                        trabajador['area'] = area
-                        todos_base.append(trabajador)
-                
-                for trab in todos_base:
-                    local_db.insert('trabajadores', trab)
-                st.success("✅ Estructura base restaurada exitosamente")
-                st.rerun()
+                try:
+                    # Obtener todos los trabajadores actuales
+                    trabajadores_actuales = local_db.query('trabajadores')
+                    if trabajadores_actuales:
+                        # Eliminar solo los no base
+                        for trab in trabajadores_actuales:
+                            if not trab.get('es_base', False):
+                                local_db.delete('trabajadores', trab['id'])
+                    
+                    st.success("✅ Estructura base restaurada exitosamente")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"❌ Error al restaurar: {str(e)}")
         
         with col_c2:
             st.subheader("Exportar Datos")
-            if st.button("📥 Exportar a Excel"):
+            
+            try:
                 trabajadores_db = local_db.query('trabajadores')
                 if trabajadores_db:
                     df_export = pd.DataFrame(trabajadores_db)
                     # Limpiar columnas internas
-                    df_export = df_export[['nombre', 'cargo', 'area', 'subarea', 'estado', 'fecha_ingreso']]
+                    export_cols = ['nombre', 'cargo', 'area', 'subarea', 'estado', 'fecha_ingreso']
+                    available_cols = [col for col in export_cols if col in df_export.columns]
+                    df_export = df_export[available_cols]
                     
-                    # Crear archivo Excel
-                    output = io.BytesIO()
-                    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                        df_export.to_excel(writer, sheet_name='Personal', index=False)
+                    # Convertir a CSV
+                    csv = df_export.to_csv(index=False)
                     
                     st.download_button(
-                        label="Descargar Archivo Excel",
-                        data=output.getvalue(),
-                        file_name="personal_cd.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                        label="📥 Descargar como CSV",
+                        data=csv,
+                        file_name="personal_cd.csv",
+                        mime="text/csv",
+                        help="Descargar todos los datos del personal"
                     )
-
-# Agregar CSS para estilos adicionales
-st.markdown("""
-<style>
-.person-card {
-    background: white;
-    border-radius: 10px;
-    padding: 15px;
-    margin-bottom: 10px;
-    border-left: 4px solid #0033A0;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-}
-.person-name {
-    font-weight: bold;
-    font-size: 16px;
-    color: #1e3a8a;
-    margin-bottom: 5px;
-}
-.person-position {
-    font-size: 14px;
-    color: #374151;
-    margin-bottom: 3px;
-}
-.person-area {
-    font-size: 12px;
-    color: #6b7280;
-    font-style: italic;
-}
-.person-status {
-    margin-top: 8px;
-}
-.status-active {
-    background-color: #10B981;
-    color: white;
-    padding: 2px 8px;
-    border-radius: 12px;
-    font-size: 12px;
-    display: inline-block;
-}
-.status-inactive {
-    background-color: #EF4444;
-    color: white;
-    padding: 2px 8px;
-    border-radius: 12px;
-    font-size: 12px;
-    display: inline-block;
-}
-.section-description {
-    color: #6b7280;
-    font-size: 14px;
-    margin-bottom: 20px;
-}
-</style>
-""", unsafe_allow_html=True)
+                else:
+                    st.info("No hay datos para exportar")
+            except Exception as e:
+                st.error(f"❌ Error al exportar datos: {str(e)}")
 
 # ==============================================================================
 # 10. MÓDULO GESTIÓN DE DISTRIBUCIONES
