@@ -2787,138 +2787,352 @@ def mostrar_gestion_trabajadores():
     st.markdown("""
     <div class='main-header'>
         <h1 class='header-title'>👥 Gestión de Personal</h1>
-        <div class='header-subtitle'>Administración del equipo de trabajo</div>
+        <div class='header-subtitle'>Administración del equipo de trabajo por áreas</div>
     </div>
     """, unsafe_allow_html=True)
     
-    tab1, tab2, tab3 = st.tabs(["📋 Lista de Personal", "➕ Agregar Nuevo", "📊 Estadísticas"])
+    tab1, tab2, tab3, tab4 = st.tabs(["📋 Estructura Organizacional", "➕ Gestionar Personal", "📊 Estadísticas", "⚙️ Configuración"])
+    
+    # Estructura organizacional base
+    estructura_base = {
+        "Liderazgo y Control": [
+            {"id": 1, "nombre": "Wilson Pérez", "cargo": "Jefe de Logística", "subarea": "Cabeza del C.D.", "estado": "Activo", "es_base": True},
+            {"id": 2, "nombre": "Andrés Cadena", "cargo": "Segundo al mando", "subarea": "Control de Inventarios", "estado": "Activo", "es_base": True}
+        ],
+        "Gestión de Transferencias": [
+            {"id": 3, "nombre": "César Yépez", "cargo": "Responsable", "subarea": "Transferencias Fashion", "estado": "Activo", "es_base": True},
+            {"id": 4, "nombre": "Luis Perugachi", "cargo": "Encargado", "subarea": "Pivote de transferencias y Distribución", "estado": "Activo", "es_base": True},
+            {"id": 5, "nombre": "Josué Imbacuán", "cargo": "Responsable", "subarea": "Transferencias Tempo", "estado": "Activo", "es_base": True}
+        ],
+        "Distribución, Empaque y Envíos": [
+            {"id": 6, "nombre": "Jessica Suárez", "cargo": "Distribución", "subarea": "", "estado": "Activo", "es_base": True},
+            {"id": 7, "nombre": "Andrea Malquin", "cargo": "Distribución", "subarea": "", "estado": "Activo", "es_base": True},
+            {"id": 8, "nombre": "Jhonny Villa", "cargo": "Empaque", "subarea": "", "estado": "Activo", "es_base": True},
+            {"id": 9, "nombre": "Simón Vera", "cargo": "Guías y Envíos", "subarea": "", "estado": "Activo", "es_base": True}
+        ],
+        "Ventas al Por Mayor": [
+            {"id": 10, "nombre": "Jhonny Guadalupe", "cargo": "Encargado", "subarea": "Bodega y Packing", "estado": "Activo", "es_base": True},
+            {"id": 11, "nombre": "Rocio Cadena", "cargo": "Responsable", "subarea": "Picking y Distribución", "estado": "Activo", "es_base": True}
+        ],
+        "Mantenimiento y Calidad": [
+            {"id": 12, "nombre": "Diana García", "cargo": "Encargada", "subarea": "Reprocesado de prendas en cuarentena", "estado": "Activo", "es_base": True}
+        ]
+    }
+    
+    # Inicializar base de datos con estructura base si está vacía
+    trabajadores = local_db.query('trabajadores')
+    if not trabajadores:
+        # Aplanar la estructura para guardar en base de datos
+        todos_base = []
+        for area, lista in estructura_base.items():
+            for trabajador in lista:
+                trabajador['area'] = area
+                todos_base.append(trabajador)
+        
+        for trab in todos_base:
+            local_db.insert('trabajadores', trab)
+        trabajadores = local_db.query('trabajadores')
     
     with tab1:
         st.markdown("""
         <div class='filter-panel'>
-            <h4>👤 Personal Activo</h4>
+            <h4>🏢 Estructura Organizacional del Centro de Distribución</h4>
+            <p class='section-description'>Responsables por área (estructura base)</p>
+        </div>
         """, unsafe_allow_html=True)
         
-        # Obtener trabajadores de la base de datos local
-        trabajadores = local_db.query('trabajadores')
-        df_trabajadores = pd.DataFrame(trabajadores)
+        # Mostrar estructura por áreas
+        for area, personal in estructura_base.items():
+            with st.expander(f"📌 {area} ({len(personal)} personas)", expanded=True):
+                cols = st.columns(3)
+                for idx, trab in enumerate(personal):
+                    col_idx = idx % 3
+                    with cols[col_idx]:
+                        st.markdown(f"""
+                        <div class='person-card'>
+                            <div class='person-name'>{trab['nombre']}</div>
+                            <div class='person-position'>{trab['cargo']}</div>
+                            <div class='person-area'>{trab['subarea']}</div>
+                            <div class='person-status'><span class='status-active'>Activo</span></div>
+                        </div>
+                        """, unsafe_allow_html=True)
         
-        if not df_trabajadores.empty:
-            st.dataframe(
-                df_trabajadores,
-                use_container_width=True,
-                column_config={
-                    "nombre": st.column_config.TextColumn("Nombre", width="medium"),
-                    "cargo": st.column_config.TextColumn("Cargo", width="medium"),
-                    "estado": st.column_config.TextColumn(
-                        "Estado",
-                        width="small",
-                        help="Estado del trabajador"
-                    )
-                }
-            )
-            
-            # Estadísticas rápidas
-            col_s1, col_s2, col_s3 = st.columns(3)
-            with col_s1:
-                st.markdown(f"""
-                <div class='metric-card'>
-                    <div class='metric-title'>Total Personal</div>
-                    <div class='metric-value'>{len(df_trabajadores)}</div>
-                </div>
-                """, unsafe_allow_html=True)
-            
-            with col_s2:
-                activos = len(df_trabajadores[df_trabajadores['estado'] == 'Activo'])
-                st.markdown(f"""
-                <div class='metric-card'>
-                    <div class='metric-title'>Activos</div>
-                    <div class='metric-value'>{activos}</div>
-                </div>
-                """, unsafe_allow_html=True)
-            
-            with col_s3:
-                st.markdown(f"""
-                <div class='metric-card'>
-                    <div class='metric-title'>Diferentes Cargos</div>
-                    <div class='metric-value'>{df_trabajadores['cargo'].nunique()}</div>
-                </div>
-                """, unsafe_allow_html=True)
-        else:
-            st.info("No hay trabajadores registrados.")
-        st.markdown("</div>", unsafe_allow_html=True)
+        # Resumen general
+        st.markdown("---")
+        col_res1, col_res2, col_res3 = st.columns(3)
+        with col_res1:
+            total_personal = sum(len(p) for p in estructura_base.values())
+            st.metric("👥 Total Personal Base", total_personal)
+        with col_res2:
+            st.metric("🏭 Áreas Definidas", len(estructura_base))
+        with col_res3:
+            cargos_unicos = len(set([t['cargo'] for area in estructura_base.values() for t in area]))
+            st.metric("🎯 Cargos Únicos", cargos_unicos)
     
     with tab2:
         st.markdown("""
         <div class='filter-panel'>
-            <h4>📝 Registrar Nuevo Personal</h4>
+            <h4>📝 Gestión de Personal por Área</h4>
+            <p class='section-description'>Agregar o eliminar trabajadores en cada área</p>
+        </div>
         """, unsafe_allow_html=True)
         
-        with st.form("nuevo_trabajador"):
-            col_f1, col_f2 = st.columns(2)
-            with col_f1:
-                nombre = st.text_input("Nombre Completo")
-                cedula = st.text_input("Cédula/RUT")
-                telefono = st.text_input("Teléfono")
-            
-            with col_f2:
-                cargo = st.selectbox("Cargo", ["Operador", "Supervisor", "Auditor", "Administrativo", "Gerente"])
-                departamento = st.selectbox("Departamento", ["Logística", "Almacén", "Transporte", "Administración"])
-                fecha_ingreso = st.date_input("Fecha de Ingreso", datetime.now())
-            
-            submit = st.form_submit_button("💾 Guardar Trabajador", type="primary")
-            
-            if submit:
-                if nombre and cargo:
-                    # Simular guardado
-                    nuevo_id = len(trabajadores) + 1
-                    nuevo_trabajador = {
-                        'id': nuevo_id,
-                        'nombre': nombre,
-                        'cargo': cargo,
-                        'departamento': departamento,
-                        'fecha_ingreso': fecha_ingreso.strftime('%Y-%m-%d'),
-                        'estado': 'Activo'
-                    }
+        # Pestañas para cada área
+        area_tabs = st.tabs(list(estructura_base.keys()))
+        
+        for idx, (area, trabajadores_area) in enumerate(estructura_base.items()):
+            with area_tabs[idx]:
+                col1, col2 = st.columns([2, 1])
+                
+                with col1:
+                    st.subheader(f"Personal en {area}")
                     
-                    local_db.insert('trabajadores', nuevo_trabajador)
-                    st.success(f"✅ Trabajador {nombre} registrado exitosamente!")
-                    st.rerun()
-                else:
-                    st.error("❌ Por favor complete todos los campos obligatorios.")
-        st.markdown("</div>", unsafe_allow_html=True)
+                    # Obtener trabajadores de esta área (base + adicionales)
+                    trabajadores_db = local_db.query('trabajadores')
+                    trabajadores_area_db = [t for t in trabajadores_db if t.get('area') == area]
+                    
+                    if trabajadores_area_db:
+                        df_area = pd.DataFrame(trabajadores_area_db)
+                        
+                        # Configurar columnas para mostrar
+                        display_cols = ['nombre', 'cargo', 'subarea', 'estado']
+                        df_display = df_area[display_cols]
+                        
+                        # Agregar columna de acciones
+                        df_display['acciones'] = ""
+                        
+                        # Mostrar dataframe con opción de eliminar
+                        for i, row in df_display.iterrows():
+                            col_d1, col_d2, col_d3, col_d4, col_d5 = st.columns([3, 2, 2, 1, 1])
+                            with col_d1:
+                                st.write(f"**{row['nombre']}**")
+                            with col_d2:
+                                st.write(row['cargo'])
+                            with col_d3:
+                                st.write(row['subarea'] if row['subarea'] else "-")
+                            with col_d4:
+                                status_color = "🟢" if row['estado'] == 'Activo' else "🔴"
+                                st.write(f"{status_color}")
+                            with col_d5:
+                                # Solo permitir eliminar si no es trabajador base
+                                trabajador_id = df_area.iloc[i]['id']
+                                es_base = df_area.iloc[i].get('es_base', False)
+                                
+                                if not es_base:
+                                    if st.button("🗑️", key=f"eliminar_{area}_{trabajador_id}"):
+                                        local_db.delete('trabajadores', trabajador_id)
+                                        st.success(f"Trabajador {row['nombre']} eliminado")
+                                        st.rerun()
+                    else:
+                        st.info(f"No hay personal registrado en {area}")
+                
+                with col2:
+                    st.subheader("Agregar Personal")
+                    with st.form(key=f"form_{area}"):
+                        nombre_nuevo = st.text_input("Nombre Completo", key=f"nombre_{area}")
+                        cargo_nuevo = st.text_input("Cargo", key=f"cargo_{area}")
+                        subarea_nuevo = st.text_input("Área específica/Subárea", key=f"subarea_{area}")
+                        estado_nuevo = st.selectbox("Estado", ["Activo", "Inactivo"], key=f"estado_{area}")
+                        
+                        submit = st.form_submit_button(f"➕ Agregar a {area}")
+                        
+                        if submit:
+                            if nombre_nuevo and cargo_nuevo:
+                                # Generar nuevo ID
+                                max_id = max([t['id'] for t in local_db.query('trabajadores')]) if local_db.query('trabajadores') else 0
+                                nuevo_id = max_id + 1
+                                
+                                nuevo_trabajador = {
+                                    'id': nuevo_id,
+                                    'nombre': nombre_nuevo,
+                                    'cargo': cargo_nuevo,
+                                    'area': area,
+                                    'subarea': subarea_nuevo,
+                                    'estado': estado_nuevo,
+                                    'es_base': False,
+                                    'fecha_ingreso': datetime.now().strftime('%Y-%m-%d')
+                                }
+                                
+                                local_db.insert('trabajadores', nuevo_trabajador)
+                                st.success(f"✅ {nombre_nuevo} agregado a {area}")
+                                st.rerun()
+                            else:
+                                st.error("❌ Nombre y Cargo son obligatorios")
     
     with tab3:
         st.markdown("""
         <div class='filter-panel'>
             <h4>📊 Estadísticas del Personal</h4>
+        </div>
         """, unsafe_allow_html=True)
         
-        if not df_trabajadores.empty:
+        trabajadores_db = local_db.query('trabajadores')
+        if trabajadores_db:
+            df_todos = pd.DataFrame(trabajadores_db)
+            
+            # Métricas principales
+            col_m1, col_m2, col_m3, col_m4 = st.columns(4)
+            with col_m1:
+                total = len(df_todos)
+                st.metric("👥 Total Personal", total)
+            with col_m2:
+                activos = len(df_todos[df_todos['estado'] == 'Activo'])
+                st.metric("🟢 Activos", activos, delta=f"{activos/total*100:.1f}%")
+            with col_m3:
+                base = len(df_todos[df_todos.get('es_base', False) == True])
+                st.metric("🏛️ Personal Base", base)
+            with col_m4:
+                adicional = len(df_todos[df_todos.get('es_base', False) == False])
+                st.metric("➕ Adicionales", adicional)
+            
             # Gráficos
             col_g1, col_g2 = st.columns(2)
             
             with col_g1:
                 st.markdown('<div class="chart-container">', unsafe_allow_html=True)
-                dist_cargo = df_trabajadores['cargo'].value_counts()
-                fig1 = px.pie(values=dist_cargo.values, names=dist_cargo.index, 
-                            title="Distribución por Cargo",
-                            color_discrete_sequence=['#0033A0', '#E4002B', '#10B981', '#8B5CF6', '#F59E0B'])
+                dist_area = df_todos['area'].value_counts()
+                fig1 = px.bar(
+                    x=dist_area.index, 
+                    y=dist_area.values,
+                    title="Distribución por Área",
+                    labels={'x': 'Área', 'y': 'Cantidad'},
+                    color=dist_area.values,
+                    color_continuous_scale='blues'
+                )
+                fig1.update_layout(showlegend=False)
                 st.plotly_chart(fig1, use_container_width=True)
                 st.markdown('</div>', unsafe_allow_html=True)
             
             with col_g2:
                 st.markdown('<div class="chart-container">', unsafe_allow_html=True)
-                fig2 = px.bar(x=dist_cargo.index, y=dist_cargo.values,
-                            title="Personal por Cargo",
-                            labels={'x': 'Cargo', 'y': 'Cantidad'},
-                            color=dist_cargo.values,
-                            color_continuous_scale='Viridis')
+                fig2 = px.pie(
+                    values=df_todos['estado'].value_counts().values, 
+                    names=df_todos['estado'].value_counts().index,
+                    title="Estado del Personal",
+                    color_discrete_sequence=['#10B981', '#EF4444']
+                )
                 st.plotly_chart(fig2, use_container_width=True)
                 st.markdown('</div>', unsafe_allow_html=True)
+            
+            # Tabla resumen por área
+            st.subheader("📋 Resumen por Área")
+            resumen_data = []
+            for area in estructura_base.keys():
+                area_data = df_todos[df_todos['area'] == area]
+                resumen_data.append({
+                    'Área': area,
+                    'Total': len(area_data),
+                    'Activos': len(area_data[area_data['estado'] == 'Activo']),
+                    'Base': len(area_data[area_data.get('es_base', False) == True]),
+                    'Adicional': len(area_data[area_data.get('es_base', False) == False])
+                })
+            
+            df_resumen = pd.DataFrame(resumen_data)
+            st.dataframe(df_resumen, use_container_width=True)
         else:
             st.info("No hay datos para mostrar estadísticas.")
-        st.markdown("</div>", unsafe_allow_html=True)
+    
+    with tab4:
+        st.markdown("""
+        <div class='filter-panel'>
+            <h4>⚙️ Configuración del Sistema</h4>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        col_c1, col_c2 = st.columns(2)
+        
+        with col_c1:
+            st.subheader("Restaurar Estructura Base")
+            st.warning("⚠️ Esta acción eliminará todo el personal adicional y restaurará la estructura original")
+            if st.button("🔄 Restaurar Estructura Base", type="secondary"):
+                # Eliminar todos los trabajadores
+                local_db.delete_all('trabajadores')
+                # Insertar estructura base
+                todos_base = []
+                for area, lista in estructura_base.items():
+                    for trabajador in lista:
+                        trabajador['area'] = area
+                        todos_base.append(trabajador)
+                
+                for trab in todos_base:
+                    local_db.insert('trabajadores', trab)
+                st.success("✅ Estructura base restaurada exitosamente")
+                st.rerun()
+        
+        with col_c2:
+            st.subheader("Exportar Datos")
+            if st.button("📥 Exportar a Excel"):
+                trabajadores_db = local_db.query('trabajadores')
+                if trabajadores_db:
+                    df_export = pd.DataFrame(trabajadores_db)
+                    # Limpiar columnas internas
+                    df_export = df_export[['nombre', 'cargo', 'area', 'subarea', 'estado', 'fecha_ingreso']]
+                    
+                    # Crear archivo Excel
+                    output = io.BytesIO()
+                    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                        df_export.to_excel(writer, sheet_name='Personal', index=False)
+                    
+                    st.download_button(
+                        label="Descargar Archivo Excel",
+                        data=output.getvalue(),
+                        file_name="personal_cd.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    )
+
+# Agregar CSS para estilos adicionales
+st.markdown("""
+<style>
+.person-card {
+    background: white;
+    border-radius: 10px;
+    padding: 15px;
+    margin-bottom: 10px;
+    border-left: 4px solid #0033A0;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+.person-name {
+    font-weight: bold;
+    font-size: 16px;
+    color: #1e3a8a;
+    margin-bottom: 5px;
+}
+.person-position {
+    font-size: 14px;
+    color: #374151;
+    margin-bottom: 3px;
+}
+.person-area {
+    font-size: 12px;
+    color: #6b7280;
+    font-style: italic;
+}
+.person-status {
+    margin-top: 8px;
+}
+.status-active {
+    background-color: #10B981;
+    color: white;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 12px;
+    display: inline-block;
+}
+.status-inactive {
+    background-color: #EF4444;
+    color: white;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 12px;
+    display: inline-block;
+}
+.section-description {
+    color: #6b7280;
+    font-size: 14px;
+    margin-bottom: 20px;
+}
+</style>
+""", unsafe_allow_html=True)
 
 # ==============================================================================
 # 10. MÓDULO GESTIÓN DE DISTRIBUCIONES
