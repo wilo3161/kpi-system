@@ -14,7 +14,7 @@ import io
 import os
 import warnings
 from pathlib import Path
-from io import BytesIOimport streamlit as st
+from io import BytesIO
 import pandas as pd 
 import numpy as np
 import plotly.express as px
