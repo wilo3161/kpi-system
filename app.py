@@ -2846,7 +2846,7 @@ def mostrar_gestion_trabajadores():
         ],
         "Distribución, Empaque y Envíos": [
             {"id": 6, "nombre": "Jessica Suárez", "cargo": "Distribución", "subarea": "", "estado": "Activo", "es_base": True},
-            {"id": 7, "nombre": "Andrea Malquin", "cargo": "Distribución", "subarea": "", "estado": "Activo", "es_base": True},
+            {"id": 7, "nombre": "Norma Paredes", "cargo": "Distribución", "subarea": "", "estado": "Activo", "es_base": True},
             {"id": 8, "nombre": "Jhonny Villa", "cargo": "Empaque", "subarea": "", "estado": "Activo", "es_base": True},
             {"id": 9, "nombre": "Simón Vera", "cargo": "Guías y Envíos", "subarea": "", "estado": "Activo", "es_base": True}
         ],
