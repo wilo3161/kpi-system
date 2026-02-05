@@ -3,8 +3,7 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
-import datetime
-import timedelta
+from datetime import timedelta
 import time
 import hashlib
 import logging
@@ -19,7 +18,6 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
-from datetime import datetime, timedelta
 import time
 import hashlib
 import logging
