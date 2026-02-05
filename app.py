@@ -8,7 +8,7 @@ import time
 import hashlib
 import logging
 import re
-import jsonmodulo
+import json
 import io
 import os
 import warnings
