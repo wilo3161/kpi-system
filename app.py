@@ -19,6 +19,9 @@ import imaplib
 import email
 from email.header import decode_header
 import unicodedata
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 
 # --- LIBRERÍAS DE TERCEROS ---
 import qrcode
@@ -536,7 +539,8 @@ div.stButton > button:first-child {
 """, unsafe_allow_html=True)
 
 # --- LOGGING CONFIG ---
-if not os.path.exists('logs'): os.makedirs('logs')
+if not os.path.exists('logs'): 
+    os.makedirs('logs')
 logging.basicConfig(filename='logs/app_system.log', level=logging.INFO)
 warnings.filterwarnings('ignore')
 
@@ -545,26 +549,34 @@ warnings.filterwarnings('ignore')
 # ==============================================================================
 
 def normalizar_texto_wilo(texto):
-    if pd.isna(texto) or texto == '': return ''
+    if pd.isna(texto) or texto == '': 
+        return ''
     texto = str(texto)
     try:
         texto = unicodedata.normalize('NFKD', texto).encode('ASCII', 'ignore').decode('ASCII')
-    except: pass
+    except: 
+        pass
     texto = re.sub(r'[^A-Za-z0-9\s]', ' ', texto.upper())
     return re.sub(r'\s+', ' ', texto).strip()
 
 def procesar_subtotal_wilo(valor):
-    if pd.isna(valor): return 0.0
+    if pd.isna(valor): 
+        return 0.0
     try:
-        if isinstance(valor, (int, float)): return float(valor)
+        if isinstance(valor, (int, float)): 
+            return float(valor)
         valor_str = str(valor).strip()
         valor_str = re.sub(r'[^\d.,-]', '', valor_str)
         if ',' in valor_str and '.' in valor_str:
-            if valor_str.rfind(',') > valor_str.rfind('.'): valor_str = valor_str.replace('.', '').replace(',', '.')
-            else: valor_str = valor_str.replace(',', '')
-        elif ',' in valor_str: valor_str = valor_str.replace(',', '.')
+            if valor_str.rfind(',') > valor_str.rfind('.'): 
+                valor_str = valor_str.replace('.', '').replace(',', '.')
+            else: 
+                valor_str = valor_str.replace(',', '')
+        elif ',' in valor_str: 
+            valor_str = valor_str.replace(',', '.')
         return float(valor_str) if valor_str else 0.0
-    except: return 0.0
+    except: 
+        return 0.0
 
 def hash_password(pw: str) -> str:
     return hashlib.sha256(pw.encode()).hexdigest()
@@ -573,7 +585,8 @@ def validar_fecha(fecha: str) -> bool:
     try:
         datetime.strptime(fecha, "%Y-%m-%d")
         return True
-    except ValueError: return False
+    except ValueError: 
+        return False
 
 # ==============================================================================
 # 1. SIMULACIÓN DE BASE DE DATOS LOCAL
@@ -673,7 +686,8 @@ class WiloEmailEngine:
 
     def _decode_utf8(self, header_part) -> str:
         """Decodifica encabezados de correo (asuntos, nombres)."""
-        if not header_part: return ""
+        if not header_part: 
+            return ""
         decoded = decode_header(header_part)
         content = ""
         for part, encoding in decoded:
@@ -884,7 +898,8 @@ def identificar_tipo_tienda_v8(nombre):
     Lógica V8.0 para clasificación de tiendas.
     Incluye regla específica para JOFRE SANTANA y manejo de Piezas.
     """
-    if pd.isna(nombre) or nombre == '': return "DESCONOCIDO"
+    if pd.isna(nombre) or nombre == '': 
+        return "DESCONOCIDO"
     nombre_norm = normalizar_texto_wilo(nombre)
     
     # 1. Regla Específica Solicitada
@@ -1019,8 +1034,10 @@ def mostrar_reconciliacion_v8():
                         def crear_grupo(row):
                             tipo = row['TIPO_TIENDA']
                             nom = normalizar_texto_wilo(row['DESTINATARIO_NORM'])
-                            if tipo == "VENTAS AL POR MAYOR": return "VENTAS AL POR MAYOR - JOFRE SANTANA"
-                            if tipo == "VENTA WEB": return f"WEB - {nom}"
+                            if tipo == "VENTAS AL POR MAYOR": 
+                                return "VENTAS AL POR MAYOR - JOFRE SANTANA"
+                            if tipo == "VENTA WEB": 
+                                return f"WEB - {nom}"
                             return f"TIENDA - {nom}"
                         
                         df_final['GRUPO'] = df_final.apply(crear_grupo, axis=1)
@@ -1214,12 +1231,15 @@ TIENDAS_REGULARES_LISTA = [
 
 def extraer_entero(valor):
     try:
-        if pd.isna(valor): return 0
+        if pd.isna(valor): 
+            return 0
         if isinstance(valor, str):
             valor = valor.replace('.', '')
-            if ',' in valor: valor = valor.split(',')[0]
+            if ',' in valor: 
+                valor = valor.split(',')[0]
         val = float(valor)
-        if val >= 1000000: return int(val // 1000000)
+        if val >= 1000000: 
+            return int(val // 1000000)
         return int(val)
     except:
         return 0
@@ -1229,14 +1249,20 @@ def clasificar_transferencia(row):
     cantidad = row.get('Cantidad_Entera', 0)
     if cantidad >= 500 and cantidad % 100 == 0:
         return 'Fundas'
-    if any(kw in sucursal for kw in PRICE_KEYWORDS): return 'Price Club'
-    if any(kw in sucursal for kw in WEB_KEYWORDS): return 'Tienda Web'
-    if any(kw in sucursal for kw in FALLAS_KEYWORDS): return 'Fallas'
-    if any(kw in sucursal for kw in VENTAS_MAYOR_KEYWORDS): return 'Ventas por Mayor'
-    if any(tienda.upper() in sucursal for tienda in TIENDAS_REGULARES_LISTA): return 'Tiendas'
+    if any(kw in sucursal for kw in PRICE_KEYWORDS): 
+        return 'Price Club'
+    if any(kw in sucursal for kw in WEB_KEYWORDS): 
+        return 'Tienda Web'
+    if any(kw in sucursal for kw in FALLAS_KEYWORDS): 
+        return 'Fallas'
+    if any(kw in sucursal for kw in VENTAS_MAYOR_KEYWORDS): 
+        return 'Ventas por Mayor'
+    if any(tienda.upper() in sucursal for tienda in TIENDAS_REGULARES_LISTA): 
+        return 'Tiendas'
     
     tiendas_kw = ['AERO', 'MALL', 'CENTRO', 'SHOPPING', 'PLAZA', 'RIOCENTRO']
-    if any(kw in sucursal for kw in tiendas_kw): return 'Tiendas'
+    if any(kw in sucursal for kw in tiendas_kw): 
+        return 'Tiendas'
     return 'Ventas por Mayor'
 
 def procesar_transferencias_diarias(df):
