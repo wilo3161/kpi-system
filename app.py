@@ -3957,10 +3957,11 @@ ADMIN_PASSWORD = "admin123"
 USER_PASSWORD = "user123"
 
 # ==============================================================================
-# 2. ESTILOS CSS ULTRA-MODERNOS (ESTILO AEROPOSTALE EC
-
-
 # ==============================================================================
+# 2. ESTILOS CSS ULTRA-MODERNOS (ESTILO AEROPOSTALE EC)
+# ==============================================================================
+
+st.markdown("""
 <style>
 /* --- FUENTES Y FONDO GLOBAL --- */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;700;800&display=swap');
@@ -3968,6 +3969,16 @@ USER_PASSWORD = "user123"
 :root {
     --accent-blue: #0033A0;
     --accent-red: #E4002B;
+    --success: #10B981;
+    --danger: #EF4444;
+    --warning: #F59E0B;
+    --purple: #8B5CF6;
+    --text-dark: #1A1F36;
+    --text-gray: #6B7280;
+    --border-radius-sm: 8px;
+    --border-radius-md: 15px;
+    --border-radius-lg: 20px;
+    --card-shadow: 0 4px 15px rgba(0,0,0,0.05);
 }
 
 .stApp {
@@ -3981,23 +3992,18 @@ USER_PASSWORD = "user123"
     background-size: cover;
     background-position: center;
     background-attachment: fixed;
-    html.Div(style={
-    "minHeight": "100vh",
-    "padding": "50px 10%",
-    "marginTop": "-100px"
-})
+    min-height: 100vh;
+    padding: 50px 10%;
+    margin-top: -100px;
 }
 
 .nav-header {
     display: flex;
     justify-content: center;
-    html.Div(style={
-    "gap": "40px";
-    "margin-bottom": "80px";
-    "border-bottom": "1px solid rgba(255,255,255,0.2)";
-    "padding-bottom": "20px";
-})
-
+    gap: 40px;
+    margin-bottom: 80px;
+    border-bottom: 1px solid rgba(255,255,255,0.2);
+    padding-bottom: 20px;
 }
 
 .nav-item {
@@ -4066,7 +4072,10 @@ USER_PASSWORD = "user123"
 
 .card-button-overlay button {
     position: absolute !important;
-    top: 0; left: 0; width: 100%; height: 100%;
+    top: 0; 
+    left: 0; 
+    width: 100%; 
+    height: 100%;
     background: transparent !important;
     border: none !important;
     color: transparent !important;
@@ -4083,20 +4092,6 @@ USER_PASSWORD = "user123"
     border-left: 8px solid var(--accent-blue);
 }
 
-.stat-card {
-    background: white;
-    border-radius: 15px;
-    padding: 1.5rem;
-    box-shadow: 0 4px 15px rgba(0,0,0,0.05);
-    border-top: 4px solid var(--accent-blue);
-    text-align: center;
-}
-
-.stat-value { font-size: 2rem; font-weight: 800; color: #1A1F36; }
-.stat-title { font-size: 0.8rem; color: #6B7280; text-transform: uppercase; letter-spacing: 1px; }
-
-</style>
-""", unsafe_allow_html=True)
 /* --- TARJETAS DE ESTADÍSTICAS --- */
 .stats-grid {
     display: grid;
@@ -4114,6 +4109,7 @@ USER_PASSWORD = "user123"
     border-top: 4px solid;
     position: relative;
     overflow: hidden;
+    text-align: center;
 }
 
 .stat-card:hover {
@@ -4369,7 +4365,6 @@ USER_PASSWORD = "user123"
 }
 </style>
 """, unsafe_allow_html=True)
-
 # ==============================================================================
 # 3. MOTOR DE AUDITORÍA (LÓGICA DE NEGOCIO)
 # ==============================================================================
