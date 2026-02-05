@@ -2841,12 +2841,12 @@ def mostrar_gestion_trabajadores():
         ],
         "Gestión de Transferencias": [
             {"id": 3, "nombre": "César Yépez", "cargo": "Responsable", "subarea": "Transferencias Fashion", "estado": "Activo", "es_base": True},
-            {"id": 4, "nombre": "Luis Perugachi", "cargo": "Encargado", "subarea": "Pivote de transferencias y Distribución", "estado": "Activo", "es_base": True},
+            {"id": 4, "nombre": "Luis Perugachi", "cargo": "Encargado", "subarea": "Pivote de transferencias Price y Distribución", "estado": "Activo", "es_base": True},
             {"id": 5, "nombre": "Josué Imbacuán", "cargo": "Responsable", "subarea": "Transferencias Tempo", "estado": "Activo", "es_base": True}
         ],
         "Distribución, Empaque y Envíos": [
-            {"id": 6, "nombre": "Jessica Suárez", "cargo": "Distribución", "subarea": "", "estado": "Activo", "es_base": True},
-            {"id": 7, "nombre": "Norma Paredes", "cargo": "Distribución", "subarea": "", "estado": "Activo", "es_base": True},
+            {"id": 6, "nombre": "Jessica Suárez", "cargo": "Distribución Aero", "subarea": "", "estado": "Activo", "es_base": True},
+            {"id": 7, "nombre": "Norma Paredes", "cargo": "Distribución Price", "subarea": "", "estado": "Activo", "es_base": True},
             {"id": 8, "nombre": "Jhonny Villa", "cargo": "Empaque y Guías", "subarea": "", "estado": "Activo", "es_base": True},
             {"id": 9, "nombre": "Simón Vera", "cargo": "Guías y Envíos", "subarea": "", "estado": "Activo", "es_base": True}
         ],
