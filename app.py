@@ -3991,10 +3991,13 @@ USER_PASSWORD = "user123"
 .nav-header {
     display: flex;
     justify-content: center;
+    html.Div(style={
     gap: 40px;
     margin-bottom: 80px;
     border-bottom: 1px solid rgba(255,255,255,0.2);
     padding-bottom: 20px;
+})
+
 }
 
 .nav-item {
