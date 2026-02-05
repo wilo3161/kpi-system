@@ -3982,7 +3982,7 @@ USER_PASSWORD = "user123"
     background-position: center;
     background-attachment: fixed;
     html.Div(style="min-height: 100vh;")
-    padding: 50px 10%;
+    html.Div(style="min-height: 100vh; padding: 50px 10%;")
     margin-top: -100px;
 }
 
