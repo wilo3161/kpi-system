@@ -3981,9 +3981,11 @@ USER_PASSWORD = "user123"
     background-size: cover;
     background-position: center;
     background-attachment: fixed;
-    html.Div(style="min-height: 100vh;")
-    html.Div(style="min-height: 100vh; padding: 50px 10%;")
-    margin-top: -100px;
+    html.Div(style={
+    "minHeight": "100vh",
+    "padding": "50px 10%",
+    "marginTop": "-100px"
+})
 }
 
 .nav-header {
