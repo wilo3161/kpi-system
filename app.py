@@ -2854,7 +2854,7 @@ def mostrar_gestion_trabajadores():
             {"id": 10, "nombre": "Jhonny Guadalupe", "cargo": "Encargado", "subarea": "Bodega y Packing", "estado": "Activo", "es_base": True},
             {"id": 11, "nombre": "Rocio Cadena", "cargo": "Responsable", "subarea": "Picking y Distribución", "estado": "Activo", "es_base": True}
         ],
-        "Mantenimiento y Calidad": [
+        "Reproceso y Calidad": [
             {"id": 12, "nombre": "Diana García", "cargo": "Encargada", "subarea": "Reprocesado de prendas en cuarentena", "estado": "Activo", "es_base": True}
         ]
     }
