@@ -42,15 +42,8 @@ st.set_page_config(
 )
 
 # --- LOGGING CONFIG ---
-if not os.path.exists('logs'):
-    os.makedirs('logs')
-
-logging.basicConfig(
-    filename='logs/app_system.log',
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
+if not os.path.exists('logs'): os.makedirs('logs')
+logging.basicConfig(filename='logs/app_system.log', level=logging.INFO)
 warnings.filterwarnings('ignore')
 
 # ==============================================================================
@@ -58,7 +51,6 @@ warnings.filterwarnings('ignore')
 # ==============================================================================
 
 def normalizar_texto_wilo(texto):
-    """Normaliza texto: quita acentos, caracteres especiales y hace mayúsculas."""
     if pd.isna(texto) or texto == '': return ''
     texto = str(texto)
     try:
@@ -66,6 +58,22 @@ def normalizar_texto_wilo(texto):
     except: pass
     texto = re.sub(r'[^A-Za-z0-9\s]', ' ', texto.upper())
     return re.sub(r'\s+', ' ', texto).strip()
+
+def procesar_subtotal_wilo(valor):
+    if pd.isna(valor): return 0.0
+    try:
+        if isinstance(valor, (int, float)): return float(valor)
+        valor_str = str(valor).strip()
+        valor_str = re.sub(r'[^\d.,-]', '', valor_str)
+        if ',' in valor_str and '.' in valor_str:
+            if valor_str.rfind(',') > valor_str.rfind('.'): valor_str = valor_str.replace('.', '').replace(',', '.')
+            else: valor_str = valor_str.replace(',', '')
+        elif ',' in valor_str: valor_str = valor_str.replace(',', '.')
+        return float(valor_str) if valor_str else 0.0
+    except: return 0.0
+
+def hash_password(pw: str) -> str:
+    return hashlib.sha256(pw.encode()).hexdigest()
 
 def procesar_subtotal_wilo(valor):
     """Limpia y convierte valores monetarios (ej: $1,200.50 -> 1200.50)."""
@@ -98,8 +106,6 @@ def hash_password(pw: str) -> str:
 # ==============================================================================
 
 class LocalDatabase:
-    """Simulación de base de datos local para reemplazar Supabase"""
-    
     def __init__(self):
         self.data = {
             'users': [
@@ -109,16 +115,43 @@ class LocalDatabase:
             ],
             'kpis': self._generate_kpis_data(),
             'guias': [],
-            'trabajadores': [
-                {'id': 1, 'nombre': 'Andrés Yépez', 'cargo': 'Supervisor', 'estado': 'Activo'},
-                {'id': 2, 'nombre': 'Josué Imbacuán', 'cargo': 'Operador', 'estado': 'Activo'},
-                {'id': 3, 'nombre': 'María González', 'cargo': 'Auditora', 'estado': 'Activo'}
-            ],
+            'trabajadores': [],
             'distribuciones': [
                 {'id': 1, 'transporte': 'Tempo', 'guías': 45, 'estado': 'En ruta'},
                 {'id': 2, 'transporte': 'Luis Perugachi', 'guías': 32, 'estado': 'Entregado'}
             ]
         }
+    
+    def _generate_kpis_data(self):
+        kpis = []
+        today = datetime.now()
+        for i in range(30):
+            date = today - timedelta(days=i)
+            kpis.append({
+                'id': i, 'fecha': date.strftime('%Y-%m-%d'),
+                'produccion': np.random.randint(800, 1500),
+                'eficiencia': np.random.uniform(85, 98),
+                'alertas': np.random.randint(0, 5),
+                'costos': np.random.uniform(5000, 15000)
+            })
+        return kpis
+    
+    def query(self, table, filters=None):
+        results = self.data.get(table, [])
+        if filters:
+            for key, value in filters.items():
+                results = [item for item in results if item.get(key) == value]
+        return results
+    
+    def insert(self, table, data):
+        if table not in self.data: self.data[table] = []
+        data['id'] = len(self.data[table]) + 1
+        self.data[table].append(data)
+        return True
+
+local_db = LocalDatabase()
+ADMIN_PASSWORD = "admin123"
+USER_PASSWORD = "user123"
     
     def _generate_kpis_data(self):
         """Genera datos de KPIs simulados"""
@@ -184,127 +217,137 @@ USER_PASSWORD = "user123"
 
 
 # ==============================================================================
-st.markdown("""
 <style>
-/* --- VARIABLES DE DISEÑO INSPIRADAS EN LAS IMÁGENES --- */
+/* --- FUENTES Y FONDO GLOBAL --- */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;700;800&display=swap');
+
 :root {
-    --bg-main: #F0F2F5;
-    --glass-bg: rgba(255, 255, 255, 0.7);
-    --card-shadow: 0 20px 40px rgba(0, 0, 0, 0.05);
     --accent-blue: #0033A0;
     --accent-red: #E4002B;
-    --border-radius-lg: 30px;
-    --border-radius-md: 20px;
-    --border-radius-sm: 15px;
-    --text-dark: #1A1F36;
-    --text-gray: #6B7280;
-    --success: #10B981;
-    --warning: #F59E0B;
-    --danger: #EF4444;
-    --info: #3B82F6;
-    --purple: #8B5CF6;
 }
 
-/* --- CONTENEDOR PRINCIPAL --- */
 .stApp {
-    background-color: var(--bg-main) !important;
-    font-family: 'Inter', 'Segoe UI', sans-serif !important;
-}
-
-/* --- OCULTAR ELEMENTOS DE STREAMLIT --- */
-#MainMenu {visibility: hidden;}
-footer {visibility: hidden;}
-.stDeployButton {display: none !important;}
-.reportview-container .main .block-container {padding-top: 1rem;}
-
-/* --- SIDEBAR MODERNO --- */
-[data-testid="stSidebar"] {
-    background: white !important;
-    border-right: 1px solid #EDF2F7 !important;
-    padding: 2rem 1rem !important;
-}
-
-[data-testid="stSidebar"] > div:first-child {
-    padding-top: 0 !important;
-}
-
-.sidebar-header {
-    text-align: center;
-    padding: 0 1rem 2rem 1rem;
-    border-bottom: 1px solid #F1F5F9;
-    margin-bottom: 2rem;
-}
-
-.sidebar-logo {
-    font-size: 2.2rem;
-    font-weight: 800;
-    background: linear-gradient(45deg, var(--accent-blue), var(--accent-red));
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    margin-bottom: 0.5rem;
     font-family: 'Inter', sans-serif;
 }
 
-.sidebar-subtitle {
-    color: var(--text-gray);
-    font-size: 0.9rem;
-    letter-spacing: 1px;
-    font-weight: 500;
+/* --- ESTILO PANTALLA DE INICIO (GALERÍA) --- */
+.landing-container {
+    background-image: linear-gradient(rgba(0,0,0,0.6), rgba(0,0,0,0.6)), 
+                      url('https://images.unsplash.com/photo-1567401893414-76b7b1e5a7a5?q=80&w=2070&auto=format&fit=crop');
+    background-size: cover;
+    background-position: center;
+    background-attachment: fixed;
+    min-height: 100vh;
+    padding: 50px 10%;
+    margin-top: -100px;
 }
 
-/* --- BOTONES DEL SIDEBAR --- */
-[data-testid="stSidebar"] button {
+.nav-header {
+    display: flex;
+    justify-content: center;
+    gap: 40px;
+    margin-bottom: 80px;
+    border-bottom: 1px solid rgba(255,255,255,0.2);
+    padding-bottom: 20px;
+}
+
+.nav-item {
+    color: white;
+    text-decoration: none;
+    text-transform: uppercase;
+    letter-spacing: 3px;
+    font-size: 13px;
+    font-weight: 400;
+    opacity: 0.8;
+}
+
+/* --- GRID DE TARJETAS TIPO GALERÍA --- */
+.gallery-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 30px;
+    margin-bottom: 30px;
+}
+
+.gallery-card {
+    height: 300px;
+    background: rgba(255,255,255,0.1);
+    display: flex;
+    position: relative;
+    overflow: hidden;
+    transition: all 0.4s ease;
+    cursor: pointer;
+    border: 1px solid rgba(255,255,255,0.1);
+}
+
+.gallery-card:hover {
+    transform: scale(1.02);
+    background: rgba(255,255,255,0.2);
+    border-color: white;
+}
+
+.card-image {
+    width: 50%;
+    height: 100%;
+    background-size: cover;
+    background-position: center;
+    filter: grayscale(40%);
+}
+
+.card-text {
+    width: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255,255,255,0.05);
+    backdrop-filter: blur(5px);
+    color: white;
+    text-transform: uppercase;
+    letter-spacing: 5px;
+    font-size: 18px;
+    font-weight: 300;
+    text-align: center;
+    padding: 20px;
+}
+
+/* --- BOTONES INVISIBLES SOBRE LAS CARDS --- */
+.stButton > button {
+    border-radius: 0px !important;
+}
+
+.card-button-overlay button {
+    position: absolute !important;
+    top: 0; left: 0; width: 100%; height: 100%;
     background: transparent !important;
     border: none !important;
-    color: var(--text-dark) !important;
-    text-align: left;
-    padding: 0.8rem 1.5rem !important;
-    margin: 0.3rem 0 !important;
-    border-radius: var(--border-radius-sm) !important;
-    font-weight: 500 !important;
-    font-size: 0.95rem !important;
-    width: 100% !important;
-    transition: all 0.3s ease !important;
-    display: flex !important;
-    align-items: center !important;
+    color: transparent !important;
+    z-index: 10;
 }
 
-[data-testid="stSidebar"] button:hover {
-    background: #F8FAFC !important;
-    color: var(--accent-blue) !important;
-    transform: translateX(5px);
-}
-
-[data-testid="stSidebar"] button.active {
-    background: linear-gradient(90deg, var(--accent-blue), #0066CC) !important;
-    color: white !important;
-    box-shadow: 0 4px 15px rgba(0, 51, 160, 0.2);
-}
-
-/* --- HEADER PRINCIPAL --- */
+/* --- ESTILOS INTERNOS (DASHBOARDS) --- */
 .main-header {
     background: white;
-    padding: 2.5rem 3rem;
-    border-radius: var(--border-radius-lg);
+    padding: 2rem;
+    border-radius: 20px;
     margin-bottom: 2rem;
-    box-shadow: var(--card-shadow);
-    border-left: 6px solid var(--accent-blue);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.05);
+    border-left: 8px solid var(--accent-blue);
 }
 
-.header-title {
-    font-size: 2.8rem;
-    font-weight: 800;
-    color: var(--text-dark);
-    margin-bottom: 0.5rem;
-    font-family: 'Inter', sans-serif;
+.stat-card {
+    background: white;
+    border-radius: 15px;
+    padding: 1.5rem;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+    border-top: 4px solid var(--accent-blue);
+    text-align: center;
 }
 
-.header-subtitle {
-    font-size: 1.1rem;
-    color: var(--text-gray);
-    font-weight: 400;
-}
+.stat-value { font-size: 2rem; font-weight: 800; color: #1A1F36; }
+.stat-title { font-size: 0.8rem; color: #6B7280; text-transform: uppercase; letter-spacing: 1px; }
 
+</style>
+""", unsafe_allow_html=True)
 /* --- TARJETAS DE ESTADÍSTICAS --- */
 .stats-grid {
     display: grid;
@@ -583,7 +626,74 @@ footer {visibility: hidden;}
 # ==============================================================================
 
 class WiloEmailEngine:
-    """Motor real para extracción y análisis de correos logísticos."""
+    def __init__(self, host, user, password):
+        self.host, self.user, self.password = host, user, password
+    def _connect(self):
+        self.mail = imaplib.IMAP4_SSL(self.host)
+        self.mail.login(self.user, self.password)
+        self.mail.select("inbox")
+    def classify_email(self, subject, body):
+        text = (subject + " " + body).lower()
+        if any(w in text for w in ["faltante", "falta"]): return {"tipo": "📦 FALTANTE", "urgencia": "ALTA"}
+        if "daño" in text: return {"tipo": "⚠️ DAÑO", "urgencia": "ALTA"}
+        return {"tipo": "ℹ️ GENERAL", "urgencia": "BAJA"}
+    def get_latest_news(self, limit=20):
+        self._connect()
+        _, messages = self.mail.search(None, 'ALL')
+        ids = messages[0].split()
+        results = []
+        for e_id in reversed(ids[-limit:]):
+            _, msg_data = self.mail.fetch(e_id, '(RFC822)')
+            msg = email.message_from_bytes(msg_data[0][1])
+            analysis = self.classify_email(str(msg["Subject"]), "")
+            results.append({"fecha": msg["Date"], "remitente": msg["From"], "asunto": msg["Subject"], "tipo": analysis["tipo"], "urgencia": analysis["urgencia"], "pedido": "N/A"})
+        self.mail.logout()
+        return results
+
+def mostrar_auditoria_correos():
+    st.markdown("<div class='main-header'><h1>📧 Email Wilo AI Auditor</h1></div>", unsafe_allow_html=True)
+    with st.sidebar:
+        user = st.text_input("Correo", value="wperez@fashionclub.com.ec")
+        pw = st.text_input("Pass", value="2wperez*", type="password")
+    if st.button("🚀 Iniciar Auditoría Real"):
+        engine = WiloEmailEngine("mail.fashionclub.com.ec", user, pw)
+        data = engine.get_latest_news(10)
+        st.dataframe(pd.DataFrame(data), use_container_width=True)
+
+def identificar_tipo_tienda_v8(nombre):
+    norm = normalizar_texto_wilo(nombre)
+    if 'JOFRE' in norm: return "VENTAS AL POR MAYOR"
+    if any(p in norm for p in ['MALL', 'TIENDA', 'PLAZA']): return "TIENDA FÍSICA"
+    return "VENTA WEB"
+
+def mostrar_reconciliacion_v8():
+    st.markdown("<div class='main-header'><h1>💰 Reconciliación Logística V8.0</h1></div>", unsafe_allow_html=True)
+    f1 = st.file_uploader("Manifiesto", type=['xlsx'])
+    if st.checkbox("Simular Datos", value=True):
+        df = pd.DataFrame({'DEST': ['JOFRE SANTANA', 'MALL DEL SOL', 'CLIENTE WEB'], 'VALOR': [100, 200, 50]})
+        df['TIPO'] = df['DEST'].apply(identificar_tipo_tienda_v8)
+        st.dataframe(df, use_container_width=True)
+
+def mostrar_dashboard_transferencias():
+    st.markdown("<div class='main-header'><h1>📦 Dashboard de Transferencias</h1></div>", unsafe_allow_html=True)
+    st.info("Módulo de análisis de carga diaria.")
+
+def mostrar_generacion_guias():
+    st.markdown("<div class='main-header'><h1>📋 Generador de Guías QR</h1></div>", unsafe_allow_html=True)
+    with st.form("guia"):
+        dest = st.text_input("Destinatario")
+        if st.form_submit_button("Generar PDF"):
+            st.success(f"Guía para {dest} generada.")
+
+def mostrar_gestion_trabajadores():
+    st.markdown("<div class='main-header'><h1>👥 Gestión de Personal CD</h1></div>", unsafe_allow_html=True)
+    st.table(pd.DataFrame([
+        {"Nombre": "Wilson Pérez", "Cargo": "Jefe Logística"},
+        {"Nombre": "Andrés Cadena", "Cargo": "Jefe Inventarios"}
+    ]))
+
+def mostrar_dashboard_kpis():
+    st.markdown("<div class='main-header'><h1>📊 Dashboard Operativo KPIs</h1></div>", unsafe_allow_html=True)
     
     def __init__(self, host: str, user: str, password: str):
         self.host = host
@@ -683,7 +793,64 @@ class WiloEmailEngine:
 # ==============================================================================
 # 4. INTERFAZ DE AUDITORÍA DE CORREOS (CORREGIDA)
 # ==============================================================================
+def render_gallery_card(title, image_url, page_key):
+    """Renderiza una tarjeta estilo galería que cambia la página al hacer clic"""
+    card_id = title.replace(" ", "_").lower()
+    
+    html = f"""
+    <div class="gallery-card">
+        <div class="card-image" style="background-image: url('{image_url}')"></div>
+        <div class="card-text">{title}</div>
+    </div>
+    """
+    st.markdown(html, unsafe_allow_html=True)
+    
+    # El botón invisible de Streamlit para capturar el clic
+    with st.container():
+        st.markdown('<div class="card-button-overlay">', unsafe_allow_html=True)
+        if st.button(f"Go to {title}", key=f"btn_nav_{card_id}"):
+            st.session_state.current_page = page_key
+            st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
 
+def mostrar_pantalla_inicio():
+    st.markdown('<div class="landing-container">', unsafe_allow_html=True)
+    
+    # Header de Navegación
+    st.markdown("""
+    <div class="nav-header">
+        <span class="nav-item">Gallery</span>
+        <span class="nav-item">Logistics</span>
+        <span class="nav-item">Distribution</span>
+        <span class="nav-item">Contacts</span>
+    </div>
+    <div style='text-align:center; color:white; margin-bottom:50px;'>
+        <h1 style='font-weight:800; letter-spacing:10px; font-size:3.5rem;'>AEROPOSTALE</h1>
+        <p style='letter-spacing:5px; opacity:0.7;'>CENTRO DE DISTRIBUCIÓN ECUADOR | ERP SYSTEM</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Grid de Módulos (Como en la imagen)
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        render_gallery_card("Dashboard KPIs", "https://images.unsplash.com/photo-1460925895917-afdab827c52f?q=80&w=500", "Dashboard KPIs")
+    with col2:
+        render_gallery_card("Reconciliación", "https://images.unsplash.com/photo-1554224155-6726b3ff858f?q=80&w=500", "Reconciliación V8")
+    with col3:
+        render_gallery_card("Auditoría Email", "https://images.unsplash.com/photo-1557200134-90327ee9fafa?q=80&w=500", "Email Wilo AI")
+
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    col4, col5, col6 = st.columns(3)
+    with col4:
+        render_gallery_card("Transferencias", "https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?q=80&w=500", "Dashboard Transferencias")
+    with col5:
+        render_gallery_card("Personal CD", "https://images.unsplash.com/photo-1521737711867-e3b97375f902?q=80&w=500", "Trabajadores")
+    with col6:
+        render_gallery_card("Guías QR", "https://images.unsplash.com/photo-1566576721346-d4a3b4eaad5b?q=80&w=500", "Generar Guías")
+
+    st.markdown('</div>', unsafe_allow_html=True)
 def mostrar_auditoria_correos():
     """Interfaz para la auditoría de correos con Wilo AI"""
     st.set_page_config(page_title="Wilo AI Auditor", page_icon="📧", layout="wide")
@@ -3514,171 +3681,77 @@ def mostrar_pagina_login(rol_target):
 # 13. FUNCIÓN PRINCIPAL DE LA APLICACIÓN
 # ==============================================================================
 
-def main():
-    # Inicializar estado de sesión
-    if 'user_type' not in st.session_state:
-        st.session_state.user_type = None
-    if 'show_login' not in st.session_state:
-        st.session_state.show_login = False
-    if 'login_target' not in st.session_state:
-        st.session_state.login_target = None
-    if 'current_page' not in st.session_state:
-        st.session_state.current_page = "Dashboard KPIs"
+def mostrar_pagina_login(rol_target):
+    st.markdown("""<div style='display:flex; justify-content:center; align-items:center; min-height:80vh;'>
+        <div style='background:white; padding:3rem; border-radius:20px; box-shadow:0 20px 60px rgba(0,0,0,0.1); width:400px; text-align:center;'>
+            <h2 style='color:#0033A0;'>🔐 ACCESO RESTRINGIDO</h2>""", unsafe_allow_html=True)
     
-    # Configurar sidebar solo si no estamos en login
-    if not st.session_state.show_login:
-        # --- SIDEBAR MODERNO ---
+    with st.form("login"):
+        pw = st.text_input("Contraseña", type="password")
+        if st.form_submit_button("INGRESAR"):
+            correct = ADMIN_PASSWORD if rol_target == "admin" else USER_PASSWORD
+            if pw == correct:
+                st.session_state.user_type = rol_target
+                st.session_state.show_login = False
+                st.rerun()
+            else: st.error("Incorrecto")
+    
+    if st.button("Volver al Inicio"):
+        st.session_state.show_login = False
+        st.session_state.current_page = "Inicio"
+        st.rerun()
+    st.markdown("</div></div>", unsafe_allow_html=True)
+
+def main():
+    # Inicialización de estado
+    if 'current_page' not in st.session_state: st.session_state.current_page = "Inicio"
+    if 'user_type' not in st.session_state: st.session_state.user_type = None
+    if 'show_login' not in st.session_state: st.session_state.show_login = False
+
+    # Sidebar (Solo visible si no es la página de inicio para no romper la estética)
+    if st.session_state.current_page != "Inicio":
         with st.sidebar:
-            # Encabezado del sidebar
-            st.markdown("""
-            <div class='sidebar-header'>
-                <div class='sidebar-logo'>AEROPOSTALE ERP</div>
-                <div class='sidebar-subtitle'>Sistema Integral v3.0</div>
-            </div>
-            """, unsafe_allow_html=True)
-            
-            # Estado de usuario
-            if st.session_state.user_type:
-                user_badge = "🛡️ ADMIN" if st.session_state.user_type == "admin" else "👤 USER"
-                st.markdown(f"""
-                <div style='
-                    background: rgba(0, 51, 160, 0.1); 
-                    padding: 10px; 
-                    border-radius: 8px; 
-                    margin: 10px; 
-                    text-align: center;
-                    border: 1px solid rgba(0, 51, 160, 0.2);
-                '>
-                    <strong style='color: #0033A0;'>{user_badge}</strong>
-                </div>
-                """, unsafe_allow_html=True)
-            
-            # Menú de navegación
-            menu_items = {
-                "Dashboard KPIs": {"icon": "📊", "role": "public"},
-                "Reconciliación V8": {"icon": "💰", "role": "admin"},
-                "Email Wilo AI": {"icon": "📧", "role": "admin"},
-                "Dashboard Transferencias": {"icon": "📦", "role": "admin"},
-                "Generar Guías": {"icon": "📋", "role": "user"},
-                "Trabajadores": {"icon": "👥", "role": "admin"},
-                "Distribuciones": {"icon": "🚚", "role": "admin"},
-                "Ayuda": {"icon": "❓", "role": "public"}
-            }
-            
-            for page_name, page_info in menu_items.items():
-                is_active = st.session_state.current_page == page_name
-                
-                if st.button(
-                    f"{page_info['icon']} {page_name}",
-                    key=f"btn_{page_name}",
-                    use_container_width=True,
-                    type="primary" if is_active else "secondary"
-                ):
-                    # Verificar permisos
-                    if page_info['role'] == "public" or \
-                       (st.session_state.user_type == "admin") or \
-                       (st.session_state.user_type == "user" and page_info['role'] == "user"):
-                        st.session_state.current_page = page_name
-                        st.session_state.show_login = False
-                        st.rerun()
-                    else:
-                        st.session_state.login_target = page_info['role']
-                        st.session_state.show_login = True
-                        st.rerun()
-            
-            st.markdown("---")
-            
-            # Botones de sesión
-            if st.session_state.user_type:
-                if st.button("🚪 Cerrar Sesión", use_container_width=True):
-                    st.session_state.user_type = None
-                    st.session_state.current_page = "Dashboard KPIs"
-                    st.rerun()
-            else:
-                col_login1, col_login2 = st.columns(2)
-                with col_login1:
-                    if st.button("🛡️ Admin", use_container_width=True):
-                        st.session_state.login_target = "admin"
-                        st.session_state.show_login = True
-                        st.rerun()
-                with col_login2:
-                    if st.button("👤 User", use_container_width=True):
-                        st.session_state.login_target = "user"
-                        st.session_state.show_login = True
-                        st.rerun()
+            st.markdown("<h2 style='text-align:center; color:#0033A0;'>AERO ERP</h2>", unsafe_allow_html=True)
+            if st.button("🏠 Volver al Inicio Principal", use_container_width=True):
+                st.session_state.current_page = "Inicio"
+                st.rerun()
+            st.divider()
+            if st.button("🚪 Cerrar Sesión", use_container_width=True):
+                st.session_state.user_type = None
+                st.session_state.current_page = "Inicio"
+                st.rerun()
+
+    # Routing
+    if st.session_state.show_login:
+        mostrar_pagina_login(st.session_state.login_target)
+    elif st.session_state.current_page == "Inicio":
+        mostrar_pantalla_inicio()
+    else:
+        # Validación de Roles
+        page_roles = {
+            "Dashboard KPIs": "public", "Reconciliación V8": "admin", 
+            "Email Wilo AI": "admin", "Dashboard Transferencias": "admin",
+            "Generar Guías": "user", "Trabajadores": "admin"
+        }
+        req = page_roles.get(st.session_state.current_page, "admin")
         
-        # --- CONTENIDO PRINCIPAL ---
-        if st.session_state.show_login:
-            mostrar_pagina_login(st.session_state.login_target)
-        else:
-            # Ejecutar el módulo correspondiente
-            page_mapping = {
+        if req == "public" or st.session_state.user_type == "admin" or (st.session_state.user_type == "user" and req == "user"):
+            mapping = {
                 "Dashboard KPIs": mostrar_dashboard_kpis,
                 "Reconciliación V8": mostrar_reconciliacion_v8,
                 "Email Wilo AI": mostrar_auditoria_correos,
                 "Dashboard Transferencias": mostrar_dashboard_transferencias,
                 "Generar Guías": mostrar_generacion_guias,
-                "Trabajadores": mostrar_gestion_trabajadores,
-                "Distribuciones": mostrar_gestion_distribuciones,
-                "Ayuda": mostrar_ayuda
+                "Trabajadores": mostrar_gestion_trabajadores
             }
-            
-            current_func = page_mapping.get(st.session_state.current_page)
-            if current_func:
-                # Verificación de permisos
-                page_roles = {
-                    "Dashboard KPIs": "public",
-                    "Reconciliación V8": "admin",
-                    "Email Wilo AI": "admin",
-                    "Dashboard Transferencias": "admin",
-                    "Generar Guías": "user",
-                    "Trabajadores": "admin",
-                    "Distribuciones": "admin",
-                    "Ayuda": "public"
-                }
-                
-                required_role = page_roles.get(st.session_state.current_page, "admin")
-                
-                if required_role == "public" or \
-                   (st.session_state.user_type == "admin") or \
-                   (st.session_state.user_type == "user" and required_role == "user"):
-                    current_func()
-                else:
-                    st.warning("🔒 Este módulo requiere permisos especiales.")
-                    st.session_state.login_target = required_role
-                    st.session_state.show_login = True
-                    st.rerun()
-            else:
-                st.error("Página no encontrada")
-                st.session_state.current_page = "Dashboard KPIs"
-                st.rerun()
-        
-        # --- FOOTER ---
-        st.markdown("""
-        <div class="app-footer">
-            <span class="footer-logo">AEROPOSTALE EC-ERP</span> v3.1 | © 2026 Todos los derechos reservados.<br>
-            Desarrollado con ❤️ para la optimización logística | <em>#EficienciaOperativa</em>
-        </div>
-        """, unsafe_allow_html=True)
-    else:
-        # Mostrar página de login
-        mostrar_pagina_login(st.session_state.login_target)
+            mapping[st.session_state.current_page]()
+        else:
+            st.session_state.login_target = req
+            st.session_state.show_login = True
+            st.rerun()
+
+    # Footer
+    st.markdown("<div class='app-footer'>AEROPOSTALE EC-ERP v3.5 | Wilson Pérez Logistics Design</div>", unsafe_allow_html=True)
 
 if __name__ == "__main__":
-    try:
-        main()
-    except Exception as e:
-        st.error(f"❌ Error crítico en la aplicación: {e}")
-        logger.error(f"Crash: {e}", exc_info=True)
-        st.markdown(f"""
-        <div class='filter-panel'>
-            <h4>🆘 Sistema de Recuperación</h4>
-            <p>La aplicación encontró un error. Por favor:</p>
-            <ol>
-                <li>Recargue la página (F5)</li>
-                <li>Verifique sus archivos de entrada</li>
-                <li>Contacte a soporte si el problema persiste</li>
-            </ol>
-            <p>Detalles técnicos: {str(e)}</p>
-        </div>
-        """, unsafe_allow_html=True)
+    main()
