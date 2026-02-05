@@ -3656,7 +3656,7 @@ def main():
         # --- FOOTER ---
         st.markdown("""
         <div class="app-footer">
-            <span class="footer-logo">AEROPOSTALE EC-ERP</span> v3.1 | © 2025 Todos los derechos reservados.<br>
+            <span class="footer-logo">AEROPOSTALE EC-ERP</span> v3.1 | © 2026 Todos los derechos reservados.<br>
             Desarrollado con ❤️ para la optimización logística | <em>#EficienciaOperativa</em>
         </div>
         """, unsafe_allow_html=True)
