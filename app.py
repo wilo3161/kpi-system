@@ -2837,7 +2837,7 @@ def mostrar_gestion_trabajadores():
     estructura_base = {
         "Liderazgo y Control": [
             {"id": 1, "nombre": "Wilson Pérez", "cargo": "Jefe de Logística", "subarea": "Cabeza del C.D.", "estado": "Activo", "es_base": True},
-            {"id": 2, "nombre": "Andrés Cadena", "cargo": "Segundo al mando", "subarea": "Control de Inventarios", "estado": "Activo", "es_base": True}
+            {"id": 2, "nombre": "Andrés Cadena", "cargo": "Jefe de Inventarios", "subarea": "Control de Inventarios", "estado": "Activo", "es_base": True}
         ],
         "Gestión de Transferencias": [
             {"id": 3, "nombre": "César Yépez", "cargo": "Responsable", "subarea": "Transferencias Fashion", "estado": "Activo", "es_base": True},
