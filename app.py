@@ -328,13 +328,26 @@ st.markdown("""
     font-size: 2.5rem;
     font-weight: 800;
     color: white;
-    margin-bottom: 15px;
+    margin-bottom: 0.5rem;
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.header-icon {
+    display: inline-block;
+    font-size: 2.8rem;
     background: linear-gradient(45deg, #60A5FA, #F472B6);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
-    text-shadow: 0 5px 15px rgba(96, 165, 250, 0.2);
+    filter: drop-shadow(0 5px 15px rgba(96, 165, 250, 0.3));
 }
 
+.header-text {
+    background: linear-gradient(45deg, #60A5FA, #F472B6);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
 .header-subtitle {
     font-size: 1.1rem;
     color: #CBD5E1;
@@ -343,7 +356,33 @@ st.markdown("""
     margin: 0 auto;
     line-height: 1.6;
 }
+/* Asegurar que los iconos sean visibles en todos los contextos */
+.module-header h1 .header-icon {
+    opacity: 1 !important;
+    visibility: visible !important;
+}
 
+/* Para los emojis en títulos */
+.module-header h1 span:first-child {
+    text-shadow: 0 0 20px rgba(96, 165, 250, 0.4);
+}
+
+/* Responsive para iconos */
+@media (max-width: 768px) {
+    .header-title {
+        flex-direction: column;
+        gap: 10px;
+        text-align: center;
+    }
+    
+    .header-icon {
+        font-size: 2.5rem;
+    }
+    
+    .header-text {
+        font-size: 2.2rem;
+    }
+}
 /* Contenido de módulos - ESPACIADO CORRECTO */
 .module-content {
     margin-top: 30px;
@@ -628,15 +667,26 @@ def add_back_button():
     </script>
     """, unsafe_allow_html=True)
 
-def show_module_header(title, subtitle):
-    """Muestra la cabecera de un módulo"""
+def show_module_header(title_with_icon, subtitle):
+    """Muestra la cabecera de un módulo con icono visible"""
+    # Separar el icono (primer carácter) del texto del título
+    if title_with_icon and len(title_with_icon) > 0:
+        # El icono es el primer carácter (los emojis son 1-2 caracteres)
+        icon = title_with_icon[0]
+        title_text = title_with_icon[1:].strip()
+    else:
+        icon = ""
+        title_text = title_with_icon
+    
     st.markdown(f"""
     <div class="module-header fade-in">
-        <h1 class="header-title">{title}</h1>
+        <h1 class="header-title">
+            <span class="header-icon">{icon}</span>
+            <span class="header-text">{title_text}</span>
+        </h1>
         <p class="header-subtitle">{subtitle}</p>
     </div>
     """, unsafe_allow_html=True)
-
 # ==============================================================================
 # 3. PÁGINA PRINCIPAL - COMPLETAMENTE REDISEÑADA
 # ==============================================================================
