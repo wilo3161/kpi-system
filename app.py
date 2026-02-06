@@ -3251,7 +3251,7 @@ def generar_pdf_profesional(guia_data):
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
         ('ALIGN', (0, 0), (0, 0), 'LEFT'),
         ('ALIGN', (1, 0), (1, 0), 'CENTER'),
-        ('PADDING', (0, 0), (-1, -1), 5),
+        ('PADDING', (0, 0), (-1, -1), 15),
         ('BOTTOMPADDING', (0, 0), (-1, -1), 17),
     ]))
     
