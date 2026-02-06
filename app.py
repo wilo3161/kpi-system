@@ -3382,8 +3382,8 @@ def generar_pdf_profesional(guia_data):
     
     def mostrar_vista_previa_guia(guia_data):
     
-    st.markdown("---")
-    st.markdown(f"### 👁️ Vista Previa - Guía {guia_data['numero']}")
+        st.markdown("---")
+        st.markdown(f"### 👁️ Vista Previa - Guía {guia_data['numero']}")
     
     col_prev1, col_prev2 = st.columns(2)
     
