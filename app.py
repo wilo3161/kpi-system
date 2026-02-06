@@ -1340,7 +1340,7 @@ def mostrar_pantalla_inicio():
     <div class="app-footer">
         <p>Sistema ERP v4.0 • Desarrollado por Wilson Pérez • Logística & Sistemas</p>
         <p style="font-size: 0.8rem; color: #64748B; margin-top: 10px;">
-            © 2024 AEROPOSTALE Ecuador • Todos los derechos reservados
+            © 2026 AEROPOSTALE Ecuador • Todos los derechos reservados
         </p>
     </div>
     """, unsafe_allow_html=True)
