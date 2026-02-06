@@ -3230,7 +3230,7 @@ def generar_pdf_profesional(guia_data):
     # Columna izquierda: Logo
     if logo_bytes:
         try:
-            logo_img = Image(io.BytesIO(logo_bytes), width=2*inch, height=1*inch)
+            logo_img = Image(io.BytesIO(logo_bytes), width=1*inch, height=1*inch)
             logo_cell = logo_img
         except:
             logo_cell = Paragraph(f"<b>{guia_data['marca']}</b>", styles['TituloPrincipal'])
@@ -3341,7 +3341,7 @@ def generar_pdf_profesional(guia_data):
             qr_img = Image(io.BytesIO(qr_bytes), width=1.5*inch, height=1.5*inch)
             
             # Crear tabla para centrar el QR
-            qr_table = Table([[qr_img]], colWidths=[7.5*inch])
+            qr_table = Table([[qr_img]], colWidths=[1.5*inch])
             qr_table.setStyle(TableStyle([
                 ('ALIGN', (0, 0), (0, 0), 'CENTER'),
                 ('VALIGN', (0, 0), (0, 0), 'MIDDLE'),
