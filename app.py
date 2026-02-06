@@ -342,7 +342,7 @@ st.markdown("""
 .stDataFrame {
     border-radius: 12px !important;
     overflow: hidden !important;
-    background: rgba(255, 255,255, 0.05) !important;
+    background: rgba(255, 255, 255, 0.05) !important;
 }
 
 /* Scrollbar personalizado */
@@ -457,7 +457,7 @@ def show_sidebar():
         st.markdown("""
         <div class="sidebar-header">
             <div class="sidebar-title">AERO ERP</div>
-            <div class="sidebar-subtitle"> • Wilson Pérez</div>
+            <div class="sidebar-subtitle">v4.0 • Wilson Pérez</div>
         </div>
         """, unsafe_allow_html=True)
         
@@ -500,11 +500,7 @@ def show_sidebar():
 # 3. FUNCIONES AUXILIARES GLOBALES
 # ==============================================================================
 
-import unicodedata
-from typing import Dict, List, Optional, Any, Union
-
 def normalizar_texto_wilo(texto):
-    """Normaliza texto para comparación"""
     if pd.isna(texto) or texto == '': 
         return ''
     texto = str(texto)
@@ -516,7 +512,6 @@ def normalizar_texto_wilo(texto):
     return re.sub(r'\s+', ' ', texto).strip()
 
 def procesar_subtotal_wilo(valor):
-    """Procesa valores monetarios"""
     if pd.isna(valor): 
         return 0.0
     try:
@@ -536,11 +531,9 @@ def procesar_subtotal_wilo(valor):
         return 0.0
 
 def hash_password(pw: str) -> str:
-    """Genera hash SHA256 de contraseña"""
     return hashlib.sha256(pw.encode()).hexdigest()
 
 def validar_fecha(fecha: str) -> bool:
-    """Valida formato de fecha"""
     try:
         datetime.strptime(fecha, "%Y-%m-%d")
         return True
@@ -569,7 +562,6 @@ class LocalDatabase:
         }
     
     def _generate_kpis_data(self):
-        """Genera datos de KPIs de ejemplo"""
         kpis = []
         today = datetime.now()
         for i in range(30):
@@ -585,7 +577,6 @@ class LocalDatabase:
         return kpis
     
     def query(self, table, filters=None):
-        """Consulta datos de una tabla"""
         if table not in self.data:
             return []
         
@@ -596,7 +587,6 @@ class LocalDatabase:
         return results
     
     def insert(self, table, data):
-        """Inserta datos en una tabla"""
         if table not in self.data:
             self.data[table] = []
         
@@ -610,7 +600,6 @@ class LocalDatabase:
         return True
     
     def authenticate(self, username, password):
-        """Autentica un usuario"""
         users = self.query('users', {'username': username})
         if not users:
             return None
@@ -921,15 +910,13 @@ def mostrar_reconciliacion_v8():
                     st.metric("Guías Procesadas", len(df_final))
                 
                 with col_res2:
-                    porcentaje = (con_factura/len(df_final))*100 if len(df_final) > 0 else 0
-                    st.metric("Conciliadas", con_factura, f"{porcentaje:.1f}%")
+                    st.metric("Conciliadas", con_factura, f"{(con_factura/len(df_final))*100:.1f}%")
                 
                 with col_res3:
                     st.metric("Valor Total", f"${total_facturado:,.2f}")
                 
                 with col_res4:
-                    diferencia = total_facturado - df_final['VALOR_MANIFIESTO'].sum()
-                    st.metric("Diferencia", f"${diferencia:,.2f}", delta_color="inverse")
+                    st.metric("Diferencia", f"${(total_facturado - df_final['VALOR_MANIFIESTO'].sum()):,.2f}", delta_color="inverse")
                 
                 st.divider()
                 
@@ -953,43 +940,6 @@ def mostrar_reconciliacion_v8():
 # ==============================================================================
 # 7. MÓDULO AUDITORÍA DE CORREOS
 # ==============================================================================
-
-class WiloEmailEngine:
-    """Motor de análisis de correos (versión simplificada para demostración)"""
-    def __init__(self, host, user, password):
-        self.host = host
-        self.user = user
-        self.password = password
-    
-    def get_latest_news(self, limit=10):
-        """Obtiene correos recientes (datos de demostración)"""
-        # Datos de demostración
-        return [
-            {
-                'fecha': '2024-01-15 09:30',
-                'remitente': 'cliente@empresa.com',
-                'asunto': 'Faltante en pedido #12345',
-                'tipo': '📦 FALTANTE',
-                'urgencia': 'ALTA',
-                'pedido': '#12345'
-            },
-            {
-                'fecha': '2024-01-15 10:15',
-                'remitente': 'tienda@mall.com',
-                'asunto': 'Sobrante en entrega',
-                'tipo': '👔 SOBRANTE',
-                'urgencia': 'MEDIA',
-                'pedido': '#12346'
-            },
-            {
-                'fecha': '2024-01-15 11:45',
-                'remitente': 'soporte@aeropostale.com',
-                'asunto': 'Re: Etiquetas dañadas',
-                'tipo': '⚠️ DAÑO',
-                'urgencia': 'ALTA',
-                'pedido': '#12347'
-            }
-        ]
 
 def mostrar_auditoria_correos():
     """Módulo de auditoría de correos"""
@@ -1018,9 +968,41 @@ def mostrar_auditoria_correos():
         with st.spinner("🔍 Analizando bandeja de entrada..."):
             time.sleep(3)
             
-            # Usar el motor de correos
-            engine = WiloEmailEngine(imap_server, email_user, email_pass)
-            datos_auditoria = engine.get_latest_news()
+            # Datos de demostración
+            datos_auditoria = [
+                {
+                    'fecha': '2024-01-15 09:30',
+                    'remitente': 'cliente@empresa.com',
+                    'asunto': 'Faltante en pedido #12345',
+                    'tipo': '📦 FALTANTE',
+                    'urgencia': 'ALTA',
+                    'pedido': '#12345'
+                },
+                {
+                    'fecha': '2024-01-15 10:15',
+                    'remitente': 'tienda@mall.com',
+                    'asunto': 'Sobrante en entrega',
+                    'tipo': '👔 SOBRANTE',
+                    'urgencia': 'MEDIA',
+                    'pedido': '#12346'
+                },
+                {
+                    'fecha': '2024-01-15 11:45',
+                    'remitente': 'soporte@aeropostale.com',
+                    'asunto': 'Re: Etiquetas dañadas',
+                    'tipo': '⚠️ DAÑO',
+                    'urgencia': 'ALTA',
+                    'pedido': '#12347'
+                },
+                {
+                    'fecha': '2024-01-15 14:20',
+                    'remitente': 'ventas@web.com',
+                    'asunto': 'Consulta general',
+                    'tipo': 'ℹ️ GENERAL',
+                    'urgencia': 'BAJA',
+                    'pedido': 'N/A'
+                }
+            ]
             
             df_auditoria = pd.DataFrame(datos_auditoria)
             
@@ -1108,8 +1090,7 @@ def mostrar_dashboard_transferencias():
         with col_log2:
             st.subheader("📊 Resumen")
             for cat, uni in zip(categorias, unidades):
-                porcentaje = (uni/sum(unidades))*100 if sum(unidades) > 0 else 0
-                st.metric(cat, f"{uni:,}", delta=f"{porcentaje:.1f}%")
+                st.metric(cat, f"{uni:,}", delta=f"{uni/sum(unidades)*100:.1f}%")
         
         st.divider()
         
@@ -1288,14 +1269,6 @@ def mostrar_configuracion():
         
         if st.button("💾 Guardar Configuración", type="primary"):
             st.success("✅ Configuración guardada")
-    
-    with tab_conf2:
-        st.subheader("Gestión de Usuarios")
-        st.info("Funcionalidad en desarrollo...")
-    
-    with tab_conf3:
-        st.subheader("Seguridad del Sistema")
-        st.info("Funcionalidad en desarrollo...")
 
 # ==============================================================================
 # 12. NAVEGACIÓN PRINCIPAL
@@ -1306,7 +1279,7 @@ def mostrar_pantalla_inicio():
     st.markdown("""
     <div class="gallery-container">
         <div class="brand-title">AEROPOSTALE</div>
-        <div class="brand-subtitle">Centro de Distribución Ecuador | ERP </div>
+        <div class="brand-subtitle">Centro de Distribución Ecuador | ERP v4.0</div>
     </div>
     """, unsafe_allow_html=True)
     
@@ -1338,9 +1311,9 @@ def mostrar_pantalla_inicio():
     # Footer
     st.markdown("""
     <div class="app-footer">
-        <p>Sistema ERP • Desarrollado por Wilson Pérez • Logística & Sistemas</p>
+        <p>Sistema ERP v4.0 • Desarrollado por Wilson Pérez • Logística & Sistemas</p>
         <p style="font-size: 0.8rem; color: #64748B; margin-top: 10px;">
-            © 2026 AEROPOSTALE Ecuador • Todos los derechos reservados
+            © 2024 AEROPOSTALE Ecuador • Todos los derechos reservados
         </p>
     </div>
     """, unsafe_allow_html=True)
@@ -1383,20 +1356,13 @@ def main():
     
     # Botón flotante para volver al inicio
     if st.session_state.current_page != "Inicio":
-        st.markdown("""
-        <style>
-        .stButton > button {
-            position: fixed;
-            bottom: 30px;
-            right: 30px;
-            z-index: 100;
-        }
-        </style>
-        """, unsafe_allow_html=True)
-        
         if st.button("🏠", help="Volver al inicio", key="floating_home"):
             st.session_state.current_page = "Inicio"
             st.rerun()
 
 if __name__ == "__main__":
+    # Importaciones necesarias para módulos que faltan
+    import unicodedata
+    from typing import Dict, List, Optional, Any, Union
+    
     main()
