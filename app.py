@@ -3142,8 +3142,8 @@ def generar_pdf_profesional(guia_data):
     
     # Configurar el documento
     doc = SimpleDocTemplate(buffer, pagesize=letter,
-                           rightMargin=0.5*inch, leftMargin=0.5*inch,
-                           topMargin=0.5*inch, bottomMargin=0.5*inch)
+                           rightMargin=0.2*inch, leftMargin=0.2*inch,
+                           topMargin=0.2*inch, bottomMargin=0.2*inch)
     
     styles = getSampleStyleSheet()
     
@@ -3151,32 +3151,32 @@ def generar_pdf_profesional(guia_data):
     styles.add(ParagraphStyle(
         name='TituloPrincipal',
         parent=styles['Title'],
-        fontSize=24,
+        fontSize=16,
         textColor=HexColor('#000000'),
         fontName='Helvetica-Bold',
         alignment=TA_CENTER,
-        spaceAfter=10
+        spaceAfter=2
     ))
     
     styles.add(ParagraphStyle(
         name='Subtitulo',
         parent=styles['Heading2'],
-        fontSize=16,
+        fontSize=12,
         textColor=HexColor('#000000'),
         fontName='Helvetica-Bold',
         alignment=TA_CENTER,
-        spaceAfter=20
+        spaceAfter=2
     ))
     
     styles.add(ParagraphStyle(
         name='EncabezadoSeccion',
         parent=styles['Heading3'],
-        fontSize=14,
+        fontSize=10,
         textColor=HexColor('#000000'),
         fontName='Helvetica-Bold',
         alignment=TA_LEFT,
-        spaceAfter=8,
-        spaceBefore=16,
+        spaceAfter=4,
+        spaceBefore=4,
         underline=True
     ))
     
@@ -3197,7 +3197,7 @@ def generar_pdf_profesional(guia_data):
         textColor=HexColor('#000000'),
         fontName='Helvetica',
         alignment=TA_LEFT,
-        spaceAfter=12,
+        spaceAfter=4,
         leftIndent=10
     ))
     
@@ -3359,10 +3359,7 @@ def generar_pdf_profesional(guia_data):
             
             contenido.append(qr_table)
             
-            # Texto debajo del QR
-            contenido.append(Spacer(1, 0.1*inch))
-            contenido.append(Paragraph(f"<b>URL de Seguimiento:</b> {guia_data['url_pedido']}", 
-                                      ParagraphStyle(name='QRText', fontSize=9, alignment=TA_CENTER)))
+            
         except:
             # Si hay error con el QR, mostrar solo la URL
             contenido.append(Paragraph(f"<b>URL de Seguimiento:</b> {guia_data['url_pedido']}", 
@@ -3370,11 +3367,7 @@ def generar_pdf_profesional(guia_data):
     
     contenido.append(Spacer(1, 0.3*inch))
     
-    # LÍNEA DE FIRMAS (como en documentos oficiales)
-    contenido.append(Paragraph("_" * 50, ParagraphStyle(name='LineaFirma', fontSize=8, alignment=TA_CENTER)))
-    contenido.append(Paragraph("Firma del Remitente", 
-                              ParagraphStyle(name='Firma', fontSize=9, alignment=TA_CENTER)))
-    
+      
     # Construir el PDF
     doc.build(contenido)
     buffer.seek(0)
