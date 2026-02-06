@@ -8,7 +8,20 @@ import time
 import hashlib
 import re
 import unicodedata
+import io
+import json
+import qrcode
+import requests
+import imaplib
+import email
+from email.header import decode_header
 from typing import Dict, List, Optional, Any, Union
+from reportlab.lib.pagesizes import letter
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import inch
+from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_RIGHT
+from reportlab.lib.colors import HexColor
 
 # --- CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(
@@ -591,6 +604,186 @@ st.markdown("""
 .hidden {
     display: none !important;
 }
+
+/* Estilos adicionales para tarjetas de métricas */
+.stat-card {
+    background: rgba(30, 41, 59, 0.8);
+    border-radius: 16px;
+    padding: 20px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(10px);
+    transition: all 0.3s ease;
+}
+
+.stat-card:hover {
+    transform: translateY(-5px);
+    border-color: #60A5FA;
+    box-shadow: 0 10px 25px rgba(96, 165, 250, 0.2);
+}
+
+.card-blue {
+    border-left: 4px solid #60A5FA;
+}
+
+.card-green {
+    border-left: 4px solid #10B981;
+}
+
+.card-red {
+    border-left: 4px solid #EF4444;
+}
+
+.card-purple {
+    border-left: 4px solid #8B5CF6;
+}
+
+.card-orange {
+    border-left: 4px solid #F59E0B;
+}
+
+.stat-icon {
+    font-size: 2rem;
+    margin-bottom: 10px;
+}
+
+.stat-title {
+    color: #CBD5E1;
+    font-size: 0.9rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 8px;
+}
+
+.stat-value {
+    color: white;
+    font-size: 2rem;
+    font-weight: 800;
+    margin-bottom: 5px;
+}
+
+.stat-change {
+    font-size: 0.85rem;
+    font-weight: 600;
+    padding: 4px 8px;
+    border-radius: 12px;
+    display: inline-block;
+}
+
+.positive {
+    background: rgba(16, 185, 129, 0.2);
+    color: #10B981;
+}
+
+.negative {
+    background: rgba(239, 68, 68, 0.2);
+    color: #EF4444;
+}
+
+.warning {
+    background: rgba(245, 158, 11, 0.2);
+    color: #F59E0B;
+}
+
+/* Contenedor de gráficos */
+.chart-container {
+    background: rgba(30, 41, 59, 0.7);
+    backdrop-filter: blur(10px);
+    border-radius: 16px;
+    padding: 20px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    margin-bottom: 20px;
+}
+
+/* Panel de filtros */
+.filter-panel {
+    background: rgba(30, 41, 59, 0.8);
+    backdrop-filter: blur(10px);
+    border-radius: 16px;
+    padding: 20px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    margin-bottom: 20px;
+}
+
+.filter-title {
+    color: white;
+    font-size: 1.3rem;
+    font-weight: 700;
+    margin-bottom: 15px;
+}
+
+/* Grid de estadísticas */
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 15px;
+    margin-bottom: 30px;
+}
+
+@media (max-width: 1200px) {
+    .stats-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 768px) {
+    .stats-grid { grid-template-columns: 1fr; }
+}
+
+/* Tarjetas de métricas alternativas */
+.metric-card {
+    background: rgba(30, 41, 59, 0.8);
+    border-radius: 12px;
+    padding: 15px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    margin-bottom: 10px;
+}
+
+.metric-title {
+    color: #94A3B8;
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.metric-value {
+    color: white;
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin: 5px 0;
+}
+
+.metric-subtitle {
+    color: #64748B;
+    font-size: 0.75rem;
+}
+
+/* Encabezados principales */
+.main-header {
+    text-align: center;
+    padding: 30px 0;
+    margin-bottom: 30px;
+}
+
+.header-title {
+    color: white;
+    font-size: 2.5rem;
+    font-weight: 800;
+    margin-bottom: 10px;
+}
+
+.header-subtitle {
+    color: #94A3B8;
+    font-size: 1.1rem;
+    max-width: 800px;
+    margin: 0 auto;
+    line-height: 1.6;
+}
+
+.section-description {
+    color: #94A3B8;
+    font-size: 0.9rem;
+    margin-top: 5px;
+}
 </style>
 
 <div class="main-bg"></div>
@@ -609,6 +802,16 @@ def initialize_session_state():
     # Estado para cada módulo
     if 'module_data' not in st.session_state:
         st.session_state.module_data = {}
+    
+    # Para el generador de guías
+    if 'guias_registradas' not in st.session_state:
+        st.session_state.guias_registradas = []
+    if 'contador_guias' not in st.session_state:
+        st.session_state.contador_guias = 1000
+    if 'qr_images' not in st.session_state:
+        st.session_state.qr_images = {}
+    if 'logos' not in st.session_state:
+        st.session_state.logos = {}
 
 def create_module_card(icon, title, description, module_key):
     """Crea una tarjeta de módulo completamente clickeable"""
@@ -694,7 +897,152 @@ def show_module_header(title_with_icon, subtitle):
     """, unsafe_allow_html=True)
 
 # ==============================================================================
-# 3. PÁGINA PRINCIPAL - COMPLETAMENTE REDISEÑADA
+# 3. FUNCIONES AUXILIARES
+# ==============================================================================
+
+def hash_password(password):
+    """Hashea una contraseña"""
+    return hashlib.sha256(password.encode()).hexdigest()
+
+def normalizar_texto_wilo(texto):
+    """Normaliza texto para comparaciones"""
+    if pd.isna(texto):
+        return ""
+    # Convertir a mayúsculas y eliminar acentos
+    texto = str(texto).upper()
+    texto = unicodedata.normalize('NFD', texto).encode('ascii', 'ignore').decode('ascii')
+    return texto
+
+def procesar_subtotal_wilo(valor):
+    """Procesa valores numéricos"""
+    try:
+        if pd.isna(valor):
+            return 0.0
+        if isinstance(valor, str):
+            # Eliminar símbolos de moneda y separadores de miles
+            valor = valor.replace('$', '').replace(',', '')
+        return float(valor)
+    except:
+        return 0.0
+
+def to_excel(df):
+    """Convierte DataFrame a Excel"""
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False, sheet_name='Data')
+    return output.getvalue()
+
+def normalizar_codigo(df, columnas_posibles):
+    """Normaliza la columna de código a string y elimina espacios"""
+    for col in columnas_posibles:
+        if col in df.columns:
+            df[col] = df[col].astype(str).str.strip()
+            return df, col
+    return df, None
+
+def extraer_entero(valor):
+    """Extrae valor entero de diferentes formatos"""
+    try:
+        if pd.isna(valor): return 0
+        if isinstance(valor, str):
+            valor = valor.replace('.', '')
+            if ',' in valor: valor = valor.split(',')[0]
+        val = float(valor)
+        if val >= 1000000: return int(val // 1000000)
+        return int(val)
+    except:
+        return 0
+
+# ==============================================================================
+# 4. SIMULACIÓN DE BASE DE DATOS LOCAL
+# ==============================================================================
+
+class LocalDatabase:
+    """Simulación de base de datos local para reemplazar Supabase"""
+    
+    def __init__(self):
+        self.data = {
+            'users': [
+                {'id': 1, 'username': 'admin', 'role': 'admin', 'password_hash': hash_password('admin123')},
+                {'id': 2, 'username': 'user', 'role': 'user', 'password_hash': hash_password('user123')},
+                {'id': 3, 'username': 'wilson', 'role': 'admin', 'password_hash': hash_password('admin123')}
+            ],
+            'kpis': self._generate_kpis_data(),
+            'guias': [],
+            'trabajadores': [
+                {'id': 1, 'nombre': 'Andrés Yépez', 'cargo': 'Supervisor', 'estado': 'Activo'},
+                {'id': 2, 'nombre': 'Josué Imbacuán', 'cargo': 'Operador', 'estado': 'Activo'},
+                {'id': 3, 'nombre': 'María González', 'cargo': 'Auditora', 'estado': 'Activo'}
+            ],
+            'distribuciones': [
+                {'id': 1, 'transporte': 'Tempo', 'guías': 45, 'estado': 'En ruta'},
+                {'id': 2, 'transporte': 'Luis Perugachi', 'guías': 32, 'estado': 'Entregado'}
+            ]
+        }
+    
+    def _generate_kpis_data(self):
+        """Genera datos de KPIs simulados"""
+        kpis = []
+        today = datetime.now()
+        for i in range(30):
+            date = today - timedelta(days=i)
+            kpis.append({
+                'id': i,
+                'fecha': date.strftime('%Y-%m-%d'),
+                'produccion': np.random.randint(800, 1500),
+                'eficiencia': np.random.uniform(85, 98),
+                'alertas': np.random.randint(0, 5),
+                'costos': np.random.uniform(5000, 15000)
+            })
+        return kpis
+    
+    def query(self, table, filters=None):
+        """Simula consulta a la base de datos"""
+        if table not in self.data:
+            return []
+        
+        results = self.data[table]
+        if filters:
+            for key, value in filters.items():
+                results = [item for item in results if item.get(key) == value]
+        return results
+    
+    def insert(self, table, data):
+        """Simula inserción de datos"""
+        if table not in self.data:
+            self.data[table] = []
+        
+        if isinstance(data, dict):
+            data['id'] = len(self.data[table]) + 1
+            self.data[table].append(data)
+        elif isinstance(data, list):
+            for item in data:
+                item['id'] = len(self.data[table]) + 1
+                self.data[table].append(item)
+        return True
+    
+    def delete(self, table, id):
+        """Elimina un registro por ID"""
+        if table in self.data:
+            self.data[table] = [item for item in self.data[table] if item.get('id') != id]
+        return True
+    
+    def authenticate(self, username, password):
+        """Autenticación local"""
+        users = self.query('users', {'username': username})
+        if not users:
+            return None
+        
+        user = users[0]
+        if user['password_hash'] == hash_password(password):
+            return user
+        return None
+
+# Instancia global de base de datos local
+local_db = LocalDatabase()
+
+# ==============================================================================
+# 5. PÁGINA PRINCIPAL - COMPLETAMENTE REDISEÑADA
 # ==============================================================================
 
 def show_main_page():
@@ -790,109 +1138,132 @@ def show_main_page():
         </p>
     </div>
     """, unsafe_allow_html=True)
-# ==============================================================================
-# 1. SIMULACIÓN DE BASE DE DATOS LOCAL
-# ==============================================================================
 
-class LocalDatabase:
-    """Simulación de base de datos local para reemplazar Supabase"""
-    
-    def __init__(self):
-        self.data = {
-            'users': [
-                {'id': 1, 'username': 'admin', 'role': 'admin', 'password_hash': hash_password('admin123')},
-                {'id': 2, 'username': 'user', 'role': 'user', 'password_hash': hash_password('user123')},
-                {'id': 3, 'username': 'wilson', 'role': 'admin', 'password_hash': hash_password('admin123')}
-            ],
-            'kpis': self._generate_kpis_data(),
-            'guias': [],
-            'trabajadores': [
-                {'id': 1, 'nombre': 'Andrés Yépez', 'cargo': 'Supervisor', 'estado': 'Activo'},
-                {'id': 2, 'nombre': 'Josué Imbacuán', 'cargo': 'Operador', 'estado': 'Activo'},
-                {'id': 3, 'nombre': 'María González', 'cargo': 'Auditora', 'estado': 'Activo'}
-            ],
-            'distribuciones': [
-                {'id': 1, 'transporte': 'Tempo', 'guías': 45, 'estado': 'En ruta'},
-                {'id': 2, 'transporte': 'Luis Perugachi', 'guías': 32, 'estado': 'Entregado'}
-            ]
-        }
-    
-    def _generate_kpis_data(self):
-        """Genera datos de KPIs simulados"""
-        kpis = []
-        today = datetime.now()
-        for i in range(30):
-            date = today - timedelta(days=i)
-            kpis.append({
-                'id': i,
-                'fecha': date.strftime('%Y-%m-%d'),
-                'produccion': np.random.randint(800, 1500),
-                'eficiencia': np.random.uniform(85, 98),
-                'alertas': np.random.randint(0, 5),
-                'costos': np.random.uniform(5000, 15000)
-            })
-        return kpis
-    
-    def query(self, table, filters=None):
-        """Simula consulta a la base de datos"""
-        if table not in self.data:
-            return []
-        
-        results = self.data[table]
-        if filters:
-            for key, value in filters.items():
-                results = [item for item in results if item.get(key) == value]
-        return results
-    
-    def insert(self, table, data):
-        """Simula inserción de datos"""
-        if table not in self.data:
-            self.data[table] = []
-        
-        if isinstance(data, dict):
-            data['id'] = len(self.data[table]) + 1
-            self.data[table].append(data)
-        elif isinstance(data, list):
-            for item in data:
-                item['id'] = len(self.data[table]) + 1
-                self.data[table].append(item)
-        return True
-    
-    def authenticate(self, username, password):
-        """Autenticación local"""
-        users = self.query('users', {'username': username})
-        if not users:
-            return None
-        
-        user = users[0]
-        if user['password_hash'] == hash_password(password):
-            return user
-        return None
-
-# Instancia global de base de datos local
-local_db = LocalDatabase()
-
-# Variables Globales
-ADMIN_PASSWORD = "admin123"
-USER_PASSWORD = "user123"
 # ==============================================================================
-# 4. MÓDULOS ESPECÍFICOS - MEJORADOS ESTÉTICAMENTE
+# 6. MÓDULO DASHBOARD KPIs
 # ==============================================================================
 
-def show_dashboard_logistico():
-    """Dashboard de logística y transferencias - MEJORADO"""
-    # Botón de volver
+def show_dashboard_kpis():
+    """Dashboard de KPIs - MEJORADO"""
     add_back_button()
-    
-    # Cabecera del módulo
     show_module_header(
-        "📦 Dashboard Logístico",
-        "Control de transferencias y distribución en tiempo real"
+        "📊 Dashboard de KPIs",
+        "Métricas en tiempo real del Centro de Distribución"
     )
     
     st.markdown('<div class="module-content">', unsafe_allow_html=True)
     
-    # --- CONFIGURACIÓN DE PARÁMETROS ---
+    # Filtros
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        fecha_inicio = st.date_input("📅 Fecha Inicio", datetime.now() - timedelta(days=30))
+    with col2:
+        fecha_fin = st.date_input("📅 Fecha Fin", datetime.now())
+    with col3:
+        tipo_kpi = st.selectbox("📈 Tipo de Métrica", ["Producción", "Eficiencia", "Costos", "Alertas"])
+    
+    # Obtener datos de la base de datos local
+    kpis_data = local_db.query('kpis')
+    df_kpis = pd.DataFrame(kpis_data)
+    
+    if not df_kpis.empty:
+        df_kpis['fecha'] = pd.to_datetime(df_kpis['fecha'])
+        mask = (df_kpis['fecha'].dt.date >= fecha_inicio) & (df_kpis['fecha'].dt.date <= fecha_fin)
+        df_filtered = df_kpis[mask]
+        
+        if not df_filtered.empty:
+            # KPIs Principales
+            st.markdown("<div class='stats-grid'>", unsafe_allow_html=True)
+            col_k1, col_k2, col_k3, col_k4 = st.columns(4)
+            
+            with col_k1:
+                prod_prom = df_filtered['produccion'].mean()
+                prod_tend = ((df_filtered['produccion'].iloc[-1] - df_filtered['produccion'].iloc[0]) / df_filtered['produccion'].iloc[0] * 100) if len(df_filtered) > 1 else 0
+                st.markdown(f"""
+                <div class='stat-card card-blue'>
+                    <div class='stat-icon'>🏭</div>
+                    <div class='stat-title'>Producción Promedio</div>
+                    <div class='stat-value'>{prod_prom:,.0f}</div>
+                    <div class='stat-change {'positive' if prod_tend > 0 else 'negative'}">{'📈' if prod_tend > 0 else '📉'} {prod_tend:.1f}%</div>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with col_k2:
+                efic_prom = df_filtered['eficiencia'].mean()
+                st.markdown(f"""
+                <div class='stat-card card-green'>
+                    <div class='stat-icon'>⚡</div>
+                    <div class='stat-title'>Eficiencia</div>
+                    <div class='stat-value'>{efic_prom:.1f}%</div>
+                    <div class='stat-change {'positive' if efic_prom > 90 else 'warning'}">{'Excelente' if efic_prom > 90 else 'Mejorable'}</div>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with col_k3:
+                alert_total = df_filtered['alertas'].sum()
+                st.markdown(f"""
+                <div class='stat-card card-red'>
+                    <div class='stat-icon'>🚨</div>
+                    <div class='stat-title'>Alertas Totales</div>
+                    <div class='stat-value'>{alert_total}</div>
+                    <div class='stat-change {'negative' if alert_total > 10 else 'positive'}">{'Revisar' if alert_total > 10 else 'Controlado'}</div>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with col_k4:
+                costo_prom = df_filtered['costos'].mean()
+                st.markdown(f"""
+                <div class='stat-card card-purple'>
+                    <div class='stat-icon'>💰</div>
+                    <div class='stat-title'>Costo Promedio</div>
+                    <div class='stat-value'>${costo_prom:,.0f}</div>
+                    <div class='stat-change'>Diario</div>
+                </div>
+                """, unsafe_allow_html=True)
+            st.markdown("</div>", unsafe_allow_html=True)
+            
+            # Gráficos
+            st.markdown('<div class="chart-container">', unsafe_allow_html=True)
+            fig = px.line(df_filtered, x='fecha', y='produccion', 
+                        title='Producción Diaria',
+                        labels={'produccion': 'Unidades', 'fecha': 'Fecha'},
+                        line_shape='spline')
+            fig.update_traces(line=dict(color='#0033A0', width=3))
+            st.plotly_chart(fig, use_container_width=True)
+            st.markdown('</div>', unsafe_allow_html=True)
+            
+            # Gráficos secundarios
+            col_ch1, col_ch2 = st.columns(2)
+            with col_ch1:
+                st.markdown('<div class="chart-container">', unsafe_allow_html=True)
+                fig2 = px.bar(df_filtered.tail(7), x=df_filtered.tail(7)['fecha'].dt.strftime('%a'), y='eficiencia',
+                            title='Eficiencia Semanal', 
+                            color='eficiencia',
+                            color_continuous_scale='Viridis')
+                st.plotly_chart(fig2, use_container_width=True)
+                st.markdown('</div>', unsafe_allow_html=True)
+            
+            with col_ch2:
+                st.markdown('<div class="chart-container">', unsafe_allow_html=True)
+                fig3 = px.scatter(df_filtered, x='produccion', y='costos',
+                                title='Relación Producción vs Costos',
+                                color='alertas',
+                                size='eficiencia',
+                                hover_data=['fecha'])
+                st.plotly_chart(fig3, use_container_width=True)
+                st.markdown('</div>', unsafe_allow_html=True)
+        else:
+            st.warning("No hay datos para el rango de fechas seleccionado.")
+    else:
+        st.info("Cargando datos de KPIs...")
+    
+    st.markdown('</div>', unsafe_allow_html=True)
+
+# ==============================================================================
+# 7. MÓDULO DASHBOARD LOGÍSTICO
+# ==============================================================================
+
+# Constantes para el dashboard logístico
 TIENDAS_REGULARES = 42
 PRICE_CLUBS = 5
 TIENDA_WEB = 1
@@ -916,21 +1287,8 @@ TIENDAS_REGULARES_LISTA = [
     'RIOCENTRO NORTE', 'SAN LUIS', 'SANTO DOMINGO'
 ]
 
-# --- FUNCIONES DE SOPORTE MEJORADAS ---
-
-def extraer_entero(valor):
-    try:
-        if pd.isna(valor): return 0
-        if isinstance(valor, str):
-            valor = valor.replace('.', '')
-            if ',' in valor: valor = valor.split(',')[0]
-        val = float(valor)
-        if val >= 1000000: return int(val // 1000000)
-        return int(val)
-    except:
-        return 0
-
 def clasificar_transferencia(row):
+    """Clasifica las transferencias por categoría"""
     sucursal = str(row.get('Sucursal Destino', row.get('Bodega Destino', ''))).upper()
     cantidad = row.get('Cantidad_Entera', 0)
     if cantidad >= 500 and cantidad % 100 == 0:
@@ -946,6 +1304,7 @@ def clasificar_transferencia(row):
     return 'Ventas por Mayor'
 
 def procesar_transferencias_diarias(df):
+    """Procesa las transferencias diarias"""
     df = df.dropna(subset=['Secuencial'])
     df['Secuencial'] = df['Secuencial'].astype(str).str.strip()
     df = df[df['Secuencial'] != '']
@@ -978,21 +1337,8 @@ def procesar_transferencias_diarias(df):
             res['conteo_sucursales'][cat] = 0
     return res
 
-def normalizar_codigo(df, columnas_posibles):
-    """Normaliza la columna de código a string y elimina espacios"""
-    for col in columnas_posibles:
-        if col in df.columns:
-            df[col] = df[col].astype(str).str.strip()
-            return df, col
-    return df, None
-
-def to_excel(df):
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        df.to_excel(writer, index=False, sheet_name='Detalle_Secuencial')
-    return output.getvalue()
-
 def mostrar_dashboard_transferencias():
+    """Muestra el dashboard de transferencias"""
     st.markdown("""
     <div class='main-header'>
         <h1 class='header-title'>📊 Dashboard de Transferencias Diarias</h1>
@@ -1003,7 +1349,6 @@ def mostrar_dashboard_transferencias():
     # --- PESTAÑAS PRINCIPALES ---
     tab1, tab2, tab3 = st.tabs(["📊 Transferencias Diarias", "📦 Mercadería en Tránsito", "📈 Análisis de Stock"])
     
-    # --- PESTAÑA 1: TRANSFERENCIAS DIARIAS ---
     with tab1:
         # Sidebar para carga de datos
         with st.sidebar:
@@ -1306,7 +1651,6 @@ def mostrar_dashboard_transferencias():
             
             st.dataframe(ejemplo_data, use_container_width=True)
     
-    # --- PESTAÑA 2: MERCADERÍA EN TRÁNSITO ---
     with tab2:
         st.header("📦 Análisis de Mercadería en Tránsito")
         st.info("Este módulo requiere el 'Archivo Base' y el 'Archivo de Comparación' para agrupar por Departamento.")
@@ -1640,7 +1984,6 @@ def mostrar_dashboard_transferencias():
                 | 67890 | PANTALONES   | 67890          | 50       |
                 """)
     
-    # --- PESTAÑA 3: ANÁLISIS DE STOCK ---
     with tab3:
         st.header("📈 Análisis de Stock y Ventas")
         
@@ -1876,133 +2219,38 @@ def mostrar_dashboard_transferencias():
                     - SUCURSAL: Sucursal donde se realizó la venta
                     """)
 
-def show_dashboard_kpis():
-    """Dashboard de KPIs - MEJORADO"""
+def show_dashboard_logistico():
+    """Dashboard de logística y transferencias - MEJORADO"""
+    # Botón de volver
     add_back_button()
+    
+    # Cabecera del módulo
     show_module_header(
-        "📊 Dashboard de KPIs",
-        "Métricas en tiempo real del Centro de Distribución"
+        "📦 Dashboard Logístico",
+        "Control de transferencias y distribución en tiempo real"
     )
     
     st.markdown('<div class="module-content">', unsafe_allow_html=True)
     
-   ef mostrar_dashboard_kpis():
-    st.markdown("""
-    <div class='main-header'>
-        <h1 class='header-title'>📊 Dashboard de KPIs en Tiempo Real</h1>
-        <div class='header-subtitle'>Monitorización Integral del Desempeño Operativo</div>
-    </div>
-    """, unsafe_allow_html=True)
+    # Mostrar el dashboard
+    mostrar_dashboard_transferencias()
     
-    # Filtros
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        fecha_inicio = st.date_input("📅 Fecha Inicio", datetime.now() - timedelta(days=30))
-    with col2:
-        fecha_fin = st.date_input("📅 Fecha Fin", datetime.now())
-    with col3:
-        tipo_kpi = st.selectbox("📈 Tipo de Métrica", ["Producción", "Eficiencia", "Costos", "Alertas"])
-    
-    # Obtener datos de la base de datos local
-    kpis_data = local_db.query('kpis')
-    df_kpis = pd.DataFrame(kpis_data)
-    
-    if not df_kpis.empty:
-        df_kpis['fecha'] = pd.to_datetime(df_kpis['fecha'])
-        mask = (df_kpis['fecha'].dt.date >= fecha_inicio) & (df_kpis['fecha'].dt.date <= fecha_fin)
-        df_filtered = df_kpis[mask]
-        
-        if not df_filtered.empty:
-            # KPIs Principales
-            st.markdown("<div class='stats-grid'>", unsafe_allow_html=True)
-            col_k1, col_k2, col_k3, col_k4 = st.columns(4)
-            
-            with col_k1:
-                prod_prom = df_filtered['produccion'].mean()
-                prod_tend = ((df_filtered['produccion'].iloc[-1] - df_filtered['produccion'].iloc[0]) / df_filtered['produccion'].iloc[0] * 100) if len(df_filtered) > 1 else 0
-                st.markdown(f"""
-                <div class='stat-card card-blue'>
-                    <div class='stat-icon'>🏭</div>
-                    <div class='stat-title'>Producción Promedio</div>
-                    <div class='stat-value'>{prod_prom:,.0f}</div>
-                    <div class='stat-change {'positive' if prod_tend > 0 else 'negative'}">{'📈' if prod_tend > 0 else '📉'} {prod_tend:.1f}%</div>
-                </div>
-                """, unsafe_allow_html=True)
-            
-            with col_k2:
-                efic_prom = df_filtered['eficiencia'].mean()
-                st.markdown(f"""
-                <div class='stat-card card-green'>
-                    <div class='stat-icon'>⚡</div>
-                    <div class='stat-title'>Eficiencia</div>
-                    <div class='stat-value'>{efic_prom:.1f}%</div>
-                    <div class='stat-change {'positive' if efic_prom > 90 else 'warning'}">{'Excelente' if efic_prom > 90 else 'Mejorable'}</div>
-                </div>
-                """, unsafe_allow_html=True)
-            
-            with col_k3:
-                alert_total = df_filtered['alertas'].sum()
-                st.markdown(f"""
-                <div class='stat-card card-red'>
-                    <div class='stat-icon'>🚨</div>
-                    <div class='stat-title'>Alertas Totales</div>
-                    <div class='stat-value'>{alert_total}</div>
-                    <div class='stat-change {'negative' if alert_total > 10 else 'positive'}">{'Revisar' if alert_total > 10 else 'Controlado'}</div>
-                </div>
-                """, unsafe_allow_html=True)
-            
-            with col_k4:
-                costo_prom = df_filtered['costos'].mean()
-                st.markdown(f"""
-                <div class='stat-card card-purple'>
-                    <div class='stat-icon'>💰</div>
-                    <div class='stat-title'>Costo Promedio</div>
-                    <div class='stat-value'>${costo_prom:,.0f}</div>
-                    <div class='stat-change'>Diario</div>
-                </div>
-                """, unsafe_allow_html=True)
-            st.markdown("</div>", unsafe_allow_html=True)
-            
-            # Gráficos
-            st.markdown('<div class="chart-container">', unsafe_allow_html=True)
-            fig = px.line(df_filtered, x='fecha', y='produccion', 
-                        title='Producción Diaria',
-                        labels={'produccion': 'Unidades', 'fecha': 'Fecha'},
-                        line_shape='spline')
-            fig.update_traces(line=dict(color='#0033A0', width=3))
-            st.plotly_chart(fig, use_container_width=True)
-            st.markdown('</div>', unsafe_allow_html=True)
-            
-            # Gráficos secundarios
-            col_ch1, col_ch2 = st.columns(2)
-            with col_ch1:
-                st.markdown('<div class="chart-container">', unsafe_allow_html=True)
-                fig2 = px.bar(df_filtered.tail(7), x=df_filtered.tail(7)['fecha'].dt.strftime('%a'), y='eficiencia',
-                            title='Eficiencia Semanal', 
-                            color='eficiencia',
-                            color_continuous_scale='Viridis')
-                st.plotly_chart(fig2, use_container_width=True)
-                st.markdown('</div>', unsafe_allow_html=True)
-            
-            with col_ch2:
-                st.markdown('<div class="chart-container">', unsafe_allow_html=True)
-                fig3 = px.scatter(df_filtered, x='produccion', y='costos',
-                                title='Relación Producción vs Costos',
-                                color='alertas',
-                                size='eficiencia',
-                                hover_data=['fecha'])
-                st.plotly_chart(fig3, use_container_width=True)
-                st.markdown('</div>', unsafe_allow_html=True)
-        else:
-            st.warning("No hay datos para el rango de fechas seleccionado.")
-    else:
-        st.info("Cargando datos de KPIs...")
+    st.markdown('</div>', unsafe_allow_html=True)
 
 # ==============================================================================
-# 9. MÓDULO GESTIÓN DE TRABAJADORES
+# 8. MÓDULO GESTIÓN DE EQUIPO
 # ==============================================================================
 
-def mostrar_gestion_trabajadores():
+def show_gestion_equipo():
+    """Gestión de personal"""
+    add_back_button()
+    show_module_header(
+        "👥 Gestión de Equipo",
+        "Administración del personal del Centro de Distribución"
+    )
+    
+    st.markdown('<div class="module-content">', unsafe_allow_html=True)
+    
     st.markdown("""
     <div class='main-header'>
         <h1 class='header-title'>👥 Gestión de Personal</h1>
@@ -2038,34 +2286,28 @@ def mostrar_gestion_trabajadores():
         ]
     }
     
-    # Inicializar base de datos local (solución temporal si falla)
+    # Obtener trabajadores de la base de datos
     try:
         trabajadores = local_db.query('trabajadores')
-        if trabajadores is None:
-            trabajadores = []
-    except:
-        trabajadores = []
-        st.warning("⚠️ Base de datos no disponible - usando almacenamiento temporal")
-    
-    # Inicializar estructura base si está vacía
-    if not trabajadores:
-        st.info("📝 Inicializando estructura organizacional base...")
-        # Aplanar la estructura para guardar en base de datos
-        todos_base = []
-        for area, lista in estructura_base.items():
-            for trabajador in lista:
-                trabajador['area'] = area
-                trabajador['fecha_ingreso'] = datetime.now().strftime('%Y-%m-%d')
-                todos_base.append(trabajador)
-        
-        # Insertar en base de datos
-        for trab in todos_base:
-            try:
+        if not trabajadores:
+            # Inicializar estructura base si está vacía
+            st.info("📝 Inicializando estructura organizacional base...")
+            # Aplanar la estructura para guardar en base de datos
+            todos_base = []
+            for area, lista in estructura_base.items():
+                for trabajador in lista:
+                    trabajador['area'] = area
+                    trabajador['fecha_ingreso'] = datetime.now().strftime('%Y-%m-%d')
+                    todos_base.append(trabajador)
+            
+            # Insertar en base de datos
+            for trab in todos_base:
                 local_db.insert('trabajadores', trab)
-            except:
-                # Si falla la inserción, añadir a lista temporal
-                trabajadores.append(trab)
-        st.success("✅ Estructura base inicializada correctamente")
+            st.success("✅ Estructura base inicializada correctamente")
+            trabajadores = local_db.query('trabajadores')
+    except Exception as e:
+        st.error(f"Error al cargar trabajadores: {str(e)}")
+        trabajadores = []
     
     with tab1:
         st.markdown("""
@@ -2118,7 +2360,7 @@ def mostrar_gestion_trabajadores():
             if trabajadores_db is None:
                 trabajadores_db = []
         except:
-            trabajadores_db = trabajadores  # Usar lista temporal si falla
+            trabajadores_db = trabajadores
         
         # Pestañas para cada área
         area_tabs = st.tabs(list(estructura_base.keys()))
@@ -2169,11 +2411,7 @@ def mostrar_gestion_trabajadores():
                                     if st.button("🗑️", key=f"eliminar_{area}_{trabajador_id}"):
                                         try:
                                             # Eliminar de la base de datos
-                                            if hasattr(local_db, 'delete'):
-                                                local_db.delete('trabajadores', trabajador_id)
-                                            else:
-                                                # Eliminar de lista temporal
-                                                trabajadores_db = [t for t in trabajadores_db if t.get('id') != trabajador_id]
+                                            local_db.delete('trabajadores', int(trabajador_id))
                                             st.success(f"✅ Trabajador {row['Nombre']} eliminado de {area}")
                                             st.rerun()
                                         except Exception as e:
@@ -2221,10 +2459,6 @@ def mostrar_gestion_trabajadores():
                                     st.rerun()
                                 except Exception as e:
                                     st.error(f"❌ Error al agregar trabajador: {str(e)}")
-                                    # Alternativa: agregar a lista temporal
-                                    trabajadores_db.append(nuevo_trabajador)
-                                    st.success(f"✅ {nombre_nuevo} agregado temporalmente a {area}")
-                                    st.rerun()
                             else:
                                 st.error("❌ Nombre y Cargo son obligatorios")
     
@@ -2377,25 +2611,14 @@ def mostrar_gestion_trabajadores():
                     st.info("No hay datos para exportar")
             except Exception as e:
                 st.error(f"❌ Error al exportar datos: {str(e)}")
-
     
     st.markdown('</div>', unsafe_allow_html=True)
 
 # ==============================================================================
-# 5. FUNCIONES AUXILIARES Y MÓDULOS RESTANTES
+# 9. MÓDULO RECONCILIACIÓN V8
 # ==============================================================================
 
-def show_reconciliacion_v8():
-    """Módulo de reconciliación financiera"""
-    add_back_button()
-    show_module_header(
-        "💰 Reconciliación V8",
-        "Conciliación de facturas y manifiestos con IA"
-    )
-    
-    st.markdown('<div class="module-content">', unsafe_allow_html=True)
-    
-    ef identificar_tipo_tienda_v8(nombre):
+def identificar_tipo_tienda_v8(nombre):
     """
     Lógica V8.0 para clasificación de tiendas.
     Incluye regla específica para JOFRE SANTANA y manejo de Piezas.
@@ -2422,7 +2645,16 @@ def show_reconciliacion_v8():
         
     return "TIENDA FÍSICA" # Default
 
-def mostrar_reconciliacion_v8():
+def show_reconciliacion_v8():
+    """Módulo de reconciliación financiera"""
+    add_back_button()
+    show_module_header(
+        "💰 Reconciliación V8",
+        "Conciliación de facturas y manifiestos con IA"
+    )
+    
+    st.markdown('<div class="module-content">', unsafe_allow_html=True)
+    
     st.markdown("""
     <div class='main-header'>
         <h1 class='header-title'>📦 Reconciliación Logística V8.0</h1>
@@ -2533,7 +2765,7 @@ def mostrar_reconciliacion_v8():
                     # Creación de Grupos
                     def crear_grupo(row):
                         tipo = row['TIPO_TIENDA']
-                        nom = normalizar_texto_wilo(row['DESTINATARio_NORM'])
+                        nom = normalizar_texto_wilo(row['DESTINATARIO_NORM'])
                         if tipo == "VENTAS AL POR MAYOR": return "VENTAS AL POR MAYOR - JOFRE SANTANA"
                         if tipo == "VENTA WEB": return f"WEB - {nom}"
                         return f"TIENDA - {nom}"
@@ -2665,7 +2897,7 @@ def mostrar_reconciliacion_v8():
                     
                     # Exportación
                     st.markdown("### 💾 Exportar Datos")
-                    buffer = BytesIO()
+                    buffer = io.BytesIO()
                     with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
                         df_final.to_excel(writer, sheet_name='Data_Completa', index=False)
                         resumen.to_excel(writer, sheet_name='Resumen_Canal', index=False)
@@ -2699,24 +2931,18 @@ def mostrar_reconciliacion_v8():
     
     st.markdown('</div>', unsafe_allow_html=True)
 
-def show_auditoria_correos():
-    """Módulo de auditoría de correos"""
-    add_back_button()
-    show_module_header(
-        "📧 Auditoría de Correos",
-        "Análisis inteligente de novedades por email"
-    )
-    
-    st.markdown('<div class="module-content">', unsafe_allow_html=True)
-    
-    class WiloEmailEngine:
+# ==============================================================================
+# 10. MÓDULO AUDITORÍA DE CORREOS
+# ==============================================================================
+
+class WiloEmailEngine:
     """Motor real para extracción y análisis de correos logísticos."""
     
     def __init__(self, host: str, user: str, password: str):
         self.host = host
         self.user = user
         self.password = password
-        self.mail = mail
+        self.mail = None
 
     def _connect(self):
         """Establece conexión segura SSL con el servidor de Fashion Club."""
@@ -2807,14 +3033,16 @@ def show_auditoria_correos():
         self.mail.logout()
         return results
 
-# ==============================================================================
-# 4. INTERFAZ DE AUDITORÍA DE CORREOS (CORREGIDA)
-# ==============================================================================
-
-def mostrar_auditoria_correos():
-    """Interfaz para la auditoría de correos con Wilo AI"""
-    st.set_page_config(page_title="Wilo AI Auditor", page_icon="📧", layout="wide")
-
+def show_auditoria_correos():
+    """Módulo de auditoría de correos"""
+    add_back_button()
+    show_module_header(
+        "📧 Auditoría de Correos",
+        "Análisis inteligente de novedades por email"
+    )
+    
+    st.markdown('<div class="module-content">', unsafe_allow_html=True)
+    
     # Sidebar para Credenciales (Seguridad primero)
     st.sidebar.title("🔐 Acceso Seguro")
     mail_user = st.sidebar.text_input("Correo", value="wperez@fashionclub.com.ec")
@@ -2889,37 +3117,14 @@ def mostrar_auditoria_correos():
 
             except Exception as e:
                 st.error(f"❌ Error durante la auditoría: {e}")
-
-
-def show_gestion_equipo():
-    """Gestión de personal"""
-    add_back_button()
-    show_module_header(
-        "👥 Gestión de Equipo",
-        "Administración del personal del Centro de Distribución"
-    )
-    
-    st.markdown('<div class="module-content">', unsafe_allow_html=True)
-    
-    tab1, tab2, tab3 = st.tabs(["🏢 Estructura", "➕ Agregar", "📊 Estadísticas"])
-    
-    with tab1:
-        # Contenido existente
-        pass
     
     st.markdown('</div>', unsafe_allow_html=True)
 
-def show_generar_guias():
-    """Generador de guías de envío"""
-    add_back_button()
-    show_module_header(
-        "🚚 Generador de Guías",
-        "Sistema de envíos con seguimiento QR"
-    )
-    
-    st.markdown('<div class="module-content">', unsafe_allow_html=True)
-    
-    def descargar_logo(url):
+# ==============================================================================
+# 11. MÓDULO GENERAR GUÍAS
+# ==============================================================================
+
+def descargar_logo(url):
     """Descarga el logo desde la URL"""
     try:
         response = requests.get(url, timeout=10)
@@ -2942,7 +3147,7 @@ def generar_pdf_profesional(guia_data):
     
     styles = getSampleStyleSheet()
     
-    # Crear estilos personalizados (colores y fuentes basados en la guía de ejemplo)
+    # Crear estilos personalizados
     styles.add(ParagraphStyle(
         name='Titulo',
         parent=styles['Title'],
@@ -2961,16 +3166,6 @@ def generar_pdf_profesional(guia_data):
         fontName='Helvetica-Bold',
         alignment=TA_RIGHT,
         spaceAfter=10
-    ))
-    
-    styles.add(ParagraphStyle(
-        name='SubtituloDerecha',
-        parent=styles['Heading2'],
-        fontSize=12,
-        textColor=HexColor('#333333'),
-        fontName='Helvetica',
-        alignment=TA_RIGHT,
-        spaceAfter=8
     ))
     
     styles.add(ParagraphStyle(
@@ -3007,10 +3202,7 @@ def generar_pdf_profesional(guia_data):
     # Contenido del documento
     contenido = []
     
-    # CABECERA CON LOGO, QR Y TÍTULO A LA DERECHA
-    # ==========================================
-    
-    # Determinar logo según marca
+    # CABECERA CON LOGO, QR Y TÍTULO
     logo_bytes = None
     if guia_data['marca'] == 'Fashion Club':
         logo_url = "https://raw.githubusercontent.com/wilo3161/kpi-system/main/images/Fashion.jpg"
@@ -3050,7 +3242,7 @@ def generar_pdf_profesional(guia_data):
         except:
             qr_cell = Paragraph("QR no disponible", styles['Contenido'])
     
-    # Columna derecha: Título (CENTRO DE DISTRIBUCIÓN a la derecha)
+    # Columna derecha: Título
     titulo_text = f"""
     <b>CENTRO DE DISTRIBUCIÓN {guia_data['marca'].upper()}</b><br/>
     <font size=10>GUÍA DE ENVÍO</font>
@@ -3077,10 +3269,7 @@ def generar_pdf_profesional(guia_data):
     contenido.append(Paragraph("_" * 100, ParagraphStyle(name='Linea', fontSize=6)))
     contenido.append(Spacer(1, 0.2*inch))
     
-    # INFORMACIÓN DE LA GUÍA (EXACTAMENTE COMO EN LA IMAGEN)
-    # ==========================================
-    
-    # Número de guía, fecha y estado en una sola línea
+    # INFORMACIÓN DE LA GUÍA
     info_guia = Table([
         [Paragraph(f"<b>NÚMERO DE GUÍA:</b> {guia_data['numero']}", styles['ContenidoNegrita']),
          Paragraph(f"<b>FECHA DE EMISIÓN:</b> {guia_data['fecha_emision']}", styles['ContenidoNegrita']),
@@ -3098,9 +3287,7 @@ def generar_pdf_profesional(guia_data):
     contenido.append(info_guia)
     contenido.append(Spacer(1, 0.2*inch))
     
-    # INFORMACIÓN DE ENVÍO (EXACTAMENTE COMO EN LA IMAGEN)
-    # ==========================================
-    
+    # INFORMACIÓN DE ENVÍO
     contenido.append(Paragraph("INFORMACIÓN DE ENVÍO", styles['EncabezadoSeccion']))
     
     # Crear tabla con dos columnas para remitente y destinatario
@@ -3113,11 +3300,11 @@ def generar_pdf_profesional(guia_data):
         [Paragraph(f"<b>Nombre:</b> {guia_data['remitente']}", styles['Contenido']),
          Paragraph(f"<b>Nombre:</b> {guia_data['destinatario']}", styles['Contenido'])],
         
-        # Dirección (con más espacio)
+        # Dirección
         [Paragraph(f"<b>Dirección:</b> {guia_data['direccion_remitente']}", styles['Contenido']),
          Paragraph(f"<b>Dirección:</b> {guia_data['direccion_destinatario']}", styles['Contenido'])],
         
-        # Teléfono y tienda (solo destinatario)
+        # Teléfono y tienda
         ["", Paragraph(f"<b>Teléfono:</b> {guia_data['telefono_destinatario']}", styles['Contenido'])],
         
         ["", Paragraph(f"<b>Tienda:</b> {guia_data['tienda_destino']}", styles['Contenido'])]
@@ -3332,20 +3519,15 @@ Generado el: {guia_data['fecha_creacion']}
     
     st.markdown("</div>", unsafe_allow_html=True)
 
-def mostrar_generacion_guias():
-    st.markdown("""
-    <div class='main-header'>
-        <h1 class='header-title'>🚚 Centro de Distribución Fashion Club</h1>
-        <div class='header-subtitle'>Generador de Guías de Envío con QR y Tracking</div>
-    </div>
-    """, unsafe_allow_html=True)
+def show_generar_guias():
+    """Generador de guías de envío"""
+    add_back_button()
+    show_module_header(
+        "🚚 Generador de Guías",
+        "Sistema de envíos con seguimiento QR"
+    )
     
-    # Configuración inicial para el estado de sesión
-    if 'guias_registradas' not in st.session_state:
-        st.session_state.guias_registradas = []
-        st.session_state.contador_guias = 1000
-        st.session_state.qr_images = {}
-        st.session_state.logos = {}
+    st.markdown('<div class="module-content">', unsafe_allow_html=True)
     
     # URLs de logos desde GitHub
     url_fashion_logo = "https://raw.githubusercontent.com/wilo3161/kpi-system/main/images/Fashion.jpg"
@@ -3547,12 +3729,11 @@ def mostrar_generacion_guias():
                     # Agregar a lista de guías
                     st.session_state.guias_registradas.append(guia_data)
                     
-                    # También guardar en la base de datos local (si existe)
+                    # También guardar en la base de datos local
                     try:
-                        if 'local_db' in globals():
-                            local_db.insert('guias', guia_data)
-                    except:
-                        pass
+                        local_db.insert('guias', guia_data)
+                    except Exception as e:
+                        st.warning(f"⚠️ No se pudo guardar en la base de datos: {str(e)}")
                     
                     # Generar PDF mejorado con logo y QR
                     pdf_bytes = generar_pdf_profesional(guia_data)
@@ -3561,9 +3742,12 @@ def mostrar_generacion_guias():
                     
                     # Mostrar resumen
                     mostrar_resumen_guia(guia_data, pdf_bytes)
-    pass
     
     st.markdown('</div>', unsafe_allow_html=True)
+
+# ==============================================================================
+# 12. MÓDULOS RESTANTES (PLACEHOLDERS)
+# ==============================================================================
 
 def show_control_inventario():
     """Control de inventario"""
@@ -3575,7 +3759,17 @@ def show_control_inventario():
     
     st.markdown('<div class="module-content">', unsafe_allow_html=True)
     
-    st.info("Módulo en desarrollo...")
+    st.info("""
+    ## 🚧 Módulo en Desarrollo
+    
+    **Funcionalidades planeadas:**
+    - 📊 Control de stock en tiempo real
+    - 📈 Alertas de inventario bajo
+    - 🔄 Sistema de reposición automática
+    - 📋 Auditorías de inventario
+    
+    *Disponible en la próxima versión*
+    """)
     
     st.markdown('</div>', unsafe_allow_html=True)
 
@@ -3589,7 +3783,17 @@ def show_reportes_avanzados():
     
     st.markdown('<div class="module-content">', unsafe_allow_html=True)
     
-    st.info("Módulo en desarrollo...")
+    st.info("""
+    ## 🚧 Módulo en Desarrollo
+    
+    **Funcionalidades planeadas:**
+    - 📊 Reportes personalizados
+    - 📈 Análisis predictivo
+    - 📋 Dashboards ejecutivos
+    - 📤 Exportación múltiple formatos
+    
+    *Disponible en la próxima versión*
+    """)
     
     st.markdown('</div>', unsafe_allow_html=True)
 
@@ -3606,13 +3810,75 @@ def show_configuracion():
     tab1, tab2, tab3 = st.tabs(["General", "Usuarios", "Seguridad"])
     
     with tab1:
-        # Contenido existente
-        pass
+        st.header("Configuración General")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.subheader("🌐 Configuración Regional")
+            zona_horaria = st.selectbox("Zona Horaria", ["America/Guayaquil", "UTC"])
+            moneda = st.selectbox("Moneda", ["USD", "EUR", "COP"])
+            idioma = st.selectbox("Idioma", ["Español", "Inglés"])
+        
+        with col2:
+            st.subheader("📊 Configuración de Reportes")
+            formato_fecha = st.selectbox("Formato de Fecha", ["DD/MM/YYYY", "MM/DD/YYYY", "YYYY-MM-DD"])
+            decimales = st.slider("Decimales", 0, 4, 2)
+            separador_miles = st.selectbox("Separador de Miles", [",", ".", " "])
+        
+        if st.button("💾 Guardar Configuración"):
+            st.success("✅ Configuración guardada exitosamente")
+    
+    with tab2:
+        st.header("Gestión de Usuarios")
+        
+        # Mostrar usuarios existentes
+        usuarios = local_db.query('users')
+        df_usuarios = pd.DataFrame(usuarios)
+        
+        if not df_usuarios.empty:
+            st.dataframe(df_usuarios[['username', 'role']], use_container_width=True)
+        
+        # Formulario para agregar usuario
+        with st.form("form_usuario"):
+            st.subheader("Agregar Nuevo Usuario")
+            nuevo_usuario = st.text_input("Nombre de usuario")
+            nueva_contrasena = st.text_input("Contraseña", type="password")
+            rol = st.selectbox("Rol", ["admin", "user"])
+            
+            if st.form_submit_button("➕ Agregar Usuario"):
+                if nuevo_usuario and nueva_contrasena:
+                    try:
+                        local_db.insert('users', {
+                            'username': nuevo_usuario,
+                            'role': rol,
+                            'password_hash': hash_password(nueva_contrasena)
+                        })
+                        st.success(f"✅ Usuario {nuevo_usuario} agregado exitosamente")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"❌ Error: {str(e)}")
+    
+    with tab3:
+        st.header("Configuración de Seguridad")
+        
+        st.subheader("🔐 Políticas de Contraseña")
+        longitud_minima = st.slider("Longitud mínima de contraseña", 6, 20, 8)
+        requerir_mayusculas = st.checkbox("Requerir mayúsculas", True)
+        requerir_numeros = st.checkbox("Requerir números", True)
+        expiracion = st.selectbox("Expiración de contraseña (días)", ["30", "60", "90", "Nunca"])
+        
+        st.subheader("🔒 Configuración de Sesión")
+        tiempo_inactividad = st.slider("Tiempo de inactividad (minutos)", 5, 120, 30)
+        max_intentos = st.slider("Máximo de intentos fallidos", 3, 10, 5)
+        
+        if st.button("🔒 Aplicar Configuración de Seguridad"):
+            st.success("✅ Configuración de seguridad aplicada")
     
     st.markdown('</div>', unsafe_allow_html=True)
 
 # ==============================================================================
-# 6. NAVEGACIÓN PRINCIPAL
+# 13. NAVEGACIÓN PRINCIPAL
 # ==============================================================================
 
 def main():
