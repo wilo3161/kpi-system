@@ -3328,10 +3328,10 @@ def generar_pdf_profesional(guia_data):
     
     # Datos del destinatario
     destinatario_data = [
-        [Paragraph("<b>Tienda:</b>", styles['CampoTitulo']),
+        [Paragraph("<b>Ciudad:</b>", styles['CampoTitulo']),
          Paragraph(guia_data['destinatario'], styles['CampoContenido'])],
         
-        [Paragraph("<b>Ciudad:</b>", styles['CampoTitulo']),
+        [Paragraph("<b>Tienda Destino:</b>", styles['CampoTitulo']),
          Paragraph(guia_data['tienda_destino'], styles['CampoContenido'])],
         
         [Paragraph("<b>Dirección:</b>", styles['CampoTitulo']),
@@ -3429,16 +3429,14 @@ def show_generar_guias():
     
     # Listas de tiendas y remitentes
     tiendas = [
-        "Aero Matriz", "Aero Zona Franca", "Aero Servicios Y Otros", "Aero Bod Donaciones", "Price Club", 
-        "Aero Trans Toma Fisica", "Aero Oil Uno", "Aero La Plaza", "Aero Milagro", "Aero Condado Shopping",
+        "Matriz","Aero Oil Uno", "Aero La Plaza", "Aero Milagro", "Aero Condado Shopping",
         "Aero Multiplaza Riobamba", "Aero Santo Domingo", "Aero Quevedo", "Aero Manta", "Aero Portoviejo", 
         "Price Club Portoviejo", "Aero Rio Centro Norte", "Aero Duran", "Price Club City Mall", "Aero Mall Del Sur",
         "Aero Los Ceibos", "Aero Ambato", "Aero Carapungo", "Aero Peninsula", "Aero Paseo Ambato", "Aero Mall Del Sol", 
         "Aero Babahoyo", "Aero Riobamba", "Aero Mall Del Pacifico", "Aero San Luis", "Aero Machala",
-        "Aero Ventas Por Mayor", "Aero Cuenca Centro Historico", "Aero Cuenca", "Aero Tienda Movil - Web",
-        "Aero Playas", "Aero Bod San Roque", "Aero Bomboli", "Aero Mall Del Rio Gye", "Aero Urban Ambato", 
-        "Aero Riocentro El Dorado", "Aero Pasaje", "Aero El Coca", "Aero 6 De Diciembre", "Aero Lago Agrio",
-        "Aero Pedernales", "Price Club Machala", "Price Club Guayaquil", "Aero Bodega Fallas", "Aero Regional Costa",
+        "Aero Cuenca Centro Historico", "Aero Cuenca", "Aero Tienda Movil - Web",
+        "Aero Playas", "Aero Bomboli", "Aero Mall Del Rio Gye","Aero Riocentro El Dorado", "Aero Pasaje", "Aero El Coca",
+        "Aero 6 De Diciembre", "Aero Lago Agrio","Aero Pedernales", "Price Club Machala", "Price Club Guayaquil",
         "Aero CCi", "Aero Cayambe", "Aero Bahia De Caraquez", "Aero Daule", "Aero Jagi El Dorado"
     ]
     
