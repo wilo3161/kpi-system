@@ -3678,7 +3678,8 @@ def show_generar_guias():
                 qr_bytes = st.session_state.qr_images[url_pedido]
                 st.image(qr_bytes, caption="Escanea para seguir el pedido", width=200)
                 st.caption(f"URL: {url_pedido}")
-        st.markdown('</div>', unsafe_allow_html=True)
+                
+    st.markdown('</div>', unsafe_allow_html=True)
 
 # ==============================================================================
 # 12. MÓDULOS RESTANTES (PLACEHOLDERS)
