@@ -3381,7 +3381,7 @@ def generar_pdf_profesional(guia_data):
     return buffer.getvalue()
     
     def mostrar_vista_previa_guia(guia_data):
-    """Muestra una vista previa de la guía antes de generar el PDF"""
+    "Muestra una vista previa de la guía antes de generar el PDF"
     st.markdown("---")
     st.markdown(f"### 👁️ Vista Previa - Guía {guia_data['numero']}")
     
