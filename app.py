@@ -3137,7 +3137,7 @@ def descargar_logo(url):
         return None
 
 def generar_pdf_profesional(guia_data):
-    """Genera un PDF profesional con logo y QR integrado"""
+    """Genera un PDF profesional con formato similar a la guía médica de ejemplo"""
     buffer = io.BytesIO()
     
     # Configurar el documento
@@ -3147,11 +3147,11 @@ def generar_pdf_profesional(guia_data):
     
     styles = getSampleStyleSheet()
     
-    # Crear estilos personalizados
+    # Crear estilos personalizados basados en la imagen
     styles.add(ParagraphStyle(
-        name='Titulo',
+        name='TituloPrincipal',
         parent=styles['Title'],
-        fontSize=20,
+        fontSize=24,
         textColor=HexColor('#000000'),
         fontName='Helvetica-Bold',
         alignment=TA_CENTER,
@@ -3159,50 +3159,55 @@ def generar_pdf_profesional(guia_data):
     ))
     
     styles.add(ParagraphStyle(
-        name='TituloDerecha',
-        parent=styles['Title'],
-        fontSize=20,
+        name='Subtitulo',
+        parent=styles['Heading2'],
+        fontSize=16,
         textColor=HexColor('#000000'),
         fontName='Helvetica-Bold',
-        alignment=TA_RIGHT,
-        spaceAfter=10
+        alignment=TA_CENTER,
+        spaceAfter=20
     ))
     
     styles.add(ParagraphStyle(
         name='EncabezadoSeccion',
         parent=styles['Heading3'],
-        fontSize=11,
+        fontSize=14,
         textColor=HexColor('#000000'),
         fontName='Helvetica-Bold',
         alignment=TA_LEFT,
-        spaceAfter=6,
-        spaceBefore=12
+        spaceAfter=8,
+        spaceBefore=16,
+        underline=True
     ))
     
     styles.add(ParagraphStyle(
-        name='Contenido',
+        name='CampoTitulo',
+        parent=styles['Normal'],
+        fontSize=10,
+        textColor=HexColor('#000000'),
+        fontName='Helvetica-Bold',
+        alignment=TA_LEFT,
+        spaceAfter=4
+    ))
+    
+    styles.add(ParagraphStyle(
+        name='CampoContenido',
         parent=styles['Normal'],
         fontSize=10,
         textColor=HexColor('#000000'),
         fontName='Helvetica',
         alignment=TA_LEFT,
-        spaceAfter=4
-    ))
-    
-    styles.add(ParagraphStyle(
-        name='ContenidoNegrita',
-        parent=styles['Normal'],
-        fontSize=10,
-        textColor=HexColor('#000000'),
-        fontName='Helvetica-Bold',
-        alignment=TA_LEFT,
-        spaceAfter=4
+        spaceAfter=12,
+        leftIndent=10
     ))
     
     # Contenido del documento
     contenido = []
     
-    # CABECERA CON LOGO, QR Y TÍTULO
+    # CABECERA CON LOGO Y TÍTULO
+    # ==========================
+    
+    # Determinar logo según marca
     logo_bytes = None
     if guia_data['marca'] == 'Fashion Club':
         logo_url = "https://raw.githubusercontent.com/wilo3161/kpi-system/main/images/Fashion.jpg"
@@ -3219,306 +3224,161 @@ def generar_pdf_profesional(guia_data):
     else:
         logo_bytes = st.session_state.logos[guia_data['marca']]
     
-    # Crear tabla de cabecera con logo, QR y título
+    # Crear tabla de cabecera con logo y título
     cabecera_data = []
     
     # Columna izquierda: Logo
     if logo_bytes:
         try:
-            logo_img = Image(io.BytesIO(logo_bytes), width=2*inch, height=1.2*inch)
+            logo_img = Image(io.BytesIO(logo_bytes), width=2*inch, height=1*inch)
             logo_cell = logo_img
         except:
-            logo_cell = Paragraph(f"<b>{guia_data['marca']}</b>", styles['Titulo'])
+            logo_cell = Paragraph(f"<b>{guia_data['marca']}</b>", styles['TituloPrincipal'])
     else:
-        logo_cell = Paragraph(f"<b>{guia_data['marca']}</b>", styles['Titulo'])
+        logo_cell = Paragraph(f"<b>{guia_data['marca']}</b>", styles['TituloPrincipal'])
     
-    # Columna central: QR
-    qr_cell = ""
-    if guia_data['url_pedido'] in st.session_state.qr_images:
-        try:
-            qr_bytes = st.session_state.qr_images[guia_data['url_pedido']]
-            qr_img = Image(io.BytesIO(qr_bytes), width=1.2*inch, height=1.2*inch)
-            qr_cell = qr_img
-        except:
-            qr_cell = Paragraph("QR no disponible", styles['Contenido'])
-    
-    # Columna derecha: Título
+    # Columna derecha: Título principal centrado (como en la imagen)
     titulo_text = f"""
-    <b>CENTRO DE DISTRIBUCIÓN {guia_data['marca'].upper()}</b><br/>
-    <font size=10>GUÍA DE ENVÍO</font>
+    <b>CENTRO DE DISTRIBUCIÓN<br/>{guia_data['marca'].upper()}</b>
     """
-    titulo_cell = Paragraph(titulo_text, styles['TituloDerecha'])
+    titulo_cell = Paragraph(titulo_text, styles['TituloPrincipal'])
     
-    # Crear tabla de cabecera
-    cabecera_table = Table([[logo_cell, qr_cell, titulo_cell]], 
-                           colWidths=[2.5*inch, 2.5*inch, 2.5*inch])
+    # Crear tabla de cabecera con 2 columnas
+    cabecera_table = Table([[logo_cell, titulo_cell]], 
+                           colWidths=[2.5*inch, 4*inch])
     
     cabecera_table.setStyle(TableStyle([
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
         ('ALIGN', (0, 0), (0, 0), 'LEFT'),
         ('ALIGN', (1, 0), (1, 0), 'CENTER'),
-        ('ALIGN', (2, 0), (2, 0), 'RIGHT'),
         ('PADDING', (0, 0), (-1, -1), 5),
         ('BOTTOMPADDING', (0, 0), (-1, -1), 10),
     ]))
     
     contenido.append(cabecera_table)
-    contenido.append(Spacer(1, 0.1*inch))
     
-    # Línea separadora
-    contenido.append(Paragraph("_" * 100, ParagraphStyle(name='Linea', fontSize=6)))
+    # SUBTÍTULO: GUÍA DE REMISIÓN
+    contenido.append(Paragraph("GUÍA DE REMISIÓN", styles['Subtitulo']))
     contenido.append(Spacer(1, 0.2*inch))
     
-    # INFORMACIÓN DE LA GUÍA
+    # INFORMACIÓN DE LA GUÍA EN UNA TABLA
+    # ===================================
+    
+    # Información de la guía (número, fecha, estado)
     info_guia = Table([
-        [Paragraph(f"<b>NÚMERO DE GUÍA:</b> {guia_data['numero']}", styles['ContenidoNegrita']),
-         Paragraph(f"<b>FECHA DE EMISIÓN:</b> {guia_data['fecha_emision']}", styles['ContenidoNegrita']),
-         Paragraph(f"<b>ESTADO:</b> {guia_data['estado']}", styles['ContenidoNegrita'])]
+        [Paragraph(f"<b>Número de Guía:</b> {guia_data['numero']}", styles['CampoContenido']),
+         Paragraph(f"<b>Fecha de Emisión:</b> {guia_data['fecha_emision']}", styles['CampoContenido']),
+         Paragraph(f"<b>Estado:</b> {guia_data['estado']}", styles['CampoContenido'])]
     ], colWidths=[2.5*inch, 2.5*inch, 2.5*inch])
     
     info_guia.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, -1), HexColor('#F0F0F0')),
         ('PADDING', (0, 0), (-1, -1), 8),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
         ('BOX', (0, 0), (-1, -1), 0.5, HexColor('#CCCCCC')),
     ]))
     
     contenido.append(info_guia)
-    contenido.append(Spacer(1, 0.2*inch))
+    contenido.append(Spacer(1, 0.3*inch))
     
-    # INFORMACIÓN DE ENVÍO
-    contenido.append(Paragraph("INFORMACIÓN DE ENVÍO", styles['EncabezadoSeccion']))
+    # REMITENTE Y DESTINATARIO (ESTILO DE LA IMAGEN)
+    # ==============================================
     
     # Crear tabla con dos columnas para remitente y destinatario
-    datos_envio = [
-        # Encabezados
-        [Paragraph("<b>REMITENTE</b>", styles['ContenidoNegrita']), 
-         Paragraph("<b>DESTINATARIO</b>", styles['ContenidoNegrita'])],
+    # Primera fila: Títulos
+    contenido.append(Paragraph("REMITENTE", styles['EncabezadoSeccion']))
+    
+    # Datos del remitente
+    remitente_data = [
+        [Paragraph("<b>Nombre del Remitente:</b>", styles['CampoTitulo']),
+         Paragraph(guia_data['remitente'], styles['CampoContenido'])],
         
-        # Nombre
-        [Paragraph(f"<b>Nombre:</b> {guia_data['remitente']}", styles['Contenido']),
-         Paragraph(f"<b>Nombre:</b> {guia_data['destinatario']}", styles['Contenido'])],
+        [Paragraph("<b>Dirección:</b>", styles['CampoTitulo']),
+         Paragraph(guia_data['direccion_remitente'], styles['CampoContenido'])],
         
-        # Dirección
-        [Paragraph(f"<b>Dirección:</b> {guia_data['direccion_remitente']}", styles['Contenido']),
-         Paragraph(f"<b>Dirección:</b> {guia_data['direccion_destinatario']}", styles['Contenido'])],
-        
-        # Teléfono y tienda
-        ["", Paragraph(f"<b>Teléfono:</b> {guia_data['telefono_destinatario']}", styles['Contenido'])],
-        
-        ["", Paragraph(f"<b>Tienda:</b> {guia_data['tienda_destino']}", styles['Contenido'])]
+        ["", ""],  # Espacio para teléfono si se agrega en el futuro
+        ["", ""],  # Espacio para otro teléfono si se agrega en el futuro
     ]
     
-    tabla_envio = Table(datos_envio, colWidths=[3.5*inch, 3.5*inch])
-    tabla_envio.setStyle(TableStyle([
-        ('GRID', (0, 0), (-1, -1), 0.5, HexColor('#CCCCCC')),
-        ('BACKGROUND', (0, 0), (-1, 0), HexColor('#E8E8E8')),
-        ('PADDING', (0, 0), (-1, -1), 8),
+    tabla_remitente = Table(remitente_data, colWidths=[2*inch, 5*inch])
+    tabla_remitente.setStyle(TableStyle([
         ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-        ('SPAN', (0, 3), (0, 3)),
-        ('SPAN', (0, 4), (0, 4)),
-        ('BOTTOMPADDING', (0, 2), (1, 2), 12),
+        ('PADDING', (0, 0), (-1, -1), 5),
     ]))
     
-    contenido.append(tabla_envio)
+    contenido.append(tabla_remitente)
+    contenido.append(Spacer(1, 0.2*inch))
+    
+    # Destinatario
+    contenido.append(Paragraph("DESTINATARIO", styles['EncabezadoSeccion']))
+    
+    # Datos del destinatario
+    destinatario_data = [
+        [Paragraph("<b>Nombre del Destinatario:</b>", styles['CampoTitulo']),
+         Paragraph(guia_data['destinatario'], styles['CampoContenido'])],
+        
+        [Paragraph("<b>Tienda/Institución:</b>", styles['CampoTitulo']),
+         Paragraph(guia_data['tienda_destino'], styles['CampoContenido'])],
+        
+        [Paragraph("<b>Teléfono:</b>", styles['CampoTitulo']),
+         Paragraph(guia_data['telefono_destinatario'], styles['CampoContenido'])],
+        
+        [Paragraph("<b>Teléfono (opcional):</b>", styles['CampoTitulo']),
+         Paragraph("", styles['CampoContenido'])],  # Espacio para otro teléfono
+        
+        [Paragraph("<b>Dirección:</b>", styles['CampoTitulo']),
+         Paragraph(guia_data['direccion_destinatario'], styles['CampoContenido'])],
+    ]
+    
+    tabla_destinatario = Table(destinatario_data, colWidths=[2*inch, 5*inch])
+    tabla_destinatario.setStyle(TableStyle([
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('PADDING', (0, 0), (-1, -1), 5),
+    ]))
+    
+    contenido.append(tabla_destinatario)
+    contenido.append(Spacer(1, 0.4*inch))
+    
+    # CÓDIGO QR PARA SEGUIMIENTO
+    # ==========================
+    
+    # Agregar el QR en el centro
+    if guia_data['url_pedido'] in st.session_state.qr_images:
+        try:
+            qr_bytes = st.session_state.qr_images[guia_data['url_pedido']]
+            qr_img = Image(io.BytesIO(qr_bytes), width=1.5*inch, height=1.5*inch)
+            
+            # Crear tabla para centrar el QR
+            qr_table = Table([[qr_img]], colWidths=[7.5*inch])
+            qr_table.setStyle(TableStyle([
+                ('ALIGN', (0, 0), (0, 0), 'CENTER'),
+                ('VALIGN', (0, 0), (0, 0), 'MIDDLE'),
+                ('PADDING', (0, 0), (0, 0), 10),
+            ]))
+            
+            contenido.append(qr_table)
+            
+            # Texto debajo del QR
+            contenido.append(Spacer(1, 0.1*inch))
+            contenido.append(Paragraph(f"<b>URL de Seguimiento:</b> {guia_data['url_pedido']}", 
+                                      ParagraphStyle(name='QRText', fontSize=9, alignment=TA_CENTER)))
+        except:
+            # Si hay error con el QR, mostrar solo la URL
+            contenido.append(Paragraph(f"<b>URL de Seguimiento:</b> {guia_data['url_pedido']}", 
+                                      ParagraphStyle(name='QRText', fontSize=9, alignment=TA_CENTER)))
+    
+    contenido.append(Spacer(1, 0.3*inch))
+    
+    # LÍNEA DE FIRMAS (como en documentos oficiales)
+    contenido.append(Paragraph("_" * 50, ParagraphStyle(name='LineaFirma', fontSize=8, alignment=TA_CENTER)))
+    contenido.append(Paragraph("Firma del Remitente", 
+                              ParagraphStyle(name='Firma', fontSize=9, alignment=TA_CENTER)))
     
     # Construir el PDF
     doc.build(contenido)
     buffer.seek(0)
     return buffer.getvalue()
-
-def mostrar_vista_previa_guia(guia_data):
-    """Muestra una vista previa de la guía sin generar PDF"""
-    st.markdown("""
-    <div class='filter-panel'>
-        <h4>👁️ Vista Previa de la Guía</h4>
-    """, unsafe_allow_html=True)
-    
-    # Mostrar logo según marca
-    col_logo, col_info = st.columns([1, 3])
-    
-    with col_logo:
-        if guia_data['marca'] == 'Fashion Club':
-            logo_url = "https://raw.githubusercontent.com/wilo3161/kpi-system/main/images/Fashion.jpg"
-        else:
-            logo_url = "https://raw.githubusercontent.com/wilo3161/kpi-system/main/images/Tempo.jpg"
-        
-        try:
-            st.image(logo_url, caption=guia_data['marca'], width=150)
-        except:
-            st.markdown(f"**{guia_data['marca']}**")
-    
-    with col_info:
-        st.markdown("**📋 Información de la Guía**")
-        st.write(f"**Número:** {guia_data['numero']}")
-        st.write(f"**Estado:** {guia_data['estado']}")
-        st.write(f"**Fecha:** {guia_data['fecha_emision']}")
-    
-    st.divider()
-    
-    # Información de envío
-    col_rem, col_dest = st.columns(2)
-    
-    with col_rem:
-        st.markdown("**👤 Remitente**")
-        st.write(f"**Nombre:** {guia_data['remitente']}")
-        st.write(f"**Dirección:** {guia_data['direccion_remitente']}")
-    
-    with col_dest:
-        st.markdown("**🏪 Destinatario**")
-        st.write(f"**Nombre:** {guia_data['destinatario']}")
-        st.write(f"**Teléfono:** {guia_data['telefono_destinatario']}")
-        st.write(f"**Dirección:** {guia_data['direccion_destinatario']}")
-        if guia_data['tienda_destino'] != "No especificada":
-            st.write(f"**Tienda:** {guia_data['tienda_destino']}")
-    
-    st.divider()
-    
-    # Seguimiento
-    st.markdown("**🔗 Seguimiento**")
-    st.write(f"**URL:** {guia_data['url_pedido']}")
-    
-    # Mostrar QR si está disponible
-    if guia_data['url_pedido'] in st.session_state.qr_images:
-        col_qr, col_url = st.columns([1, 3])
-        with col_qr:
-            qr_bytes = st.session_state.qr_images[guia_data['url_pedido']]
-            st.image(qr_bytes, caption="Código QR", width=120)
-        with col_url:
-            st.info(f"**URL completa:** {guia_data['url_pedido']}")
-    
-    st.markdown("</div>", unsafe_allow_html=True)
-
-def mostrar_resumen_guia(guia_data, pdf_bytes):
-    """Muestra el resumen de la guía generada y opciones de descarga"""
-    st.markdown("""
-    <div class='filter-panel'>
-        <h4>✅ Guía Generada Exitosamente</h4>
-    """, unsafe_allow_html=True)
-    
-    # Mostrar información de la guía
-    col_logo, col_info = st.columns([1, 3])
-    
-    with col_logo:
-        if guia_data['marca'] == 'Fashion Club':
-            logo_url = "https://raw.githubusercontent.com/wilo3161/kpi-system/main/images/Fashion.jpg"
-        else:
-            logo_url = "https://raw.githubusercontent.com/wilo3161/kpi-system/main/images/Tempo.jpg"
-        
-        try:
-            st.image(logo_url, caption=guia_data['marca'], width=120)
-        except:
-            st.markdown(f"**{guia_data['marca']}**")
-    
-    with col_info:
-        st.markdown("**📋 Información de la Guía**")
-        st.write(f"**Número:** {guia_data['numero']}")
-        st.write(f"**Estado:** {guia_data['estado']}")
-        st.write(f"**Fecha:** {guia_data['fecha_creacion']}")
-    
-    st.divider()
-    
-    # Información del destinatario
-    col_det1, col_det2 = st.columns(2)
-    
-    with col_det1:
-        st.markdown("**🏪 Destinatario**")
-        st.write(f"**Nombre:** {guia_data['destinatario']}")
-        st.write(f"**Teléfono:** {guia_data['telefono_destinatario']}")
-    
-    with col_det2:
-        st.markdown("**📍 Dirección**")
-        st.write(guia_data['direccion_destinatario'])
-        if guia_data['tienda_destino'] != "No especificada":
-            st.write(f"**Tienda:** {guia_data['tienda_destino']}")
-    
-    # Mostrar QR si está disponible
-    if guia_data['url_pedido'] in st.session_state.qr_images:
-        st.divider()
-        col_qr, col_url = st.columns([1, 3])
-        
-        with col_qr:
-            qr_bytes = st.session_state.qr_images[guia_data['url_pedido']]
-            st.image(qr_bytes, caption="Código QR", width=100)
-        
-        with col_url:
-            st.markdown("**🔗 URL de Seguimiento**")
-            st.write(f"[{guia_data['url_pedido']}]({guia_data['url_pedido']})")
-            st.caption("Escanee el código QR para rastrear el envío")
-    
-    st.divider()
-    
-    # Botones de descarga
-    st.markdown("**💾 Opciones de Descarga:**")
-    
-    col_r1, col_r2, col_r3 = st.columns(3)
-    
-    with col_r1:
-        # Descargar PDF
-        st.download_button(
-            label="📥 Descargar PDF",
-            data=pdf_bytes,
-            file_name=f"guia_{guia_data['numero']}.pdf",
-            mime="application/pdf",
-            use_container_width=True,
-            type="primary"
-        )
-    
-    with col_r2:
-        # Descargar JSON
-        json_data = json.dumps(guia_data, indent=2, ensure_ascii=False)
-        st.download_button(
-            label="📋 Descargar JSON",
-            data=json_data,
-            file_name=f"guia_{guia_data['numero']}.json",
-            mime="application/json",
-            use_container_width=True
-        )
-    
-    with col_r3:
-        # Descargar Texto (simplificado)
-        info_text = f"""GUÍA DE ENVÍO - {guia_data['marca'].upper()}
-CENTRO DE DISTRIBUCIÓN {guia_data['marca'].upper()}
-
-NÚMERO: {guia_data['numero']}
-FECHA: {guia_data['fecha_emision']}
-ESTADO: {guia_data['estado']}
-
-REMITENTE:
-Nombre: {guia_data['remitente']}
-Dirección: {guia_data['direccion_remitente']}
-
-DESTINATARIO:
-Nombre: {guia_data['destinatario']}
-Teléfono: {guia_data['telefono_destinatario']}
-Tienda: {guia_data['tienda_destino']}
-Dirección: {guia_data['direccion_destinatario']}
-
-SEGUIMIENTO:
-URL: {guia_data['url_pedido']}
-
-Generado el: {guia_data['fecha_creacion']}
-"""
-        
-        st.download_button(
-            label="📄 Descargar Texto",
-            data=info_text,
-            file_name=f"guia_{guia_data['numero']}.txt",
-            mime="text/plain",
-            use_container_width=True
-        )
-    
-    # Información adicional
-    st.markdown(f"""
-    **📌 Información Importante:**
-    - La guía **{guia_data['numero']}** ha sido registrada en el sistema
-    - Estado actual: **{guia_data['estado']}**
-    - Puede realizar seguimiento en: [{guia_data['url_pedido'][:50]}...]({guia_data['url_pedido']})
-    """)
-    
-    st.markdown("</div>", unsafe_allow_html=True)
-
 def show_generar_guias():
     """Generador de guías de envío"""
     add_back_button()
