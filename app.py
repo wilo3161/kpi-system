@@ -3204,7 +3204,7 @@ def generar_pdf_profesional(guia_data):
     # Contenido del documento
     contenido = []
     
-    # CABECERA CON LOGO Y TÍTULO
+    # CABECERA CON LOGO, TÍTULO Y QR
     # ==========================
     
     # Determinar logo según marca
@@ -3224,8 +3224,8 @@ def generar_pdf_profesional(guia_data):
     else:
         logo_bytes = st.session_state.logos[guia_data['marca']]
     
-    # Crear tabla de cabecera con logo y título
-    cabecera_data = []
+    # Preparar elementos para la cabecera
+    cabecera_elements = []
     
     # Columna izquierda: Logo
     if logo_bytes:
@@ -3237,22 +3237,38 @@ def generar_pdf_profesional(guia_data):
     else:
         logo_cell = Paragraph(f"<b>{guia_data['marca']}</b>", styles['TituloPrincipal'])
     
-    # Columna derecha: Título principal centrado (como en la imagen)
+    # Columna central: Título principal con fondo
     titulo_text = f"""
     <b>CENTRO DE DISTRIBUCIÓN<br/>{guia_data['marca'].upper()}</b>
     """
     titulo_cell = Paragraph(titulo_text, styles['TituloPrincipal'])
     
-    # Crear tabla de cabecera con 2 columnas
-    cabecera_table = Table([[logo_cell, titulo_cell]], 
-                           colWidths=[1.5*inch, 3*inch])
+    # Columna derecha: QR
+    qr_cell = None
+    if guia_data['url_pedido'] in st.session_state.get('qr_images', {}):
+        try:
+            qr_bytes = st.session_state.qr_images[guia_data['url_pedido']]
+            qr_img = Image(io.BytesIO(qr_bytes), width=1*inch, height=1*inch)
+            qr_cell = qr_img
+        except:
+            qr_cell = Paragraph(f"<b>QR<br/>Seguimiento</b>", 
+                               ParagraphStyle(name='QRPlaceholder', fontSize=8, alignment=TA_CENTER))
+    else:
+        qr_cell = Paragraph("", styles['Normal'])
+    
+    # Crear tabla de cabecera con 3 columnas
+    cabecera_table = Table([[logo_cell, titulo_cell, qr_cell]], 
+                          colWidths=[1.5*inch, 3.5*inch, 1*inch])
     
     cabecera_table.setStyle(TableStyle([
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
         ('ALIGN', (0, 0), (0, 0), 'LEFT'),
         ('ALIGN', (1, 0), (1, 0), 'CENTER'),
+        ('ALIGN', (2, 0), (2, 0), 'CENTER'),
         ('PADDING', (0, 0), (-1, -1), 2),
         ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+        ('BACKGROUND', (1, 0), (1, 0), HexColor('#F0F0F0')),  # Fondo para el título
+        ('BOX', (1, 0), (1, 0), 1, HexColor('#CCCCCC')),     # Borde alrededor del título
     ]))
     
     contenido.append(cabecera_table)
@@ -3331,43 +3347,20 @@ def generar_pdf_profesional(guia_data):
     contenido.append(tabla_destinatario)
     contenido.append(Spacer(1, 0.4*inch))
     
-    # CÓDIGO QR PARA SEGUIMIENTO
-    # ==========================
-    
-    # Agregar el QR en el centro
-    if guia_data['url_pedido'] in st.session_state.qr_images:
-        try:
-            qr_bytes = st.session_state.qr_images[guia_data['url_pedido']]
-            qr_img = Image(io.BytesIO(qr_bytes), width=1.5*inch, height=1.5*inch)
-            
-            # Crear tabla para centrar el QR
-            qr_table = Table([[qr_img]], colWidths=[1.5*inch])
-            qr_table.setStyle(TableStyle([
-                ('ALIGN', (0, 0), (0, 0), 'CENTER'),
-                ('VALIGN', (0, 0), (0, 0), 'MIDDLE'),
-                ('PADDING', (0, 0), (0, 0), 10),
-            ]))
-            
-            contenido.append(qr_table)
-            
-            
-        except:
-            # Si hay error con el QR, mostrar solo la URL
-            contenido.append(Paragraph(f"<b>URL de Seguimiento:</b> {guia_data['url_pedido']}", 
-                                      ParagraphStyle(name='QRText', fontSize=9, alignment=TA_CENTER)))
-    
-    contenido.append(Spacer(1, 0.3*inch))
-    
+    # NOTA SOBRE EL QR
+    contenido.append(Paragraph("<b>Nota:</b> Escanee el código QR en la cabecera para seguimiento del pedido", 
+                             ParagraphStyle(name='NotaQR', fontSize=9, alignment=TA_CENTER)))
+    contenido.append(Spacer(1, 0.1*inch))
       
     # Construir el PDF
     doc.build(contenido)
     buffer.seek(0)
     return buffer.getvalue()
     
-    def mostrar_vista_previa_guia(guia_data):
+def mostrar_vista_previa_guia(guia_data):
     
-        st.markdown("---")
-        st.markdown(f"### 👁️ Vista Previa - Guía {guia_data['numero']}")
+    st.markdown("---")
+    st.markdown(f"### 👁️ Vista Previa - Guía {guia_data['numero']}")
     
     col_prev1, col_prev2 = st.columns(2)
     
