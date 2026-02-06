@@ -3275,7 +3275,10 @@ def generar_pdf_profesional(guia_data):
     
     # SUBTÍTULO: GUÍA DE REMISIÓN
     contenido.append(Paragraph("GUÍA DE REMISIÓN", styles['Subtitulo']))
-    contenido.append(Spacer(1, 0.2*inch))
+    
+    # NOTA SOBRE EL QR (justo debajo del subtítulo)
+    contenido.append(Paragraph("<b>Nota:</b> Escanee el código QR en la cabecera para seguimiento del pedido", 
+                             ParagraphStyle(name='NotaQR', fontSize=8, alignment=TA_CENTER, spaceAfter=8)))
     
     # INFORMACIÓN DE LA GUÍA EN UNA TABLA
     # ===================================
@@ -3289,68 +3292,44 @@ def generar_pdf_profesional(guia_data):
     
     info_guia.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, -1), HexColor('#F0F0F0')),
-        ('PADDING', (0, 0), (-1, -1), 8),
+        ('PADDING', (0, 0), (-1, -1), 6),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
         ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
         ('BOX', (0, 0), (-1, -1), 0.5, HexColor('#CCCCCC')),
     ]))
     
     contenido.append(info_guia)
-    contenido.append(Spacer(1, 0.3*inch))
+    contenido.append(Spacer(1, 0.1*inch))
     
-    # REMITENTE Y DESTINATARIO (ESTILO DE LA IMAGEN)
-    # ==============================================
+    # REMITENTE Y DESTINATARIO EN UNA TABLA DE 2 COLUMNAS (GRID)
+    # ===========================================================
     
     # Crear tabla con dos columnas para remitente y destinatario
-    # Primera fila: Títulos
-    contenido.append(Paragraph("REMITENTE", styles['EncabezadoSeccion']))
-    
-    # Datos del remitente
-    remitente_data = [
-        [Paragraph("<b>Nombre del Remitente:</b>", styles['CampoTitulo']),
-         Paragraph(guia_data['remitente'], styles['CampoContenido'])],
+    remitente_destinatario_data = [
+        [Paragraph("<b>REMITENTE</b>", styles['EncabezadoSeccion']),
+         Paragraph("<b>DESTINATARIO</b>", styles['EncabezadoSeccion'])],
         
-        [Paragraph("<b>Dirección:</b>", styles['CampoTitulo']),
-         Paragraph(guia_data['direccion_remitente'], styles['CampoContenido'])],
+        [Paragraph(f"<b>Nombre:</b> {guia_data['remitente']}", styles['CampoContenido']),
+         Paragraph(f"<b>Nombre:</b> {guia_data['destinatario']}", styles['CampoContenido'])],
+        
+        [Paragraph(f"<b>Dirección:</b> {guia_data['direccion_remitente']}", styles['CampoContenido']),
+         Paragraph(f"<b>Ciudad:</b> {guia_data['tienda_destino']}", styles['CampoContenido'])],
+        
+        ['',  # Celda vacía para remitente
+         Paragraph(f"<b>Dirección:</b> {guia_data['direccion_destinatario']}", styles['CampoContenido'])]
     ]
     
-    tabla_remitente = Table(remitente_data, colWidths=[2*inch, 5*inch])
-    tabla_remitente.setStyle(TableStyle([
+    tabla_remitente_destinatario = Table(remitente_destinatario_data, colWidths=[3.5*inch, 3.5*inch])
+    tabla_remitente_destinatario.setStyle(TableStyle([
         ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-        ('PADDING', (0, 0), (-1, -1), 5),
+        ('PADDING', (0, 0), (-1, -1), 4),
+        ('GRID', (0, 0), (-1, -1), 0.5, HexColor('#CCCCCC')),
+        ('BACKGROUND', (0, 0), (1, 0), HexColor('#E8E8E8')),  # Fondo para los encabezados
+        ('SPAN', (0, 0), (0, 0)),  # Expandir REMITENTE en su columna
+        ('SPAN', (1, 0), (1, 0)),  # Expandir DESTINATARIO en su columna
     ]))
     
-    contenido.append(tabla_remitente)
-    contenido.append(Spacer(1, 0.2*inch))
-    
-    # Destinatario
-    contenido.append(Paragraph("DESTINATARIO", styles['EncabezadoSeccion']))
-    
-    # Datos del destinatario
-    destinatario_data = [
-        [Paragraph("<b>Ciudad:</b>", styles['CampoTitulo']),
-         Paragraph(guia_data['destinatario'], styles['CampoContenido'])],
-        
-        [Paragraph("<b>Tienda Destino:</b>", styles['CampoTitulo']),
-         Paragraph(guia_data['tienda_destino'], styles['CampoContenido'])],
-        
-        [Paragraph("<b>Dirección:</b>", styles['CampoTitulo']),
-         Paragraph(guia_data['direccion_destinatario'], styles['CampoContenido'])],
-    ]
-    
-    tabla_destinatario = Table(destinatario_data, colWidths=[2*inch, 5*inch])
-    tabla_destinatario.setStyle(TableStyle([
-        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-        ('PADDING', (0, 0), (-1, -1), 5),
-    ]))
-    
-    contenido.append(tabla_destinatario)
-    contenido.append(Spacer(1, 0.4*inch))
-    
-    # NOTA SOBRE EL QR
-    contenido.append(Paragraph("<b>Nota:</b> Escanee el código QR en la cabecera para seguimiento del pedido", 
-                             ParagraphStyle(name='NotaQR', fontSize=9, alignment=TA_CENTER)))
-    contenido.append(Spacer(1, 0.1*inch))
+    contenido.append(tabla_remitente_destinatario)
       
     # Construir el PDF
     doc.build(contenido)
