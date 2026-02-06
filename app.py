@@ -3379,6 +3379,60 @@ def generar_pdf_profesional(guia_data):
     doc.build(contenido)
     buffer.seek(0)
     return buffer.getvalue()
+    def mostrar_vista_previa_guia(guia_data):
+    """Muestra una vista previa de la guía antes de generar el PDF"""
+    st.markdown("---")
+    st.markdown(f"### 👁️ Vista Previa - Guía {guia_data['numero']}")
+    
+    col_prev1, col_prev2 = st.columns(2)
+    
+    with col_prev1:
+        st.markdown(f"""
+        <div style='background: #f8f9fa; border-radius: 10px; padding: 20px; margin-bottom: 20px; border-left: 4px solid #0033A0;'>
+            <h4 style='color: #0033A0; margin-bottom: 10px;'>🏢 Información de la Empresa</h4>
+            <p><strong>Marca:</strong> {guia_data['marca']}</p>
+            <p><strong>Número de Guía:</strong> {guia_data['numero']}</p>
+            <p><strong>Fecha:</strong> {guia_data['fecha_emision']}</p>
+            <p><strong>Estado:</strong> {guia_data['estado']}</p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        st.markdown(f"""
+        <div style='background: #f8f9fa; border-radius: 10px; padding: 20px; margin-bottom: 20px; border-left: 4px solid #E4002B;'>
+            <h4 style='color: #E4002B; margin-bottom: 10px;'>👤 Información del Remitente</h4>
+            <p><strong>Nombre:</strong> {guia_data['remitente']}</p>
+            <p><strong>Dirección:</strong> {guia_data['direccion_remitente'][:50]}...</p>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with col_prev2:
+        st.markdown(f"""
+        <div style='background: #f8f9fa; border-radius: 10px; padding: 20px; margin-bottom: 20px; border-left: 4px solid #10B981;'>
+            <h4 style='color: #10B981; margin-bottom: 10px;'>🏪 Información del Destinatario</h4>
+            <p><strong>Nombre:</strong> {guia_data['destinatario']}</p>
+            <p><strong>Teléfono:</strong> {guia_data['telefono_destinatario']}</p>
+            <p><strong>Tienda:</strong> {guia_data['tienda_destino']}</p>
+            <p><strong>Dirección:</strong> {guia_data['direccion_destinatario'][:50]}...</p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        st.markdown(f"""
+        <div style='background: #f8f9fa; border-radius: 10px; padding: 20px; border-left: 4px solid #8B5CF6;'>
+            <h4 style='color: #8B5CF6; margin-bottom: 10px;'>🔗 Información Digital</h4>
+            <p><strong>URL de Seguimiento:</strong></p>
+            <p style='word-break: break-all; font-size: 0.9rem;'>{guia_data['url_pedido']}</p>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    # Mostrar QR si existe
+    if guia_data.get('qr_bytes'):
+        st.markdown("---")
+        st.markdown("### 🔗 Vista Previa del Código QR")
+        col_qr1, col_qr2, col_qr3 = st.columns([1, 2, 1])
+        with col_qr2:
+            st.image(guia_data['qr_bytes'], caption="Código QR para seguimiento", width=150)
+    
+    st.info("Esta es una vista previa. Haz clic en '🚀 Generar Guía PDF' para crear el documento oficial.")
 def show_generar_guias():
     """Generador de guías de envío"""
     add_back_button()
@@ -3531,79 +3585,100 @@ def show_generar_guias():
         st.markdown("</div>", unsafe_allow_html=True)
     
     # Procesar la guía
-    if submit or preview:
-        # Validaciones
-        errors = []
-        if not nombre_destinatario:
-            errors.append("❌ El nombre del destinatario es obligatorio")
-        if not direccion_destinatario:
-            errors.append("❌ La dirección del destinatario es obligatoria")
-        if not url_pedido or len(url_pedido) < 10:
-            errors.append("❌ Ingrese una URL válida para el pedido")
-        elif not url_pedido.startswith(('http://', 'https://')):
-            errors.append("❌ La URL debe comenzar con http:// o https://")
+    if submit:
+    with st.spinner(f"Generando guía {guia_num}..."):
+        time.sleep(1.5)
         
-        if errors:
-            for error in errors:
-                st.error(error)
-        else:
-            # Generar número de guía único
-            guia_num = f"GFC-{st.session_state.contador_guias:04d}"
-            st.session_state.contador_guias += 1
+        # Agregar a lista de guías
+        st.session_state.guias_registradas.append(guia_data)
+        
+        # También guardar en la base de datos local
+        try:
+            local_db.insert('guias', guia_data)
+        except Exception as e:
+            st.warning(f"⚠️ No se pudo guardar en la base de datos: {str(e)}")
+        
+        # Generar PDF mejorado con logo y QR
+        pdf_bytes = generar_pdf_profesional(guia_data)
+        
+        st.success(f"✅ Guía {guia_num} generada exitosamente!")
+        
+        # MOSTRAR RESUMEN Y OPCIONES DE DESCARGA (CORRECCIÓN)
+        st.markdown("---")
+        st.markdown(f"### 📋 Resumen de la Guía {guia_num}")
+        
+        col_sum1, col_sum2 = st.columns(2)
+        with col_sum1:
+            st.markdown(f"""
+            <div class='metric-card'>
+                <div class='metric-title'>Número de Guía</div>
+                <div class='metric-value'>{guia_num}</div>
+            </div>
+            """, unsafe_allow_html=True)
             
-            # Descargar logo si no está en cache
-            if marca not in st.session_state.logos:
-                logo_url = url_fashion_logo if marca == "Fashion Club" else url_tempo_logo
-                logo_bytes = descargar_logo(logo_url)
-                if logo_bytes:
-                    st.session_state.logos[marca] = logo_bytes
+            st.markdown(f"""
+            <div class='metric-card'>
+                <div class='metric-title'>Remitente</div>
+                <div class='metric-value'>{remitente_nombre}</div>
+            </div>
+            """, unsafe_allow_html=True)
             
-            # Obtener bytes del QR
-            qr_bytes = st.session_state.qr_images.get(url_pedido)
+            st.markdown(f"""
+            <div class='metric-card'>
+                <div class='metric-title'>Destinatario</div>
+                <div class='metric-value'>{nombre_destinatario}</div>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with col_sum2:
+            st.markdown(f"""
+            <div class='metric-card'>
+                <div class='metric-title'>Marca</div>
+                <div class='metric-value'>{marca}</div>
+            </div>
+            """, unsafe_allow_html=True)
             
-            # Crear diccionario con datos de la guía
-            guia_data = {
-                "numero": guia_num,
-                "marca": marca,
-                "remitente": remitente_nombre,
-                "direccion_remitente": remitente_direccion,
-                "destinatario": nombre_destinatario,
-                "telefono_destinatario": telefono_destinatario or "No especificado",
-                "direccion_destinatario": direccion_destinatario,
-                "tienda_destino": tienda_destino if tienda_destino else "No especificada",
-                "url_pedido": url_pedido,
-                "estado": "Generada",
-                "fecha_emision": datetime.now().strftime("%Y-%m-%d"),
-                "fecha_creacion": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                "qr_bytes": qr_bytes
-            }
+            st.markdown(f"""
+            <div class='metric-card'>
+                <div class='metric-title'>Fecha</div>
+                <div class='metric-value'>{datetime.now().strftime('%Y-%m-%d')}</div>
+            </div>
+            """, unsafe_allow_html=True)
             
-            if preview:
-                # Vista previa
-                mostrar_vista_previa_guia(guia_data)
-            
-            if submit:
-                with st.spinner(f"Generando guía {guia_num}..."):
-                    time.sleep(1.5)
-                    
-                    # Agregar a lista de guías
-                    st.session_state.guias_registradas.append(guia_data)
-                    
-                    # También guardar en la base de datos local
-                    try:
-                        local_db.insert('guias', guia_data)
-                    except Exception as e:
-                        st.warning(f"⚠️ No se pudo guardar en la base de datos: {str(e)}")
-                    
-                    # Generar PDF mejorado con logo y QR
-                    pdf_bytes = generar_pdf_profesional(guia_data)
-                    
-                    st.success(f"✅ Guía {guia_num} generada exitosamente!")
-                    
-                    # Mostrar resumen
-                    mostrar_resumen_guia(guia_data, pdf_bytes)
-    
-    st.markdown('</div>', unsafe_allow_html=True)
+            st.markdown(f"""
+            <div class='metric-card'>
+                <div class='metric-title'>Estado</div>
+                <div class='metric-value'>Generada</div>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        # Botón para descargar PDF
+        st.markdown("---")
+        col_btn1, col_btn2 = st.columns(2)
+        with col_btn1:
+            st.download_button(
+                label="📥 Descargar PDF",
+                data=pdf_bytes,
+                file_name=f"guia_{guia_num}_{datetime.now().strftime('%Y%m%d')}.pdf",
+                mime="application/pdf",
+                use_container_width=True,
+                type="primary"
+            )
+        
+        with col_btn2:
+            if st.button("🔄 Generar Otra Guía", use_container_width=True):
+                st.rerun()
+        
+        # Mostrar QR generado
+        if url_pedido in st.session_state.qr_images:
+            st.markdown("---")
+            st.markdown("### 🔗 Código QR Generado")
+            col_qr1, col_qr2, col_qr3 = st.columns([1, 2, 1])
+            with col_qr2:
+                qr_bytes = st.session_state.qr_images[url_pedido]
+                st.image(qr_bytes, caption="Escanea para seguir el pedido", width=200)
+                st.caption(f"URL: {url_pedido}")
+        st.markdown('</div>', unsafe_allow_html=True)
 
 # ==============================================================================
 # 12. MÓDULOS RESTANTES (PLACEHOLDERS)
