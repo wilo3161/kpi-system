@@ -3251,8 +3251,8 @@ def generar_pdf_profesional(guia_data):
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
         ('ALIGN', (0, 0), (0, 0), 'LEFT'),
         ('ALIGN', (1, 0), (1, 0), 'CENTER'),
-        ('PADDING', (0, 0), (-1, -1), 2),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+        ('PADDING', (0, 0), (-1, -1), 5),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 7),
     ]))
     
     contenido.append(cabecera_table)
@@ -3343,7 +3343,7 @@ def generar_pdf_profesional(guia_data):
             # Crear tabla para centrar el QR
             qr_table = Table([[qr_img]], colWidths=[1.5*inch])
             qr_table.setStyle(TableStyle([
-                ('ALIGN', (0, 0), (0, 0), 'TOP'),
+                ('ALIGN', (0, 0), (0, 0), 'CENTER'),
                 ('VALIGN', (0, 0), (0, 0), 'MIDDLE'),
                 ('PADDING', (0, 0), (0, 0), 10),
             ]))
