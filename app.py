@@ -3252,7 +3252,7 @@ def generar_pdf_profesional(guia_data):
         ('ALIGN', (0, 0), (0, 0), 'LEFT'),
         ('ALIGN', (1, 0), (1, 0), 'CENTER'),
         ('PADDING', (0, 0), (-1, -1), 2),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 17),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
     ]))
     
     contenido.append(cabecera_table)
