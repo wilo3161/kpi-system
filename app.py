@@ -519,7 +519,7 @@ def show_sidebar():
             st.session_state.current_page = "Inicio"
             st.rerun()
             def normalizar_texto_wilo(texto):
-    if pd.isna(texto) or texto == '': 
+    if pd.isna(texto) or texto == '', 
         return ''
     texto = str(texto)
     try:
