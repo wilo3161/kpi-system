@@ -164,29 +164,30 @@ st.markdown("""
     line-height: 1.3;
 }
 
-/* Eliminados los estilos de botones invisibles */
-
-/* Sidebar */
-[data-testid="stSidebar"] {
-    background: linear-gradient(180deg, #1a237e 0%, #283593 100%);
-}
-
-.sidebar-header {
-    text-align: center;
-    padding: 20px 0;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.sidebar-title {
+/* Botón de volver al inicio */
+.back-to-home {
+    position: fixed;
+    top: 20px;
+    left: 20px;
+    z-index: 1000;
+    background: linear-gradient(45deg, #60A5FA, #8B5CF6);
     color: white;
-    font-size: 1.5rem;
-    font-weight: 700;
-    margin-bottom: 5px;
+    border: none;
+    border-radius: 8px;
+    padding: 0.8rem 1.5rem;
+    font-weight: 600;
+    font-size: 0.95rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 15px rgba(96, 165, 250, 0.2);
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
 
-.sidebar-subtitle {
-    color: #94A3B8;
-    font-size: 0.8rem;
+.back-to-home:hover {
+    transform: translateX(-3px);
+    box-shadow: 0 8px 25px rgba(96, 165, 250, 0.3);
 }
 
 /* Contenido interno */
@@ -198,6 +199,7 @@ st.markdown("""
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
     margin-bottom: 2rem;
     border: 1px solid rgba(255, 255, 255, 0.1);
+    margin-top: 60px;
 }
 
 .header-title {
@@ -388,35 +390,9 @@ st.markdown("""
     border-top: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-/* Botón flotante */
-.floating-btn {
-    position: fixed;
-    bottom: 30px;
-    right: 30px;
-    width: 60px;
-    height: 60px;
-    border-radius: 50%;
-    background: linear-gradient(45deg, #60A5FA, #8B5CF6);
-    border: none;
-    color: white;
-    font-size: 1.5rem;
-    cursor: pointer;
-    box-shadow: 0 8px 25px rgba(96, 165, 250, 0.3);
-    transition: all 0.3s ease;
-    z-index: 100;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.floating-btn:hover {
-    transform: scale(1.1) rotate(90deg);
-    box-shadow: 0 12px 30px rgba(96, 165, 250, 0.4);
-}
-
-/* Clase para tarjetas clickeables */
-.clickable-card {
-    cursor: pointer;
+/* Eliminar estilos de sidebar */
+[data-testid="stSidebar"] {
+    display: none !important;
 }
 </style>
 
@@ -428,68 +404,33 @@ st.markdown("""
 # ==============================================================================
 
 def create_card(icon, title, description, key_target):
-    """Crea una tarjeta de módulo interactiva que es clickeable directamente"""
-    # Usar columnas para crear un contenedor clickeable
-    col = st.columns(1)
-    with col[0]:
-        # Crear un botón invisible que cubra toda la tarjeta
-        if st.button(f"", key=f"card_{key_target}", 
-                    help=f"Acceder a {title}",
-                    use_container_width=True):
-            st.session_state.current_page = key_target
-            st.rerun()
-        
-        # Mostrar la tarjeta visualmente
-        st.markdown(f"""
-        <div class="module-card">
-            <div class="card-icon">{icon}</div>
-            <div class="card-title">{title}</div>
-            <div class="card-description">{description}</div>
-        </div>
-        """, unsafe_allow_html=True)
+    """Crea una tarjeta de módulo interactiva"""
+    # Crear un contenedor con botón invisible
+    st.markdown(f"""
+    <div class="module-card" id="card_{key_target}">
+        <div class="card-icon">{icon}</div>
+        <div class="card-title">{title}</div>
+        <div class="card-description">{description}</div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Botón invisible que cubre toda la tarjeta
+    if st.button("", key=f"btn_{key_target}", help=f"Acceder a {title}"):
+        st.session_state.current_page = key_target
+        st.rerun()
 
-def show_sidebar():
-    """Muestra la barra lateral de navegación"""
-    with st.sidebar:
-        st.markdown("""
-        <div class="sidebar-header">
-            <div class="sidebar-title">AERO ERP</div>
-            <div class="sidebar-subtitle">v4.0 • Wilson Pérez</div>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        if st.button("🏠 INICIO PRINCIPAL", use_container_width=True, type="primary"):
-            st.session_state.current_page = "Inicio"
-            st.rerun()
-        
-        st.divider()
-        
-        st.markdown("**📋 Módulos:**")
-        
-        # Menú de navegación rápida
-        modules = [
-            ("Dashboard KPIs", "Dashboard KPIs"),
-            ("Reconciliación V8", "Reconciliación V8"),
-            ("Email Wilo AI", "Email Wilo AI"),
-            ("Dashboard Transferencias", "Dashboard Transferencias"),
-            ("Trabajadores", "Trabajadores"),
-            ("Generar Guías", "Generar Guías"),
-            ("Inventario", "inventario"),
-            ("Reportes", "reportes")
-        ]
-        
-        for name, key in modules:
-            if st.button(f"📌 {name}", key=f"sidebar_{key}", use_container_width=True):
-                st.session_state.current_page = key
-                st.rerun()
-        
-        st.divider()
-        
-        if st.button("⚙️ Configuración", use_container_width=True):
-            st.session_state.current_page = "configuracion"
-            st.rerun()
-        
-        if st.button("🚪 Cerrar Sesión", use_container_width=True):
+def add_back_button():
+    """Agrega el botón de volver al inicio"""
+    st.markdown("""
+    <button class="back-to-home" onclick="window.location.href='?page=Inicio'">
+        ← Menú Principal
+    </button>
+    """, unsafe_allow_html=True)
+    
+    # También agregamos un botón funcional de Streamlit
+    col1, col2 = st.columns([1, 11])
+    with col1:
+        if st.button("← Menú Principal", key="back_button"):
             st.session_state.current_page = "Inicio"
             st.rerun()
 
@@ -620,6 +561,9 @@ USER_PASSWORD = "user123"
 
 def mostrar_dashboard_kpis():
     """Dashboard principal de KPIs"""
+    # Botón de volver al inicio
+    add_back_button()
+    
     st.markdown("""
     <div class='internal-header'>
         <h1 class='header-title'>📊 DASHBOARD DE KPIs</h1>
@@ -781,6 +725,9 @@ def identificar_tipo_tienda_v8(nombre):
 
 def mostrar_reconciliacion_v8():
     """Módulo de reconciliación financiera"""
+    # Botón de volver al inicio
+    add_back_button()
+    
     st.markdown("""
     <div class='internal-header'>
         <h1 class='header-title'>💰 RECONCILIACIÓN FINANCIERA</h1>
@@ -941,6 +888,9 @@ def mostrar_reconciliacion_v8():
 
 def mostrar_auditoria_correos():
     """Módulo de auditoría de correos"""
+    # Botón de volver al inicio
+    add_back_button()
+    
     st.markdown("""
     <div class='internal-header'>
         <h1 class='header-title'>📧 AUDITORÍA DE CORREOS</h1>
@@ -948,11 +898,16 @@ def mostrar_auditoria_correos():
     </div>
     """, unsafe_allow_html=True)
     
-    with st.sidebar:
-        st.markdown("### 🔐 Credenciales")
+    # Credenciales en el panel principal (sin sidebar)
+    col_credenciales1, col_credenciales2 = st.columns(2)
+    
+    with col_credenciales1:
         email_user = st.text_input("Correo", "wperez@fashionclub.com.ec")
+    
+    with col_credenciales2:
         email_pass = st.text_input("Contraseña", type="password", value="demo123")
-        imap_server = "mail.fashionclub.com.ec"
+    
+    imap_server = "mail.fashionclub.com.ec"
     
     col_btn1, col_btn2 = st.columns([3, 1])
     
@@ -1053,6 +1008,9 @@ def mostrar_auditoria_correos():
 
 def mostrar_dashboard_transferencias():
     """Dashboard de logística y transferencias"""
+    # Botón de volver al inicio
+    add_back_button()
+    
     st.markdown("""
     <div class='internal-header'>
         <h1 class='header-title'>📦 DASHBOARD LOGÍSTICO</h1>
@@ -1113,6 +1071,9 @@ def mostrar_dashboard_transferencias():
 
 def mostrar_gestion_trabajadores():
     """Gestión de personal"""
+    # Botón de volver al inicio
+    add_back_button()
+    
     st.markdown("""
     <div class='internal-header'>
         <h1 class='header-title'>👥 GESTIÓN DE EQUIPO</h1>
@@ -1172,6 +1133,9 @@ def mostrar_gestion_trabajadores():
 
 def mostrar_generacion_guias():
     """Generador de guías de envío"""
+    # Botón de volver al inicio
+    add_back_button()
+    
     st.markdown("""
     <div class='internal-header'>
         <h1 class='header-title'>🚚 GENERADOR DE GUÍAS</h1>
@@ -1230,26 +1194,97 @@ def mostrar_generacion_guias():
 
 def mostrar_inventario():
     """Control de inventario"""
+    # Botón de volver al inicio
+    add_back_button()
+    
     st.markdown("""
     <div class='internal-header'>
         <h1 class='header-title'>📋 CONTROL DE INVENTARIO</h1>
         <div class='header-subtitle'>Gestión de stock en tiempo real</div>
     </div>
     """, unsafe_allow_html=True)
-    st.info("Módulo en desarrollo...")
+    
+    col_inv1, col_inv2 = st.columns(2)
+    
+    with col_inv1:
+        st.subheader("📊 Niveles de Stock")
+        categorias = ['Camisetas', 'Pantalones', 'Chaquetas', 'Accesorios', 'Zapatos']
+        niveles = [85, 60, 45, 90, 75]
+        
+        fig = px.bar(
+            x=categorias, y=niveles,
+            title="Niveles de Stock por Categoría",
+            color=categorias,
+            color_discrete_sequence=px.colors.qualitative.Pastel
+        )
+        fig.update_layout(height=400)
+        st.plotly_chart(fig, use_container_width=True)
+    
+    with col_inv2:
+        st.subheader("⚡ Acciones Rápidas")
+        
+        if st.button("📥 Realizar Conteo", use_container_width=True):
+            st.info("Iniciando proceso de conteo físico...")
+        
+        if st.button("📤 Ajustar Inventario", use_container_width=True):
+            st.info("Abrir formulario de ajustes...")
+        
+        if st.button("📊 Generar Reporte", use_container_width=True):
+            st.info("Generando reporte de inventario...")
 
 def mostrar_reportes():
     """Generador de reportes"""
+    # Botón de volver al inicio
+    add_back_button()
+    
     st.markdown("""
     <div class='internal-header'>
         <h1 class='header-title'>📈 REPORTES AVANZADOS</h1>
         <div class='header-subtitle'>Análisis y estadísticas ejecutivas</div>
     </div>
     """, unsafe_allow_html=True)
-    st.info("Módulo en desarrollo...")
+    
+    tab_rep1, tab_rep2, tab_rep3 = st.tabs(["📅 Diarios", "📆 Mensuales", "🎯 Personalizados"])
+    
+    with tab_rep1:
+        st.subheader("Reportes Diarios")
+        
+        col_rep1, col_rep2 = st.columns(2)
+        
+        with col_rep1:
+            fecha_reporte = st.date_input("Seleccionar fecha", datetime.now())
+        
+        with col_rep2:
+            tipo_reporte = st.selectbox("Tipo de reporte", [
+                "Ventas por Tienda",
+                "Productividad Operativa",
+                "Movimientos de Inventario",
+                "Estado de Transferencias"
+            ])
+        
+        if st.button("🔄 Generar Reporte Diario", type="primary"):
+            with st.spinner("Generando reporte..."):
+                time.sleep(2)
+                st.success(f"Reporte {tipo_reporte} generado para {fecha_reporte}")
+                
+                # Datos de ejemplo
+                data_ejemplo = {
+                    'Métrica': ['Ventas Totales', 'Unidades Vendidas', 'Ticket Promedio', 'Clientes Atendidos'],
+                    'Valor': ['$15,240', '1,250', '$12.19', '85'],
+                    'Variación vs Ayer': ['+12.5%', '+8.3%', '+3.9%', '+5.2%']
+                }
+                
+                st.dataframe(pd.DataFrame(data_ejemplo), use_container_width=True)
+    
+    with tab_rep2:
+        st.subheader("Reportes Mensuales")
+        st.info("Módulo en desarrollo avanzado...")
 
 def mostrar_configuracion():
     """Configuración del sistema"""
+    # Botón de volver al inicio
+    add_back_button()
+    
     st.markdown("""
     <div class='internal-header'>
         <h1 class='header-title'>⚙️ CONFIGURACIÓN</h1>
@@ -1267,9 +1302,30 @@ def mostrar_configuracion():
         
         if st.button("💾 Guardar Configuración", type="primary"):
             st.success("✅ Configuración guardada")
+    
+    with tab_conf2:
+        st.subheader("Gestión de Usuarios")
+        
+        # Lista de usuarios existentes
+        usuarios = [
+            {"nombre": "Wilson Pérez", "rol": "Administrador", "email": "wperez@fashionclub.com.ec"},
+            {"nombre": "Luis Perugachi", "rol": "Supervisor", "email": "lperugachi@aeropostale.com"},
+            {"nombre": "Andrés Cadena", "rol": "Operador", "email": "acadena@aeropostale.com"}
+        ]
+        
+        st.dataframe(pd.DataFrame(usuarios), use_container_width=True)
+        
+        # Formulario para agregar usuario
+        with st.expander("➕ Agregar Nuevo Usuario"):
+            nuevo_nombre = st.text_input("Nombre completo")
+            nuevo_email = st.text_input("Correo electrónico")
+            nuevo_rol = st.selectbox("Rol", ["Administrador", "Supervisor", "Operador", "Consulta"])
+            
+            if st.button("Agregar Usuario", key="add_user"):
+                st.success(f"Usuario {nuevo_nombre} agregado exitosamente")
 
 # ==============================================================================
-# 12. NAVEGACIÓN PRINCIPAL
+# 12. PÁGINA PRINCIPAL
 # ==============================================================================
 
 def mostrar_pantalla_inicio():
@@ -1303,7 +1359,19 @@ def mostrar_pantalla_inicio():
     # Distribuir los módulos en las columnas
     for idx, (icon, title, desc, key) in enumerate(modulos):
         with cols[idx % 3]:
-            create_card(icon, title, desc, key)
+            # Crear un contenedor con botón invisible
+            st.markdown(f"""
+            <div class="module-card">
+                <div class="card-icon">{icon}</div>
+                <div class="card-title">{title}</div>
+                <div class="card-description">{desc}</div>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            # Botón invisible que cubre toda la tarjeta
+            if st.button("", key=f"btn_{key}", help=f"Acceder a {title}"):
+                st.session_state.current_page = key
+                st.rerun()
     
     st.markdown('</div>', unsafe_allow_html=True)
     
@@ -1317,15 +1385,15 @@ def mostrar_pantalla_inicio():
     </div>
     """, unsafe_allow_html=True)
 
+# ==============================================================================
+# 13. NAVEGACIÓN PRINCIPAL
+# ==============================================================================
+
 def main():
     """Función principal de la aplicación"""
     # Inicializar estado de sesión
     if 'current_page' not in st.session_state:
         st.session_state.current_page = "Inicio"
-    
-    # Mostrar sidebar solo si no estamos en la página de inicio
-    if st.session_state.current_page != "Inicio":
-        show_sidebar()
     
     # Navegación entre páginas
     if st.session_state.current_page == "Inicio":
@@ -1352,12 +1420,6 @@ def main():
         st.error("Página no encontrada")
         st.session_state.current_page = "Inicio"
         st.rerun()
-    
-    # Botón flotante para volver al inicio
-    if st.session_state.current_page != "Inicio":
-        if st.button("🏠", help="Volver al inicio", key="floating_home"):
-            st.session_state.current_page = "Inicio"
-            st.rerun()
 
 if __name__ == "__main__":
     # Importaciones necesarias para módulos que faltan
