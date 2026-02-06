@@ -3296,9 +3296,6 @@ def generar_pdf_profesional(guia_data):
         
         [Paragraph("<b>Dirección:</b>", styles['CampoTitulo']),
          Paragraph(guia_data['direccion_remitente'], styles['CampoContenido'])],
-        
-        ["", ""],  # Espacio para teléfono si se agrega en el futuro
-        ["", ""],  # Espacio para otro teléfono si se agrega en el futuro
     ]
     
     tabla_remitente = Table(remitente_data, colWidths=[2*inch, 5*inch])
@@ -3315,17 +3312,11 @@ def generar_pdf_profesional(guia_data):
     
     # Datos del destinatario
     destinatario_data = [
-        [Paragraph("<b>Nombre del Destinatario:</b>", styles['CampoTitulo']),
+        [Paragraph("<b>Tienda:</b>", styles['CampoTitulo']),
          Paragraph(guia_data['destinatario'], styles['CampoContenido'])],
         
-        [Paragraph("<b>Tienda/Institución:</b>", styles['CampoTitulo']),
+        [Paragraph("<b>Ciudad:</b>", styles['CampoTitulo']),
          Paragraph(guia_data['tienda_destino'], styles['CampoContenido'])],
-        
-        [Paragraph("<b>Teléfono:</b>", styles['CampoTitulo']),
-         Paragraph(guia_data['telefono_destinatario'], styles['CampoContenido'])],
-        
-        [Paragraph("<b>Teléfono (opcional):</b>", styles['CampoTitulo']),
-         Paragraph("", styles['CampoContenido'])],  # Espacio para otro teléfono
         
         [Paragraph("<b>Dirección:</b>", styles['CampoTitulo']),
          Paragraph(guia_data['direccion_destinatario'], styles['CampoContenido'])],
