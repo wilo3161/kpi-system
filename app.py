@@ -341,13 +341,16 @@ st.markdown("""
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     filter: drop-shadow(0 5px 15px rgba(96, 165, 250, 0.3));
+    text-shadow: 0 0 20px rgba(96, 165, 250, 0.4);
 }
 
 .header-text {
     background: linear-gradient(45deg, #60A5FA, #F472B6);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
+    text-shadow: 0 5px 15px rgba(96, 165, 250, 0.2);
 }
+
 .header-subtitle {
     font-size: 1.1rem;
     color: #CBD5E1;
@@ -356,6 +359,7 @@ st.markdown("""
     margin: 0 auto;
     line-height: 1.6;
 }
+
 /* Asegurar que los iconos sean visibles en todos los contextos */
 .module-header h1 .header-icon {
     opacity: 1 !important;
@@ -383,6 +387,7 @@ st.markdown("""
         font-size: 2.2rem;
     }
 }
+
 /* Contenido de módulos - ESPACIADO CORRECTO */
 .module-content {
     margin-top: 30px;
@@ -687,6 +692,7 @@ def show_module_header(title_with_icon, subtitle):
         <p class="header-subtitle">{subtitle}</p>
     </div>
     """, unsafe_allow_html=True)
+
 # ==============================================================================
 # 3. PÁGINA PRINCIPAL - COMPLETAMENTE REDISEÑADA
 # ==============================================================================
