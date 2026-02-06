@@ -164,21 +164,7 @@ st.markdown("""
     line-height: 1.3;
 }
 
-/* Botones invisibles */
-.stButton > button.module-btn {
-    width: 100% !important;
-    height: 180px !important;
-    background-color: transparent !important;
-    border: none !important;
-    color: transparent !important;
-    position: absolute !important;
-    top: 0 !important;
-    left: 0 !important;
-    z-index: 10 !important;
-    cursor: pointer !important;
-    padding: 0 !important;
-    margin: 0 !important;
-}
+/* Eliminados los estilos de botones invisibles */
 
 /* Sidebar */
 [data-testid="stSidebar"] {
@@ -427,6 +413,11 @@ st.markdown("""
     transform: scale(1.1) rotate(90deg);
     box-shadow: 0 12px 30px rgba(96, 165, 250, 0.4);
 }
+
+/* Clase para tarjetas clickeables */
+.clickable-card {
+    cursor: pointer;
+}
 </style>
 
 <div class="main-bg"></div>
@@ -437,19 +428,25 @@ st.markdown("""
 # ==============================================================================
 
 def create_card(icon, title, description, key_target):
-    """Crea una tarjeta de módulo interactiva"""
-    st.markdown(f"""
-    <div class="module-card">
-        <div class="card-icon">{icon}</div>
-        <div class="card-title">{title}</div>
-        <div class="card-description">{description}</div>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    # Botón invisible que cubre toda la tarjeta
-    if st.button(f"Entrar {title}", key=f"btn_{key_target}", help=f"Acceder a {title}"):
-        st.session_state.current_page = key_target
-        st.rerun()
+    """Crea una tarjeta de módulo interactiva que es clickeable directamente"""
+    # Usar columnas para crear un contenedor clickeable
+    col = st.columns(1)
+    with col[0]:
+        # Crear un botón invisible que cubra toda la tarjeta
+        if st.button(f"", key=f"card_{key_target}", 
+                    help=f"Acceder a {title}",
+                    use_container_width=True):
+            st.session_state.current_page = key_target
+            st.rerun()
+        
+        # Mostrar la tarjeta visualmente
+        st.markdown(f"""
+        <div class="module-card">
+            <div class="card-icon">{icon}</div>
+            <div class="card-title">{title}</div>
+            <div class="card-description">{description}</div>
+        </div>
+        """, unsafe_allow_html=True)
 
 def show_sidebar():
     """Muestra la barra lateral de navegación"""
@@ -505,6 +502,7 @@ def normalizar_texto_wilo(texto):
         return ''
     texto = str(texto)
     try:
+        import unicodedata
         texto = unicodedata.normalize('NFKD', texto).encode('ASCII', 'ignore').decode('ASCII')
     except: 
         pass
@@ -1299,9 +1297,10 @@ def mostrar_pantalla_inicio():
         ("⚙️", "Configuración", "Sistema y preferencias", "configuracion")
     ]
     
-    # Crear 3 columnas
+    # Crear 3 columnas para el grid
     cols = st.columns(3)
     
+    # Distribuir los módulos en las columnas
     for idx, (icon, title, desc, key) in enumerate(modulos):
         with cols[idx % 3]:
             create_card(icon, title, desc, key)
