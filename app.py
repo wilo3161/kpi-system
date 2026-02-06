@@ -457,7 +457,7 @@ def show_sidebar():
         st.markdown("""
         <div class="sidebar-header">
             <div class="sidebar-title">AERO ERP</div>
-            <div class="sidebar-subtitle">v4.0 • Wilson Pérez</div>
+            <div class="sidebar-subtitle"> • Wilson Pérez</div>
         </div>
         """, unsafe_allow_html=True)
         
@@ -1306,7 +1306,7 @@ def mostrar_pantalla_inicio():
     st.markdown("""
     <div class="gallery-container">
         <div class="brand-title">AEROPOSTALE</div>
-        <div class="brand-subtitle">Centro de Distribución Ecuador | ERP v4.0</div>
+        <div class="brand-subtitle">Centro de Distribución Ecuador | ERP </div>
     </div>
     """, unsafe_allow_html=True)
     
@@ -1338,7 +1338,7 @@ def mostrar_pantalla_inicio():
     # Footer
     st.markdown("""
     <div class="app-footer">
-        <p>Sistema ERP v4.0 • Desarrollado por Wilson Pérez • Logística & Sistemas</p>
+        <p>Sistema ERP • Desarrollado por Wilson Pérez • Logística & Sistemas</p>
         <p style="font-size: 0.8rem; color: #64748B; margin-top: 10px;">
             © 2026 AEROPOSTALE Ecuador • Todos los derechos reservados
         </p>
