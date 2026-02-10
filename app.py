@@ -2018,18 +2018,18 @@ def mostrar_dashboard_transferencias():
                                  f"{resumen_dept.index[0] if not resumen_dept.empty else 'N/A'}")
             
             except Exception as e:
-                st.error(f"❌ Error al procesar los archivos: {str(e)}")
-                st.info("""
-                **Posibles causas del error:**
-                1. Las columnas de código no tienen el mismo formato en ambos archivos
-                2. Los archivos tienen formatos diferentes a los esperados
-                3. Problemas con caracteres especiales en los nombres de columnas
-                
-                **Solución sugerida:**
-                1. Verifica que ambos archivos tengan una columna con códigos de producto
-                2. El archivo base debe tener una columna con departamentos
-                3. El archivo de comparación debe tener una columna con cantidades
-                """)
+            st.error(f"❌ **Error al procesar el archivo:** {str(e)}")
+            st.info("""
+            **Posibles causas del error:**
+            1. El archivo no es un Excel válido
+            2. El archivo está vacío o corrupto
+            3. Formato de archivo no compatible
+            
+            **Solución sugerida:**
+            1. Verifica que el archivo sea un Excel (.xlsx)
+            2. Asegúrate de que tenga datos en la primera hoja
+            3. Verifica que tenga las columnas requeridas
+            """)
         
         else:
             st.info("👈 Por favor, carga ambos archivos para realizar el análisis de mercadería en tránsito.")
