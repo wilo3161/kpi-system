@@ -1404,282 +1404,295 @@ def mostrar_dashboard_transferencias():
             - **Tiendas**: Todas las demás transferencias
             """)
             
-            return  # Salir si no hay archivo
-        
-        # PROCESAR EL ARCHIVO CARGADO
-        try:
-            df_diario = pd.read_excel(file_diario)
-            st.success(f"✅ Archivo cargado exitosamente: {file_diario.name}")
-            
-            # Mostrar vista previa del archivo
-            with st.expander("🔍 Vista previa del archivo cargado", expanded=True):
-                st.dataframe(df_diario.head(10), use_container_width=True)
-                st.info(f"📊 **Total de filas:** {len(df_diario)} | **Total de columnas:** {len(df_diario.columns)}")
+        else:
+            # PROCESAR EL ARCHIVO CARGADO
+            try:
+                df_diario = pd.read_excel(file_diario)
+                st.success(f"✅ Archivo cargado exitosamente: {file_diario.name}")
                 
-                # Mostrar nombres de columnas
-                st.write("**Columnas detectadas:**")
-                for col in df_diario.columns:
-                    st.write(f"- `{col}`")
-            
-            # Verificar columnas requeridas
-            columnas_requeridas = ['Secuencial', 'Cantidad Prendas']
-            columnas_destino = ['Sucursal Destino', 'Bodega Destino']
-            
-            # Verificar columnas requeridas
-            faltan_requeridas = [col for col in columnas_requeridas if col not in df_diario.columns]
-            if faltan_requeridas:
-                st.error(f"❌ **Columnas faltantes:** {faltan_requeridas}")
-                st.info("Por favor, verifica que tu archivo tenga las columnas requeridas.")
-                return
-            
-            # Verificar al menos una columna de destino
-            tiene_destino = any(col in df_diario.columns for col in columnas_destino)
-            if not tiene_destino:
-                st.error("❌ **No se encontró columna de destino.**")
-                st.info("El archivo debe tener al menos una de estas columnas: 'Sucursal Destino' o 'Bodega Destino'")
-                return
-            
-            # Continuar con el procesamiento...
-            res = procesar_transferencias_diarias(df_diario)
-            
-            # --- SECCIÓN 1: KPIs POR CATEGORÍA ---
-            st.header("📈 KPIs por Categoría")
-            
-            # Mapeo de nombres de categorías para display
-            categorias_display = {
-                'Price Club': 'PRICE CLUB',
-                'Tiendas': 'TIENDAS REGULARES',
-                'Ventas por Mayor': 'VENTAS POR MAYOR',
-                'Tienda Web': 'TIENDA WEB',
-                'Fallas': 'FALLAS',
-                'Fundas': 'FUNDAS'
-            }
-            
-            # Mapeo de sucursales esperadas por categoría
-            sucursales_esperadas = {
-                'Price Club': PRICE_CLUBS,
-                'Tiendas': TIENDAS_REGULARES,
-                'Ventas por Mayor': VENTAS_POR_MAYOR,
-                'Tienda Web': TIENDA_WEB,
-                'Fallas': FALLAS,
-                'Fundas': None
-            }
-            
-            # Crear columnas para las tarjetas (2x3 grid)
-            cols = st.columns(3)
-            for i, (cat, cat_display) in enumerate(categorias_display.items()):
-                cantidad = res['por_categoria'].get(cat, 0)
-                sucursales_activas = res['conteo_sucursales'].get(cat, 0)
-                esperadas = sucursales_esperadas.get(cat)
-                
-                with cols[i % 3]:
-                    if cat == 'Fundas':
-                        st.markdown(f"""
-                        <div class='stat-card card-purple'>
-                            <div class='stat-title'>{cat_display}</div>
-                            <div class='stat-value'>{cantidad:,}</div>
-                            <div class='metric-subtitle'>Múltiplos de 100 ≥ 500 unidades</div>
-                        </div>
-                        """, unsafe_allow_html=True)
-                    else:
-                        st.markdown(f"""
-                        <div class='stat-card {'card-blue' if i % 3 == 0 else 'card-green' if i % 3 == 1 else 'card-orange'}'>
-                            <div class='stat-title'>{cat_display}</div>
-                            <div class='stat-value'>{cantidad:,}</div>
-                            <div class='metric-subtitle'>{sucursales_activas} sucursales | {esperadas} esperadas</div>
-                        </div>
-                        """, unsafe_allow_html=True)
-                
-                if i == 2:  # Crear nuevas columnas después de 3 elementos
-                    cols = st.columns(3)
-            
-            st.divider()
-            
-            # --- SECCIÓN 2: GRÁFICO DE PASTEL Y ANÁLISIS VISUAL ---
-            st.header("📊 Análisis Visual")
-            
-            col1, col2 = st.columns([2, 1])
-            
-            with col1:
-                # Gráfico de pastel con todas las categorías
-                categorias_pie = list(res['por_categoria'].keys())
-                valores_pie = list(res['por_categoria'].values())
-                
-                # Crear DataFrame para el gráfico
-                df_pie = pd.DataFrame({
-                    'Categoría': categorias_pie,
-                    'Unidades': valores_pie
-                })
-                
-                # Filtrar categorías con valor 0
-                df_pie = df_pie[df_pie['Unidades'] > 0]
-                
-                if not df_pie.empty:
-                    # Crear gráfico de pastel
-                    fig_pie = px.pie(
-                        df_pie,
-                        values='Unidades',
-                        names='Categoría',
-                        title="Distribución por Categoría (Gráfico de Pastel)",
-                        color_discrete_sequence=['#0033A0', '#E4002B', '#10B981', '#8B5CF6', '#F59E0B', '#3B82F6'],
-                        hole=0.3
-                    )
+                # Mostrar vista previa del archivo
+                with st.expander("🔍 Vista previa del archivo cargado", expanded=True):
+                    st.dataframe(df_diario.head(10), use_container_width=True)
+                    st.info(f"📊 **Total de filas:** {len(df_diario)} | **Total de columnas:** {len(df_diario.columns)}")
                     
-                    fig_pie.update_traces(
-                        textposition='inside',
-                        textinfo='percent+label',
-                        hovertemplate='<b>%{label}</b><br>Unidades: %{value:,}<br>Porcentaje: %{percent}'
-                    )
+                    # Mostrar nombres de columnas
+                    st.write("**Columnas detectadas:**")
+                    for col in df_diario.columns:
+                        st.write(f"- `{col}`")
+                
+                # Verificar columnas requeridas
+                columnas_requeridas = ['Secuencial', 'Cantidad Prendas']
+                columnas_destino = ['Sucursal Destino', 'Bodega Destino']
+                
+                # Verificar columnas requeridas
+                faltan_requeridas = [col for col in columnas_requeridas if col not in df_diario.columns]
+                if faltan_requeridas:
+                    st.error(f"❌ **Columnas faltantes:** {faltan_requeridas}")
+                    st.info("Por favor, verifica que tu archivo tenga las columnas requeridas.")
                     
-                    fig_pie.update_layout(
-                        height=500,
-                        showlegend=True,
-                        legend=dict(
-                            orientation="h",
-                            yanchor="bottom",
-                            y=-0.2,
-                            xanchor="center",
-                            x=0.5
-                        )
-                    )
-                    
-                    st.plotly_chart(fig_pie, use_container_width=True)
                 else:
-                    st.info("No hay datos para mostrar el gráfico de pastel")
+                    # Verificar al menos una columna de destino
+                    tiene_destino = any(col in df_diario.columns for col in columnas_destino)
+                    if not tiene_destino:
+                        st.error("❌ **No se encontró columna de destino.**")
+                        st.info("El archivo debe tener al menos una de estas columnas: 'Sucursal Destino' o 'Bodega Destino'")
+                        
+                    else:
+                        # Continuar con el procesamiento...
+                        res = procesar_transferencias_diarias(df_diario)
+                        
+                        # --- SECCIÓN 1: KPIs POR CATEGORÍA ---
+                        st.header("📈 KPIs por Categoría")
+                        
+                        # Mapeo de nombres de categorías para display
+                        categorias_display = {
+                            'Price Club': 'PRICE CLUB',
+                            'Tiendas': 'TIENDAS REGULARES',
+                            'Ventas por Mayor': 'VENTAS POR MAYOR',
+                            'Tienda Web': 'TIENDA WEB',
+                            'Fallas': 'FALLAS',
+                            'Fundas': 'FUNDAS'
+                        }
+                        
+                        # Mapeo de sucursales esperadas por categoría
+                        sucursales_esperadas = {
+                            'Price Club': PRICE_CLUBS,
+                            'Tiendas': TIENDAS_REGULARES,
+                            'Ventas por Mayor': VENTAS_POR_MAYOR,
+                            'Tienda Web': TIENDA_WEB,
+                            'Fallas': FALLAS,
+                            'Fundas': None
+                        }
+                        
+                        # Crear columnas para las tarjetas (2x3 grid)
+                        cols = st.columns(3)
+                        for i, (cat, cat_display) in enumerate(categorias_display.items()):
+                            cantidad = res['por_categoria'].get(cat, 0)
+                            sucursales_activas = res['conteo_sucursales'].get(cat, 0)
+                            esperadas = sucursales_esperadas.get(cat)
+                            
+                            with cols[i % 3]:
+                                if cat == 'Fundas':
+                                    st.markdown(f"""
+                                    <div class='stat-card card-purple'>
+                                        <div class='stat-title'>{cat_display}</div>
+                                        <div class='stat-value'>{cantidad:,}</div>
+                                        <div class='metric-subtitle'>Múltiplos de 100 ≥ 500 unidades</div>
+                                    </div>
+                                    """, unsafe_allow_html=True)
+                                else:
+                                    st.markdown(f"""
+                                    <div class='stat-card {'card-blue' if i % 3 == 0 else 'card-green' if i % 3 == 1 else 'card-orange'}'>
+                                        <div class='stat-title'>{cat_display}</div>
+                                        <div class='stat-value'>{cantidad:,}</div>
+                                        <div class='metric-subtitle'>{sucursales_activas} sucursales | {esperadas} esperadas</div>
+                                    </div>
+                                    """, unsafe_allow_html=True)
+                            
+                            if i == 2:  # Crear nuevas columnas después de 3 elementos
+                                cols = st.columns(3)
+                        
+                        st.divider()
+                        
+                        # --- SECCIÓN 2: GRÁFICO DE PASTEL Y ANÁLISIS VISUAL ---
+                        st.header("📊 Análisis Visual")
+                        
+                        col1, col2 = st.columns([2, 1])
+                        
+                        with col1:
+                            # Gráfico de pastel con todas las categorías
+                            categorias_pie = list(res['por_categoria'].keys())
+                            valores_pie = list(res['por_categoria'].values())
+                            
+                            # Crear DataFrame para el gráfico
+                            df_pie = pd.DataFrame({
+                                'Categoría': categorias_pie,
+                                'Unidades': valores_pie
+                            })
+                            
+                            # Filtrar categorías con valor 0
+                            df_pie = df_pie[df_pie['Unidades'] > 0]
+                            
+                            if not df_pie.empty:
+                                # Crear gráfico de pastel
+                                fig_pie = px.pie(
+                                    df_pie,
+                                    values='Unidades',
+                                    names='Categoría',
+                                    title="Distribución por Categoría (Gráfico de Pastel)",
+                                    color_discrete_sequence=['#0033A0', '#E4002B', '#10B981', '#8B5CF6', '#F59E0B', '#3B82F6'],
+                                    hole=0.3
+                                )
+                                
+                                fig_pie.update_traces(
+                                    textposition='inside',
+                                    textinfo='percent+label',
+                                    hovertemplate='<b>%{label}</b><br>Unidades: %{value:,}<br>Porcentaje: %{percent}'
+                                )
+                                
+                                fig_pie.update_layout(
+                                    height=500,
+                                    showlegend=True,
+                                    legend=dict(
+                                        orientation="h",
+                                        yanchor="bottom",
+                                        y=-0.2,
+                                        xanchor="center",
+                                        x=0.5
+                                    )
+                                )
+                                
+                                st.plotly_chart(fig_pie, use_container_width=True)
+                            else:
+                                st.info("No hay datos para mostrar el gráfico de pastel")
+                        
+                        with col2:
+                            # KPIs generales
+                            st.subheader("TOTAL GENERAL")
+                            st.markdown(f"""
+                            <div class='metric-card'>
+                                <div class='metric-value'>{res['total_unidades']:,}</div>
+                                <div class='metric-subtitle'>Suma de todas las unidades</div>
+                            </div>
+                            """, unsafe_allow_html=True)
+                            
+                            # PROMEDIO X TRANSFERENCIA
+                            promedio = res['total_unidades'] / res['transferencias'] if res['transferencias'] > 0 else 0
+                            st.markdown(f"""
+                            <div class='metric-card'>
+                                <div class='metric-title'>PROMEDIO X TRANSFERENCIA</div>
+                                <div class='metric-value'>{promedio:,.0f}</div>
+                                <div class='metric-subtitle'>Unidades por transferencia</div>
+                            </div>
+                            """, unsafe_allow_html=True)
+                            
+                            # CATEGORÍAS ACTIVAS
+                            categorias_activas = sum(1 for cat in res['por_categoria'].values() if cat > 0)
+                            st.markdown(f"""
+                            <div class='metric-card'>
+                                <div class='metric-title'>CATEGORÍAS ACTIVAS</div>
+                                <div class='metric-value'>{categorias_activas}/6</div>
+                                <div class='metric-subtitle'>Categorías con datos</div>
+                            </div>
+                            """, unsafe_allow_html=True)
+                            
+                            # % FUNDAS
+                            porcentaje_fundas = (res['por_categoria'].get('Fundas', 0) / res['total_unidades']) * 100 if res['total_unidades'] > 0 else 0
+                            st.markdown(f"""
+                            <div class='metric-card'>
+                                <div class='metric-title'>% FUNDAS</div>
+                                <div class='metric-value'>{porcentaje_fundas:.1f}%</div>
+                                <div class='metric-subtitle'>Porcentaje del total</div>
+                            </div>
+                            """, unsafe_allow_html=True)
+                        
+                        st.divider()
+                        
+                        # --- SECCIÓN 3: DISTRIBUCIÓN EXCLUYENDO FUNDAS ---
+                        st.header("📊 Distribución Excluyendo Fundas")
+                        
+                        # Preparar datos excluyendo Fundas
+                        categorias_excl_fundas = ['Price Club', 'Tiendas', 'Ventas por Mayor', 'Tienda Web', 'Fallas']
+                        valores_excl_fundas = [res['por_categoria'].get(cat, 0) for cat in categorias_excl_fundas]
+                        total_excl_fundas = sum(valores_excl_fundas)
+                        
+                        if total_excl_fundas > 0:
+                            # Crear DataFrame para el gráfico de barras
+                            df_barras = pd.DataFrame({
+                                'Categoría': ['Tienda Web', 'Price Club', 'Ventas por Mayor', 'Tiendas', 'Fallas'],
+                                'Unidades': [
+                                    res['por_categoria'].get('Tienda Web', 0),
+                                    res['por_categoria'].get('Price Club', 0),
+                                    res['por_categoria'].get('Ventas por Mayor', 0),
+                                    res['por_categoria'].get('Tiendas', 0),
+                                    res['por_categoria'].get('Fallas', 0)
+                                ]
+                            })
+                            
+                            # Calcular porcentajes
+                            df_barras['Porcentaje'] = (df_barras['Unidades'] / total_excl_fundas) * 100
+                            
+                            # Crear gráfico de barras
+                            fig_barras = go.Figure(data=[
+                                go.Bar(
+                                    x=df_barras['Categoría'],
+                                    y=df_barras['Porcentaje'],
+                                    text=[f"{p:.1f}%" for p in df_barras['Porcentaje']],
+                                    textposition='auto',
+                                    marker_color=['#0033A0', '#E4002B', '#10B981', '#8B5CF6', '#F59E0B']
+                                )
+                            ])
+                            
+                            fig_barras.update_layout(
+                                title="Distribución por Categoría (excluyendo Fundas)",
+                                yaxis_title="Porcentaje (%)",
+                                xaxis_title="Categoría",
+                                template="plotly_white",
+                                height=400
+                            )
+                            
+                            st.plotly_chart(fig_barras, use_container_width=True)
+                            
+                            # Mostrar tabla con porcentajes
+                            st.dataframe(
+                                df_barras[['Categoría', 'Unidades', 'Porcentaje']].sort_values('Porcentaje', ascending=False),
+                                use_container_width=True
+                            )
+                        else:
+                            st.info("No hay datos para mostrar la distribución (excluyendo Fundas)")
+                        
+                        st.divider()
+                        
+                        # --- SECCIÓN 4: DETALLE Y EXPORTACIÓN ---
+                        st.header("📄 Detalle por Secuencial")
+                        
+                        df_detalle = res['df_procesado'][['Sucursal Destino', 'Secuencial', 'Cantidad_Entera', 'Categoria']].copy()
+                        
+                        # Mostrar resumen estadístico
+                        with st.expander("📋 Resumen Estadístico", expanded=True):
+                            st.dataframe(
+                                pd.DataFrame.from_dict(res['detalle_categoria'], orient='index')
+                                .reset_index()
+                                .rename(columns={'index': 'Categoría', 'cantidad': 'Unidades', 'transf': 'Transferencias', 'unicas': 'Sucursales Únicas'}),
+                                use_container_width=True
+                            )
+                        
+                        # Botón de descarga
+                        col_d1, col_d2 = st.columns([1, 4])
+                        with col_d1:
+                            excel_data = to_excel(df_detalle)
+                            st.download_button(
+                                label="📥 Descargar Excel",
+                                data=excel_data,
+                                file_name=f"detalle_transferencias_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
+                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                use_container_width=True
+                            )
+                        
+                        # Mostrar tabla detallada
+                        st.dataframe(
+                            df_detalle.rename(columns={
+                                'Sucursal Destino': 'Sucursal',
+                                'Cantidad_Entera': 'Cantidad',
+                                'Categoria': 'Categoría'
+                            }),
+                            use_container_width=True,
+                            height=400
+                        )
             
-            with col2:
-                # KPIs generales
-                st.subheader("TOTAL GENERAL")
-                st.markdown(f"""
-                <div class='metric-card'>
-                    <div class='metric-value'>{res['total_unidades']:,}</div>
-                    <div class='metric-subtitle'>Suma de todas las unidades</div>
-                </div>
-                """, unsafe_allow_html=True)
+            except Exception as e:
+                st.error(f"❌ **Error al procesar el archivo:** {str(e)}")
+                st.info("""
+                **Posibles causas del error:**
+                1. El archivo no es un Excel válido
+                2. El archivo está vacío o corrupto
+                3. Formato de archivo no compatible
                 
-                # PROMEDIO X TRANSFERENCIA
-                promedio = res['total_unidades'] / res['transferencias'] if res['transferencias'] > 0 else 0
-                st.markdown(f"""
-                <div class='metric-card'>
-                    <div class='metric-title'>PROMEDIO X TRANSFERENCIA</div>
-                    <div class='metric-value'>{promedio:,.0f}</div>
-                    <div class='metric-subtitle'>Unidades por transferencia</div>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                # CATEGORÍAS ACTIVAS
-                categorias_activas = sum(1 for cat in res['por_categoria'].values() if cat > 0)
-                st.markdown(f"""
-                <div class='metric-card'>
-                    <div class='metric-title'>CATEGORÍAS ACTIVAS</div>
-                    <div class='metric-value'>{categorias_activas}/6</div>
-                    <div class='metric-subtitle'>Categorías con datos</div>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                # % FUNDAS
-                porcentaje_fundas = (res['por_categoria'].get('Fundas', 0) / res['total_unidades']) * 100 if res['total_unidades'] > 0 else 0
-                st.markdown(f"""
-                <div class='metric-card'>
-                    <div class='metric-title'>% FUNDAS</div>
-                    <div class='metric-value'>{porcentaje_fundas:.1f}%</div>
-                    <div class='metric-subtitle'>Porcentaje del total</div>
-                </div>
-                """, unsafe_allow_html=True)
-            
-            st.divider()
-            
-            # --- SECCIÓN 3: DISTRIBUCIÓN EXCLUYENDO FUNDAS ---
-            st.header("📊 Distribución Excluyendo Fundas")
-            
-            # Preparar datos excluyendo Fundas
-            categorias_excl_fundas = ['Price Club', 'Tiendas', 'Ventas por Mayor', 'Tienda Web', 'Fallas']
-            valores_excl_fundas = [res['por_categoria'].get(cat, 0) for cat in categorias_excl_fundas]
-            total_excl_fundas = sum(valores_excl_fundas)
-            
-            if total_excl_fundas > 0:
-                # Crear DataFrame para el gráfico de barras
-                df_barras = pd.DataFrame({
-                    'Categoría': ['Tienda Web', 'Price Club', 'Ventas por Mayor', 'Tiendas', 'Fallas'],
-                    'Unidades': [
-                        res['por_categoria'].get('Tienda Web', 0),
-                        res['por_categoria'].get('Price Club', 0),
-                        res['por_categoria'].get('Ventas por Mayor', 0),
-                        res['por_categoria'].get('Tiendas', 0),
-                        res['por_categoria'].get('Fallas', 0)
-                    ]
-                })
-                
-                # Calcular porcentajes
-                df_barras['Porcentaje'] = (df_barras['Unidades'] / total_excl_fundas) * 100
-                
-                # Crear gráfico de barras
-                fig_barras = go.Figure(data=[
-                    go.Bar(
-                        x=df_barras['Categoría'],
-                        y=df_barras['Porcentaje'],
-                        text=[f"{p:.1f}%" for p in df_barras['Porcentaje']],
-                        textposition='auto',
-                        marker_color=['#0033A0', '#E4002B', '#10B981', '#8B5CF6', '#F59E0B']
-                    )
-                ])
-                
-                fig_barras.update_layout(
-                    title="Distribución por Categoría (excluyendo Fundas)",
-                    yaxis_title="Porcentaje (%)",
-                    xaxis_title="Categoría",
-                    template="plotly_white",
-                    height=400
-                )
-                
-                st.plotly_chart(fig_barras, use_container_width=True)
-                
-                # Mostrar tabla con porcentajes
-                st.dataframe(
-                    df_barras[['Categoría', 'Unidades', 'Porcentaje']].sort_values('Porcentaje', ascending=False),
-                    use_container_width=True
-                )
-            else:
-                st.info("No hay datos para mostrar la distribución (excluyendo Fundas)")
-            
-            st.divider()
-            
-            # --- SECCIÓN 4: DETALLE Y EXPORTACIÓN ---
-            st.header("📄 Detalle por Secuencial")
-            
-            df_detalle = res['df_procesado'][['Sucursal Destino', 'Secuencial', 'Cantidad_Entera', 'Categoria']].copy()
-            
-            # Mostrar resumen estadístico
-            with st.expander("📋 Resumen Estadístico", expanded=True):
-                st.dataframe(
-                    pd.DataFrame.from_dict(res['detalle_categoria'], orient='index')
-                    .reset_index()
-                    .rename(columns={'index': 'Categoría', 'cantidad': 'Unidades', 'transf': 'Transferencias', 'unicas': 'Sucursales Únicas'}),
-                    use_container_width=True
-                )
-            
-            # Botón de descarga
-            col_d1, col_d2 = st.columns([1, 4])
-            with col_d1:
-                excel_data = to_excel(df_detalle)
-                st.download_button(
-                    label="📥 Descargar Excel",
-                    data=excel_data,
-                    file_name=f"detalle_transferencias_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    use_container_width=True
-                )
-            
-            # Mostrar tabla detallada
-            st.dataframe(
-                df_detalle.rename(columns={
-                    'Sucursal Destino': 'Sucursal',
-                    'Cantidad_Entera': 'Cantidad',
-                    'Categoria': 'Categoría'
-                }),
-                use_container_width=True,
-                height=400
-            )
+                **Solución sugerida:**
+                1. Verifica que el archivo sea un Excel (.xlsx)
+                2. Asegúrate de que tenga datos en la primera hoja
+                3. Verifica que tenga las columnas requeridas
+                """)
         
     else:
             # Pantalla de bienvenida cuando no hay archivo cargado
