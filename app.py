@@ -1681,7 +1681,7 @@ def mostrar_dashboard_transferencias():
                 height=400
             )
         
-            else:
+    else:
             # Pantalla de bienvenida cuando no hay archivo cargado
             st.info("👈 Por favor, sube un archivo Excel desde la barra lateral para comenzar el análisis.")
             
