@@ -1350,19 +1350,96 @@ def mostrar_dashboard_transferencias():
     tab1, tab2, tab3 = st.tabs(["📊 Transferencias Diarias", "📦 Mercadería en Tránsito", "📈 Análisis de Stock"])
     
     with tab1:
-        # Sidebar para carga de datos
-        with st.sidebar:
-            st.markdown("""
-            <div class='filter-panel'>
-                <h4>📂 Carga de Datos</h4>
-            """, unsafe_allow_html=True)
-            file_diario = st.file_uploader("Subir archivo diario (xlsx)", type=['xlsx'], key="diario_up")
-            if st.button("🔄 Limpiar y Recargar", use_container_width=True):
-                st.rerun()
-            st.markdown("</div>", unsafe_allow_html=True)
+        # CORRECCIÓN: MOVER LA CARGA DE ARCHIVOS DENTRO DE LA PESTAÑA
+        st.markdown("""
+        <div class='filter-panel'>
+            <h4>📂 Carga de Archivo de Transferencias</h4>
+            <p class='section-description'>Sube el archivo Excel de transferencias diarias (ej: 322026.xlsx)</p>
+        </div>
+        """, unsafe_allow_html=True)
         
-        if file_diario:
+        # Contenedor para carga de archivo
+        upload_container = st.container()
+        
+        with upload_container:
+            col_upload1, col_upload2 = st.columns([3, 1])
+            with col_upload1:
+                file_diario = st.file_uploader(
+                    "Selecciona el archivo Excel",
+                    type=['xlsx'],
+                    key="diario_transferencias",
+                    label_visibility="collapsed"
+                )
+            with col_upload2:
+                if st.button("🔄 Limpiar", use_container_width=True):
+                    st.rerun()
+        
+        # Mostrar instrucciones si no hay archivo
+        if not file_diario:
+            st.info("👆 **Por favor, sube un archivo Excel desde el panel superior para comenzar el análisis.**")
+            
+            # Mostrar ejemplo de estructura
+            st.markdown("### 📋 Estructura del archivo esperado:")
+            ejemplo_data = pd.DataFrame({
+                'Secuencial': ['TR001', 'TR002', 'TR003', 'TR004'],
+                'Sucursal Destino': ['PRICE CLUB QUITO', 'AERO MALL DEL SOL', 'VENTAS POR MAYOR', 'TIENDA WEB'],
+                'Cantidad Prendas': [1500, 245, 5000, 120],
+                'Bodega Destino': ['BODEGA CENTRAL', 'BODEGA NORTE', 'BODEGA CENTRAL', 'BODEGA WEB']
+            })
+            
+            st.dataframe(ejemplo_data, use_container_width=True)
+            
+            st.markdown("""
+            ### 📝 Columnas requeridas:
+            1. **Secuencial**: Número único de transferencia
+            2. **Sucursal Destino** o **Bodega Destino**: Nombre de la tienda destino
+            3. **Cantidad Prendas**: Cantidad de unidades a transferir
+            
+            ### 🎯 Categorías automáticas:
+            - **Price Club**: Contiene "PRICE" o "OIL" en el nombre
+            - **Tienda Web**: Contiene "WEB", "TIENDA MOVIL" o "MOVIL"
+            - **Fallas**: Contiene "FALLAS"
+            - **Ventas por Mayor**: Contiene "MAYOR" o "MAYORISTA"
+            - **Fundas**: Cantidad ≥ 500 y múltiplo de 100
+            - **Tiendas**: Todas las demás transferencias
+            """)
+            
+            return  # Salir si no hay archivo
+        
+        # PROCESAR EL ARCHIVO CARGADO
+        try:
             df_diario = pd.read_excel(file_diario)
+            st.success(f"✅ Archivo cargado exitosamente: {file_diario.name}")
+            
+            # Mostrar vista previa del archivo
+            with st.expander("🔍 Vista previa del archivo cargado", expanded=True):
+                st.dataframe(df_diario.head(10), use_container_width=True)
+                st.info(f"📊 **Total de filas:** {len(df_diario)} | **Total de columnas:** {len(df_diario.columns)}")
+                
+                # Mostrar nombres de columnas
+                st.write("**Columnas detectadas:**")
+                for col in df_diario.columns:
+                    st.write(f"- `{col}`")
+            
+            # Verificar columnas requeridas
+            columnas_requeridas = ['Secuencial', 'Cantidad Prendas']
+            columnas_destino = ['Sucursal Destino', 'Bodega Destino']
+            
+            # Verificar columnas requeridas
+            faltan_requeridas = [col for col in columnas_requeridas if col not in df_diario.columns]
+            if faltan_requeridas:
+                st.error(f"❌ **Columnas faltantes:** {faltan_requeridas}")
+                st.info("Por favor, verifica que tu archivo tenga las columnas requeridas.")
+                return
+            
+            # Verificar al menos una columna de destino
+            tiene_destino = any(col in df_diario.columns for col in columnas_destino)
+            if not tiene_destino:
+                st.error("❌ **No se encontró columna de destino.**")
+                st.info("El archivo debe tener al menos una de estas columnas: 'Sucursal Destino' o 'Bodega Destino'")
+                return
+            
+            # Continuar con el procesamiento...
             res = procesar_transferencias_diarias(df_diario)
             
             # --- SECCIÓN 1: KPIs POR CATEGORÍA ---
