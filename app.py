@@ -1447,7 +1447,7 @@ def mostrar_dashboard_transferencias():
                         # Mapeo de nombres de categorías para display
                         categorias_display = {
                             'Price Club': 'PRICE CLUB',
-                            'Tiendas': 'TIENDAS REGULARES',
+                            'Tiendas': 'TIENDAS AEROPOSTALE',
                             'Ventas por Mayor': 'VENTAS POR MAYOR',
                             'Tienda Web': 'TIENDA WEB',
                             'Fallas': 'FALLAS',
