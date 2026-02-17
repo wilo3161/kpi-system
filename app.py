@@ -1337,7 +1337,7 @@ def show_dashboard_kpis():
     
     st.markdown('</div>', unsafe_allow_html=True)
 
-#===================
+# ==============================================================================
 # 7. MODULO DASHBOARD LOGISTICO
 # ==============================================================================
 
@@ -1365,10 +1365,39 @@ TIENDAS_REGULARES_LISTA = [
     'RIOCENTRO NORTE', 'SAN LUIS', 'SANTO DOMINGO'
 ]
 
+# Colores de las tarjetas KPI
+COLORS = {
+    'PRICE CLUB': '#0033A0',          # Azul corporativo
+    'TIENDAS AEROPOSTALE': '#E4002B', # Rojo
+    'VENTAS POR MAYOR': '#10B981',     # Verde esmeralda
+    'TIENDA WEB': '#8B5CF6',           # Violeta
+    'FALLAS': '#F59E0B',               # Naranja/Ámbar
+    'FUNDAS': '#EC4899'                # Rosa
+}
+
+# Gradientes de fondo (15% a 40% de opacidad)
+GRADIENTS = {
+    'PRICE CLUB': 'linear-gradient(135deg, #0033A015, #0033A030)',
+    'TIENDAS AEROPOSTALE': 'linear-gradient(135deg, #E4002B15, #E4002B30)',
+    'VENTAS POR MAYOR': 'linear-gradient(135deg, #10B98115, #10B98130)',
+    'TIENDA WEB': 'linear-gradient(135deg, #8B5CF615, #8B5CF630)',
+    'FALLAS': 'linear-gradient(135deg, #F59E0B15, #F59E0B30)',
+    'FUNDAS': 'linear-gradient(135deg, #EC489915, #EC489930)'
+}
+
+# Colores adicionales usados en gráficos
+CHART_COLORS = ['#0033A0', '#E4002B', '#10B981', '#8B5CF6', '#F59E0B', '#3B82F6']
+
 # ==============================================================================
-# NUEVAS IMPORTACIONES Y CLASES PARA EL SISTEMA DE KPI DIARIO
+# CLASES PARA EL SISTEMA DE KPI DIARIO
 # ==============================================================================
 import os
+import io
+import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
+from datetime import datetime
+import streamlit as st
 
 # Diccionarios para clasificación de productos
 GENDER_MAP = {
@@ -1441,8 +1470,6 @@ WAREHOUSE_GROUPS = {
     'SAN': 'San',
     'LOS': 'Los'
 }
-
-STORAGE_PATH = "kpi_diario_base.parquet"
 
 class TextileClassifier:
     """Clasificador inteligente para productos textiles"""
@@ -1648,8 +1675,7 @@ class DataProcessor:
             classifications.append(self.classifier.classify_product(prod))
         class_df = pd.DataFrame(classifications)
         
-        # --- CORRECCIÓN: Eliminar columnas duplicadas antes de concatenar ---
-        # Identificar columnas de clasificación que ya existen en df
+        # Eliminar columnas duplicadas antes de concatenar
         cols_to_drop = [col for col in class_df.columns if col in df.columns]
         if cols_to_drop:
             df = df.drop(columns=cols_to_drop)
@@ -1674,50 +1700,6 @@ class DataProcessor:
         if any(x in up for x in ['WEB', 'ONLINE', 'MOVIL']):
             return 'Tienda Online'
         return 'Otros'
-
-
-class HistoryManager:
-    def __init__(self, path=STORAGE_PATH):
-        self.path = path
-    
-    def load_history(self) -> pd.DataFrame:
-        try:
-            df = pd.read_parquet(self.path)
-            if 'Fecha' in df.columns:
-                df['Fecha'] = pd.to_datetime(df['Fecha'])
-            if 'Cantidad' in df.columns:
-                df['Cantidad'] = pd.to_numeric(df['Cantidad'], errors='coerce')
-            return df
-        except:
-            return pd.DataFrame()
-    
-    def save_to_history(self, new_data: pd.DataFrame, append=True) -> pd.DataFrame:
-        try:
-            if append:
-                hist = self.load_history()
-                if not hist.empty:
-                    key_cols = ['ID_Transferencia'] if 'ID_Transferencia' in new_data.columns else []
-                    if not key_cols:
-                        key_cols = ['Secuencial - Factura', 'Producto', 'Bodega Recibe', 'Fecha', 'Cantidad']
-                        key_cols = [c for c in key_cols if c in new_data.columns]
-                    if key_cols:
-                        mask = ~new_data[key_cols].apply(tuple, axis=1).isin(hist[key_cols].apply(tuple, axis=1))
-                        new_data = new_data[mask]
-                combined = pd.concat([hist, new_data], ignore_index=True)
-            else:
-                combined = new_data
-            combined.to_parquet(self.path, index=False)
-            return combined
-        except Exception as e:
-            st.error(f"Error al guardar historial: {e}")
-            return new_data if not append else self.load_history()
-    
-    def clear_history(self):
-        try:
-            os.remove(self.path)
-            st.success("Historial eliminado")
-        except:
-            st.warning("No había historial para eliminar")
 
 
 class ReportGenerator:
@@ -1837,30 +1819,41 @@ def procesar_transferencias_diarias(df):
     return res
 
 
+def extraer_entero(valor):
+    """Extrae un entero de un valor que puede ser string, float o int"""
+    if pd.isna(valor):
+        return 0
+    if isinstance(valor, (int, float)):
+        return int(valor)
+    try:
+        # Limpiar el string: eliminar puntos de miles y convertir a entero
+        limpio = str(valor).replace('.', '').strip()
+        return int(float(limpio))  # primero a float por si tiene decimales
+    except:
+        return 0
+
+
+def to_excel(df):
+    """Convierte DataFrame a bytes de Excel"""
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False, sheet_name='Sheet1')
+    return output.getvalue()
+
+
 # ==============================================================================
-# NUEVA FUNCIÓN PARA MOSTRAR EL DASHBOARD DE KPI DIARIO (DENTRO DE TAB2)
+# FUNCIÓN PARA MOSTRAR EL DASHBOARD DE KPI DIARIO (DENTRO DE TAB2) - SIN HISTORIAL
 # ==============================================================================
 
 def mostrar_kpi_diario():
-    """Dashboard de KPI Diario con clasificación inteligente y gestión de historial"""
+    """Dashboard de KPI Diario con clasificación inteligente - sin persistencia"""
     
     # Inicializar estado de sesión para este submódulo
-    if 'kdi_loaded' not in st.session_state:
-        st.session_state.kdi_loaded = False
+    if 'kdi_data' not in st.session_state:
         st.session_state.kdi_data = pd.DataFrame()
-        st.session_state.kdi_filtered = pd.DataFrame()
     
-    history_mgr = HistoryManager()
     processor = DataProcessor()
     report_gen = ReportGenerator()
-    
-    # Cargar historial existente al inicio si no hay datos cargados
-    if not st.session_state.kdi_loaded:
-        hist = history_mgr.load_history()
-        if not hist.empty:
-            st.session_state.kdi_data = hist
-            st.session_state.kdi_filtered = hist.copy()
-            st.session_state.kdi_loaded = True
     
     # --- Área de carga de archivo ---
     st.markdown("### 📂 Cargar archivo de transferencias diarias")
@@ -1873,24 +1866,20 @@ def mostrar_kpi_diario():
             label_visibility="collapsed"
         )
     with col_up2:
-        if st.button("🔄 Limpiar filtros", key="kdi_clear"):
-            if st.session_state.kdi_loaded:
-                st.session_state.kdi_filtered = st.session_state.kdi_data.copy()
-                st.rerun()
+        if st.button("🔄 Limpiar datos", key="kdi_clear"):
+            st.session_state.kdi_data = pd.DataFrame()
+            st.rerun()
     
     if uploaded:
         with st.spinner("Procesando archivo..."):
             new_data = processor.process_excel_file(uploaded)
             if not new_data.empty:
-                combined = history_mgr.save_to_history(new_data, append=True)
-                st.session_state.kdi_data = combined
-                st.session_state.kdi_filtered = combined.copy()
-                st.session_state.kdi_loaded = True
-                st.success("Datos actualizados en el historial")
+                st.session_state.kdi_data = new_data
+                st.success("✅ Datos cargados correctamente")
                 st.rerun()
     
     # Si no hay datos, mostrar instrucciones
-    if not st.session_state.kdi_loaded or st.session_state.kdi_data.empty:
+    if st.session_state.kdi_data.empty:
         st.info("👆 Sube un archivo para comenzar el análisis.")
         with st.expander("📋 Estructura esperada del archivo"):
             st.markdown("""
@@ -1908,7 +1897,7 @@ def mostrar_kpi_diario():
     # --- FILTROS ---
     st.markdown("### 🔍 Filtros")
     data = st.session_state.kdi_data
-    filtered = st.session_state.kdi_filtered.copy()
+    filtered = data.copy()
     
     col_f1, col_f2, col_f3, col_f4 = st.columns(4)
     with col_f1:
@@ -1916,7 +1905,10 @@ def mostrar_kpi_diario():
             min_d = filtered['Fecha'].min().date()
             max_d = filtered['Fecha'].max().date()
             dr = st.date_input("Rango de fechas", [min_d, max_d], key="kdi_fecha")
-            if len(dr) == 2:
+            # Manejar caso de una sola fecha seleccionada
+            if isinstance(dr, (list, tuple)) and len(dr) == 1:
+                dr = [dr[0], dr[0]]
+            if isinstance(dr, (list, tuple)) and len(dr) == 2:
                 mask = (filtered['Fecha'].dt.date >= dr[0]) & (filtered['Fecha'].dt.date <= dr[1])
                 filtered = filtered[mask].copy()
     with col_f2:
@@ -1938,7 +1930,6 @@ def mostrar_kpi_diario():
             if sel != 'Todas':
                 filtered = filtered[filtered['Categoria'] == sel]
     
-    st.session_state.kdi_filtered = filtered
     st.markdown("---")
     
     # --- KPIs ---
@@ -1951,10 +1942,11 @@ def mostrar_kpi_diario():
     n_transfers = filtered['Secuencial - Factura'].nunique() if 'Secuencial - Factura' in filtered.columns else len(filtered)
     n_products = filtered['Producto'].nunique() if 'Producto' in filtered.columns else 0
     
+    # Usamos colores de la paleta para las tarjetas genéricas (se puede personalizar)
     k1, k2, k3, k4 = st.columns(4)
     with k1:
         st.markdown(f"""
-        <div class='stat-card card-blue'>
+        <div class='stat-card' style="background: {GRADIENTS['PRICE CLUB']}; border-left: 5px solid {COLORS['PRICE CLUB']};">
             <div class='stat-icon'>📦</div>
             <div class='stat-title'>Unidades Totales</div>
             <div class='stat-value'>{total_units:,}</div>
@@ -1962,7 +1954,7 @@ def mostrar_kpi_diario():
         """, unsafe_allow_html=True)
     with k2:
         st.markdown(f"""
-        <div class='stat-card card-green'>
+        <div class='stat-card' style="background: {GRADIENTS['TIENDAS AEROPOSTALE']}; border-left: 5px solid {COLORS['TIENDAS AEROPOSTALE']};">
             <div class='stat-icon'>🏪</div>
             <div class='stat-title'>Bodegas Destino</div>
             <div class='stat-value'>{n_bodegas}</div>
@@ -1970,7 +1962,7 @@ def mostrar_kpi_diario():
         """, unsafe_allow_html=True)
     with k3:
         st.markdown(f"""
-        <div class='stat-card card-purple'>
+        <div class='stat-card' style="background: {GRADIENTS['VENTAS POR MAYOR']}; border-left: 5px solid {COLORS['VENTAS POR MAYOR']};">
             <div class='stat-icon'>📋</div>
             <div class='stat-title'>Transferencias</div>
             <div class='stat-value'>{n_transfers}</div>
@@ -1978,7 +1970,7 @@ def mostrar_kpi_diario():
         """, unsafe_allow_html=True)
     with k4:
         st.markdown(f"""
-        <div class='stat-card card-orange'>
+        <div class='stat-card' style="background: {GRADIENTS['TIENDA WEB']}; border-left: 5px solid {COLORS['TIENDA WEB']};">
             <div class='stat-icon'>👕</div>
             <div class='stat-title'>Productos Únicos</div>
             <div class='stat-value'>{n_products}</div>
@@ -2007,7 +1999,12 @@ def mostrar_kpi_diario():
         if 'Categoria' in filtered.columns:
             cat_sum = filtered.groupby('Categoria')['Cantidad'].sum()
             if not cat_sum.empty:
-                fig = px.pie(values=cat_sum.values, names=cat_sum.index, hole=0.4)
+                # Usar colores de la paleta para las categorías principales
+                fig = px.pie(
+                    values=cat_sum.values, names=cat_sum.index,
+                    hole=0.4,
+                    color_discrete_sequence=CHART_COLORS
+                )
                 fig.update_layout(height=350)
                 st.plotly_chart(fig, use_container_width=True)
     
@@ -2017,14 +2014,18 @@ def mostrar_kpi_diario():
         if 'Fecha' in filtered.columns:
             daily = filtered.groupby(filtered['Fecha'].dt.date)['Cantidad'].sum().reset_index()
             daily.columns = ['Fecha', 'Unidades']
-            fig = px.line(daily, x='Fecha', y='Unidades', markers=True)
+            fig = px.line(daily, x='Fecha', y='Unidades', markers=True, color_discrete_sequence=[COLORS['PRICE CLUB']])
             st.plotly_chart(fig, use_container_width=True)
     with col_g4:
         st.subheader("🎨 Top Colores")
         if 'Color' in filtered.columns:
             col_sum = filtered.groupby('Color')['Cantidad'].sum().nlargest(8)
             if not col_sum.empty:
-                fig = px.bar(x=col_sum.index, y=col_sum.values, color=col_sum.index)
+                fig = px.bar(
+                    x=col_sum.index, y=col_sum.values,
+                    color=col_sum.index,
+                    color_discrete_sequence=CHART_COLORS
+                )
                 st.plotly_chart(fig, use_container_width=True)
     
     st.markdown("---")
@@ -2033,7 +2034,14 @@ def mostrar_kpi_diario():
     st.subheader("📋 Detalle de Transferencias")
     cols_display = ['Fecha', 'Bodega Recibe', 'Producto', 'Genero', 'Categoria', 'Color', 'Talla', 'Cantidad']
     cols_display = [c for c in cols_display if c in filtered.columns]
-    st.dataframe(filtered[cols_display].sort_values('Fecha', ascending=False), use_container_width=True, height=300)
+    
+    # Ordenar solo si 'Fecha' está en las columnas mostradas
+    if 'Fecha' in cols_display:
+        display_df = filtered.sort_values('Fecha', ascending=False)[cols_display]
+    else:
+        display_df = filtered[cols_display]
+    
+    st.dataframe(display_df, use_container_width=True, height=300)
     
     st.markdown("---")
     
@@ -2057,15 +2065,6 @@ def mostrar_kpi_diario():
                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                         use_container_width=True
                     )
-    
-    # Botón para limpiar historial (solo visible en sidebar o expander)
-    with st.expander("⚙️ Administración de historial"):
-        if st.button("🗑️ Eliminar todo el historial", use_container_width=True):
-            history_mgr.clear_history()
-            st.session_state.kdi_loaded = False
-            st.session_state.kdi_data = pd.DataFrame()
-            st.session_state.kdi_filtered = pd.DataFrame()
-            st.rerun()
 
 
 # ==============================================================================
@@ -2172,10 +2171,12 @@ def mostrar_dashboard_transferencias():
                             cantidad = res['por_categoria'].get(cat, 0)
                             sucursales_activas = res['conteo_sucursales'].get(cat, 0)
                             esperadas = sucursales_esperadas.get(cat)
+                            color = COLORS.get(cat_display, '#0033A0')  # fallback azul
+                            gradient = GRADIENTS.get(cat_display, 'linear-gradient(135deg, #0033A015, #0033A030)')
                             with cols[i % 3]:
                                 if cat == 'Fundas':
                                     st.markdown(f"""
-                                    <div class='stat-card card-purple'>
+                                    <div class='stat-card' style="background: {gradient}; border-left: 5px solid {color};">
                                         <div class='stat-title'>{cat_display}</div>
                                         <div class='stat-value'>{cantidad:,}</div>
                                         <div class='metric-subtitle'>Multiplos de 100 ≥ 500 unidades</div>
@@ -2183,7 +2184,7 @@ def mostrar_dashboard_transferencias():
                                     """, unsafe_allow_html=True)
                                 else:
                                     st.markdown(f"""
-                                    <div class='stat-card {'card-blue' if i % 3 == 0 else 'card-green' if i % 3 == 1 else 'card-orange'}'>
+                                    <div class='stat-card' style="background: {gradient}; border-left: 5px solid {color};">
                                         <div class='stat-title'>{cat_display}</div>
                                         <div class='stat-value'>{cantidad:,}</div>
                                         <div class='metric-subtitle'>{sucursales_activas} sucursales | {esperadas} esperadas</div>
@@ -2207,7 +2208,7 @@ def mostrar_dashboard_transferencias():
                                     values='Unidades',
                                     names='Categoria',
                                     title="Distribucion por Categoria",
-                                    color_discrete_sequence=['#0033A0', '#E4002B', '#10B981', '#8B5CF6', '#F59E0B', '#3B82F6'],
+                                    color_discrete_sequence=CHART_COLORS,
                                     hole=0.3
                                 )
                                 fig_pie.update_traces(textposition='inside', textinfo='percent+label')
@@ -2267,7 +2268,7 @@ def mostrar_dashboard_transferencias():
                                     y=df_barras['Porcentaje'],
                                     text=[f"{p:.1f}%" for p in df_barras['Porcentaje']],
                                     textposition='auto',
-                                    marker_color=['#0033A0', '#E4002B', '#10B981', '#8B5CF6', '#F59E0B']
+                                    marker_color=CHART_COLORS[:5]
                                 )
                             ])
                             fig_barras.update_layout(title="Distribucion por Categoria (excl. Fundas)", yaxis_title="Porcentaje (%)", xaxis_title="Categoria", template="plotly_white", height=400)
@@ -2305,7 +2306,6 @@ def mostrar_dashboard_transferencias():
                 st.error(f"❌ **Error al procesar el archivo:** {str(e)}")
     
     with tab2:
-        # NUEVO: Dashboard de KPI Diario
         mostrar_kpi_diario()
     
     with tab3:
