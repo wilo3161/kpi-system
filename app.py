@@ -1340,10 +1340,6 @@ def show_dashboard_kpis():
 # ==============================================================================
 # 7. MODULO DASHBOARD LOGISTICO
 # ==============================================================================
-
-# 7. MODULO DASHBOARD LOGISTICO
-# ==============================================================================
-
 # ==============================================================================
 # 7. MODULO DASHBOARD LOGISTICO
 # ==============================================================================
@@ -1373,8 +1369,9 @@ TIENDAS_REGULARES_LISTA = [
 ]
 
 # ==============================================================================
-# NUEVAS CLASES PARA EL SISTEMA DE KPI DIARIO (MERCADERÍA EN TRÁNSITO)
+# NUEVAS IMPORTACIONES Y CLASES PARA EL SISTEMA DE KPI DIARIO
 # ==============================================================================
+import os  # necesario para la gestión del archivo de historial
 
 # Diccionarios para clasificación de productos
 GENDER_MAP = {
@@ -1680,21 +1677,19 @@ class HistoryManager:
         self.path = path
     
     def load_history(self) -> pd.DataFrame:
-        if os.path.exists(self.path):
-            try:
-                df = pd.read_parquet(self.path)
-                if 'Fecha' in df.columns:
-                    df['Fecha'] = pd.to_datetime(df['Fecha'])
-                if 'Cantidad' in df.columns:
-                    df['Cantidad'] = pd.to_numeric(df['Cantidad'], errors='coerce')
-                return df
-            except:
-                return pd.DataFrame()
-        return pd.DataFrame()
+        try:
+            df = pd.read_parquet(self.path)
+            if 'Fecha' in df.columns:
+                df['Fecha'] = pd.to_datetime(df['Fecha'])
+            if 'Cantidad' in df.columns:
+                df['Cantidad'] = pd.to_numeric(df['Cantidad'], errors='coerce')
+            return df
+        except:
+            return pd.DataFrame()
     
     def save_to_history(self, new_data: pd.DataFrame, append=True) -> pd.DataFrame:
         try:
-            if append and os.path.exists(self.path):
+            if append:
                 hist = self.load_history()
                 if not hist.empty:
                     key_cols = ['ID_Transferencia'] if 'ID_Transferencia' in new_data.columns else []
@@ -1714,9 +1709,11 @@ class HistoryManager:
             return new_data if not append else self.load_history()
     
     def clear_history(self):
-        if os.path.exists(self.path):
+        try:
             os.remove(self.path)
             st.success("Historial eliminado")
+        except:
+            st.warning("No había historial para eliminar")
 
 
 class ReportGenerator:
@@ -2082,7 +2079,7 @@ def mostrar_dashboard_transferencias():
     tab1, tab2, tab3 = st.tabs(["📊 Transferencias Diarias", "📦 Mercadería en Tránsito (KPI Diario)", "📈 Análisis de Stock"])
     
     with tab1:
-        # Contenido original de Transferencias Diarias (sin cambios)
+        # --- Carga de archivo original ---
         st.markdown("""
         <div class='filter-panel'>
             <h4>📂 Carga de Archivo de Transferencias</h4>
@@ -2105,30 +2102,372 @@ def mostrar_dashboard_transferencias():
         
         if not file_diario:
             st.info("👆 **Por favor, sube un archivo Excel desde el panel superior para comenzar el analisis.**")
-            # ... (mostrar ejemplo, etc. - igual que en el original)
-            # Aquí se puede copiar el código original de la pestaña 1
-            # Por brevedad, no repito todo, pero en la respuesta final debe ir completo
-            # (En el código final incluiré el contenido original de tab1)
+            st.markdown("### 📋 Estructura del archivo esperado:")
+            ejemplo_data = pd.DataFrame({
+                'Secuencial': ['TR001', 'TR002', 'TR003', 'TR004'],
+                'Sucursal Destino': ['PRICE CLUB QUITO', 'AERO MALL DEL SOL', 'VENTAS POR MAYOR', 'TIENDA WEB'],
+                'Cantidad Prendas': [1500, 245, 5000, 120],
+                'Bodega Destino': ['BODEGA CENTRAL', 'BODEGA NORTE', 'BODEGA CENTRAL', 'BODEGA WEB']
+            })
+            st.dataframe(ejemplo_data, use_container_width=True)
+            st.markdown("""
+            ### 📝 Columnas requeridas:
+            1. **Secuencial**: Numero unico de transferencia
+            2. **Sucursal Destino** o **Bodega Destino**: Nombre de la tienda destino
+            3. **Cantidad Prendas**: Cantidad de unidades a transferir
+            
+            ### 🎯 Categorias automaticas:
+            - **Price Club**: Contiene "PRICE" o "OIL" en el nombre
+            - **Tienda Web**: Contiene "WEB", "TIENDA MOVIL" o "MOVIL"
+            - **Fallas**: Contiene "FALLAS"
+            - **Ventas por Mayor**: Contiene "MAYOR" o "MAYORISTA"
+            - **Fundas**: Cantidad ≥ 500 y multiplo de 100
+            - **Tiendas**: Todas las demas transferencias
+            """)
         else:
             try:
                 df_diario = pd.read_excel(file_diario)
-                # ... (todo el procesamiento original)
-                st.success(f"✅ Archivo cargado: {file_diario.name}")
-                # Resto del código...
+                st.success(f"✅ Archivo cargado exitosamente: {file_diario.name}")
+                with st.expander("🔍 Vista previa del archivo cargado", expanded=True):
+                    st.dataframe(df_diario.head(10), use_container_width=True)
+                    st.info(f"📊 **Total de filas:** {len(df_diario)} | **Total de columnas:** {len(df_diario.columns)}")
+                    st.write("**Columnas detectadas:**")
+                    for col in df_diario.columns:
+                        st.write(f"- `{col}`")
+                
+                columnas_requeridas = ['Secuencial', 'Cantidad Prendas']
+                columnas_destino = ['Sucursal Destino', 'Bodega Destino']
+                faltan_requeridas = [col for col in columnas_requeridas if col not in df_diario.columns]
+                if faltan_requeridas:
+                    st.error(f"❌ **Columnas faltantes:** {faltan_requeridas}")
+                else:
+                    tiene_destino = any(col in df_diario.columns for col in columnas_destino)
+                    if not tiene_destino:
+                        st.error("❌ **No se encontro columna de destino.**")
+                    else:
+                        res = procesar_transferencias_diarias(df_diario)
+                        st.header("📈 KPIs por Categoria")
+                        categorias_display = {
+                            'Price Club': 'PRICE CLUB',
+                            'Tiendas': 'TIENDAS AEROPOSTALE',
+                            'Ventas por Mayor': 'VENTAS POR MAYOR',
+                            'Tienda Web': 'TIENDA WEB',
+                            'Fallas': 'FALLAS',
+                            'Fundas': 'FUNDAS'
+                        }
+                        sucursales_esperadas = {
+                            'Price Club': PRICE_CLUBS,
+                            'Tiendas': TIENDAS_REGULARES,
+                            'Ventas por Mayor': VENTAS_POR_MAYOR,
+                            'Tienda Web': TIENDA_WEB,
+                            'Fallas': FALLAS,
+                            'Fundas': None
+                        }
+                        cols = st.columns(3)
+                        for i, (cat, cat_display) in enumerate(categorias_display.items()):
+                            cantidad = res['por_categoria'].get(cat, 0)
+                            sucursales_activas = res['conteo_sucursales'].get(cat, 0)
+                            esperadas = sucursales_esperadas.get(cat)
+                            with cols[i % 3]:
+                                if cat == 'Fundas':
+                                    st.markdown(f"""
+                                    <div class='stat-card card-purple'>
+                                        <div class='stat-title'>{cat_display}</div>
+                                        <div class='stat-value'>{cantidad:,}</div>
+                                        <div class='metric-subtitle'>Multiplos de 100 ≥ 500 unidades</div>
+                                    </div>
+                                    """, unsafe_allow_html=True)
+                                else:
+                                    st.markdown(f"""
+                                    <div class='stat-card {'card-blue' if i % 3 == 0 else 'card-green' if i % 3 == 1 else 'card-orange'}'>
+                                        <div class='stat-title'>{cat_display}</div>
+                                        <div class='stat-value'>{cantidad:,}</div>
+                                        <div class='metric-subtitle'>{sucursales_activas} sucursales | {esperadas} esperadas</div>
+                                    </div>
+                                    """, unsafe_allow_html=True)
+                            if i == 2:
+                                cols = st.columns(3)
+                        st.divider()
+                        
+                        # Sección 2: Gráfico de pastel
+                        st.header("📊 Analisis Visual")
+                        col1, col2 = st.columns([2, 1])
+                        with col1:
+                            categorias_pie = list(res['por_categoria'].keys())
+                            valores_pie = list(res['por_categoria'].values())
+                            df_pie = pd.DataFrame({'Categoria': categorias_pie, 'Unidades': valores_pie})
+                            df_pie = df_pie[df_pie['Unidades'] > 0]
+                            if not df_pie.empty:
+                                fig_pie = px.pie(
+                                    df_pie,
+                                    values='Unidades',
+                                    names='Categoria',
+                                    title="Distribucion por Categoria",
+                                    color_discrete_sequence=['#0033A0', '#E4002B', '#10B981', '#8B5CF6', '#F59E0B', '#3B82F6'],
+                                    hole=0.3
+                                )
+                                fig_pie.update_traces(textposition='inside', textinfo='percent+label')
+                                fig_pie.update_layout(height=500, showlegend=True)
+                                st.plotly_chart(fig_pie, use_container_width=True)
+                            else:
+                                st.info("No hay datos para mostrar el grafico de pastel")
+                        with col2:
+                            st.subheader("TOTAL GENERAL")
+                            st.markdown(f"""
+                            <div class='metric-card'>
+                                <div class='metric-value'>{res['total_unidades']:,}</div>
+                                <div class='metric-subtitle'>Suma de todas las unidades</div>
+                            </div>
+                            """, unsafe_allow_html=True)
+                            promedio = res['total_unidades'] / res['transferencias'] if res['transferencias'] > 0 else 0
+                            st.markdown(f"""
+                            <div class='metric-card'>
+                                <div class='metric-title'>PROMEDIO X TRANSFERENCIA</div>
+                                <div class='metric-value'>{promedio:,.0f}</div>
+                            </div>
+                            """, unsafe_allow_html=True)
+                            categorias_activas = sum(1 for cat in res['por_categoria'].values() if cat > 0)
+                            st.markdown(f"""
+                            <div class='metric-card'>
+                                <div class='metric-title'>CATEGORIAS ACTIVAS</div>
+                                <div class='metric-value'>{categorias_activas}/6</div>
+                            </div>
+                            """, unsafe_allow_html=True)
+                            porcentaje_fundas = (res['por_categoria'].get('Fundas', 0) / res['total_unidades']) * 100 if res['total_unidades'] > 0 else 0
+                            st.markdown(f"""
+                            <div class='metric-card'>
+                                <div class='metric-title'>% FUNDAS</div>
+                                <div class='metric-value'>{porcentaje_fundas:.1f}%</div>
+                            </div>
+                            """, unsafe_allow_html=True)
+                        st.divider()
+                        
+                        # Sección 3: Distribución excluyendo fundas
+                        st.header("📊 Distribucion Excluyendo Fundas")
+                        categorias_excl = ['Price Club', 'Tiendas', 'Ventas por Mayor', 'Tienda Web', 'Fallas']
+                        valores_excl = [res['por_categoria'].get(cat, 0) for cat in categorias_excl]
+                        total_excl = sum(valores_excl)
+                        if total_excl > 0:
+                            df_barras = pd.DataFrame({
+                                'Categoria': ['Tienda Web', 'Price Club', 'Ventas por Mayor', 'Tiendas', 'Fallas'],
+                                'Unidades': [res['por_categoria'].get('Tienda Web', 0),
+                                             res['por_categoria'].get('Price Club', 0),
+                                             res['por_categoria'].get('Ventas por Mayor', 0),
+                                             res['por_categoria'].get('Tiendas', 0),
+                                             res['por_categoria'].get('Fallas', 0)]
+                            })
+                            df_barras['Porcentaje'] = (df_barras['Unidades'] / total_excl) * 100
+                            fig_barras = go.Figure(data=[
+                                go.Bar(
+                                    x=df_barras['Categoria'],
+                                    y=df_barras['Porcentaje'],
+                                    text=[f"{p:.1f}%" for p in df_barras['Porcentaje']],
+                                    textposition='auto',
+                                    marker_color=['#0033A0', '#E4002B', '#10B981', '#8B5CF6', '#F59E0B']
+                                )
+                            ])
+                            fig_barras.update_layout(title="Distribucion por Categoria (excl. Fundas)", yaxis_title="Porcentaje (%)", xaxis_title="Categoria", template="plotly_white", height=400)
+                            st.plotly_chart(fig_barras, use_container_width=True)
+                            st.dataframe(df_barras[['Categoria', 'Unidades', 'Porcentaje']].sort_values('Porcentaje', ascending=False), use_container_width=True)
+                        else:
+                            st.info("No hay datos para mostrar la distribucion (excluyendo Fundas)")
+                        st.divider()
+                        
+                        # Sección 4: Detalle y exportación
+                        st.header("📄 Detalle por Secuencial")
+                        df_detalle = res['df_procesado'][['Sucursal Destino', 'Secuencial', 'Cantidad_Entera', 'Categoria']].copy()
+                        with st.expander("📋 Resumen Estadistico", expanded=True):
+                            st.dataframe(
+                                pd.DataFrame.from_dict(res['detalle_categoria'], orient='index')
+                                .reset_index()
+                                .rename(columns={'index': 'Categoria', 'cantidad': 'Unidades', 'transf': 'Transferencias', 'unicas': 'Sucursales Unicas'}),
+                                use_container_width=True
+                            )
+                        col_d1, col_d2 = st.columns([1, 4])
+                        with col_d1:
+                            excel_data = to_excel(df_detalle)
+                            st.download_button(
+                                label="📥 Descargar Excel",
+                                data=excel_data,
+                                file_name=f"detalle_transferencias_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
+                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                use_container_width=True
+                            )
+                        st.dataframe(
+                            df_detalle.rename(columns={'Sucursal Destino': 'Sucursal', 'Cantidad_Entera': 'Cantidad', 'Categoria': 'Categoria'}),
+                            use_container_width=True, height=400
+                        )
             except Exception as e:
-                st.error(f"Error: {e}")
+                st.error(f"❌ **Error al procesar el archivo:** {str(e)}")
     
     with tab2:
         # NUEVO: Dashboard de KPI Diario
         mostrar_kpi_diario()
     
     with tab3:
-        # Contenido original de Análisis de Stock (sin cambios)
+        # --- Análisis de Stock (original) ---
         st.header("📈 Analisis de Stock y Ventas")
-        # ... (código original de tab3)
-        st.info("Esta pestaña requiere archivos de stock y ventas.")
+        with st.container():
+            st.subheader("📂 Carga de Datos para Analisis")
+            col_stock1, col_stock2 = st.columns(2)
+            with col_stock1:
+                stock_file = st.file_uploader("Archivo de Stock Actual", type=['xlsx', 'csv'], key="stock_file")
+            with col_stock2:
+                ventas_file = st.file_uploader("Archivo Historico de Ventas", type=['xlsx', 'csv'], key="ventas_file")
+            
+            if stock_file and ventas_file:
+                try:
+                    df_stock = pd.read_excel(stock_file) if stock_file.name.endswith('.xlsx') else pd.read_csv(stock_file)
+                    df_ventas = pd.read_excel(ventas_file) if ventas_file.name.endswith('.xlsx') else pd.read_csv(ventas_file)
+                    
+                    st.subheader("📊 Metricas Rapidas")
+                    col_metrics1, col_metrics2, col_metrics3, col_metrics4 = st.columns(4)
+                    with col_metrics1:
+                        st.markdown(f"""
+                        <div class='metric-card'>
+                            <div class='metric-title'>Total SKUs</div>
+                            <div class='metric-value'>{len(df_stock):,}</div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                    with col_metrics2:
+                        if 'Stock' in df_stock.columns:
+                            total_stock = df_stock['Stock'].sum()
+                            st.markdown(f"""
+                            <div class='metric-card'>
+                                <div class='metric-title'>Total Unidades</div>
+                                <div class='metric-value'>{total_stock:,}</div>
+                            </div>
+                            """, unsafe_allow_html=True)
+                        else:
+                            st.info("Columna 'Stock' no encontrada")
+                    with col_metrics3:
+                        if 'VENTAS' in df_ventas.columns:
+                            total_ventas = df_ventas['VENTAS'].sum()
+                            st.markdown(f"""
+                            <div class='metric-card'>
+                                <div class='metric-title'>Ventas Totales</div>
+                                <div class='metric-value'>{total_ventas:,}</div>
+                            </div>
+                            """, unsafe_allow_html=True)
+                        else:
+                            st.info("Columna 'VENTAS' no encontrada")
+                    with col_metrics4:
+                        if 'FECHA' in df_ventas.columns:
+                            df_ventas['FECHA'] = pd.to_datetime(df_ventas['FECHA'], errors='coerce')
+                            dias_analizados = df_ventas['FECHA'].nunique()
+                            st.markdown(f"""
+                            <div class='metric-card'>
+                                <div class='metric-title'>Dias Analizados</div>
+                                <div class='metric-value'>{dias_analizados}</div>
+                            </div>
+                            """, unsafe_allow_html=True)
+                        else:
+                            st.info("Columna 'FECHA' no encontrada")
+                    
+                    st.subheader("📊 Analisis ABC de Stock")
+                    if 'Stock' in df_stock.columns and 'CODIGO' in df_stock.columns:
+                        df_stock_sorted = df_stock.sort_values('Stock', ascending=False)
+                        df_stock_sorted['Stock_Acumulado'] = df_stock_sorted['Stock'].cumsum()
+                        total_stock_val = df_stock_sorted['Stock'].sum()
+                        df_stock_sorted['Porcentaje_Acumulado'] = (df_stock_sorted['Stock_Acumulado'] / total_stock_val) * 100
+                        df_stock_sorted['Clasificacion_ABC'] = pd.cut(
+                            df_stock_sorted['Porcentaje_Acumulado'],
+                            bins=[0, 80, 95, 100],
+                            labels=['A', 'B', 'C']
+                        )
+                        resumen_abc = df_stock_sorted.groupby('Clasificacion_ABC').agg({
+                            'CODIGO': 'count',
+                            'Stock': 'sum'
+                        }).rename(columns={'CODIGO': 'SKUs', 'Stock': 'Unidades'})
+                        fig_abc = px.pie(
+                            resumen_abc.reset_index(),
+                            values='Unidades',
+                            names='Clasificacion_ABC',
+                            title="Distribucion ABC del Stock",
+                            color_discrete_sequence=['#0033A0', '#E4002B', '#10B981'],
+                            hole=0.4
+                        )
+                        col_abc1, col_abc2 = st.columns([2, 1])
+                        with col_abc1:
+                            st.plotly_chart(fig_abc, use_container_width=True)
+                        with col_abc2:
+                            st.dataframe(resumen_abc, use_container_width=True)
+                    else:
+                        st.warning("Para el analisis ABC se requieren las columnas 'CODIGO' y 'Stock'")
+                    
+                    st.subheader("🔄 Analisis de Rotacion")
+                    if 'VENTAS' in df_ventas.columns and 'CODIGO' in df_ventas.columns:
+                        ventas_por_producto = df_ventas.groupby('CODIGO')['VENTAS'].sum().reset_index()
+                        if 'CODIGO' in df_stock.columns and 'Stock' in df_stock.columns:
+                            df_rotacion = pd.merge(
+                                df_stock[['CODIGO', 'Stock']],
+                                ventas_por_producto,
+                                on='CODIGO',
+                                how='left'
+                            )
+                            df_rotacion['VENTAS'] = df_rotacion['VENTAS'].fillna(0)
+                            df_rotacion['Rotacion'] = df_rotacion.apply(
+                                lambda x: x['VENTAS'] / x['Stock'] if x['Stock'] > 0 else 0,
+                                axis=1
+                            )
+                            df_rotacion['Nivel_Rotacion'] = pd.cut(
+                                df_rotacion['Rotacion'],
+                                bins=[-1, 0.1, 0.5, 1, 10, float('inf')],
+                                labels=['Muy Baja', 'Baja', 'Media', 'Alta', 'Muy Alta']
+                            )
+                            resumen_rotacion = df_rotacion.groupby('Nivel_Rotacion').agg({
+                                'CODIGO': 'count',
+                                'Stock': 'sum',
+                                'VENTAS': 'sum'
+                            }).rename(columns={'CODIGO': 'SKUs', 'Stock': 'Stock_Total', 'VENTAS': 'Ventas_Total'})
+                            st.dataframe(resumen_rotacion, use_container_width=True)
+                            fig_rotacion = go.Figure(data=[
+                                go.Bar(
+                                    x=resumen_rotacion.index,
+                                    y=resumen_rotacion['SKUs'],
+                                    text=resumen_rotacion['SKUs'],
+                                    textposition='auto',
+                                    marker_color='#FFA07A'
+                                )
+                            ])
+                            fig_rotacion.update_layout(title="SKUs por Nivel de Rotacion", xaxis_title="Nivel de Rotacion", yaxis_title="Cantidad de SKUs", template="plotly_white", height=400)
+                            st.plotly_chart(fig_rotacion, use_container_width=True)
+                    else:
+                        st.info("Para el analisis de rotacion se requieren las columnas 'CODIGO' y 'VENTAS'")
+                    
+                    st.subheader("🔮 Prediccion con Random Forest")
+                    st.info("Funcionalidad en Desarrollo...")
+                    
+                    with st.expander("📋 Ver Datos Cargados"):
+                        col_raw1, col_raw2 = st.columns(2)
+                        with col_raw1:
+                            st.write("**Datos de Stock:**")
+                            st.dataframe(df_stock.head(20), use_container_width=True)
+                        with col_raw2:
+                            st.write("**Datos de Ventas:**")
+                            st.dataframe(df_ventas.head(20), use_container_width=True)
+                except Exception as e:
+                    st.error(f"Error al procesar los archivos: {str(e)}")
+            else:
+                st.info("👈 Por favor, carga ambos archivos para realizar el analisis de stock y ventas.")
+                with st.expander("ℹ️ Informacion sobre los archivos requeridos"):
+                    st.markdown("""
+                    **Archivo de Stock Actual debe contener:**
+                    - CODIGO: Codigo del producto
+                    - PRODUCTO: Descripcion del producto
+                    - Stock: Cantidad disponible
+                    - DEPARTAMENTO: Categoria del producto
+                    
+                    **Archivo Historico de Ventas debe contener:**
+                    - CODIGO: Codigo del producto
+                    - FECHA: Fecha de la venta
+                    - VENTAS: Cantidad vendida
+                    - SUCURSAL: Sucursal donde se realizo la venta
+                    """)
+
 
 def show_dashboard_logistico():
+    """Dashboard de logistica y transferencias - MEJORADO"""
     add_back_button()
     show_module_header(
         "📦 Dashboard Logistico",
