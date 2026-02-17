@@ -1337,7 +1337,7 @@ def show_dashboard_kpis():
     
     st.markdown('</div>', unsafe_allow_html=True)
 
-# ==============================================================================
+## ==============================================================================
 # 7. MODULO DASHBOARD LOGISTICO - VERSION FINAL CORREGIDA
 # ==============================================================================
 
@@ -1897,38 +1897,44 @@ class TransitDataProcessor:
 
 
 # ==============================================================================
-# FUNCIONES DE PROCESAMIENTO DE TRANSFERENCIAS DIARIAS (MEJORADAS PARA ROBUSTEZ)
+# FUNCIONES ORIGINALES DE PROCESAMIENTO DE TRANSFERENCIAS DIARIAS (restauradas)
 # ==============================================================================
 
-def detectar_columna(df, posibles, obligatoria=False, nombre_amigable=""):
-    """Detecta una columna en el dataframe basado en una lista de posibles nombres."""
-    for col in df.columns:
-        col_upper = col.strip().upper()
-        for posible in posibles:
-            if posible.upper() in col_upper:
-                return col
-    if obligatoria:
-        st.error(f"❌ No se encontró la columna {nombre_amigable}. Se esperaba una de: {', '.join(posibles)}")
-    return None
-
 def clasificar_transferencia(row):
-    sucursal = str(row.get('destino', '')).upper()
+    """Clasifica las transferencias por categoria (versión original)"""
+    # Buscar en las posibles columnas de destino
+    if 'Sucursal Destino' in row and pd.notna(row['Sucursal Destino']):
+        sucursal = str(row['Sucursal Destino']).upper()
+    elif 'Bodega Destino' in row and pd.notna(row['Bodega Destino']):
+        sucursal = str(row['Bodega Destino']).upper()
+    else:
+        sucursal = ''
+    
     cantidad = row.get('Cantidad_Entera', 0)
     if cantidad >= 500 and cantidad % 100 == 0:
         return 'Fundas'
-    if any(kw in sucursal for kw in PRICE_KEYWORDS): return 'Price Club'
-    if any(kw in sucursal for kw in WEB_KEYWORDS): return 'Tienda Web'
-    if any(kw in sucursal for kw in FALLAS_KEYWORDS): return 'Fallas'
-    if any(kw in sucursal for kw in VENTAS_MAYOR_KEYWORDS): return 'Ventas por Mayor'
-    if any(tienda.upper() in sucursal for tienda in TIENDAS_REGULARES_LISTA): return 'Tiendas'
+    if any(kw in sucursal for kw in PRICE_KEYWORDS): 
+        return 'Price Club'
+    if any(kw in sucursal for kw in WEB_KEYWORDS): 
+        return 'Tienda Web'
+    if any(kw in sucursal for kw in FALLAS_KEYWORDS): 
+        return 'Fallas'
+    if any(kw in sucursal for kw in VENTAS_MAYOR_KEYWORDS): 
+        return 'Ventas por Mayor'
+    if any(tienda.upper() in sucursal for tienda in TIENDAS_REGULARES_LISTA): 
+        return 'Tiendas'
     tiendas_kw = ['AERO', 'MALL', 'CENTRO', 'SHOPPING', 'PLAZA', 'RIOCENTRO']
-    if any(kw in sucursal for kw in tiendas_kw): return 'Tiendas'
+    if any(kw in sucursal for kw in tiendas_kw): 
+        return 'Tiendas'
     return 'Ventas por Mayor'
 
 def extraer_entero(valor):
+    """Extrae valor entero de diferentes formatos"""
     try:
-        if pd.isna(valor): return 0
-        if isinstance(valor, (int, float)): return int(valor)
+        if pd.isna(valor):
+            return 0
+        if isinstance(valor, (int, float)):
+            return int(valor)
         if isinstance(valor, str):
             valor_limpio = valor.replace(',', '').replace("'", "").strip()
             return int(float(valor_limpio))
@@ -1937,22 +1943,9 @@ def extraer_entero(valor):
         return 0
 
 def procesar_transferencias_diarias(df):
-    """Procesa las transferencias diarias con detección flexible de columnas."""
+    """Procesa las transferencias diarias con la lógica original que funcionaba"""
     try:
         df = df.copy()
-        
-        # Detectar columnas
-        col_secuencial = detectar_columna(df, ['Secuencial', 'SECUENCIAL', 'Secuencial - Factura'], obligatoria=True, nombre_amigable="Secuencial")
-        col_cantidad = detectar_columna(df, ['Cantidad Prendas', 'CANTIDAD PRENDAS', 'Cantidad', 'CANTIDAD'], obligatoria=True, nombre_amigable="Cantidad Prendas")
-        col_destino = detectar_columna(df, ['Sucursal Destino', 'SUCURSAL DESTINO', 'Bodega Destino', 'BODEGA DESTINO', 'Destino', 'DESTINO'], obligatoria=True, nombre_amigable="Destino")
-        
-        if not col_secuencial or not col_cantidad or not col_destino:
-            return None
-        
-        # Renombrar para facilitar el procesamiento
-        df = df.rename(columns={col_secuencial: 'Secuencial', col_cantidad: 'Cantidad Prendas', col_destino: 'destino'})
-        
-        # Limpiar secuenciales
         df = df.dropna(subset=['Secuencial'])
         df['Secuencial'] = df['Secuencial'].astype(str).str.strip()
         df = df[df['Secuencial'] != '']
@@ -1979,10 +1972,15 @@ def procesar_transferencias_diarias(df):
             df_cat = df[df['Categoria'] == cat]
             res['por_categoria'][cat] = int(df_cat['Cantidad_Entera'].sum())
             if not df_cat.empty:
+                # Determinar columna de destino para contar sucursales únicas
+                if 'Sucursal Destino' in df_cat.columns:
+                    sucursal_col = 'Sucursal Destino'
+                else:
+                    sucursal_col = 'Bodega Destino'
                 res['detalle_categoria'][cat] = {
                     'cantidad': int(df_cat['Cantidad_Entera'].sum()),
                     'transf': int(df_cat['Secuencial'].nunique()),
-                    'unicas': int(df_cat['destino'].nunique())
+                    'unicas': int(df_cat[sucursal_col].nunique())
                 }
                 res['conteo_sucursales'][cat] = res['detalle_categoria'][cat]['unicas']
             else:
@@ -2044,7 +2042,7 @@ def mostrar_metricas_kpis(res: Dict, container):
             cols = container.columns(3)
 
 # ==============================================================================
-# DASHBOARD DE KPI DIARIO (TAB2)
+# DASHBOARD DE KPI DIARIO (TAB2) - SIN CAMBIOS
 # ==============================================================================
 
 def mostrar_kpi_diario():
@@ -2296,7 +2294,7 @@ def mostrar_dashboard_transferencias():
         "📈 Análisis de Stock (En desarrollo)"
     ])
     
-    # ===== TAB 1: Transferencias Diarias (corregida) =====
+    # ===== TAB 1: Transferencias Diarias (restaurada con estilos mejorados) =====
     with tab1:
         st.markdown("""
         <div class='filter-panel'>
@@ -2353,120 +2351,142 @@ def mostrar_dashboard_transferencias():
                     for col in df_diario.columns:
                         st.write(f"- `{col}`")
                 
-                # Procesar con la función mejorada
-                res = procesar_transferencias_diarias(df_diario)
+                # Verificar columnas requeridas
+                columnas_requeridas = ['Secuencial', 'Cantidad Prendas']
+                columnas_destino = ['Sucursal Destino', 'Bodega Destino']
                 
-                if res is None:
-                    st.error("❌ No se pudo procesar el archivo. Verifica que tenga las columnas requeridas.")
+                faltan_requeridas = [col for col in columnas_requeridas if col not in df_diario.columns]
+                if faltan_requeridas:
+                    st.error(f"❌ **Columnas faltantes:** {faltan_requeridas}")
+                    st.info("Por favor, verifica que tu archivo tenga las columnas requeridas.")
                 else:
-                    # --- SECCION 1: KPIs POR CATEGORIA ---
-                    st.header("📈 KPIs por Categoría")
-                    mostrar_metricas_kpis(res, st)
-                    st.divider()
-                    
-                    # --- SECCION 2: GRAFICO DE PASTEL Y ANALISIS VISUAL ---
-                    st.header("📊 Análisis Visual")
-                    col1, col2 = st.columns([2, 1])
-                    with col1:
-                        df_pie = pd.DataFrame({
-                            'Categoria': list(res['por_categoria'].keys()),
-                            'Unidades': list(res['por_categoria'].values())
-                        })
-                        df_pie = df_pie[df_pie['Unidades'] > 0]
-                        if not df_pie.empty:
-                            fig_pie = px.pie(
-                                df_pie,
-                                values='Unidades',
-                                names='Categoria',
-                                title="Distribución por Categoría (Gráfico de Pastel)",
-                                color_discrete_sequence=['#0033A0', '#E4002B', '#10B981', '#8B5CF6', '#F59E0B', '#3B82F6'],
-                                hole=0.3
-                            )
-                            fig_pie.update_traces(textposition='inside', textinfo='percent+label')
-                            fig_pie.update_layout(height=500)
-                            st.plotly_chart(fig_pie, use_container_width=True)
-                        else:
-                            st.info("No hay datos para mostrar el gráfico de pastel")
-                    with col2:
-                        st.markdown(f"""
-                        <div style='background: linear-gradient(135deg, #0033A020, #0033A040); padding:20px; border-radius:10px; border-left:5px solid #0033A0; margin-bottom:10px;'>
-                            <div style='font-size:14px; color:#666;'>TOTAL UNIDADES</div>
-                            <div style='font-size:32px; font-weight:bold; color:#0033A0;'>{res['total_unidades']:,}</div>
-                        </div>
-                        """, unsafe_allow_html=True)
-                        promedio = res['total_unidades'] / res['transferencias'] if res['transferencias']>0 else 0
-                        st.markdown(f"""
-                        <div style='background: linear-gradient(135deg, #10B98120, #10B98140); padding:20px; border-radius:10px; border-left:5px solid #10B981; margin-bottom:10px;'>
-                            <div style='font-size:14px; color:#666;'>PROMEDIO X TRANSFERENCIA</div>
-                            <div style='font-size:32px; font-weight:bold; color:#10B981;'>{promedio:,.0f}</div>
-                        </div>
-                        """, unsafe_allow_html=True)
-                        categorias_activas = sum(1 for cat in res['por_categoria'].values() if cat > 0)
-                        st.markdown(f"""
-                        <div style='background: linear-gradient(135deg, #8B5CF620, #8B5CF640); padding:20px; border-radius:10px; border-left:5px solid #8B5CF6; margin-bottom:10px;'>
-                            <div style='font-size:14px; color:#666;'>CATEGORÍAS ACTIVAS</div>
-                            <div style='font-size:32px; font-weight:bold; color:#8B5CF6;'>{categorias_activas}/6</div>
-                        </div>
-                        """, unsafe_allow_html=True)
-                        porcentaje_fundas = (res['por_categoria'].get('Fundas', 0) / res['total_unidades']) * 100 if res['total_unidades'] > 0 else 0
-                        st.markdown(f"""
-                        <div style='background: linear-gradient(135deg, #EC489920, #EC489940); padding:20px; border-radius:10px; border-left:5px solid #EC4899; margin-bottom:10px;'>
-                            <div style='font-size:14px; color:#666;'>% FUNDAS</div>
-                            <div style='font-size:32px; font-weight:bold; color:#EC4899;'>{porcentaje_fundas:.1f}%</div>
-                        </div>
-                        """, unsafe_allow_html=True)
-                    st.divider()
-                    
-                    # --- SECCION 3: DISTRIBUCION EXCLUYENDO FUNDAS ---
-                    st.header("📊 Distribución Excluyendo Fundas")
-                    categorias_excl = ['Price Club', 'Tiendas', 'Ventas por Mayor', 'Tienda Web', 'Fallas']
-                    valores_excl = [res['por_categoria'].get(cat, 0) for cat in categorias_excl]
-                    total_excl = sum(valores_excl)
-                    if total_excl > 0:
-                        df_barras = pd.DataFrame({
-                            'Categoria': categorias_excl,
-                            'Unidades': valores_excl
-                        })
-                        df_barras['Porcentaje'] = (df_barras['Unidades'] / total_excl) * 100
-                        fig_barras = go.Figure(data=[
-                            go.Bar(
-                                x=df_barras['Categoria'],
-                                y=df_barras['Porcentaje'],
-                                text=[f"{p:.1f}%" for p in df_barras['Porcentaje']],
-                                textposition='auto',
-                                marker_color=['#0033A0', '#E4002B', '#10B981', '#8B5CF6', '#F59E0B']
-                            )
-                        ])
-                        fig_barras.update_layout(
-                            title="Distribución por Categoría (excluyendo Fundas)",
-                            yaxis_title="Porcentaje (%)",
-                            xaxis_title="Categoría",
-                            height=400
-                        )
-                        st.plotly_chart(fig_barras, use_container_width=True)
-                        st.dataframe(df_barras.sort_values('Porcentaje', ascending=False), use_container_width=True)
+                    tiene_destino = any(col in df_diario.columns for col in columnas_destino)
+                    if not tiene_destino:
+                        st.error("❌ **No se encontró columna de destino.**")
+                        st.info("El archivo debe tener al menos una de estas columnas: 'Sucursal Destino' o 'Bodega Destino'")
                     else:
-                        st.info("No hay datos para mostrar la distribución (excluyendo Fundas)")
-                    st.divider()
-                    
-                    # --- SECCION 4: DETALLE Y EXPORTACION ---
-                    st.header("📄 Detalle por Secuencial")
-                    df_detalle = res['df_procesado'][['destino', 'Secuencial', 'Cantidad_Entera', 'Categoria']].copy()
-                    with st.expander("📋 Resumen Estadístico", expanded=True):
-                        resumen_df = pd.DataFrame.from_dict(res['detalle_categoria'], orient='index').reset_index().rename(
-                            columns={'index': 'Categoria', 'cantidad': 'Unidades', 'transf': 'Transferencias', 'unicas': 'Sucursales Únicas'})
-                        st.dataframe(resumen_df, use_container_width=True)
-                    col_d1, col_d2 = st.columns([1, 4])
-                    with col_d1:
-                        excel_data = to_excel(df_detalle)
-                        st.download_button(
-                            label="📥 Descargar Excel",
-                            data=excel_data,
-                            file_name=f"detalle_transferencias_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
-                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                            use_container_width=True
-                        )
-                    st.dataframe(df_detalle.rename(columns={'destino': 'Sucursal', 'Cantidad_Entera': 'Cantidad', 'Categoria': 'Categoría'}), use_container_width=True, height=400)
+                        # Procesar con la función original
+                        res = procesar_transferencias_diarias(df_diario)
+                        
+                        if res is None:
+                            st.error("❌ Error al procesar los datos")
+                        else:
+                            # --- SECCION 1: KPIs POR CATEGORIA (con estilos mejorados) ---
+                            st.header("📈 KPIs por Categoría")
+                            mostrar_metricas_kpis(res, st)
+                            st.divider()
+                            
+                            # --- SECCION 2: GRAFICO DE PASTEL Y ANALISIS VISUAL ---
+                            st.header("📊 Análisis Visual")
+                            col1, col2 = st.columns([2, 1])
+                            with col1:
+                                df_pie = pd.DataFrame({
+                                    'Categoria': list(res['por_categoria'].keys()),
+                                    'Unidades': list(res['por_categoria'].values())
+                                })
+                                df_pie = df_pie[df_pie['Unidades'] > 0]
+                                if not df_pie.empty:
+                                    fig_pie = px.pie(
+                                        df_pie,
+                                        values='Unidades',
+                                        names='Categoria',
+                                        title="Distribución por Categoría (Gráfico de Pastel)",
+                                        color_discrete_sequence=['#0033A0', '#E4002B', '#10B981', '#8B5CF6', '#F59E0B', '#3B82F6'],
+                                        hole=0.3
+                                    )
+                                    fig_pie.update_traces(textposition='inside', textinfo='percent+label')
+                                    fig_pie.update_layout(height=500)
+                                    st.plotly_chart(fig_pie, use_container_width=True)
+                                else:
+                                    st.info("No hay datos para mostrar el gráfico de pastel")
+                            with col2:
+                                st.markdown(f"""
+                                <div style='background: linear-gradient(135deg, #0033A020, #0033A040); padding:20px; border-radius:10px; border-left:5px solid #0033A0; margin-bottom:10px;'>
+                                    <div style='font-size:14px; color:#666;'>TOTAL UNIDADES</div>
+                                    <div style='font-size:32px; font-weight:bold; color:#0033A0;'>{res['total_unidades']:,}</div>
+                                </div>
+                                """, unsafe_allow_html=True)
+                                promedio = res['total_unidades'] / res['transferencias'] if res['transferencias']>0 else 0
+                                st.markdown(f"""
+                                <div style='background: linear-gradient(135deg, #10B98120, #10B98140); padding:20px; border-radius:10px; border-left:5px solid #10B981; margin-bottom:10px;'>
+                                    <div style='font-size:14px; color:#666;'>PROMEDIO X TRANSFERENCIA</div>
+                                    <div style='font-size:32px; font-weight:bold; color:#10B981;'>{promedio:,.0f}</div>
+                                </div>
+                                """, unsafe_allow_html=True)
+                                categorias_activas = sum(1 for cat in res['por_categoria'].values() if cat > 0)
+                                st.markdown(f"""
+                                <div style='background: linear-gradient(135deg, #8B5CF620, #8B5CF640); padding:20px; border-radius:10px; border-left:5px solid #8B5CF6; margin-bottom:10px;'>
+                                    <div style='font-size:14px; color:#666;'>CATEGORÍAS ACTIVAS</div>
+                                    <div style='font-size:32px; font-weight:bold; color:#8B5CF6;'>{categorias_activas}/6</div>
+                                </div>
+                                """, unsafe_allow_html=True)
+                                porcentaje_fundas = (res['por_categoria'].get('Fundas', 0) / res['total_unidades']) * 100 if res['total_unidades'] > 0 else 0
+                                st.markdown(f"""
+                                <div style='background: linear-gradient(135deg, #EC489920, #EC489940); padding:20px; border-radius:10px; border-left:5px solid #EC4899; margin-bottom:10px;'>
+                                    <div style='font-size:14px; color:#666;'>% FUNDAS</div>
+                                    <div style='font-size:32px; font-weight:bold; color:#EC4899;'>{porcentaje_fundas:.1f}%</div>
+                                </div>
+                                """, unsafe_allow_html=True)
+                            st.divider()
+                            
+                            # --- SECCION 3: DISTRIBUCION EXCLUYENDO FUNDAS ---
+                            st.header("📊 Distribución Excluyendo Fundas")
+                            categorias_excl = ['Price Club', 'Tiendas', 'Ventas por Mayor', 'Tienda Web', 'Fallas']
+                            valores_excl = [res['por_categoria'].get(cat, 0) for cat in categorias_excl]
+                            total_excl = sum(valores_excl)
+                            if total_excl > 0:
+                                df_barras = pd.DataFrame({
+                                    'Categoria': ['Price Club', 'Tiendas', 'Ventas por Mayor', 'Tienda Web', 'Fallas'],
+                                    'Unidades': [
+                                        res['por_categoria'].get('Price Club', 0),
+                                        res['por_categoria'].get('Tiendas', 0),
+                                        res['por_categoria'].get('Ventas por Mayor', 0),
+                                        res['por_categoria'].get('Tienda Web', 0),
+                                        res['por_categoria'].get('Fallas', 0)
+                                    ]
+                                })
+                                df_barras['Porcentaje'] = (df_barras['Unidades'] / total_excl) * 100
+                                fig_barras = go.Figure(data=[
+                                    go.Bar(
+                                        x=df_barras['Categoria'],
+                                        y=df_barras['Porcentaje'],
+                                        text=[f"{p:.1f}%" for p in df_barras['Porcentaje']],
+                                        textposition='auto',
+                                        marker_color=['#0033A0', '#E4002B', '#10B981', '#8B5CF6', '#F59E0B']
+                                    )
+                                ])
+                                fig_barras.update_layout(
+                                    title="Distribución por Categoría (excluyendo Fundas)",
+                                    yaxis_title="Porcentaje (%)",
+                                    xaxis_title="Categoría",
+                                    height=400
+                                )
+                                st.plotly_chart(fig_barras, use_container_width=True)
+                                st.dataframe(df_barras.sort_values('Porcentaje', ascending=False), use_container_width=True)
+                            else:
+                                st.info("No hay datos para mostrar la distribución (excluyendo Fundas)")
+                            st.divider()
+                            
+                            # --- SECCION 4: DETALLE Y EXPORTACION ---
+                            st.header("📄 Detalle por Secuencial")
+                            # Determinar columna de destino
+                            dest_col = 'Sucursal Destino' if 'Sucursal Destino' in res['df_procesado'].columns else 'Bodega Destino'
+                            df_detalle = res['df_procesado'][[dest_col, 'Secuencial', 'Cantidad_Entera', 'Categoria']].copy()
+                            with st.expander("📋 Resumen Estadístico", expanded=True):
+                                resumen_df = pd.DataFrame.from_dict(res['detalle_categoria'], orient='index').reset_index().rename(
+                                    columns={'index': 'Categoria', 'cantidad': 'Unidades', 'transf': 'Transferencias', 'unicas': 'Sucursales Únicas'})
+                                st.dataframe(resumen_df, use_container_width=True)
+                            col_d1, col_d2 = st.columns([1, 4])
+                            with col_d1:
+                                excel_data = to_excel(df_detalle)
+                                st.download_button(
+                                    label="📥 Descargar Excel",
+                                    data=excel_data,
+                                    file_name=f"detalle_transferencias_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
+                                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                    use_container_width=True
+                                )
+                            st.dataframe(df_detalle.rename(columns={dest_col: 'Sucursal', 'Cantidad_Entera': 'Cantidad', 'Categoria': 'Categoría'}), use_container_width=True, height=400)
             except Exception as e:
                 st.error(f"❌ **Error al procesar el archivo:** {str(e)}")
     
