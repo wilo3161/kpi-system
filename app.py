@@ -1605,39 +1605,103 @@ class TextileClassifier:
 
 
 class DataProcessor:
-    """Procesador de archivos de transferencias"""
+    """Procesador de archivos de transferencias - Versión mejorada con mapeo flexible de columnas"""
     
     def __init__(self):
         self.classifier = TextileClassifier()
     
     def process_excel_file(self, file) -> pd.DataFrame:
         try:
+            # Leer archivo
             if file.name.endswith('.csv'):
                 df = pd.read_csv(file, encoding='utf-8')
             else:
                 df = pd.read_excel(file, engine='openpyxl')
             
-            required = ['Producto', 'Fecha', 'Cantidad', 'Bodega Recibe']
-            missing = [c for c in required if c not in df.columns]
+            # Limpiar nombres de columnas
+            df.columns = [str(c).strip() for c in df.columns]
+            
+            # Mapeo flexible de columnas requeridas
+            required_std = ['Producto', 'Fecha', 'Cantidad', 'Bodega Recibe']
+            # También aceptamos nombres alternativos para destino
+            dest_aliases = ['Bodega Destino', 'Sucursal Destino', 'Destino', 'Bodega', 'Sucursal']
+            
+            col_mapping = {}
+            missing = []
+            
+            for req in required_std:
+                found = False
+                # Buscar coincidencia exacta ignorando mayúsculas y espacios
+                for col in df.columns:
+                    if col.lower() == req.lower():
+                        col_mapping[col] = req
+                        found = True
+                        break
+                if not found:
+                    # Búsqueda parcial (contiene la palabra)
+                    for col in df.columns:
+                        if req.lower() in col.lower():
+                            col_mapping[col] = req
+                            found = True
+                            break
+                # Para 'Bodega Recibe', también buscar por los alias
+                if not found and req == 'Bodega Recibe':
+                    for alias in dest_aliases:
+                        for col in df.columns:
+                            if alias.lower() in col.lower():
+                                col_mapping[col] = req
+                                found = True
+                                break
+                        if found:
+                            break
+                if not found:
+                    missing.append(req)
+            
             if missing:
-                st.error(f"Faltan columnas: {', '.join(missing)}")
+                st.error(f"❌ No se encontraron las siguientes columnas en el archivo: {', '.join(missing)}")
+                st.info("Columnas detectadas: " + ", ".join(df.columns))
                 return pd.DataFrame()
             
-            df.columns = [str(c).strip() for c in df.columns]
+            # Renombrar columnas al estándar
+            df.rename(columns=col_mapping, inplace=True)
+            
+            # Procesar cantidad
             df['Cantidad'] = self._process_quantity(df['Cantidad'])
-            df['Fecha'] = pd.to_datetime(df['Fecha'], errors='coerce', dayfirst=True)
+            
+            # Procesar fecha de forma más robusta
+            df['Fecha'] = pd.to_datetime(df['Fecha'], errors='coerce', dayfirst=True, infer_datetime_format=True)
+            # Si falla, intentar con formato mixto
+            if df['Fecha'].isna().all():
+                df['Fecha'] = pd.to_datetime(df['Fecha'], errors='coerce', format='%d/%m/%Y')
             df = df.dropna(subset=['Fecha'])
+            if df.empty:
+                st.warning("No se pudo interpretar la columna 'Fecha'. Verifique el formato (use dd/mm/aaaa).")
+                return pd.DataFrame()
+            
+            # Clasificar productos
             df = self._classify_products(df)
+            
+            # Agrupar bodega
             df['Grupo_Bodega'] = df['Bodega Recibe'].apply(self._group_warehouse)
             
-            if 'Secuencial - Factura' in df.columns:
-                df['ID_Transferencia'] = df['Secuencial - Factura'].astype(str) + '_' + df['Fecha'].dt.strftime('%Y%m%d')
+            # Buscar columna de secuencial (opcional)
+            sec_col = None
+            posibles_sec = ['Secuencial - Factura', 'Secuencial', 'Factura', 'ID Transferencia', 'Transferencia']
+            for col in df.columns:
+                if any(ps.lower() in col.lower() for ps in posibles_sec):
+                    sec_col = col
+                    break
+            if sec_col:
+                df['ID_Transferencia'] = df[sec_col].astype(str) + '_' + df['Fecha'].dt.strftime('%Y%m%d')
+            else:
+                # Crear un ID artificial
+                df['ID_Transferencia'] = df.index.astype(str) + '_' + df['Fecha'].dt.strftime('%Y%m%d')
             
             df = df.sort_values('Fecha', ascending=False).reset_index(drop=True)
             st.success(f"✅ Archivo procesado: {len(df)} registros")
             return df
         except Exception as e:
-            st.error(f"Error al procesar: {e}")
+            st.error(f"Error al procesar el archivo: {e}")
             return pd.DataFrame()
     
     def _process_quantity(self, s):
@@ -1670,8 +1734,7 @@ class DataProcessor:
             classifications.append(self.classifier.classify_product(prod))
         class_df = pd.DataFrame(classifications)
         
-        # --- CORRECCIÓN: Eliminar columnas duplicadas antes de concatenar ---
-        # Identificar columnas de clasificación que ya existen en df
+        # Eliminar columnas duplicadas que pudieran existir en df
         cols_to_drop = [col for col in class_df.columns if col in df.columns]
         if cols_to_drop:
             df = df.drop(columns=cols_to_drop)
@@ -1715,7 +1778,7 @@ class ReportGenerator:
             # Resumen ejecutivo
             summary = []
             total_units = int(df['Cantidad'].sum())
-            total_transfers = df['Secuencial - Factura'].nunique() if 'Secuencial - Factura' in df.columns else len(df)
+            total_transfers = df['ID_Transferencia'].nunique() if 'ID_Transferencia' in df.columns else len(df)
             bodegas = df['Bodega Recibe'].nunique()
             productos = df['Producto'].nunique()
             summary.append(['KPIs PRINCIPALES', ''])
@@ -1757,7 +1820,7 @@ class ReportGenerator:
             # Tendencias diarias
             if 'Fecha' in df.columns:
                 df['Fecha_Dia'] = df['Fecha'].dt.date
-                daily = df.groupby('Fecha_Dia').agg({'Cantidad': 'sum', 'Secuencial - Factura': 'nunique'}).reset_index()
+                daily = df.groupby('Fecha_Dia').agg({'Cantidad': 'sum', 'ID_Transferencia': 'nunique'}).reset_index()
                 daily.columns = ['Fecha', 'Unidades', 'Transferencias']
                 daily.sort_values('Fecha').to_excel(writer, sheet_name='Tendencias', index=False)
         
@@ -1853,21 +1916,23 @@ def mostrar_kpi_diario():
                 st.session_state.kdi_current_data = new_data
                 st.session_state.kdi_loaded = True
                 st.success("Datos cargados exitosamente")
-                st.rerun()
+                # Eliminado st.rerun() para evitar ciclos innecesarios
+            else:
+                st.warning("El archivo no pudo ser procesado. Revise el formato.")
     
     # Si no hay datos, mostrar instrucciones
     if not st.session_state.kdi_loaded or st.session_state.kdi_current_data.empty:
         st.info("👆 Sube un archivo para comenzar el análisis.")
         with st.expander("📋 Estructura esperada del archivo"):
             st.markdown("""
-            **Columnas requeridas:**
+            **Columnas requeridas (se detectan automáticamente aunque tengan nombres similares):**
             - `Producto`: nombre del producto
             - `Fecha`: fecha de la transferencia (ej. 15/01/2024)
             - `Cantidad`: número de unidades
-            - `Bodega Recibe`: destino de la mercadería
+            - `Bodega Recibe` (o `Bodega Destino`, `Sucursal Destino`, etc.): destino de la mercadería
             
             **Columna opcional:**
-            - `Secuencial - Factura`: identificador único de la transferencia
+            - `Secuencial - Factura` (o similar): identificador único de la transferencia
             """)
         return
     
@@ -1876,6 +1941,7 @@ def mostrar_kpi_diario():
     data = st.session_state.kdi_current_data
     filtered = data.copy()
     
+    # Verificar columnas necesarias para filtros
     col_f1, col_f2, col_f3, col_f4 = st.columns(4)
     with col_f1:
         if 'Fecha' in filtered.columns and not filtered.empty:
@@ -1911,9 +1977,9 @@ def mostrar_kpi_diario():
         st.warning("No hay datos con los filtros actuales.")
         return
     
-    total_units = int(filtered['Cantidad'].sum())
+    total_units = int(filtered['Cantidad'].sum()) if 'Cantidad' in filtered.columns else 0
     n_bodegas = filtered['Bodega Recibe'].nunique() if 'Bodega Recibe' in filtered.columns else 0
-    n_transfers = filtered['Secuencial - Factura'].nunique() if 'Secuencial - Factura' in filtered.columns else len(filtered)
+    n_transfers = filtered['ID_Transferencia'].nunique() if 'ID_Transferencia' in filtered.columns else len(filtered)
     n_products = filtered['Producto'].nunique() if 'Producto' in filtered.columns else 0
     
     k1, k2, k3, k4 = st.columns(4)
@@ -1952,10 +2018,9 @@ def mostrar_kpi_diario():
     
     st.markdown("---")
     
-    # --- ANÁLISIS POR DIMENSIONES (Porcentajes y Cantidades) ---
+    # --- ANÁLISIS POR DIMENSIONES (con comprobación de existencia de columnas) ---
     st.markdown("### 📊 Análisis por Dimensiones")
     
-    # Crear tabs para diferentes dimensiones
     dim_tab1, dim_tab2, dim_tab3, dim_tab4 = st.tabs(["🎨 Color", "📏 Talla", "⚧ Género", "🏷️ Categoría/Departamento"])
     
     with dim_tab1:
