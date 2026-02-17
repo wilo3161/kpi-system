@@ -1367,12 +1367,12 @@ TIENDAS_REGULARES_LISTA = [
 
 # Colores de las tarjetas KPI
 COLORS = {
-    'PRICE CLUB': '#0033A0',          # Azul corporativo
-    'TIENDAS AEROPOSTALE': '#E4002B', # Rojo
-    'VENTAS POR MAYOR': '#10B981',     # Verde esmeralda
-    'TIENDA WEB': '#8B5CF6',           # Violeta
-    'FALLAS': '#F59E0B',               # Naranja/Ámbar
-    'FUNDAS': '#EC4899'                # Rosa
+    'PRICE CLUB': '#0033A0',      # Azul corporativo
+    'TIENDAS AEROPOSTALE': '#E4002B',     # Rojo
+    'VENTAS POR MAYOR': '#10B981',       # Verde esmeralda
+    'TIENDA WEB': '#8B5CF6',       # Violeta
+    'FALLAS': '#F59E0B',   # Naranja/Ámbar
+    'FUNDAS': '#EC4899'     # Rosa
 }
 
 # Gradientes de fondo (15% a 40% de opacidad)
@@ -1389,15 +1389,9 @@ GRADIENTS = {
 CHART_COLORS = ['#0033A0', '#E4002B', '#10B981', '#8B5CF6', '#F59E0B', '#3B82F6']
 
 # ==============================================================================
-# CLASES PARA EL SISTEMA DE KPI DIARIO
+# NUEVAS IMPORTACIONES Y CLASES PARA EL SISTEMA DE KPI DIARIO
 # ==============================================================================
 import os
-import io
-import pandas as pd
-import plotly.express as px
-import plotly.graph_objects as go
-from datetime import datetime
-import streamlit as st
 
 # Diccionarios para clasificación de productos
 GENDER_MAP = {
@@ -1470,6 +1464,7 @@ WAREHOUSE_GROUPS = {
     'SAN': 'San',
     'LOS': 'Los'
 }
+
 
 class TextileClassifier:
     """Clasificador inteligente para productos textiles"""
@@ -1675,7 +1670,8 @@ class DataProcessor:
             classifications.append(self.classifier.classify_product(prod))
         class_df = pd.DataFrame(classifications)
         
-        # Eliminar columnas duplicadas antes de concatenar
+        # --- CORRECCIÓN: Eliminar columnas duplicadas antes de concatenar ---
+        # Identificar columnas de clasificación que ya existen en df
         cols_to_drop = [col for col in class_df.columns if col in df.columns]
         if cols_to_drop:
             df = df.drop(columns=cols_to_drop)
@@ -1819,38 +1815,17 @@ def procesar_transferencias_diarias(df):
     return res
 
 
-def extraer_entero(valor):
-    """Extrae un entero de un valor que puede ser string, float o int"""
-    if pd.isna(valor):
-        return 0
-    if isinstance(valor, (int, float)):
-        return int(valor)
-    try:
-        # Limpiar el string: eliminar puntos de miles y convertir a entero
-        limpio = str(valor).replace('.', '').strip()
-        return int(float(limpio))  # primero a float por si tiene decimales
-    except:
-        return 0
-
-
-def to_excel(df):
-    """Convierte DataFrame a bytes de Excel"""
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        df.to_excel(writer, index=False, sheet_name='Sheet1')
-    return output.getvalue()
-
-
 # ==============================================================================
-# FUNCIÓN PARA MOSTRAR EL DASHBOARD DE KPI DIARIO (DENTRO DE TAB2) - SIN HISTORIAL
+# NUEVA FUNCIÓN PARA MOSTRAR EL DASHBOARD DE KPI DIARIO (DENTRO DE TAB2) - SIN HISTORIAL
 # ==============================================================================
 
 def mostrar_kpi_diario():
-    """Dashboard de KPI Diario con clasificación inteligente - sin persistencia"""
+    """Dashboard de KPI Diario con clasificación inteligente - SIN HISTORIAL PERSISTENTE"""
     
     # Inicializar estado de sesión para este submódulo
-    if 'kdi_data' not in st.session_state:
-        st.session_state.kdi_data = pd.DataFrame()
+    if 'kdi_current_data' not in st.session_state:
+        st.session_state.kdi_current_data = pd.DataFrame()
+        st.session_state.kdi_loaded = False
     
     processor = DataProcessor()
     report_gen = ReportGenerator()
@@ -1867,19 +1842,21 @@ def mostrar_kpi_diario():
         )
     with col_up2:
         if st.button("🔄 Limpiar datos", key="kdi_clear"):
-            st.session_state.kdi_data = pd.DataFrame()
+            st.session_state.kdi_current_data = pd.DataFrame()
+            st.session_state.kdi_loaded = False
             st.rerun()
     
     if uploaded:
         with st.spinner("Procesando archivo..."):
             new_data = processor.process_excel_file(uploaded)
             if not new_data.empty:
-                st.session_state.kdi_data = new_data
-                st.success("✅ Datos cargados correctamente")
+                st.session_state.kdi_current_data = new_data
+                st.session_state.kdi_loaded = True
+                st.success("Datos cargados exitosamente")
                 st.rerun()
     
     # Si no hay datos, mostrar instrucciones
-    if st.session_state.kdi_data.empty:
+    if not st.session_state.kdi_loaded or st.session_state.kdi_current_data.empty:
         st.info("👆 Sube un archivo para comenzar el análisis.")
         with st.expander("📋 Estructura esperada del archivo"):
             st.markdown("""
@@ -1896,7 +1873,7 @@ def mostrar_kpi_diario():
     
     # --- FILTROS ---
     st.markdown("### 🔍 Filtros")
-    data = st.session_state.kdi_data
+    data = st.session_state.kdi_current_data
     filtered = data.copy()
     
     col_f1, col_f2, col_f3, col_f4 = st.columns(4)
@@ -1905,10 +1882,7 @@ def mostrar_kpi_diario():
             min_d = filtered['Fecha'].min().date()
             max_d = filtered['Fecha'].max().date()
             dr = st.date_input("Rango de fechas", [min_d, max_d], key="kdi_fecha")
-            # Manejar caso de una sola fecha seleccionada
-            if isinstance(dr, (list, tuple)) and len(dr) == 1:
-                dr = [dr[0], dr[0]]
-            if isinstance(dr, (list, tuple)) and len(dr) == 2:
+            if len(dr) == 2:
                 mask = (filtered['Fecha'].dt.date >= dr[0]) & (filtered['Fecha'].dt.date <= dr[1])
                 filtered = filtered[mask].copy()
     with col_f2:
@@ -1942,47 +1916,156 @@ def mostrar_kpi_diario():
     n_transfers = filtered['Secuencial - Factura'].nunique() if 'Secuencial - Factura' in filtered.columns else len(filtered)
     n_products = filtered['Producto'].nunique() if 'Producto' in filtered.columns else 0
     
-    # Usamos colores de la paleta para las tarjetas genéricas (se puede personalizar)
     k1, k2, k3, k4 = st.columns(4)
     with k1:
         st.markdown(f"""
-        <div class='stat-card' style="background: {GRADIENTS['PRICE CLUB']}; border-left: 5px solid {COLORS['PRICE CLUB']};">
-            <div class='stat-icon'>📦</div>
-            <div class='stat-title'>Unidades Totales</div>
-            <div class='stat-value'>{total_units:,}</div>
+        <div style='background: linear-gradient(135deg, #667eea15, #764ba230); padding: 20px; border-radius: 10px; border-left: 5px solid #667eea;'>
+            <div style='font-size: 24px; margin-bottom: 8px;'>📦</div>
+            <div style='font-size: 14px; color: #666; margin-bottom: 5px;'>Unidades Totales</div>
+            <div style='font-size: 28px; font-weight: bold; color: #333;'>{total_units:,}</div>
         </div>
         """, unsafe_allow_html=True)
     with k2:
         st.markdown(f"""
-        <div class='stat-card' style="background: {GRADIENTS['TIENDAS AEROPOSTALE']}; border-left: 5px solid {COLORS['TIENDAS AEROPOSTALE']};">
-            <div class='stat-icon'>🏪</div>
-            <div class='stat-title'>Bodegas Destino</div>
-            <div class='stat-value'>{n_bodegas}</div>
+        <div style='background: linear-gradient(135deg, #11998e15, #38ef7d30); padding: 20px; border-radius: 10px; border-left: 5px solid #11998e;'>
+            <div style='font-size: 24px; margin-bottom: 8px;'>🏪</div>
+            <div style='font-size: 14px; color: #666; margin-bottom: 5px;'>Bodegas Destino</div>
+            <div style='font-size: 28px; font-weight: bold; color: #333;'>{n_bodegas}</div>
         </div>
         """, unsafe_allow_html=True)
     with k3:
         st.markdown(f"""
-        <div class='stat-card' style="background: {GRADIENTS['VENTAS POR MAYOR']}; border-left: 5px solid {COLORS['VENTAS POR MAYOR']};">
-            <div class='stat-icon'>📋</div>
-            <div class='stat-title'>Transferencias</div>
-            <div class='stat-value'>{n_transfers}</div>
+        <div style='background: linear-gradient(135deg, #fc466b15, #3f5efb30); padding: 20px; border-radius: 10px; border-left: 5px solid #fc466b;'>
+            <div style='font-size: 24px; margin-bottom: 8px;'>📋</div>
+            <div style='font-size: 14px; color: #666; margin-bottom: 5px;'>Transferencias</div>
+            <div style='font-size: 28px; font-weight: bold; color: #333;'>{n_transfers}</div>
         </div>
         """, unsafe_allow_html=True)
     with k4:
         st.markdown(f"""
-        <div class='stat-card' style="background: {GRADIENTS['TIENDA WEB']}; border-left: 5px solid {COLORS['TIENDA WEB']};">
-            <div class='stat-icon'>👕</div>
-            <div class='stat-title'>Productos Únicos</div>
-            <div class='stat-value'>{n_products}</div>
+        <div style='background: linear-gradient(135deg, #f093fb15, #f5576c30); padding: 20px; border-radius: 10px; border-left: 5px solid #f093fb;'>
+            <div style='font-size: 24px; margin-bottom: 8px;'>👕</div>
+            <div style='font-size: 14px; color: #666; margin-bottom: 5px;'>Productos Únicos</div>
+            <div style='font-size: 28px; font-weight: bold; color: #333;'>{n_products}</div>
         </div>
         """, unsafe_allow_html=True)
     
     st.markdown("---")
     
-    # --- GRÁFICOS ---
+    # --- ANÁLISIS POR DIMENSIONES (Porcentajes y Cantidades) ---
+    st.markdown("### 📊 Análisis por Dimensiones")
+    
+    # Crear tabs para diferentes dimensiones
+    dim_tab1, dim_tab2, dim_tab3, dim_tab4 = st.tabs(["🎨 Color", "📏 Talla", "⚧ Género", "🏷️ Categoría/Departamento"])
+    
+    with dim_tab1:
+        if 'Color' in filtered.columns:
+            col_stats = filtered.groupby('Color').agg({
+                'Cantidad': ['sum', 'count']
+            }).reset_index()
+            col_stats.columns = ['Color', 'Unidades', 'Frecuencia']
+            col_stats['Porcentaje'] = (col_stats['Unidades'] / total_units * 100).round(2)
+            col_stats = col_stats.sort_values('Unidades', ascending=False)
+            
+            col1, col2 = st.columns([2, 1])
+            with col1:
+                fig = px.pie(col_stats, values='Unidades', names='Color', 
+                           title="Distribución por Color",
+                           color_discrete_sequence=px.colors.qualitative.Set3)
+                fig.update_traces(textposition='inside', textinfo='percent+label')
+                st.plotly_chart(fig, use_container_width=True)
+            with col2:
+                st.dataframe(col_stats[['Color', 'Unidades', 'Porcentaje']].style.format({
+                    'Unidades': '{:,}',
+                    'Porcentaje': '{:.2f}%'
+                }), use_container_width=True, height=400)
+        else:
+            st.info("No hay datos de color disponibles")
+    
+    with dim_tab2:
+        if 'Talla' in filtered.columns:
+            talla_stats = filtered.groupby('Talla').agg({
+                'Cantidad': ['sum', 'count']
+            }).reset_index()
+            talla_stats.columns = ['Talla', 'Unidades', 'Frecuencia']
+            talla_stats['Porcentaje'] = (talla_stats['Unidades'] / total_units * 100).round(2)
+            
+            # Ordenar por jerarquía de tallas si es posible
+            talla_order = ['3XS', '2XS', 'XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', 'Única']
+            talla_stats['Talla_Order'] = talla_stats['Talla'].apply(
+                lambda x: talla_order.index(x) if x in talla_order else 999
+            )
+            talla_stats = talla_stats.sort_values('Talla_Order')
+            
+            col1, col2 = st.columns([2, 1])
+            with col1:
+                fig = px.bar(talla_stats, x='Talla', y='Unidades', 
+                           title="Distribución por Talla",
+                           color='Unidades',
+                           color_continuous_scale='Viridis')
+                st.plotly_chart(fig, use_container_width=True)
+            with col2:
+                st.dataframe(talla_stats[['Talla', 'Unidades', 'Porcentaje']].style.format({
+                    'Unidades': '{:,}',
+                    'Porcentaje': '{:.2f}%'
+                }), use_container_width=True, height=400)
+        else:
+            st.info("No hay datos de talla disponibles")
+    
+    with dim_tab3:
+        if 'Genero' in filtered.columns:
+            gen_stats = filtered.groupby('Genero').agg({
+                'Cantidad': ['sum', 'count']
+            }).reset_index()
+            gen_stats.columns = ['Genero', 'Unidades', 'Frecuencia']
+            gen_stats['Porcentaje'] = (gen_stats['Unidades'] / total_units * 100).round(2)
+            gen_stats = gen_stats.sort_values('Unidades', ascending=False)
+            
+            col1, col2 = st.columns([2, 1])
+            with col1:
+                fig = px.pie(gen_stats, values='Unidades', names='Genero', 
+                           title="Distribución por Género",
+                           color_discrete_sequence=['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4'])
+                fig.update_traces(textposition='inside', textinfo='percent+label')
+                st.plotly_chart(fig, use_container_width=True)
+            with col2:
+                st.dataframe(gen_stats[['Genero', 'Unidades', 'Porcentaje']].style.format({
+                    'Unidades': '{:,}',
+                    'Porcentaje': '{:.2f}%'
+                }), use_container_width=True, height=400)
+        else:
+            st.info("No hay datos de género disponibles")
+    
+    with dim_tab4:
+        if 'Categoria' in filtered.columns:
+            cat_stats = filtered.groupby('Categoria').agg({
+                'Cantidad': ['sum', 'count']
+            }).reset_index()
+            cat_stats.columns = ['Categoria', 'Unidades', 'Frecuencia']
+            cat_stats['Porcentaje'] = (cat_stats['Unidades'] / total_units * 100).round(2)
+            cat_stats = cat_stats.sort_values('Unidades', ascending=False)
+            
+            col1, col2 = st.columns([2, 1])
+            with col1:
+                fig = px.bar(cat_stats, x='Categoria', y='Unidades', 
+                           title="Distribución por Categoría",
+                           color='Unidades',
+                           color_continuous_scale='Plasma')
+                st.plotly_chart(fig, use_container_width=True)
+            with col2:
+                st.dataframe(cat_stats[['Categoria', 'Unidades', 'Porcentaje']].style.format({
+                    'Unidades': '{:,}',
+                    'Porcentaje': '{:.2f}%'
+                }), use_container_width=True, height=400)
+        else:
+            st.info("No hay datos de categoría disponibles")
+    
+    st.markdown("---")
+    
+    # --- GRÁFICOS ADICIONALES ---
     col_g1, col_g2 = st.columns(2)
     with col_g1:
-        st.subheader("📊 Por Bodega")
+        st.subheader("📊 Top 10 Bodegas")
         if 'Bodega Recibe' in filtered.columns:
             top_bod = filtered.groupby('Bodega Recibe')['Cantidad'].sum().nlargest(10)
             if not top_bod.empty:
@@ -1994,39 +2077,14 @@ def mostrar_kpi_diario():
                 )
                 fig.update_layout(height=350)
                 st.plotly_chart(fig, use_container_width=True)
-    with col_g2:
-        st.subheader("🥧 Por Categoría")
-        if 'Categoria' in filtered.columns:
-            cat_sum = filtered.groupby('Categoria')['Cantidad'].sum()
-            if not cat_sum.empty:
-                # Usar colores de la paleta para las categorías principales
-                fig = px.pie(
-                    values=cat_sum.values, names=cat_sum.index,
-                    hole=0.4,
-                    color_discrete_sequence=CHART_COLORS
-                )
-                fig.update_layout(height=350)
-                st.plotly_chart(fig, use_container_width=True)
     
-    col_g3, col_g4 = st.columns(2)
-    with col_g3:
+    with col_g2:
         st.subheader("📈 Tendencia Diaria")
         if 'Fecha' in filtered.columns:
             daily = filtered.groupby(filtered['Fecha'].dt.date)['Cantidad'].sum().reset_index()
             daily.columns = ['Fecha', 'Unidades']
-            fig = px.line(daily, x='Fecha', y='Unidades', markers=True, color_discrete_sequence=[COLORS['PRICE CLUB']])
+            fig = px.line(daily, x='Fecha', y='Unidades', markers=True)
             st.plotly_chart(fig, use_container_width=True)
-    with col_g4:
-        st.subheader("🎨 Top Colores")
-        if 'Color' in filtered.columns:
-            col_sum = filtered.groupby('Color')['Cantidad'].sum().nlargest(8)
-            if not col_sum.empty:
-                fig = px.bar(
-                    x=col_sum.index, y=col_sum.values,
-                    color=col_sum.index,
-                    color_discrete_sequence=CHART_COLORS
-                )
-                st.plotly_chart(fig, use_container_width=True)
     
     st.markdown("---")
     
@@ -2034,14 +2092,7 @@ def mostrar_kpi_diario():
     st.subheader("📋 Detalle de Transferencias")
     cols_display = ['Fecha', 'Bodega Recibe', 'Producto', 'Genero', 'Categoria', 'Color', 'Talla', 'Cantidad']
     cols_display = [c for c in cols_display if c in filtered.columns]
-    
-    # Ordenar solo si 'Fecha' está en las columnas mostradas
-    if 'Fecha' in cols_display:
-        display_df = filtered.sort_values('Fecha', ascending=False)[cols_display]
-    else:
-        display_df = filtered[cols_display]
-    
-    st.dataframe(display_df, use_container_width=True, height=300)
+    st.dataframe(filtered[cols_display].sort_values('Fecha', ascending=False), use_container_width=True, height=300)
     
     st.markdown("---")
     
@@ -2166,28 +2217,41 @@ def mostrar_dashboard_transferencias():
                             'Fallas': FALLAS,
                             'Fundas': None
                         }
+                        
+                        # Mapeo de categorías a keys de colores
+                        color_keys = {
+                            'Price Club': 'PRICE CLUB',
+                            'Tiendas': 'TIENDAS AEROPOSTALE',
+                            'Ventas por Mayor': 'VENTAS POR MAYOR',
+                            'Tienda Web': 'TIENDA WEB',
+                            'Fallas': 'FALLAS',
+                            'Fundas': 'FUNDAS'
+                        }
+                        
                         cols = st.columns(3)
                         for i, (cat, cat_display) in enumerate(categorias_display.items()):
                             cantidad = res['por_categoria'].get(cat, 0)
                             sucursales_activas = res['conteo_sucursales'].get(cat, 0)
                             esperadas = sucursales_esperadas.get(cat)
-                            color = COLORS.get(cat_display, '#0033A0')  # fallback azul
-                            gradient = GRADIENTS.get(cat_display, 'linear-gradient(135deg, #0033A015, #0033A030)')
+                            color_key = color_keys.get(cat)
+                            bg_gradient = GRADIENTS.get(color_key, 'linear-gradient(135deg, #f0f0f015, #e0e0e030)')
+                            border_color = COLORS.get(color_key, '#cccccc')
+                            
                             with cols[i % 3]:
                                 if cat == 'Fundas':
                                     st.markdown(f"""
-                                    <div class='stat-card' style="background: {gradient}; border-left: 5px solid {color};">
-                                        <div class='stat-title'>{cat_display}</div>
-                                        <div class='stat-value'>{cantidad:,}</div>
-                                        <div class='metric-subtitle'>Multiplos de 100 ≥ 500 unidades</div>
+                                    <div style='background: {bg_gradient}; padding: 20px; border-radius: 10px; border-left: 5px solid {border_color}; margin-bottom: 15px;'>
+                                        <div style='font-size: 12px; color: #666; text-transform: uppercase; margin-bottom: 5px;'>{cat_display}</div>
+                                        <div style='font-size: 32px; font-weight: bold; color: {border_color}; margin-bottom: 5px;'>{cantidad:,}</div>
+                                        <div style='font-size: 11px; color: #888;'>Multiplos de 100 ≥ 500 unidades</div>
                                     </div>
                                     """, unsafe_allow_html=True)
                                 else:
                                     st.markdown(f"""
-                                    <div class='stat-card' style="background: {gradient}; border-left: 5px solid {color};">
-                                        <div class='stat-title'>{cat_display}</div>
-                                        <div class='stat-value'>{cantidad:,}</div>
-                                        <div class='metric-subtitle'>{sucursales_activas} sucursales | {esperadas} esperadas</div>
+                                    <div style='background: {bg_gradient}; padding: 20px; border-radius: 10px; border-left: 5px solid {border_color}; margin-bottom: 15px;'>
+                                        <div style='font-size: 12px; color: #666; text-transform: uppercase; margin-bottom: 5px;'>{cat_display}</div>
+                                        <div style='font-size: 32px; font-weight: bold; color: {border_color}; margin-bottom: 5px;'>{cantidad:,}</div>
+                                        <div style='font-size: 11px; color: #888;'>{sucursales_activas} sucursales | {esperadas} esperadas</div>
                                     </div>
                                     """, unsafe_allow_html=True)
                             if i == 2:
@@ -2203,12 +2267,22 @@ def mostrar_dashboard_transferencias():
                             df_pie = pd.DataFrame({'Categoria': categorias_pie, 'Unidades': valores_pie})
                             df_pie = df_pie[df_pie['Unidades'] > 0]
                             if not df_pie.empty:
+                                # Asignar colores específicos
+                                color_map_pie = {
+                                    'Price Club': COLORS['PRICE CLUB'],
+                                    'Tiendas': COLORS['TIENDAS AEROPOSTALE'],
+                                    'Ventas por Mayor': COLORS['VENTAS POR MAYOR'],
+                                    'Tienda Web': COLORS['TIENDA WEB'],
+                                    'Fallas': COLORS['FALLAS'],
+                                    'Fundas': COLORS['FUNDAS']
+                                }
                                 fig_pie = px.pie(
                                     df_pie,
                                     values='Unidades',
                                     names='Categoria',
                                     title="Distribucion por Categoria",
-                                    color_discrete_sequence=CHART_COLORS,
+                                    color='Categoria',
+                                    color_discrete_map=color_map_pie,
                                     hole=0.3
                                 )
                                 fig_pie.update_traces(textposition='inside', textinfo='percent+label')
@@ -2219,30 +2293,30 @@ def mostrar_dashboard_transferencias():
                         with col2:
                             st.subheader("TOTAL GENERAL")
                             st.markdown(f"""
-                            <div class='metric-card'>
-                                <div class='metric-value'>{res['total_unidades']:,}</div>
-                                <div class='metric-subtitle'>Suma de todas las unidades</div>
+                            <div style='background: linear-gradient(135deg, #667eea20, #764ba240); padding: 20px; border-radius: 10px; text-align: center; margin-bottom: 15px;'>
+                                <div style='font-size: 14px; color: #555; margin-bottom: 10px;'>Suma de todas las unidades</div>
+                                <div style='font-size: 36px; font-weight: bold; color: #333;'>{res['total_unidades']:,}</div>
                             </div>
                             """, unsafe_allow_html=True)
                             promedio = res['total_unidades'] / res['transferencias'] if res['transferencias'] > 0 else 0
                             st.markdown(f"""
-                            <div class='metric-card'>
-                                <div class='metric-title'>PROMEDIO X TRANSFERENCIA</div>
-                                <div class='metric-value'>{promedio:,.0f}</div>
+                            <div style='background: #f8f9fa; padding: 15px; border-radius: 8px; text-align: center; margin-bottom: 15px;'>
+                                <div style='font-size: 12px; color: #666; margin-bottom: 5px;'>PROMEDIO X TRANSFERENCIA</div>
+                                <div style='font-size: 24px; font-weight: bold; color: #333;'>{promedio:,.0f}</div>
                             </div>
                             """, unsafe_allow_html=True)
                             categorias_activas = sum(1 for cat in res['por_categoria'].values() if cat > 0)
                             st.markdown(f"""
-                            <div class='metric-card'>
-                                <div class='metric-title'>CATEGORIAS ACTIVAS</div>
-                                <div class='metric-value'>{categorias_activas}/6</div>
+                            <div style='background: #f8f9fa; padding: 15px; border-radius: 8px; text-align: center; margin-bottom: 15px;'>
+                                <div style='font-size: 12px; color: #666; margin-bottom: 5px;'>CATEGORIAS ACTIVAS</div>
+                                <div style='font-size: 24px; font-weight: bold; color: #333;'>{categorias_activas}/6</div>
                             </div>
                             """, unsafe_allow_html=True)
                             porcentaje_fundas = (res['por_categoria'].get('Fundas', 0) / res['total_unidades']) * 100 if res['total_unidades'] > 0 else 0
                             st.markdown(f"""
-                            <div class='metric-card'>
-                                <div class='metric-title'>% FUNDAS</div>
-                                <div class='metric-value'>{porcentaje_fundas:.1f}%</div>
+                            <div style='background: #f8f9fa; padding: 15px; border-radius: 8px; text-align: center;'>
+                                <div style='font-size: 12px; color: #666; margin-bottom: 5px;'>% FUNDAS</div>
+                                <div style='font-size: 24px; font-weight: bold; color: {COLORS['FUNDAS']};'>{porcentaje_fundas:.1f}%</div>
                             </div>
                             """, unsafe_allow_html=True)
                         st.divider()
@@ -2262,13 +2336,23 @@ def mostrar_dashboard_transferencias():
                                              res['por_categoria'].get('Fallas', 0)]
                             })
                             df_barras['Porcentaje'] = (df_barras['Unidades'] / total_excl) * 100
+                            
+                            # Colores específicos para el gráfico de barras
+                            color_map_bar = {
+                                'Tienda Web': COLORS['TIENDA WEB'],
+                                'Price Club': COLORS['PRICE CLUB'],
+                                'Ventas por Mayor': COLORS['VENTAS POR MAYOR'],
+                                'Tiendas': COLORS['TIENDAS AEROPOSTALE'],
+                                'Fallas': COLORS['FALLAS']
+                            }
+                            
                             fig_barras = go.Figure(data=[
                                 go.Bar(
                                     x=df_barras['Categoria'],
                                     y=df_barras['Porcentaje'],
                                     text=[f"{p:.1f}%" for p in df_barras['Porcentaje']],
                                     textposition='auto',
-                                    marker_color=CHART_COLORS[:5]
+                                    marker_color=[color_map_bar.get(cat, '#cccccc') for cat in df_barras['Categoria']]
                                 )
                             ])
                             fig_barras.update_layout(title="Distribucion por Categoria (excl. Fundas)", yaxis_title="Porcentaje (%)", xaxis_title="Categoria", template="plotly_white", height=400)
@@ -2306,6 +2390,7 @@ def mostrar_dashboard_transferencias():
                 st.error(f"❌ **Error al procesar el archivo:** {str(e)}")
     
     with tab2:
+        # NUEVO: Dashboard de KPI Diario - SIN HISTORIAL
         mostrar_kpi_diario()
     
     with tab3:
