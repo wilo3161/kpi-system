@@ -1712,14 +1712,14 @@ class ReportGenerator:
         
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            # Resumen ejecutivo - VALORES ABSOLUTOS (no en millones)
+            # Resumen ejecutivo
             summary = []
             total_units = int(df['Cantidad'].sum())
             total_transfers = df['ID_Transferencia'].nunique() if 'ID_Transferencia' in df.columns else len(df)
             bodegas = df['Bodega Recibe'].nunique()
             productos = df['Producto'].nunique()
             summary.append(['KPIs PRINCIPALES', ''])
-            summary.append(['Total Unidades', f'{total_units:,}'])  # CORREGIDO: Sin conversión a millones
+            summary.append(['Total Unidades', f'{total_units:,}'])
             summary.append(['Transferencias', f'{total_transfers:,}'])
             summary.append(['Bodegas Destino', f'{bodegas:,}'])
             summary.append(['Productos Únicos', f'{productos:,}'])
@@ -1728,33 +1728,33 @@ class ReportGenerator:
             top_bodegas = df.groupby('Bodega Recibe')['Cantidad'].sum().nlargest(5)
             summary.append(['TOP 5 BODEGAS', 'Unidades'])
             for b, c in top_bodegas.items():
-                summary.append([b, f'{int(c):,}'])  # CORREGIDO: Sin conversión a millones
+                summary.append([b, f'{int(c):,}'])
             summary.append(['', ''])
             
             if 'Categoria' in df.columns:
                 top_cat = df.groupby('Categoria')['Cantidad'].sum().nlargest(5)
                 summary.append(['TOP 5 CATEGORÍAS', 'Unidades'])
                 for cat, cant in top_cat.items():
-                    summary.append([cat, f'{int(cant):,}'])  # CORREGIDO: Sin conversión a millones
+                    summary.append([cat, f'{int(cant):,}'])
             
             pd.DataFrame(summary, columns=['Métrica', 'Valor']).to_excel(writer, sheet_name='Resumen', index=False)
             
-            # Detalle completo - VALORES ORIGINALES
+            # Detalle completo
             df.to_excel(writer, sheet_name='Detalle', index=False)
             
-            # Por bodega - VALORES ABSOLUTOS
+            # Por bodega
             if 'Bodega Recibe' in df.columns:
                 w_sum = df.groupby('Bodega Recibe').agg({'Cantidad': ['sum', 'count'], 'Producto': 'nunique'})
                 w_sum.columns = ['Unidades', 'Transferencias', 'Productos']
                 w_sum.sort_values('Unidades', ascending=False).to_excel(writer, sheet_name='Por_Bodega')
             
-            # Por categoría - VALORES ABSOLUTOS
+            # Por categoría
             if 'Categoria' in df.columns:
                 cat_sum = df.groupby(['Categoria', 'Genero']).agg({'Cantidad': ['sum', 'count'], 'Producto': 'nunique'})
                 cat_sum.columns = ['Unidades', 'Transferencias', 'Productos']
                 cat_sum.sort_values('Unidades', ascending=False).to_excel(writer, sheet_name='Por_Categoria')
             
-            # Tendencias diarias - VALORES ABSOLUTOS
+            # Tendencias diarias
             if 'Fecha' in df.columns:
                 df['Fecha_Dia'] = df['Fecha'].dt.date
                 daily = df.groupby('Fecha_Dia').agg({'Cantidad': 'sum', 'ID_Transferencia': 'nunique'}).reset_index()
@@ -1768,6 +1768,15 @@ class ReportGenerator:
 # ==============================================================================
 # FUNCIONES ORIGINALES DEL MÓDULO (clasificación de transferencias)
 # ==============================================================================
+
+def extraer_entero(valor):
+    """Extrae el valor entero de una cantidad"""
+    try:
+        if pd.isna(valor):
+            return 0
+        return int(float(str(valor).replace(',', '').strip()))
+    except:
+        return 0
 
 def clasificar_transferencia(row):
     sucursal = str(row.get('Sucursal Destino', row.get('Bodega Destino', ''))).upper()
@@ -1822,10 +1831,13 @@ def procesar_transferencias_diarias(df):
 def mostrar_kpi_diario():
     """Dashboard de KPI Diario con clasificación inteligente - SIN HISTORIAL PERSISTENTE"""
     
-    # Inicializar estado de sesión para este submódulo
+    # CORRECCIÓN CRÍTICA: Inicializar estado de sesión de forma más robusta
     if 'kdi_current_data' not in st.session_state:
         st.session_state.kdi_current_data = pd.DataFrame()
+    if 'kdi_loaded' not in st.session_state:
         st.session_state.kdi_loaded = False
+    if 'kdi_file_processed' not in st.session_state:
+        st.session_state.kdi_file_processed = False
     
     processor = DataProcessor()
     report_gen = ReportGenerator()
@@ -1837,25 +1849,35 @@ def mostrar_kpi_diario():
         uploaded = st.file_uploader(
             "Seleccionar archivo Excel",
             type=['xlsx', 'xls', 'csv'],
-            key="kdi_upload",
+            key="kdi_upload_unique",  # CORRECCIÓN: Key única para evitar conflictos
             label_visibility="collapsed"
         )
     with col_up2:
-        if st.button("🔄 Limpiar datos", key="kdi_clear"):
+        if st.button("🔄 Limpiar datos", key="kdi_clear_unique"):  # CORRECCIÓN: Key única
             st.session_state.kdi_current_data = pd.DataFrame()
             st.session_state.kdi_loaded = False
+            st.session_state.kdi_file_processed = False
             st.rerun()
     
-    if uploaded:
+    # CORRECCIÓN CRÍTICA: Procesar archivo de forma síncrona sin dependencia de rerun
+    if uploaded is not None and not st.session_state.kdi_file_processed:
         with st.spinner("Procesando archivo..."):
-            new_data = processor.process_excel_file(uploaded)
-            if not new_data.empty:
-                st.session_state.kdi_current_data = new_data
-                st.session_state.kdi_loaded = True
-                st.success("Datos cargados exitosamente")
-                st.rerun()
+            try:
+                new_data = processor.process_excel_file(uploaded)
+                if not new_data.empty:
+                    st.session_state.kdi_current_data = new_data
+                    st.session_state.kdi_loaded = True
+                    st.session_state.kdi_file_processed = True
+                    st.success(f"✅ {len(new_data)} registros cargados exitosamente")
+                    # NO hacer st.rerun() aquí - dejar que el flujo continúe naturalmente
+                else:
+                    st.error("❌ El archivo no contiene datos válidos o faltan columnas requeridas")
+                    st.session_state.kdi_file_processed = True  # Marcar como procesado aunque falló
+            except Exception as e:
+                st.error(f"❌ Error al procesar: {str(e)}")
+                st.session_state.kdi_file_processed = True
     
-    # Si no hay datos, mostrar instrucciones
+    # Si no hay datos cargados, mostrar instrucciones y retornar
     if not st.session_state.kdi_loaded or st.session_state.kdi_current_data.empty:
         st.info("👆 Sube un archivo para comenzar el análisis.")
         with st.expander("📋 Estructura esperada del archivo"):
@@ -1869,54 +1891,81 @@ def mostrar_kpi_diario():
             **Columna opcional:**
             - `Secuencial - Factura`: identificador único de la transferencia
             """)
+        return  # Salir de la función si no hay datos
+    
+    # --- SI LLEGAMOS AQUÍ, HAY DATOS CARGADOS - MOSTRAR EL DASHBOARD ---
+    
+    # CORRECCIÓN: Verificar explícitamente que tenemos datos
+    data = st.session_state.kdi_current_data.copy()
+    
+    if data.empty:
+        st.error("❌ Error inesperado: Los datos están vacíos")
         return
+    
+    st.success(f"📊 Mostrando dashboard con {len(data)} registros")
     
     # --- FILTROS ---
     st.markdown("### 🔍 Filtros")
-    data = st.session_state.kdi_current_data
     filtered = data.copy()
     
     col_f1, col_f2, col_f3, col_f4 = st.columns(4)
     with col_f1:
         if 'Fecha' in filtered.columns and not filtered.empty:
-            min_d = filtered['Fecha'].min().date()
-            max_d = filtered['Fecha'].max().date()
-            dr = st.date_input("Rango de fechas", [min_d, max_d], key="kdi_fecha")
-            if len(dr) == 2:
-                mask = (filtered['Fecha'].dt.date >= dr[0]) & (filtered['Fecha'].dt.date <= dr[1])
-                filtered = filtered[mask].copy()
+            try:
+                min_d = filtered['Fecha'].min().date()
+                max_d = filtered['Fecha'].max().date()
+                dr = st.date_input("Rango de fechas", [min_d, max_d], key="kdi_fecha_filter")
+                if len(dr) == 2:
+                    mask = (filtered['Fecha'].dt.date >= dr[0]) & (filtered['Fecha'].dt.date <= dr[1])
+                    filtered = filtered[mask].copy()
+            except Exception as e:
+                st.warning(f"Error en filtro de fechas: {e}")
     with col_f2:
         if 'Bodega Recibe' in filtered.columns:
-            opts = ['Todas'] + sorted(filtered['Bodega Recibe'].dropna().unique())
-            sel = st.selectbox("Bodega", opts, key="kdi_bod")
-            if sel != 'Todas':
-                filtered = filtered[filtered['Bodega Recibe'] == sel]
+            try:
+                opts = ['Todas'] + sorted(filtered['Bodega Recibe'].dropna().unique().tolist())
+                sel = st.selectbox("Bodega", opts, key="kdi_bodega_filter")
+                if sel != 'Todas':
+                    filtered = filtered[filtered['Bodega Recibe'] == sel]
+            except Exception as e:
+                st.warning(f"Error en filtro de bodega: {e}")
     with col_f3:
         if 'Genero' in filtered.columns:
-            opts = ['Todos'] + sorted(filtered['Genero'].dropna().unique())
-            sel = st.selectbox("Género", opts, key="kdi_gen")
-            if sel != 'Todos':
-                filtered = filtered[filtered['Genero'] == sel]
+            try:
+                opts = ['Todos'] + sorted(filtered['Genero'].dropna().unique().tolist())
+                sel = st.selectbox("Género", opts, key="kdi_genero_filter")
+                if sel != 'Todos':
+                    filtered = filtered[filtered['Genero'] == sel]
+            except Exception as e:
+                st.warning(f"Error en filtro de género: {e}")
     with col_f4:
         if 'Categoria' in filtered.columns:
-            opts = ['Todas'] + sorted(filtered['Categoria'].dropna().unique())
-            sel = st.selectbox("Categoría", opts, key="kdi_cat")
-            if sel != 'Todas':
-                filtered = filtered[filtered['Categoria'] == sel]
+            try:
+                opts = ['Todas'] + sorted(filtered['Categoria'].dropna().unique().tolist())
+                sel = st.selectbox("Categoría", opts, key="kdi_categoria_filter")
+                if sel != 'Todas':
+                    filtered = filtered[filtered['Categoria'] == sel]
+            except Exception as e:
+                st.warning(f"Error en filtro de categoría: {e}")
     
     st.markdown("---")
     
-    # --- KPIs (VALORES ABSOLUTOS como en Pestaña 1) ---
+    # --- KPIs (VALORES ABSOLUTOS) ---
     if filtered.empty:
         st.warning("No hay datos con los filtros actuales.")
         return
     
-    # CORRECCIÓN: Usar valores absolutos (unidades completas) NO en millones
-    total_units = int(filtered['Cantidad'].sum())
-    n_bodegas = filtered['Bodega Recibe'].nunique() if 'Bodega Recibe' in filtered.columns else 0
-    n_transfers = filtered['ID_Transferencia'].nunique() if 'ID_Transferencia' in filtered.columns else len(filtered)
-    n_products = filtered['Producto'].nunique() if 'Producto' in filtered.columns else 0
+    # CORRECCIÓN: Calcular métricas con manejo de errores
+    try:
+        total_units = int(filtered['Cantidad'].sum())
+        n_bodegas = filtered['Bodega Recibe'].nunique() if 'Bodega Recibe' in filtered.columns else 0
+        n_transfers = filtered['ID_Transferencia'].nunique() if 'ID_Transferencia' in filtered.columns else len(filtered)
+        n_products = filtered['Producto'].nunique() if 'Producto' in filtered.columns else 0
+    except Exception as e:
+        st.error(f"❌ Error al calcular métricas: {e}")
+        return
     
+    # Mostrar cards de KPI
     k1, k2, k3, k4 = st.columns(4)
     with k1:
         st.markdown(f"""
@@ -1953,175 +2002,193 @@ def mostrar_kpi_diario():
     
     st.markdown("---")
     
-    # --- ANÁLISIS POR DIMENSIONES (VALORES ABSOLUTOS) ---
+    # --- ANÁLISIS POR DIMENSIONES ---
     st.markdown("### 📊 Análisis por Dimensiones")
     
-    # Crear tabs para diferentes dimensiones
     dim_tab1, dim_tab2, dim_tab3, dim_tab4 = st.tabs(["🎨 Color", "📏 Talla", "⚧ Género", "🏷️ Categoría/Departamento"])
     
     with dim_tab1:
-        if 'Color' in filtered.columns:
-            col_stats = filtered.groupby('Color').agg({
-                'Cantidad': ['sum', 'count']
-            }).reset_index()
-            col_stats.columns = ['Color', 'Unidades', 'Frecuencia']
-            col_stats['Porcentaje'] = (col_stats['Unidades'] / total_units * 100).round(2)
-            col_stats = col_stats.sort_values('Unidades', ascending=False)
-            
-            col1, col2 = st.columns([2, 1])
-            with col1:
-                fig = px.pie(col_stats, values='Unidades', names='Color', 
-                           title="Distribución por Color",
-                           color_discrete_sequence=px.colors.qualitative.Set3)
-                fig.update_traces(textposition='inside', textinfo='percent+label')
-                st.plotly_chart(fig, use_container_width=True)
-            with col2:
-                # CORRECCIÓN: Mostrar unidades completas con formato de miles
-                st.dataframe(col_stats[['Color', 'Unidades', 'Porcentaje']].style.format({
-                    'Unidades': '{:,}',
-                    'Porcentaje': '{:.2f}%'
-                }), use_container_width=True, height=400)
+        if 'Color' in filtered.columns and not filtered['Color'].isna().all():
+            try:
+                col_stats = filtered.groupby('Color').agg({
+                    'Cantidad': ['sum', 'count']
+                }).reset_index()
+                col_stats.columns = ['Color', 'Unidades', 'Frecuencia']
+                col_stats['Porcentaje'] = (col_stats['Unidades'] / total_units * 100).round(2)
+                col_stats = col_stats.sort_values('Unidades', ascending=False)
+                
+                col1, col2 = st.columns([2, 1])
+                with col1:
+                    fig = px.pie(col_stats, values='Unidades', names='Color', 
+                               title="Distribución por Color",
+                               color_discrete_sequence=px.colors.qualitative.Set3)
+                    fig.update_traces(textposition='inside', textinfo='percent+label')
+                    st.plotly_chart(fig, use_container_width=True)
+                with col2:
+                    st.dataframe(col_stats[['Color', 'Unidades', 'Porcentaje']].style.format({
+                        'Unidades': '{:,}',
+                        'Porcentaje': '{:.2f}%'
+                    }), use_container_width=True, height=400)
+            except Exception as e:
+                st.error(f"Error en análisis por color: {e}")
         else:
             st.info("No hay datos de color disponibles")
     
     with dim_tab2:
-        if 'Talla' in filtered.columns:
-            talla_stats = filtered.groupby('Talla').agg({
-                'Cantidad': ['sum', 'count']
-            }).reset_index()
-            talla_stats.columns = ['Talla', 'Unidades', 'Frecuencia']
-            talla_stats['Porcentaje'] = (talla_stats['Unidades'] / total_units * 100).round(2)
-            
-            # Ordenar por jerarquía de tallas si es posible
-            talla_order = ['3XS', '2XS', 'XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', 'Única']
-            talla_stats['Talla_Order'] = talla_stats['Talla'].apply(
-                lambda x: talla_order.index(x) if x in talla_order else 999
-            )
-            talla_stats = talla_stats.sort_values('Talla_Order')
-            
-            col1, col2 = st.columns([2, 1])
-            with col1:
-                fig = px.bar(talla_stats, x='Talla', y='Unidades', 
-                           title="Distribución por Talla",
-                           color='Unidades',
-                           color_continuous_scale='Viridis')
-                st.plotly_chart(fig, use_container_width=True)
-            with col2:
-                # CORRECCIÓN: Mostrar unidades completas con formato de miles
-                st.dataframe(talla_stats[['Talla', 'Unidades', 'Porcentaje']].style.format({
-                    'Unidades': '{:,}',
-                    'Porcentaje': '{:.2f}%'
-                }), use_container_width=True, height=400)
+        if 'Talla' in filtered.columns and not filtered['Talla'].isna().all():
+            try:
+                talla_stats = filtered.groupby('Talla').agg({
+                    'Cantidad': ['sum', 'count']
+                }).reset_index()
+                talla_stats.columns = ['Talla', 'Unidades', 'Frecuencia']
+                talla_stats['Porcentaje'] = (talla_stats['Unidades'] / total_units * 100).round(2)
+                
+                talla_order = ['3XS', '2XS', 'XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', 'Única']
+                talla_stats['Talla_Order'] = talla_stats['Talla'].apply(
+                    lambda x: talla_order.index(x) if x in talla_order else 999
+                )
+                talla_stats = talla_stats.sort_values('Talla_Order')
+                
+                col1, col2 = st.columns([2, 1])
+                with col1:
+                    fig = px.bar(talla_stats, x='Talla', y='Unidades', 
+                               title="Distribución por Talla",
+                               color='Unidades',
+                               color_continuous_scale='Viridis')
+                    st.plotly_chart(fig, use_container_width=True)
+                with col2:
+                    st.dataframe(talla_stats[['Talla', 'Unidades', 'Porcentaje']].style.format({
+                        'Unidades': '{:,}',
+                        'Porcentaje': '{:.2f}%'
+                    }), use_container_width=True, height=400)
+            except Exception as e:
+                st.error(f"Error en análisis por talla: {e}")
         else:
             st.info("No hay datos de talla disponibles")
     
     with dim_tab3:
-        if 'Genero' in filtered.columns:
-            gen_stats = filtered.groupby('Genero').agg({
-                'Cantidad': ['sum', 'count']
-            }).reset_index()
-            gen_stats.columns = ['Genero', 'Unidades', 'Frecuencia']
-            gen_stats['Porcentaje'] = (gen_stats['Unidades'] / total_units * 100).round(2)
-            gen_stats = gen_stats.sort_values('Unidades', ascending=False)
-            
-            col1, col2 = st.columns([2, 1])
-            with col1:
-                fig = px.pie(gen_stats, values='Unidades', names='Genero', 
-                           title="Distribución por Género",
-                           color_discrete_sequence=['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4'])
-                fig.update_traces(textposition='inside', textinfo='percent+label')
-                st.plotly_chart(fig, use_container_width=True)
-            with col2:
-                # CORRECCIÓN: Mostrar unidades completas con formato de miles
-                st.dataframe(gen_stats[['Genero', 'Unidades', 'Porcentaje']].style.format({
-                    'Unidades': '{:,}',
-                    'Porcentaje': '{:.2f}%'
-                }), use_container_width=True, height=400)
+        if 'Genero' in filtered.columns and not filtered['Genero'].isna().all():
+            try:
+                gen_stats = filtered.groupby('Genero').agg({
+                    'Cantidad': ['sum', 'count']
+                }).reset_index()
+                gen_stats.columns = ['Genero', 'Unidades', 'Frecuencia']
+                gen_stats['Porcentaje'] = (gen_stats['Unidades'] / total_units * 100).round(2)
+                gen_stats = gen_stats.sort_values('Unidades', ascending=False)
+                
+                col1, col2 = st.columns([2, 1])
+                with col1:
+                    fig = px.pie(gen_stats, values='Unidades', names='Genero', 
+                               title="Distribución por Género",
+                               color_discrete_sequence=['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4'])
+                    fig.update_traces(textposition='inside', textinfo='percent+label')
+                    st.plotly_chart(fig, use_container_width=True)
+                with col2:
+                    st.dataframe(gen_stats[['Genero', 'Unidades', 'Porcentaje']].style.format({
+                        'Unidades': '{:,}',
+                        'Porcentaje': '{:.2f}%'
+                    }), use_container_width=True, height=400)
+            except Exception as e:
+                st.error(f"Error en análisis por género: {e}")
         else:
             st.info("No hay datos de género disponibles")
     
     with dim_tab4:
-        if 'Categoria' in filtered.columns:
-            cat_stats = filtered.groupby('Categoria').agg({
-                'Cantidad': ['sum', 'count']
-            }).reset_index()
-            cat_stats.columns = ['Categoria', 'Unidades', 'Frecuencia']
-            cat_stats['Porcentaje'] = (cat_stats['Unidades'] / total_units * 100).round(2)
-            cat_stats = cat_stats.sort_values('Unidades', ascending=False)
-            
-            col1, col2 = st.columns([2, 1])
-            with col1:
-                fig = px.bar(cat_stats, x='Categoria', y='Unidades', 
-                           title="Distribución por Categoría",
-                           color='Unidades',
-                           color_continuous_scale='Plasma')
-                st.plotly_chart(fig, use_container_width=True)
-            with col2:
-                # CORRECCIÓN: Mostrar unidades completas con formato de miles
-                st.dataframe(cat_stats[['Categoria', 'Unidades', 'Porcentaje']].style.format({
-                    'Unidades': '{:,}',
-                    'Porcentaje': '{:.2f}%'
-                }), use_container_width=True, height=400)
+        if 'Categoria' in filtered.columns and not filtered['Categoria'].isna().all():
+            try:
+                cat_stats = filtered.groupby('Categoria').agg({
+                    'Cantidad': ['sum', 'count']
+                }).reset_index()
+                cat_stats.columns = ['Categoria', 'Unidades', 'Frecuencia']
+                cat_stats['Porcentaje'] = (cat_stats['Unidades'] / total_units * 100).round(2)
+                cat_stats = cat_stats.sort_values('Unidades', ascending=False)
+                
+                col1, col2 = st.columns([2, 1])
+                with col1:
+                    fig = px.bar(cat_stats, x='Categoria', y='Unidades', 
+                               title="Distribución por Categoría",
+                               color='Unidades',
+                               color_continuous_scale='Plasma')
+                    st.plotly_chart(fig, use_container_width=True)
+                with col2:
+                    st.dataframe(cat_stats[['Categoria', 'Unidades', 'Porcentaje']].style.format({
+                        'Unidades': '{:,}',
+                        'Porcentaje': '{:.2f}%'
+                    }), use_container_width=True, height=400)
+            except Exception as e:
+                st.error(f"Error en análisis por categoría: {e}")
         else:
             st.info("No hay datos de categoría disponibles")
     
     st.markdown("---")
     
-    # --- GRÁFICOS ADICIONALES (VALORES ABSOLUTOS) ---
+    # --- GRÁFICOS ADICIONALES ---
     col_g1, col_g2 = st.columns(2)
     with col_g1:
         st.subheader("📊 Top 10 Bodegas")
         if 'Bodega Recibe' in filtered.columns:
-            top_bod = filtered.groupby('Bodega Recibe')['Cantidad'].sum().nlargest(10)
-            if not top_bod.empty:
-                fig = px.bar(
-                    x=top_bod.values, y=top_bod.index,
-                    orientation='h', color=top_bod.values,
-                    color_continuous_scale='Viridis',
-                    labels={'x': 'Unidades', 'y': ''}
-                )
-                fig.update_layout(height=350)
-                st.plotly_chart(fig, use_container_width=True)
+            try:
+                top_bod = filtered.groupby('Bodega Recibe')['Cantidad'].sum().nlargest(10)
+                if not top_bod.empty:
+                    fig = px.bar(
+                        x=top_bod.values, y=top_bod.index,
+                        orientation='h', color=top_bod.values,
+                        color_continuous_scale='Viridis',
+                        labels={'x': 'Unidades', 'y': ''}
+                    )
+                    fig.update_layout(height=350)
+                    st.plotly_chart(fig, use_container_width=True)
+            except Exception as e:
+                st.error(f"Error en gráfico de bodegas: {e}")
     
     with col_g2:
         st.subheader("📈 Tendencia Diaria")
         if 'Fecha' in filtered.columns:
-            daily = filtered.groupby(filtered['Fecha'].dt.date)['Cantidad'].sum().reset_index()
-            daily.columns = ['Fecha', 'Unidades']
-            fig = px.line(daily, x='Fecha', y='Unidades', markers=True)
-            st.plotly_chart(fig, use_container_width=True)
+            try:
+                daily = filtered.groupby(filtered['Fecha'].dt.date)['Cantidad'].sum().reset_index()
+                daily.columns = ['Fecha', 'Unidades']
+                fig = px.line(daily, x='Fecha', y='Unidades', markers=True)
+                st.plotly_chart(fig, use_container_width=True)
+            except Exception as e:
+                st.error(f"Error en gráfico de tendencia: {e}")
     
     st.markdown("---")
     
-    # --- TABLA DE DATOS (VALORES ABSOLUTOS) ---
+    # --- TABLA DE DATOS ---
     st.subheader("📋 Detalle de Transferencias")
     cols_display = ['Fecha', 'Bodega Recibe', 'Producto', 'Genero', 'Categoria', 'Color', 'Talla', 'Cantidad']
     cols_display = [c for c in cols_display if c in filtered.columns]
-    # CORRECCIÓN: Mostrar valores originales sin conversión a millones
-    st.dataframe(filtered[cols_display].sort_values('Fecha', ascending=False), use_container_width=True, height=300)
+    try:
+        st.dataframe(filtered[cols_display].sort_values('Fecha', ascending=False), use_container_width=True, height=300)
+    except Exception as e:
+        st.error(f"Error al mostrar tabla: {e}")
     
     st.markdown("---")
     
     # --- REPORTES ---
     st.subheader("📄 Generar Reporte")
-    col_r1, col_r2, col_r3 = st.columns([1, 1, 2])
-    with col_r1:
-        r_start = st.date_input("Fecha inicio", filtered['Fecha'].min().date(), key="r_start")
-    with col_r2:
-        r_end = st.date_input("Fecha fin", filtered['Fecha'].max().date(), key="r_end")
-    with col_r3:
-        if st.button("📥 Descargar reporte Excel", use_container_width=True):
-            with st.spinner("Generando reporte..."):
-                excel = report_gen.generate_detailed_report(filtered, r_start, r_end)
-                if excel:
-                    ts = datetime.now().strftime('%Y%m%d_%H%M%S')
-                    st.download_button(
-                        label="⬇️ Descargar",
-                        data=excel,
-                        file_name=f"KPI_Diario_{ts}.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                        use_container_width=True
-                    )
+    try:
+        col_r1, col_r2, col_r3 = st.columns([1, 1, 2])
+        with col_r1:
+            r_start = st.date_input("Fecha inicio", filtered['Fecha'].min().date(), key="kdi_report_start")
+        with col_r2:
+            r_end = st.date_input("Fecha fin", filtered['Fecha'].max().date(), key="kdi_report_end")
+        with col_r3:
+            if st.button("📥 Descargar reporte Excel", use_container_width=True, key="kdi_report_btn"):
+                with st.spinner("Generando reporte..."):
+                    excel = report_gen.generate_detailed_report(filtered, r_start, r_end)
+                    if excel:
+                        ts = datetime.now().strftime('%Y%m%d_%H%M%S')
+                        st.download_button(
+                            label="⬇️ Descargar",
+                            data=excel,
+                            file_name=f"KPI_Diario_{ts}.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            use_container_width=True,
+                            key="kdi_final_download"
+                        )
+    except Exception as e:
+        st.error(f"Error en sección de reportes: {e}")
 
 
 # ==============================================================================
@@ -2380,6 +2447,13 @@ def mostrar_dashboard_transferencias():
                             )
                         col_d1, col_d2 = st.columns([1, 4])
                         with col_d1:
+                            # CORRECCIÓN: Definir función to_excel localmente
+                            def to_excel(df):
+                                output = io.BytesIO()
+                                with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                                    df.to_excel(writer, index=False, sheet_name='Datos')
+                                return output.getvalue()
+                            
                             excel_data = to_excel(df_detalle)
                             st.download_button(
                                 label="📥 Descargar Excel",
@@ -2394,6 +2468,8 @@ def mostrar_dashboard_transferencias():
                         )
             except Exception as e:
                 st.error(f"❌ **Error al procesar el archivo:** {str(e)}")
+                import traceback
+                st.error(traceback.format_exc())
     
     with tab2:
         # NUEVO: Dashboard de KPI Diario - SIN HISTORIAL
