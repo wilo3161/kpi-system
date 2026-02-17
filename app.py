@@ -1342,7 +1342,7 @@ def show_dashboard_kpis():
 # ==============================================================================
 
 # ==============================================================================
-# 7. MODULO DASHBOARD LOGISTICO - VERSION 2.0 (ESCALABLE Y CORREGIDO)
+# 7. MODULO DASHBOARD LOGISTICO - VERSION 2.0 (CORREGIDA)
 # ==============================================================================
 
 import streamlit as st
@@ -1889,15 +1889,11 @@ class TransitDataProcessor:
                 st.error("❌ El archivo está vacío")
                 return pd.DataFrame()
             
-            # Debug de columnas
-            st.write("🔍 Columnas detectadas:", list(df.columns))
-            
             # Normalizar nombres de columnas
             df.columns = [str(col).strip() for col in df.columns]
             
             # Detectar columnas automáticamente
             col_mapping = self._detect_columns(df)
-            st.write("🗺️ Mapeo detectado:", col_mapping)
             
             if not col_mapping.get('codigo'):
                 st.error(f"❌ No se encontró columna de código. Columnas: {list(df.columns)}")
@@ -2495,7 +2491,7 @@ def mostrar_dashboard_transferencias():
     tab1, tab2, tab3 = st.tabs([
         "📊 Transferencias Diarias", 
         "📦 Mercadería en Tránsito", 
-        "📈 Análisis Histórico & Stock"
+        "📈 Análisis Histórico & Stock (En desarrollo)"
     ])
     
     # ==========================================
@@ -2745,40 +2741,31 @@ def mostrar_dashboard_transferencias():
                 st.error(traceback.format_exc())
 
     # ==========================================
-    # TAB 2: MERCADERIA EN TRANSITO (MEJORADO)
+    # TAB 2: MERCADERIA EN TRANSITO (AHORA CON UN SOLO ARCHIVO)
     # ==========================================
     with tab2:
         st.header("📦 Análisis de Mercadería en Tránsito con Clasificación Inteligente")
         
         transit_processor = TransitDataProcessor()
         
-        col_a, col_b = st.columns(2)
-        with col_a:
-            f_base = st.file_uploader(
-                "1. Archivo Base (Stock con Departamento)", 
-                type=['xlsx', 'csv'], 
-                key="base_tr_v2"
-            )
-        with col_b:
-            f_transito = st.file_uploader(
-                "2. Archivo Tránsito/Transferencias", 
-                type=['xlsx', 'csv'], 
-                key="transito_v2"
-            )
+        st.markdown("""
+        <div class='filter-panel'>
+            <h4>📂 Carga de Archivo de Tránsito</h4>
+            <p class='section-description'>Sube el archivo de mercadería en tránsito (Excel o CSV). El sistema detectará automáticamente las columnas y clasificará los productos por género, categoría textil, color y talla.</p>
+        </div>
+        """, unsafe_allow_html=True)
         
-        if f_base and f_transito:
+        f_transito = st.file_uploader(
+            "Archivo de Tránsito/Transferencias", 
+            type=['xlsx', 'csv'], 
+            key="transito_unico"
+        )
+        
+        if f_transito:
             try:
-                # Cargar base
-                if f_base.name.endswith('.csv'):
-                    df_base = pd.read_csv(f_base)
-                else:
-                    df_base = pd.read_excel(f_base)
-                
-                st.write(f"📄 Base cargada: **{len(df_base)}** registros")
-                
-                # Procesar tránsito
+                # Procesar tránsito sin base
                 with st.spinner("🔍 Clasificando productos textilmente..."):
-                    df_transito = transit_processor.process_transit_file(f_transito, df_base)
+                    df_transito = transit_processor.process_transit_file(f_transito, df_base=None)
                 
                 if df_transito is None or df_transito.empty:
                     st.error("❌ No se pudo procesar el archivo de tránsito")
@@ -2953,6 +2940,13 @@ def mostrar_dashboard_transferencias():
                                 'CODIGO': 'nunique'
                             }).rename(columns={'CODIGO': 'SKUs'}).sort_values('CANTIDAD', ascending=False)
                             res_col.to_excel(writer, sheet_name='Resumen_Colores')
+                        
+                        if 'Talla' in df_transito.columns:
+                            res_talla = df_transito.groupby('Talla').agg({
+                                'CANTIDAD': 'sum',
+                                'CODIGO': 'nunique'
+                            }).rename(columns={'CODIGO': 'SKUs'}).sort_values('CANTIDAD', ascending=False)
+                            res_talla.to_excel(writer, sheet_name='Resumen_Tallas')
                     
                     st.download_button(
                         label="📥 Descargar Análisis Completo (Excel)",
@@ -2962,7 +2956,7 @@ def mostrar_dashboard_transferencias():
                     )
                 
                 with col_exp2:
-                    st.info(f"💡 **Tip:** El archivo exportado incluye múltiples pestañas con análisis por dimensión.")
+                    st.info(f"💡 **Tip:** El archivo exportado incluye múltiples pestañas con análisis por dimensión (categoría, género, color, talla).")
             
             except Exception as e:
                 st.error(f"❌ Error: {str(e)}")
@@ -2970,190 +2964,41 @@ def mostrar_dashboard_transferencias():
                 st.error(traceback.format_exc())
         
         else:
-            st.info("👈 Carga ambos archivos para realizar el análisis completo.")
+            st.info("👆 Sube el archivo de tránsito para comenzar el análisis.")
             
             with st.expander("ℹ️ Guía de uso"):
                 st.markdown("""
-                **Archivo Base (Stock):**
-                - Código de producto, Departamento/Categoría, Descripción
-                
-                **Archivo Tránsito:**
-                - Código de producto, Cantidad, Bodega/Destino
-                
-                El sistema detectará automáticamente las columnas y clasificará cada prenda por género, categoría textil, color y talla.
+                **Archivo de Tránsito:**
+                - Debe contener columnas con código de producto, cantidad y opcionalmente descripción del producto.
+                - El sistema detectará automáticamente las columnas y clasificará cada prenda por género, categoría textil, color y talla.
+                - Se generarán gráficos y tablas resumen.
                 """)
 
     # ==========================================
-    # TAB 3: ANALISIS HISTORICO Y STOCK
+    # TAB 3: ANALISIS HISTORICO Y STOCK (EN DESARROLLO)
     # ==========================================
     with tab3:
-        st.header("📈 Análisis Histórico Acumulado y Stock")
+        st.header("📈 Análisis Histórico y de Stock (Módulo en Desarrollo)")
         
-        subtab1, subtab2 = st.tabs(["📊 Histórico Transferencias", "📦 Análisis de Stock"])
+        st.markdown("""
+        <div style="background: #fef3c7; padding: 30px; border-radius: 10px; text-align: center; border: 1px solid #fbbf24;">
+            <h3 style="color: #92400e;">🚧 Módulo en Construcción</h3>
+            <p style="color: #78350f; font-size: 1.1em;">Este módulo se encuentra actualmente en desarrollo. Pronto podrás acceder a análisis históricos avanzados y gestión de stock.</p>
+            <p style="color: #78350f;">Mientras tanto, puedes utilizar las pestañas de Transferencias Diarias y Mercadería en Tránsito para obtener información valiosa.</p>
+        </div>
+        """, unsafe_allow_html=True)
         
-        with subtab1:
-            st.subheader("Tendencias Acumuladas")
-            
-            # Mostrar métricas históricas
-            metrics = history_manager.get_accumulated_metrics()
-            
-            if metrics['total_unidades'] == 0:
-                st.info("ℹ️ No hay datos históricos acumulados aún. Procesa transferencias en la pestaña 'Transferencias Diarias' para construir el histórico.")
-            else:
-                h1, h2, h3 = st.columns(3)
-                with h1:
-                    st.metric("Total Histórico Unidades", f"{metrics['total_unidades']:,}")
-                with h2:
-                    st.metric("Categorías Distintas", len(metrics['por_categoria']))
-                with h3:
-                    st.metric("Géneros Distintos", len(metrics['por_genero']))
-                
-                # Gráfico de evolución por categoría histórica
-                if metrics['por_categoria']:
-                    st.subheader("Distribución Histórica por Canal")
-                    hist_cat = pd.DataFrame({
-                        'Canal': list(metrics['por_categoria'].keys()),
-                        'Unidades': list(metrics['por_categoria'].values())
-                    })
-                    fig_hist = px.bar(
-                        hist_cat,
-                        x='Canal',
-                        y='Unidades',
-                        color='Canal',
-                        text='Unidades'
-                    )
-                    fig_hist.update_traces(texttemplate='%{text:,.0f}', textposition='outside')
-                    st.plotly_chart(fig_hist, use_container_width=True)
-                
-                # Datos por género histórico
-                if metrics['por_genero']:
-                    st.subheader("Distribución Histórica por Género")
-                    c1, c2 = st.columns(2)
-                    with c1:
-                        fig_gen_hist = px.pie(
-                            names=list(metrics['por_genero'].keys()),
-                            values=list(metrics['por_genero'].values()),
-                            hole=0.4
-                        )
-                        st.plotly_chart(fig_gen_hist, use_container_width=True)
-                    with c2:
-                        st.write("**Detalle:**")
-                        for gen, cant in sorted(metrics['por_genero'].items(), key=lambda x: x[1], reverse=True):
-                            st.write(f"- {gen}: {cant:,} unidades")
-        
-        with subtab2:
-            st.subheader("Análisis de Stock vs Ventas")
-            
-            col_s1, col_s2 = st.columns(2)
-            with col_s1:
-                stock_file = st.file_uploader("Stock Actual", type=['xlsx', 'csv'], key="stock_v2")
-            with col_s2:
-                ventas_file = st.file_uploader("Histórico Ventas", type=['xlsx', 'csv'], key="ventas_v2")
-            
-            if stock_file and ventas_file:
-                try:
-                    df_stock = pd.read_excel(stock_file) if stock_file.name.endswith('.xlsx') else pd.read_csv(stock_file)
-                    df_ventas = pd.read_excel(ventas_file) if ventas_file.name.endswith('.xlsx') else pd.read_csv(ventas_file)
-                    
-                    # Clasificar stock si tiene descripción
-                    if any(col in df_stock.columns for col in ['Producto', 'Descripcion', 'Nombre']):
-                        desc_col = next(col for col in ['Producto', 'Descripcion', 'Nombre'] if col in df_stock.columns)
-                        classifier = TextileClassifier()
-                        class_stock = df_stock[desc_col].apply(lambda x: classifier.classify_product(x))
-                        class_df = pd.DataFrame(class_stock.tolist())
-                        df_stock = pd.concat([df_stock, class_df], axis=1)
-                    
-                    # Métricas rápidas
-                    st.subheader("📊 Métricas de Stock")
-                    m1, m2, m3, m4 = st.columns(4)
-                    
-                    with m1:
-                        st.metric("SKUs en Stock", len(df_stock))
-                    with m2:
-                        if 'Stock' in df_stock.columns:
-                            st.metric("Unidades Totales", f"{int(df_stock['Stock'].sum()):,}")
-                    with m3:
-                        if 'VENTAS' in df_ventas.columns:
-                            st.metric("Ventas Totales", f"{int(df_ventas['VENTAS'].sum()):,}")
-                    with m4:
-                        if 'FECHA' in df_ventas.columns:
-                            df_ventas['FECHA'] = pd.to_datetime(df_ventas['FECHA'], errors='coerce')
-                            dias = df_ventas['FECHA'].nunique()
-                            st.metric("Días Analizados", dias)
-                    
-                    # Análisis ABC
-                    st.subheader("📈 Clasificación ABC del Stock")
-                    if 'Stock' in df_stock.columns:
-                        df_abc = df_stock.sort_values('Stock', ascending=False).copy()
-                        df_abc['Stock_Acum'] = df_abc['Stock'].cumsum()
-                        total = df_abc['Stock'].sum()
-                        df_abc['Porc_Acum'] = (df_abc['Stock_Acum'] / total) * 100
-                        
-                        df_abc['Clase'] = pd.cut(
-                            df_abc['Porc_Acum'],
-                            bins=[0, 80, 95, 100],
-                            labels=['A (Alto Valor)', 'B (Medio)', 'C (Bajo)']
-                        )
-                        
-                        resumen_abc = df_abc.groupby('Clase').agg({
-                            'Stock': ['count', 'sum']
-                        }).reset_index()
-                        resumen_abc.columns = ['Clase', 'SKUs', 'Unidades']
-                        
-                        col_abc1, col_abc2 = st.columns([2, 1])
-                        with col_abc1:
-                            fig_abc = px.pie(
-                                resumen_abc,
-                                values='Unidades',
-                                names='Clase',
-                                hole=0.4,
-                                color_discrete_sequence=['#0033A0', '#E4002B', '#10B981']
-                            )
-                            st.plotly_chart(fig_abc, use_container_width=True)
-                        with col_abc2:
-                            st.dataframe(resumen_abc, use_container_width=True)
-                            st.caption("**Regla ABC:** A=80% valor, B=15%, C=5%")
-                    
-                    # Análisis de rotación
-                    st.subheader("🔄 Análisis de Rotación")
-                    if 'CODIGO' in df_stock.columns and 'CODIGO' in df_ventas.columns:
-                        ventas_agg = df_ventas.groupby('CODIGO')['VENTAS'].sum().reset_index()
-                        df_rot = df_stock.merge(ventas_agg, on='CODIGO', how='left')
-                        df_rot['VENTAS'] = df_rot['VENTAS'].fillna(0)
-                        df_rot['Rotacion'] = df_rot.apply(
-                            lambda x: x['VENTAS']/x['Stock'] if x['Stock'] > 0 else 0, axis=1
-                        )
-                        
-                        # Categorizar rotación
-                        df_rot['Nivel_Rot'] = pd.cut(
-                            df_rot['Rotacion'],
-                            bins=[-1, 0.1, 0.5, 1, 3, float('inf')],
-                            labels=['Muy Baja', 'Baja', 'Media', 'Alta', 'Muy Alta']
-                        )
-                        
-                        rot_resumen = df_rot.groupby('Nivel_Rot').agg({
-                            'CODIGO': 'count',
-                            'Stock': 'sum',
-                            'VENTAS': 'sum'
-                        }).reset_index()
-                        
-                        st.dataframe(rot_resumen.rename(columns={'CODIGO': 'SKUs'}), use_container_width=True)
-                        
-                        # Visualización
-                        fig_rot = px.bar(
-                            rot_resumen,
-                            x='Nivel_Rot',
-                            y='SKUs',
-                            color='Nivel_Rot',
-                            text='SKUs',
-                            color_discrete_sequence=['#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6']
-                        )
-                        st.plotly_chart(fig_rot, use_container_width=True)
-                
-                except Exception as e:
-                    st.error(f"Error: {str(e)}")
-            else:
-                st.info("Carga archivos de stock y ventas para análisis completo.")
+        # Opcional: mostrar algún dato histórico si ya se ha cargado algo
+        metrics = history_manager.get_accumulated_metrics()
+        if metrics['total_unidades'] > 0:
+            st.subheader("📊 Datos Históricos Acumulados (Sesión Actual)")
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Total Unidades Históricas", f"{metrics['total_unidades']:,}")
+            with col2:
+                st.metric("Categorías", len(metrics['por_categoria']))
+            with col3:
+                st.metric("Géneros", len(metrics['por_genero']))
 
 
 # ==============================================================================
