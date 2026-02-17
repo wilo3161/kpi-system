@@ -1340,9 +1340,6 @@ def show_dashboard_kpis():
 # ==============================================================================
 # 7. MODULO DASHBOARD LOGISTICO
 # ==============================================================================
-# ==============================================================================
-# 7. MODULO DASHBOARD LOGISTICO
-# ==============================================================================
 
 # Constantes para el dashboard logistico
 TIENDAS_REGULARES = 42
@@ -1371,7 +1368,7 @@ TIENDAS_REGULARES_LISTA = [
 # ==============================================================================
 # NUEVAS IMPORTACIONES Y CLASES PARA EL SISTEMA DE KPI DIARIO
 # ==============================================================================
-import os  # necesario para la gestión del archivo de historial
+import os
 
 # Diccionarios para clasificación de productos
 GENDER_MAP = {
@@ -1650,6 +1647,13 @@ class DataProcessor:
         for prod in df['Producto']:
             classifications.append(self.classifier.classify_product(prod))
         class_df = pd.DataFrame(classifications)
+        
+        # --- CORRECCIÓN: Eliminar columnas duplicadas antes de concatenar ---
+        # Identificar columnas de clasificación que ya existen en df
+        cols_to_drop = [col for col in class_df.columns if col in df.columns]
+        if cols_to_drop:
+            df = df.drop(columns=cols_to_drop)
+        
         return pd.concat([df, class_df], axis=1)
     
     def _group_warehouse(self, name):
