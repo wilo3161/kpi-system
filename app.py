@@ -1605,103 +1605,39 @@ class TextileClassifier:
 
 
 class DataProcessor:
-    """Procesador de archivos de transferencias - Versión mejorada con mapeo flexible de columnas"""
+    """Procesador de archivos de transferencias"""
     
     def __init__(self):
         self.classifier = TextileClassifier()
     
     def process_excel_file(self, file) -> pd.DataFrame:
         try:
-            # Leer archivo
             if file.name.endswith('.csv'):
                 df = pd.read_csv(file, encoding='utf-8')
             else:
                 df = pd.read_excel(file, engine='openpyxl')
             
-            # Limpiar nombres de columnas
-            df.columns = [str(c).strip() for c in df.columns]
-            
-            # Mapeo flexible de columnas requeridas
-            required_std = ['Producto', 'Fecha', 'Cantidad', 'Bodega Recibe']
-            # También aceptamos nombres alternativos para destino
-            dest_aliases = ['Bodega Destino', 'Sucursal Destino', 'Destino', 'Bodega', 'Sucursal']
-            
-            col_mapping = {}
-            missing = []
-            
-            for req in required_std:
-                found = False
-                # Buscar coincidencia exacta ignorando mayúsculas y espacios
-                for col in df.columns:
-                    if col.lower() == req.lower():
-                        col_mapping[col] = req
-                        found = True
-                        break
-                if not found:
-                    # Búsqueda parcial (contiene la palabra)
-                    for col in df.columns:
-                        if req.lower() in col.lower():
-                            col_mapping[col] = req
-                            found = True
-                            break
-                # Para 'Bodega Recibe', también buscar por los alias
-                if not found and req == 'Bodega Recibe':
-                    for alias in dest_aliases:
-                        for col in df.columns:
-                            if alias.lower() in col.lower():
-                                col_mapping[col] = req
-                                found = True
-                                break
-                        if found:
-                            break
-                if not found:
-                    missing.append(req)
-            
+            required = ['Producto', 'Fecha', 'Cantidad', 'Bodega Recibe']
+            missing = [c for c in required if c not in df.columns]
             if missing:
-                st.error(f"❌ No se encontraron las siguientes columnas en el archivo: {', '.join(missing)}")
-                st.info("Columnas detectadas: " + ", ".join(df.columns))
+                st.error(f"Faltan columnas: {', '.join(missing)}")
                 return pd.DataFrame()
             
-            # Renombrar columnas al estándar
-            df.rename(columns=col_mapping, inplace=True)
-            
-            # Procesar cantidad
+            df.columns = [str(c).strip() for c in df.columns]
             df['Cantidad'] = self._process_quantity(df['Cantidad'])
-            
-            # Procesar fecha de forma más robusta
-            df['Fecha'] = pd.to_datetime(df['Fecha'], errors='coerce', dayfirst=True, infer_datetime_format=True)
-            # Si falla, intentar con formato mixto
-            if df['Fecha'].isna().all():
-                df['Fecha'] = pd.to_datetime(df['Fecha'], errors='coerce', format='%d/%m/%Y')
+            df['Fecha'] = pd.to_datetime(df['Fecha'], errors='coerce', dayfirst=True)
             df = df.dropna(subset=['Fecha'])
-            if df.empty:
-                st.warning("No se pudo interpretar la columna 'Fecha'. Verifique el formato (use dd/mm/aaaa).")
-                return pd.DataFrame()
-            
-            # Clasificar productos
             df = self._classify_products(df)
-            
-            # Agrupar bodega
             df['Grupo_Bodega'] = df['Bodega Recibe'].apply(self._group_warehouse)
             
-            # Buscar columna de secuencial (opcional)
-            sec_col = None
-            posibles_sec = ['Secuencial - Factura', 'Secuencial', 'Factura', 'ID Transferencia', 'Transferencia']
-            for col in df.columns:
-                if any(ps.lower() in col.lower() for ps in posibles_sec):
-                    sec_col = col
-                    break
-            if sec_col:
-                df['ID_Transferencia'] = df[sec_col].astype(str) + '_' + df['Fecha'].dt.strftime('%Y%m%d')
-            else:
-                # Crear un ID artificial
-                df['ID_Transferencia'] = df.index.astype(str) + '_' + df['Fecha'].dt.strftime('%Y%m%d')
+            if 'Secuencial - Factura' in df.columns:
+                df['ID_Transferencia'] = df['Secuencial - Factura'].astype(str) + '_' + df['Fecha'].dt.strftime('%Y%m%d')
             
             df = df.sort_values('Fecha', ascending=False).reset_index(drop=True)
             st.success(f"✅ Archivo procesado: {len(df)} registros")
             return df
         except Exception as e:
-            st.error(f"Error al procesar el archivo: {e}")
+            st.error(f"Error al procesar: {e}")
             return pd.DataFrame()
     
     def _process_quantity(self, s):
@@ -1734,7 +1670,8 @@ class DataProcessor:
             classifications.append(self.classifier.classify_product(prod))
         class_df = pd.DataFrame(classifications)
         
-        # Eliminar columnas duplicadas que pudieran existir en df
+        # --- CORRECCIÓN: Eliminar columnas duplicadas antes de concatenar ---
+        # Identificar columnas de clasificación que ya existen en df
         cols_to_drop = [col for col in class_df.columns if col in df.columns]
         if cols_to_drop:
             df = df.drop(columns=cols_to_drop)
@@ -1775,57 +1712,53 @@ class ReportGenerator:
         
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            # Resumen ejecutivo (valores en millones)
+            # Resumen ejecutivo - VALORES ABSOLUTOS (no en millones)
             summary = []
             total_units = int(df['Cantidad'].sum())
-            total_units_millones = total_units / 1_000_000
             total_transfers = df['ID_Transferencia'].nunique() if 'ID_Transferencia' in df.columns else len(df)
             bodegas = df['Bodega Recibe'].nunique()
             productos = df['Producto'].nunique()
             summary.append(['KPIs PRINCIPALES', ''])
-            summary.append(['Total Unidades (millones)', f'{total_units_millones:,.2f}'])
+            summary.append(['Total Unidades', f'{total_units:,}'])  # CORREGIDO: Sin conversión a millones
             summary.append(['Transferencias', f'{total_transfers:,}'])
             summary.append(['Bodegas Destino', f'{bodegas:,}'])
             summary.append(['Productos Únicos', f'{productos:,}'])
             summary.append(['', ''])
             
             top_bodegas = df.groupby('Bodega Recibe')['Cantidad'].sum().nlargest(5)
-            summary.append(['TOP 5 BODEGAS', 'Unidades (millones)'])
+            summary.append(['TOP 5 BODEGAS', 'Unidades'])
             for b, c in top_bodegas.items():
-                summary.append([b, f'{c/1_000_000:,.2f}'])
+                summary.append([b, f'{int(c):,}'])  # CORREGIDO: Sin conversión a millones
             summary.append(['', ''])
             
             if 'Categoria' in df.columns:
                 top_cat = df.groupby('Categoria')['Cantidad'].sum().nlargest(5)
-                summary.append(['TOP 5 CATEGORÍAS', 'Unidades (millones)'])
+                summary.append(['TOP 5 CATEGORÍAS', 'Unidades'])
                 for cat, cant in top_cat.items():
-                    summary.append([cat, f'{cant/1_000_000:,.2f}'])
+                    summary.append([cat, f'{int(cant):,}'])  # CORREGIDO: Sin conversión a millones
             
             pd.DataFrame(summary, columns=['Métrica', 'Valor']).to_excel(writer, sheet_name='Resumen', index=False)
             
-            # Detalle completo (valores originales)
+            # Detalle completo - VALORES ORIGINALES
             df.to_excel(writer, sheet_name='Detalle', index=False)
             
-            # Por bodega (totales en millones)
+            # Por bodega - VALORES ABSOLUTOS
             if 'Bodega Recibe' in df.columns:
                 w_sum = df.groupby('Bodega Recibe').agg({'Cantidad': ['sum', 'count'], 'Producto': 'nunique'})
                 w_sum.columns = ['Unidades', 'Transferencias', 'Productos']
-                w_sum['Unidades (millones)'] = w_sum['Unidades'] / 1_000_000
                 w_sum.sort_values('Unidades', ascending=False).to_excel(writer, sheet_name='Por_Bodega')
             
-            # Por categoría (totales en millones)
+            # Por categoría - VALORES ABSOLUTOS
             if 'Categoria' in df.columns:
                 cat_sum = df.groupby(['Categoria', 'Genero']).agg({'Cantidad': ['sum', 'count'], 'Producto': 'nunique'})
                 cat_sum.columns = ['Unidades', 'Transferencias', 'Productos']
-                cat_sum['Unidades (millones)'] = cat_sum['Unidades'] / 1_000_000
                 cat_sum.sort_values('Unidades', ascending=False).to_excel(writer, sheet_name='Por_Categoria')
             
-            # Tendencias diarias (valores en millones)
+            # Tendencias diarias - VALORES ABSOLUTOS
             if 'Fecha' in df.columns:
                 df['Fecha_Dia'] = df['Fecha'].dt.date
                 daily = df.groupby('Fecha_Dia').agg({'Cantidad': 'sum', 'ID_Transferencia': 'nunique'}).reset_index()
                 daily.columns = ['Fecha', 'Unidades', 'Transferencias']
-                daily['Unidades (millones)'] = daily['Unidades'] / 1_000_000
                 daily.sort_values('Fecha').to_excel(writer, sheet_name='Tendencias', index=False)
         
         output.seek(0)
@@ -1920,23 +1853,21 @@ def mostrar_kpi_diario():
                 st.session_state.kdi_current_data = new_data
                 st.session_state.kdi_loaded = True
                 st.success("Datos cargados exitosamente")
-                # Eliminado st.rerun() para evitar ciclos innecesarios
-            else:
-                st.warning("El archivo no pudo ser procesado. Revise el formato.")
+                st.rerun()
     
     # Si no hay datos, mostrar instrucciones
     if not st.session_state.kdi_loaded or st.session_state.kdi_current_data.empty:
         st.info("👆 Sube un archivo para comenzar el análisis.")
         with st.expander("📋 Estructura esperada del archivo"):
             st.markdown("""
-            **Columnas requeridas (se detectan automáticamente aunque tengan nombres similares):**
+            **Columnas requeridas:**
             - `Producto`: nombre del producto
             - `Fecha`: fecha de la transferencia (ej. 15/01/2024)
             - `Cantidad`: número de unidades
-            - `Bodega Recibe` (o `Bodega Destino`, `Sucursal Destino`, etc.): destino de la mercadería
+            - `Bodega Recibe`: destino de la mercadería
             
             **Columna opcional:**
-            - `Secuencial - Factura` (o similar): identificador único de la transferencia
+            - `Secuencial - Factura`: identificador único de la transferencia
             """)
         return
     
@@ -1945,7 +1876,6 @@ def mostrar_kpi_diario():
     data = st.session_state.kdi_current_data
     filtered = data.copy()
     
-    # Verificar columnas necesarias para filtros
     col_f1, col_f2, col_f3, col_f4 = st.columns(4)
     with col_f1:
         if 'Fecha' in filtered.columns and not filtered.empty:
@@ -1976,12 +1906,13 @@ def mostrar_kpi_diario():
     
     st.markdown("---")
     
-    # --- KPIs (en millones) ---
+    # --- KPIs (VALORES ABSOLUTOS como en Pestaña 1) ---
     if filtered.empty:
         st.warning("No hay datos con los filtros actuales.")
         return
     
-    total_units_millones = filtered['Cantidad'].sum() / 1_000_000
+    # CORRECCIÓN: Usar valores absolutos (unidades completas) NO en millones
+    total_units = int(filtered['Cantidad'].sum())
     n_bodegas = filtered['Bodega Recibe'].nunique() if 'Bodega Recibe' in filtered.columns else 0
     n_transfers = filtered['ID_Transferencia'].nunique() if 'ID_Transferencia' in filtered.columns else len(filtered)
     n_products = filtered['Producto'].nunique() if 'Producto' in filtered.columns else 0
@@ -1991,8 +1922,8 @@ def mostrar_kpi_diario():
         st.markdown(f"""
         <div style='background: linear-gradient(135deg, #667eea15, #764ba230); padding: 20px; border-radius: 10px; border-left: 5px solid #667eea;'>
             <div style='font-size: 24px; margin-bottom: 8px;'>📦</div>
-            <div style='font-size: 14px; color: #666; margin-bottom: 5px;'>Unidades Totales (millones)</div>
-            <div style='font-size: 28px; font-weight: bold; color: #333;'>{total_units_millones:,.2f} M</div>
+            <div style='font-size: 14px; color: #666; margin-bottom: 5px;'>Unidades Totales</div>
+            <div style='font-size: 28px; font-weight: bold; color: #333;'>{total_units:,}</div>
         </div>
         """, unsafe_allow_html=True)
     with k2:
@@ -2022,9 +1953,10 @@ def mostrar_kpi_diario():
     
     st.markdown("---")
     
-    # --- ANÁLISIS POR DIMENSIONES (con comprobación de existencia de columnas) ---
+    # --- ANÁLISIS POR DIMENSIONES (VALORES ABSOLUTOS) ---
     st.markdown("### 📊 Análisis por Dimensiones")
     
+    # Crear tabs para diferentes dimensiones
     dim_tab1, dim_tab2, dim_tab3, dim_tab4 = st.tabs(["🎨 Color", "📏 Talla", "⚧ Género", "🏷️ Categoría/Departamento"])
     
     with dim_tab1:
@@ -2033,8 +1965,7 @@ def mostrar_kpi_diario():
                 'Cantidad': ['sum', 'count']
             }).reset_index()
             col_stats.columns = ['Color', 'Unidades', 'Frecuencia']
-            col_stats['Unidades (millones)'] = col_stats['Unidades'] / 1_000_000
-            col_stats['Porcentaje'] = (col_stats['Unidades'] / filtered['Cantidad'].sum() * 100).round(2)
+            col_stats['Porcentaje'] = (col_stats['Unidades'] / total_units * 100).round(2)
             col_stats = col_stats.sort_values('Unidades', ascending=False)
             
             col1, col2 = st.columns([2, 1])
@@ -2045,8 +1976,9 @@ def mostrar_kpi_diario():
                 fig.update_traces(textposition='inside', textinfo='percent+label')
                 st.plotly_chart(fig, use_container_width=True)
             with col2:
-                st.dataframe(col_stats[['Color', 'Unidades (millones)', 'Porcentaje']].style.format({
-                    'Unidades (millones)': '{:,.2f} M',
+                # CORRECCIÓN: Mostrar unidades completas con formato de miles
+                st.dataframe(col_stats[['Color', 'Unidades', 'Porcentaje']].style.format({
+                    'Unidades': '{:,}',
                     'Porcentaje': '{:.2f}%'
                 }), use_container_width=True, height=400)
         else:
@@ -2058,8 +1990,7 @@ def mostrar_kpi_diario():
                 'Cantidad': ['sum', 'count']
             }).reset_index()
             talla_stats.columns = ['Talla', 'Unidades', 'Frecuencia']
-            talla_stats['Unidades (millones)'] = talla_stats['Unidades'] / 1_000_000
-            talla_stats['Porcentaje'] = (talla_stats['Unidades'] / filtered['Cantidad'].sum() * 100).round(2)
+            talla_stats['Porcentaje'] = (talla_stats['Unidades'] / total_units * 100).round(2)
             
             # Ordenar por jerarquía de tallas si es posible
             talla_order = ['3XS', '2XS', 'XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', 'Única']
@@ -2070,14 +2001,15 @@ def mostrar_kpi_diario():
             
             col1, col2 = st.columns([2, 1])
             with col1:
-                fig = px.bar(talla_stats, x='Talla', y='Unidades (millones)', 
-                           title="Distribución por Talla (millones)",
-                           color='Unidades (millones)',
+                fig = px.bar(talla_stats, x='Talla', y='Unidades', 
+                           title="Distribución por Talla",
+                           color='Unidades',
                            color_continuous_scale='Viridis')
                 st.plotly_chart(fig, use_container_width=True)
             with col2:
-                st.dataframe(talla_stats[['Talla', 'Unidades (millones)', 'Porcentaje']].style.format({
-                    'Unidades (millones)': '{:,.2f} M',
+                # CORRECCIÓN: Mostrar unidades completas con formato de miles
+                st.dataframe(talla_stats[['Talla', 'Unidades', 'Porcentaje']].style.format({
+                    'Unidades': '{:,}',
                     'Porcentaje': '{:.2f}%'
                 }), use_container_width=True, height=400)
         else:
@@ -2089,8 +2021,7 @@ def mostrar_kpi_diario():
                 'Cantidad': ['sum', 'count']
             }).reset_index()
             gen_stats.columns = ['Genero', 'Unidades', 'Frecuencia']
-            gen_stats['Unidades (millones)'] = gen_stats['Unidades'] / 1_000_000
-            gen_stats['Porcentaje'] = (gen_stats['Unidades'] / filtered['Cantidad'].sum() * 100).round(2)
+            gen_stats['Porcentaje'] = (gen_stats['Unidades'] / total_units * 100).round(2)
             gen_stats = gen_stats.sort_values('Unidades', ascending=False)
             
             col1, col2 = st.columns([2, 1])
@@ -2101,8 +2032,9 @@ def mostrar_kpi_diario():
                 fig.update_traces(textposition='inside', textinfo='percent+label')
                 st.plotly_chart(fig, use_container_width=True)
             with col2:
-                st.dataframe(gen_stats[['Genero', 'Unidades (millones)', 'Porcentaje']].style.format({
-                    'Unidades (millones)': '{:,.2f} M',
+                # CORRECCIÓN: Mostrar unidades completas con formato de miles
+                st.dataframe(gen_stats[['Genero', 'Unidades', 'Porcentaje']].style.format({
+                    'Unidades': '{:,}',
                     'Porcentaje': '{:.2f}%'
                 }), use_container_width=True, height=400)
         else:
@@ -2114,20 +2046,20 @@ def mostrar_kpi_diario():
                 'Cantidad': ['sum', 'count']
             }).reset_index()
             cat_stats.columns = ['Categoria', 'Unidades', 'Frecuencia']
-            cat_stats['Unidades (millones)'] = cat_stats['Unidades'] / 1_000_000
-            cat_stats['Porcentaje'] = (cat_stats['Unidades'] / filtered['Cantidad'].sum() * 100).round(2)
+            cat_stats['Porcentaje'] = (cat_stats['Unidades'] / total_units * 100).round(2)
             cat_stats = cat_stats.sort_values('Unidades', ascending=False)
             
             col1, col2 = st.columns([2, 1])
             with col1:
-                fig = px.bar(cat_stats, x='Categoria', y='Unidades (millones)', 
-                           title="Distribución por Categoría (millones)",
-                           color='Unidades (millones)',
+                fig = px.bar(cat_stats, x='Categoria', y='Unidades', 
+                           title="Distribución por Categoría",
+                           color='Unidades',
                            color_continuous_scale='Plasma')
                 st.plotly_chart(fig, use_container_width=True)
             with col2:
-                st.dataframe(cat_stats[['Categoria', 'Unidades (millones)', 'Porcentaje']].style.format({
-                    'Unidades (millones)': '{:,.2f} M',
+                # CORRECCIÓN: Mostrar unidades completas con formato de miles
+                st.dataframe(cat_stats[['Categoria', 'Unidades', 'Porcentaje']].style.format({
+                    'Unidades': '{:,}',
                     'Porcentaje': '{:.2f}%'
                 }), use_container_width=True, height=400)
         else:
@@ -2135,49 +2067,38 @@ def mostrar_kpi_diario():
     
     st.markdown("---")
     
-    # --- GRÁFICOS ADICIONALES ---
+    # --- GRÁFICOS ADICIONALES (VALORES ABSOLUTOS) ---
     col_g1, col_g2 = st.columns(2)
     with col_g1:
-        st.subheader("📊 Top 10 Bodegas (millones)")
+        st.subheader("📊 Top 10 Bodegas")
         if 'Bodega Recibe' in filtered.columns:
-            top_bod = filtered.groupby('Bodega Recibe')['Cantidad'].sum().nlargest(10) / 1_000_000
+            top_bod = filtered.groupby('Bodega Recibe')['Cantidad'].sum().nlargest(10)
             if not top_bod.empty:
                 fig = px.bar(
                     x=top_bod.values, y=top_bod.index,
                     orientation='h', color=top_bod.values,
                     color_continuous_scale='Viridis',
-                    labels={'x': 'Unidades (millones)', 'y': ''}
+                    labels={'x': 'Unidades', 'y': ''}
                 )
                 fig.update_layout(height=350)
                 st.plotly_chart(fig, use_container_width=True)
     
     with col_g2:
-        st.subheader("📈 Tendencia Diaria (millones)")
+        st.subheader("📈 Tendencia Diaria")
         if 'Fecha' in filtered.columns:
             daily = filtered.groupby(filtered['Fecha'].dt.date)['Cantidad'].sum().reset_index()
             daily.columns = ['Fecha', 'Unidades']
-            daily['Unidades (millones)'] = daily['Unidades'] / 1_000_000
-            fig = px.line(daily, x='Fecha', y='Unidades (millones)', markers=True)
+            fig = px.line(daily, x='Fecha', y='Unidades', markers=True)
             st.plotly_chart(fig, use_container_width=True)
     
     st.markdown("---")
     
-    # --- TABLA DE DATOS ---
+    # --- TABLA DE DATOS (VALORES ABSOLUTOS) ---
     st.subheader("📋 Detalle de Transferencias")
     cols_display = ['Fecha', 'Bodega Recibe', 'Producto', 'Genero', 'Categoria', 'Color', 'Talla', 'Cantidad']
     cols_display = [c for c in cols_display if c in filtered.columns]
-    # Mostrar una copia con la cantidad en millones
-    display_df = filtered[cols_display].copy()
-    if 'Cantidad' in display_df.columns:
-        display_df['Cantidad (millones)'] = display_df['Cantidad'] / 1_000_000
-        # Reordenar columnas
-        cols = list(display_df.columns)
-        # Mover la nueva columna al lado de Cantidad
-        if 'Cantidad' in cols:
-            idx = cols.index('Cantidad')
-            cols.insert(idx+1, cols.pop(cols.index('Cantidad (millones)')))
-            display_df = display_df[cols]
-    st.dataframe(display_df.sort_values('Fecha', ascending=False), use_container_width=True, height=300)
+    # CORRECCIÓN: Mostrar valores originales sin conversión a millones
+    st.dataframe(filtered[cols_display].sort_values('Fecha', ascending=False), use_container_width=True, height=300)
     
     st.markdown("---")
     
