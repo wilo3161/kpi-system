@@ -1145,7 +1145,7 @@ def show_main_page():
         },
         {
             "icon": "💰", 
-            "title": "Reconciliacion V8",
+            "title": "Reconciliacion",
             "description": "Conciliacion financiera y analisis de facturas",
             "key": "reconciliacion_v8"
         },
@@ -3008,52 +3008,876 @@ def show_gestion_equipo():
     st.markdown('</div>', unsafe_allow_html=True)
 
 # ==============================================================================
-# 9. MODULO RECONCILIACION V8
+# 9. MODULO RECONCILIACION V8 (VERSIÓN PROFESIONAL CON FUZZY MATCHING)
 # ==============================================================================
 
-def identificar_tipo_tienda_v8(nombre):
-    """
-    Logica V8.0 para clasificacion de tiendas.
-    Incluye regla especifica para JOFRE SANTANA y manejo de Piezas.
-    """
-    if pd.isna(nombre) or nombre == '': return "DESCONOCIDO"
-    nombre_norm = normalizar_texto_wilo(nombre)
-    
-    # 1. Regla Especifica Solicitada
-    if 'JOFRE' in nombre_norm and 'SANTANA' in nombre_norm:
-        return "VENTAS AL POR MAYOR"
-    
-    # 2. Tiendas Fisicas (Patrones)
-    patrones_fisicas = ['LOCAL', 'MALL', 'PLAZA', 'SHOPPING', 'CENTRO', 'COMERCIAL', 'CC', 
-                       'TIENDA', 'PASEO', 'PORTAL', 'DORADO', 'CITY', 'CEIBOS', 'QUITO', 
-                       'GUAYAQUIL', 'AMBATO', 'MANTA', 'MACHALA', 'RIOCENTRO', 'AEROPOSTALE']
-    
-    if any(p in nombre_norm for p in patrones_fisicas):
-        return "TIENDA FISICA"
-        
-    # 3. Nombres Propios (Venta Web)
-    palabras = nombre_norm.split()
-    if len(palabras) > 0 and len(palabras) <= 3:
-        return "VENTA WEB"
-        
-    return "TIENDA FISICA" # Default
+import streamlit as st
+import pandas as pd
+import numpy as np
+import re
+from datetime import datetime
+import plotly.express as px
+import plotly.graph_objects as go
+from io import BytesIO
+import warnings
+import unicodedata
+from typing import Dict, Any, Optional, List, Tuple
+from fuzzywuzzy import fuzz, process
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import letter, A4
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import inch
+import matplotlib.pyplot as plt
+import base64
+import tempfile
+import os
+import zipfile
 
+warnings.filterwarnings('ignore')
+
+# ========== MOTOR DE AUDITORÍA EXPERTO CON FUZZY MATCHING ==========
+class AuditEngine:
+    """Motor experto en normalización y cruce de datos logísticos con fuzzy matching."""
+    
+    @staticmethod
+    def normalize_text(text: Any) -> str:
+        """Limpia texto: quita acentos, especiales y extra espacios."""
+        if pd.isna(text) or text == '' or str(text).strip() == '':
+            return 'SIN ASIGNAR'
+        
+        text = str(text).upper().strip()
+        
+        # Normalización Unicode para eliminar tildes y eñes
+        try:
+            text = ''.join(
+                c for c in unicodedata.normalize('NFKD', text)
+                if unicodedata.category(c) != 'Mn'
+            )
+        except Exception:
+            # Fallback simple si la normalización falla
+            pass
+        
+        # Regex para dejar solo alfanuméricos y espacios
+        text = re.sub(r'[^A-Z0-9\s]', ' ', text)
+        # Eliminar múltiples espacios
+        text = re.sub(r'\s+', ' ', text)
+        return text.strip()
+    
+    @staticmethod
+    def clean_currency(series: pd.Series) -> pd.Series:
+        """Transforma cualquier formato de moneda a float puro."""
+        if series.empty:
+            return pd.Series([0.0] * len(series), index=series.index)
+        
+        # Asegurar que sea string
+        str_series = series.astype(str)
+        
+        # Remover caracteres no numéricos excepto punto y coma
+        cleaned = str_series.str.replace(r'[^\d.,-]', '', regex=True)
+        
+        # Reemplazar coma por punto para decimales
+        cleaned = cleaned.str.replace(',', '.', regex=False)
+        
+        # Manejar múltiples puntos (solo dejar el último como decimal)
+        def fix_multiple_dots(x):
+            if pd.isna(x):
+                return np.nan
+            if '.' in str(x):
+                parts = str(x).split('.')
+                if len(parts) > 2:
+                    # Si hay múltiples puntos, tomar el último como decimal
+                    return parts[0] + '.' + parts[-1]
+            return x
+        
+        cleaned = cleaned.apply(fix_multiple_dots)
+        
+        # Convertir a numérico
+        return pd.to_numeric(cleaned, errors='coerce').fillna(0.0)
+    
+    @staticmethod
+    def identify_store_type(name: str) -> str:
+        """Clasifica entre Tienda Física o Venta Web."""
+        if not name or name == 'SIN ASIGNAR':
+            return "VENTA WEB"
+        
+        keywords_fisica = {
+            'MALL', 'RIOCENTRO', 'PLAZA', 'SHOPPING', 'LOCAL', 'SUCURSAL', 
+            'BODEGA', 'CENTRO', 'CCI', 'CITY', 'EL DORADO', 'PORTAL', 'PRICE CLUB',
+            'MATRIZ', 'IBARRA', 'COTACACHI', 'ATUNTAQUI', 'RIOBAMBA', 'QUILLO',
+            'COMERCIAL', 'ALMACEN', 'TIENDA', 'FILIAL'
+        }
+        
+        keywords_web = {
+            'ROCIO', 'ANGELICA', 'CRUZ', 'SALAZAR', 'SANCHEZ', 'ALVARADO', 
+            'CHAVEZ', 'SORIANO', 'GUALPA', 'LILIANA', 'JESSICA', 'ESTEFANIA',
+            'KARLA', 'MELISSA', 'PEREZ', 'LOYO', 'MARIA', 'ANA', 'LUIS', 'CARLOS',
+            'VENTA', 'WEB', 'ONLINE', 'DIGITAL'
+        }
+        
+        norm_name = AuditEngine.normalize_text(name)
+        words = set(norm_name.split())
+        
+        # Verificar primero si es Venta Web (nombres de personas)
+        if any(keyword in norm_name for keyword in keywords_web):
+            return "VENTA WEB"
+        
+        # Verificar si es Tienda Física
+        if any(keyword in norm_name for keyword in keywords_fisica):
+            return "TIENDA FÍSICA"
+        
+        # Heurística adicional: nombres muy cortos suelen ser web
+        word_count = len(words)
+        if word_count <= 3 and len(norm_name.replace(' ', '')) < 15:
+            return "VENTA WEB"
+        
+        # Por defecto, considerar como tienda física si tiene varias palabras
+        return "TIENDA FÍSICA"
+    
+    def fuzzy_group_stores(self, stores_list: list, threshold: int = 85) -> Dict[str, list]:
+        """
+        Agrupa tiendas similares usando fuzzy matching.
+        
+        Args:
+            stores_list: Lista de nombres de tiendas a agrupar
+            threshold: Umbral de similitud (0-100). Valores más altos son más estrictos.
+            
+        Returns:
+            Diccionario con grupos y sus miembros
+        """
+        if not stores_list:
+            return {}
+        
+        # Eliminar duplicados y valores nulos
+        unique_stores = []
+        seen = set()
+        for store in stores_list:
+            if store and store != 'SIN ASIGNAR' and store not in seen:
+                unique_stores.append(store)
+                seen.add(store)
+        
+        if not unique_stores:
+            return {}
+        
+        # Ordenar por longitud para mejor rendimiento
+        unique_stores.sort(key=lambda x: (len(x), x))
+        
+        groups = {}
+        used_stores = set()
+        
+        for store in unique_stores:
+            if store in used_stores:
+                continue
+                
+            # Buscar coincidencias para esta tienda
+            try:
+                matches = process.extract(
+                    store, 
+                    unique_stores, 
+                    scorer=fuzz.token_sort_ratio, 
+                    limit=50
+                )
+            except Exception:
+                # Si hay error en fuzzy matching, crear grupo individual
+                groups[store] = [store]
+                used_stores.add(store)
+                continue
+            
+            # Crear un grupo con las coincidencias que superan el umbral
+            group_members = []
+            for match, score in matches:
+                if score >= threshold and match not in used_stores:
+                    group_members.append(match)
+            
+            if group_members:
+                # El primer elemento es la tienda representativa del grupo
+                representative = group_members[0]
+                groups[representative] = group_members
+                
+                # Marcar todas las tiendas del grupo como usadas
+                used_stores.update(group_members)
+        
+        # Agregar tiendas que no coincidieron con ningún grupo
+        for store in unique_stores:
+            if store not in used_stores:
+                groups[store] = [store]
+        
+        return groups
+    
+    def group_stores(self, df: pd.DataFrame, dest_col: str) -> pd.DataFrame:
+        """Agrupa tiendas similares usando técnicas avanzadas de coincidencia incluyendo fuzzy matching."""
+        if df.empty or dest_col not in df.columns:
+            df['TIPO'] = 'DESCONOCIDO'
+            df['GRUPO'] = 'SIN GRUPO'
+            return df
+        
+        # Crear copia para evitar warnings
+        result_df = df.copy()
+        
+        # Normalizar nombres
+        result_df['DEST_NORM'] = result_df[dest_col].apply(self.normalize_text)
+        result_df['TIPO'] = result_df[dest_col].apply(self.identify_store_type)
+        
+        # Diccionario de grupos predefinidos basado en patrones comunes
+        grupos_predefinidos = {
+            'GUAYAQUIL EL DORADO': ['EL DORADO', 'RIOCENTRO EL DORADO', 'ELDORADO', 'GYE EL DORADO'],
+            'GUAYAQUIL MALL DEL SOL': ['MALL DEL SOL', 'GYE MALL DEL SOL', 'MALL SOL', 'MALL DEL SOL GYE'],
+            'GUAYAQUIL CITY MALL': ['CITY MALL', 'CITYMALL', 'GYE CITY MALL'],
+            'GUAYAQUIL RIOCENTRO CEIBOS': ['RIOCENTRO CEIBOS', 'RIOCENTROCEIBOS', 'CEIBOS'],
+            'QUITO CCI': ['CCI', 'CENTRO COMERCIAL CCI', 'CCI QUITO', 'CENTRO COMERCIALES DEL ECUADOR'],
+            'QUITO CONDADO SHOPPING': ['CONDADO SHOPPING', 'CONDADO', 'MALL CONDADO'],
+            'IBARRA MATRIZ': ['IBARRA MATRIZ', 'MATRIZ IBARRA', 'IBARRA BODEGA MATRIZ', 'MATRIZ'],
+            'CUENCA MALL DEL RIO': ['MALL DEL RIO CUENCA', 'MALL DEL RIO', 'CUENCA MALL RIO'],
+            'PORTOVIEJO': ['PORTOVIEJO', 'PORTO VIEJO'],
+            'MACHALA': ['MACHALA', 'MACHALA P SHOPPING', 'MACHALA PSHOPPING'],
+            'BABAHOYO': ['BABAHYO', 'BABAHOYO P SHOPPING', 'BABAHOYO PSHOPPING'],
+            'AMBATO': ['AMBATO', 'PASEO SHOPPING AMBATO', 'PASEO AMBATO'],
+            'RIOBAMBA': ['RIOBAMBA', 'RIO BAMBA', 'AEROPOSTALE RIOBAMBA'],
+            'SANTO DOMINGO': ['SANTO DOMINGO', 'STO DOMINGO', 'SANTODOMINGO', 'KM 14 QUEVEDO'],
+            'MANTA': ['MANTA', 'MALL DEL PACIFICO MANTA', 'MALL PACIFICO'],
+            'CUENCA': ['CUENCA', 'MALL DEL RIO CUENCA'],
+            'LAGO AGRIO': ['LAGO AGRIO', 'EL COCA', 'ECOCA', 'COCA'],
+            'SANTA ELENA': ['SANTA ELENA', 'PENINSULA', 'PENINSULA STA ELENA', 'PENINSULA SANTA ELENA']
+        }
+        
+        # Normalizar grupos predefinidos
+        grupos_predef_norm = {
+            grupo: [self.normalize_text(patron) for patron in patrones]
+            for grupo, patrones in grupos_predefinidos.items()
+        }
+        
+        # Aplicar agrupamiento difuso (fuzzy matching)
+        all_dest_names = result_df['DEST_NORM'].unique().tolist()
+        fuzzy_groups = self.fuzzy_group_stores(all_dest_names, threshold=80)
+        
+        # Mapeo para asignar grupo a cada nombre normalizado
+        mapeo_grupos = {}
+        
+        # 1. Primero aplicar grupos predefinidos
+        for grupo, patrones_norm in grupos_predef_norm.items():
+            for nombre_norm in result_df['DEST_NORM'].unique():
+                if nombre_norm in mapeo_grupos:
+                    continue
+                    
+                # Verificar si el nombre coincide con algún patrón
+                for patron in patrones_norm:
+                    if (patron in nombre_norm or 
+                        nombre_norm in patron or 
+                        fuzz.partial_ratio(patron, nombre_norm) > 85):
+                        mapeo_grupos[nombre_norm] = grupo
+                        break
+        
+        # 2. Luego aplicar grupos por fuzzy matching para los que no están en grupos predefinidos
+        for representative, members in fuzzy_groups.items():
+            # Verificar si el representante o algún miembro ya tiene grupo
+            existing_group = None
+            
+            for member in [representative] + members:
+                if member in mapeo_grupos:
+                    existing_group = mapeo_grupos[member]
+                    break
+            
+            # Si no hay grupo existente, crear uno nuevo
+            if existing_group is None:
+                # Usar el nombre del representante como base del grupo
+                if len(representative) > 30:
+                    grupo_name = representative[:27] + '...'
+                else:
+                    grupo_name = representative
+                
+                existing_group = f"GRUPO: {grupo_name}"
+            
+            # Asignar el mismo grupo a todos los miembros
+            for member in members:
+                if member not in mapeo_grupos:
+                    mapeo_grupos[member] = existing_group
+        
+        # Asignar grupo
+        result_df['GRUPO'] = result_df['DEST_NORM'].map(mapeo_grupos)
+        
+        # Para los que no tienen grupo, asignar basado en tipo y ciudad
+        mask_no_grupo = result_df['GRUPO'].isna()
+        if mask_no_grupo.any():
+            def asignar_grupo_default(row):
+                nombre_norm = row['DEST_NORM']
+                tipo = row['TIPO']
+                
+                if tipo == 'VENTA WEB':
+                    return 'VENTA WEB'
+                
+                # Extraer ciudad si está disponible
+                ciudad = ''
+                if 'CIUDAD_DESTINO' in row and pd.notna(row['CIUDAD_DESTINO']):
+                    ciudad = self.normalize_text(row['CIUDAD_DESTINO'])[:20]
+                
+                if ciudad and ciudad != 'DESCONOCIDA':
+                    return f'{ciudad} - {nombre_norm[:15]}'
+                
+                return f'OTROS - {nombre_norm[:20]}'
+            
+            result_df.loc[mask_no_grupo, 'GRUPO'] = result_df[mask_no_grupo].apply(
+                asignar_grupo_default, axis=1
+            )
+        
+        # Asegurar que no haya valores nulos en GRUPO
+        result_df['GRUPO'] = result_df['GRUPO'].fillna('SIN GRUPO')
+        
+        return result_df
+    
+    def run_audit(self, df_m: pd.DataFrame, df_f: pd.DataFrame, config: Dict[str, str]) -> Dict[str, Any]:
+        """Ejecuta el cruce de datos optimizado con fuzzy matching para agrupamiento."""
+        # Validar entradas
+        if df_m.empty or df_f.empty:
+            raise ValueError("Los DataFrames no pueden estar vacíos")
+        
+        # Crear copias profundas para evitar modificar los originales
+        m = df_m.copy(deep=True)
+        f = df_f.copy(deep=True)
+        
+        # 1. Preparar llaves de cruce
+        guia_m_col = config.get('guia_m')
+        guia_f_col = config.get('guia_f')
+        
+        if not guia_m_col or not guia_f_col:
+            # Búsqueda automática
+            guia_m_col = self._find_column(m, ['GUIA', 'GUÍA', 'NUMERO', 'N°', 'CODIGO'])
+            guia_f_col = self._find_column(f, ['GUIA', 'GUÍA', 'NUMERO', 'N°', 'CODIGO'])
+        
+        if not guia_m_col or not guia_f_col:
+            raise ValueError("No se pudieron identificar columnas de guía")
+        
+        m['GUIA_LIMPIA'] = self._clean_guide_column(m[guia_m_col])
+        f['GUIA_LIMPIA'] = self._clean_guide_column(f[guia_f_col])
+        
+        # 2. Limpiar valores monetarios
+        subtotal_col = config.get('subtotal')
+        if not subtotal_col:
+            subtotal_col = self._find_column(f, ['SUBTOTAL', 'TOTAL', 'FLETE', 'COSTO', 'IMPORTE', 'VALOR', 'MONTO'])
+        
+        if subtotal_col and subtotal_col in f.columns:
+            f['SUBTOTAL_LIMPIO'] = self.clean_currency(f[subtotal_col])
+        else:
+            f['SUBTOTAL_LIMPIO'] = 0.0
+        
+        # 3. Preparar ciudad destino (manifiesto)
+        ciudad_destino_col = config.get('ciudad_destino')
+        if not ciudad_destino_col:
+            ciudad_destino_col = self._find_column(m, ['CIUDAD', 'DESTINO', 'DES', 'CIUDAD DESTINO', 'DESTINATARIO'])
+        
+        if ciudad_destino_col and ciudad_destino_col in m.columns:
+            m['CIUDAD_DESTINO'] = m[ciudad_destino_col].fillna('DESCONOCIDA').astype(str)
+        else:
+            m['CIUDAD_DESTINO'] = 'DESCONOCIDA'
+        
+        # 4. Preparar ciudad destino (facturas)
+        ciudad_destino_f_col = config.get('ciudad_destino_f', ciudad_destino_col)
+        if ciudad_destino_f_col and ciudad_destino_f_col in f.columns:
+            f['CIUDAD_DESTINO'] = f[ciudad_destino_f_col].fillna('DESCONOCIDA').astype(str)
+        else:
+            f['CIUDAD_DESTINO'] = 'DESCONOCIDA'
+        
+        # 5. Preparar destinatario (facturas)
+        destinatario_col = config.get('destinatario')
+        if not destinatario_col:
+            destinatario_col = self._find_column(f, ['DESTINATARIO', 'CLIENTE', 'CONSIGNATARIO', 'SUCURSAL', 'NOMBRE', 'RAZON SOCIAL'])
+        
+        if destinatario_col and destinatario_col in f.columns:
+            f['DESTINATARIO'] = f[destinatario_col].fillna('SIN DESTINATARIO').astype(str)
+        else:
+            f['DESTINATARIO'] = 'SIN DESTINATARIO'
+        
+        # 6. Cruce (Merge)
+        merge_columns = ['GUIA_LIMPIA', 'SUBTOTAL_LIMPIO', 'CIUDAD_DESTINO', 'DESTINATARIO']
+        merge_columns = [col for col in merge_columns if col in f.columns]
+        
+        # Asegurar que las columnas existan
+        for col in ['SUBTOTAL_LIMPIO', 'CIUDAD_DESTINO', 'DESTINATARIO']:
+            if col not in f.columns:
+                f[col] = 0.0 if col == 'SUBTOTAL_LIMPIO' else 'SIN ASIGNAR'
+        
+        # Realizar el merge
+        audit_df = pd.merge(
+            m,
+            f[['GUIA_LIMPIA', 'SUBTOTAL_LIMPIO', 'CIUDAD_DESTINO', 'DESTINATARIO']],
+            on='GUIA_LIMPIA',
+            how='left',
+            suffixes=('_MANIFIESTO', '_FACTURA')
+        )
+        
+        # 7. Manejar valores nulos después del merge
+        if 'SUBTOTAL_LIMPIO' not in audit_df.columns:
+            audit_df['SUBTOTAL_LIMPIO'] = 0.0
+        
+        audit_df['SUBTOTAL_LIMPIO'] = audit_df['SUBTOTAL_LIMPIO'].fillna(0.0)
+        
+        if 'DESTINATARIO' not in audit_df.columns:
+            audit_df['DESTINATARIO'] = 'SIN DESTINATARIO'
+        
+        audit_df['DESTINATARIO'] = audit_df['DESTINATARIO'].fillna('SIN DESTINATARIO')
+        
+        if 'CIUDAD_DESTINO' not in audit_df.columns:
+            audit_df['CIUDAD_DESTINO'] = 'CIUDAD DESCONOCIDA'
+        
+        audit_df['CIUDAD_DESTINO'] = audit_df['CIUDAD_DESTINO'].fillna('CIUDAD DESCONOCIDA')
+        
+        # 8. Agrupar tiendas
+        audit_df = self.group_stores(audit_df, 'DESTINATARIO')
+        
+        # 9. Calcular métricas
+        metricas = self._calcular_metricas(audit_df)
+        resumen = self._calcular_resumen(audit_df)
+        validacion = self._validar_totales(audit_df, f)
+        stats = self._calcular_estadisticas(audit_df, f)
+        
+        return {
+            'df_final': audit_df,
+            'metricas': metricas,
+            'resumen': resumen,
+            'validacion': validacion,
+            'stats': stats
+        }
+    
+    def _find_column(self, df: pd.DataFrame, keywords: List[str]) -> Optional[str]:
+        """Encuentra una columna que contenga alguna palabra clave."""
+        if df.empty:
+            return None
+        
+        for col in df.columns:
+            col_upper = str(col).upper()
+            for keyword in keywords:
+                if keyword.upper() in col_upper:
+                    return col
+        return None
+    
+    def _clean_guide_column(self, series: pd.Series) -> pd.Series:
+        """Limpia columna de guías."""
+        if series.empty:
+            return pd.Series([], dtype=str)
+        
+        # Convertir a string, eliminar espacios y mayúsculas
+        cleaned = series.astype(str).str.strip().str.upper()
+        
+        # Remover caracteres no alfanuméricos excepto guiones
+        cleaned = cleaned.str.replace(r'[^A-Z0-9\-]', '', regex=True)
+        
+        return cleaned
+    
+    def _calcular_metricas(self, audit_df: pd.DataFrame) -> pd.DataFrame:
+        """Calcula métricas por grupo."""
+        if audit_df.empty or 'GRUPO' not in audit_df.columns:
+            return pd.DataFrame()
+        
+        metricas = audit_df.groupby('GRUPO').agg(
+            DESTINATARIOS=('DESTINATARIO', lambda x: ', '.join(sorted(set(x)))),
+            GUIAS=('GUIA_LIMPIA', 'count'),
+            SUBTOTAL=('SUBTOTAL_LIMPIO', 'sum'),
+            CIUDADES=('CIUDAD_DESTINO', lambda x: ', '.join(sorted(set(x)))),
+            TIPO=('TIPO', lambda x: x.mode()[0] if not x.mode().empty else 'NO CLASIFICADO')
+        ).reset_index()
+        
+        # Ordenar por subtotal descendente
+        metricas = metricas.sort_values('SUBTOTAL', ascending=False)
+        
+        # Calcular porcentaje
+        total = metricas['SUBTOTAL'].sum()
+        if total > 0:
+            metricas['PORCENTAJE'] = (metricas['SUBTOTAL'] / total) * 100
+        else:
+            metricas['PORCENTAJE'] = 0.0
+        
+        return metricas
+    
+    def _calcular_resumen(self, audit_df: pd.DataFrame) -> pd.DataFrame:
+        """Calcula resumen por tipo."""
+        if audit_df.empty or 'TIPO' not in audit_df.columns:
+            return pd.DataFrame()
+        
+        resumen = audit_df.groupby('TIPO').agg(
+            GUIAS=('GUIA_LIMPIA', 'count'),
+            SUBTOTAL=('SUBTOTAL_LIMPIO', 'sum'),
+            GRUPOS=('GRUPO', 'nunique')
+        ).reset_index()
+        
+        total = resumen['SUBTOTAL'].sum()
+        if total > 0:
+            resumen['PORCENTAJE'] = (resumen['SUBTOTAL'] / total) * 100
+        else:
+            resumen['PORCENTAJE'] = 0.0
+        
+        resumen = resumen.sort_values('SUBTOTAL', ascending=False)
+        return resumen
+    
+    def _validar_totales(self, audit_df: pd.DataFrame, facturas_df: pd.DataFrame) -> Dict[str, Any]:
+        """Valida que los totales coincidan."""
+        total_audit = audit_df['SUBTOTAL_LIMPIO'].sum()
+        
+        if 'SUBTOTAL_LIMPIO' in facturas_df.columns:
+            total_facturas = facturas_df['SUBTOTAL_LIMPIO'].sum()
+        else:
+            total_facturas = 0.0
+        
+        diferencia = total_audit - total_facturas
+        
+        if total_facturas != 0:
+            porcentaje = (diferencia / total_facturas) * 100
+        else:
+            porcentaje = 0.0
+        
+        # Margen de error aceptable: 0.01% o $1, lo que sea mayor
+        margen_absoluto = max(1.0, total_facturas * 0.0001)
+        coincide = abs(diferencia) <= margen_absoluto
+        
+        return {
+            'total_manifiesto': total_audit,
+            'total_facturas': total_facturas,
+            'diferencia': diferencia,
+            'porcentaje': porcentaje,
+            'coincide': coincide,
+            'margen_aceptable': margen_absoluto
+        }
+    
+    def _calcular_estadisticas(self, audit_df: pd.DataFrame, facturas_df: pd.DataFrame) -> Dict[str, Any]:
+        """Calcula estadísticas generales."""
+        guias_count = len(audit_df)
+        guias_con_subtotal = (audit_df['SUBTOTAL_LIMPIO'] > 0).sum()
+        
+        if guias_count > 0:
+            match_rate = guias_con_subtotal / guias_count
+        else:
+            match_rate = 0.0
+        
+        # Calcular top 5 grupos
+        if 'GRUPO' in audit_df.columns:
+            top_grupos = audit_df.groupby('GRUPO')['SUBTOTAL_LIMPIO'].sum().nlargest(5)
+            top_grupos_dict = top_grupos.to_dict()
+        else:
+            top_grupos_dict = {}
+        
+        return {
+            'guias_count': guias_count,
+            'guias_con_subtotal': guias_con_subtotal,
+            'tiendas_count': audit_df['GRUPO'].nunique() if 'GRUPO' in audit_df.columns else 0,
+            'total_money': audit_df['SUBTOTAL_LIMPIO'].sum(),
+            'match_rate': match_rate,
+            'facturas_count': len(facturas_df),
+            'top_5_grupos': top_grupos_dict,
+            'promedio_por_guia': audit_df['SUBTOTAL_LIMPIO'].mean() if guias_count > 0 else 0,
+            'fecha_proceso': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        }
+
+
+# ========== GENERADOR DE REPORTES PDF ==========
+class ReportGenerator:
+    """Genera reportes ejecutivos en PDF y Excel."""
+    
+    @staticmethod
+    def generar_pdf(stats: Dict, metricas: pd.DataFrame, resumen: pd.DataFrame, 
+                   validacion: Dict, nombre_archivo: str = "reporte_gastos.pdf"):
+        """Genera un reporte ejecutivo en PDF."""
+        from reportlab.lib import colors
+        from reportlab.lib.pagesizes import A4
+        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.units import inch
+        
+        # Crear documento
+        doc = SimpleDocTemplate(nombre_archivo, pagesize=A4)
+        elements = []
+        styles = getSampleStyleSheet()
+        
+        # Estilo personalizado para título
+        titulo_style = ParagraphStyle(
+            'CustomTitle',
+            parent=styles['Heading1'],
+            fontSize=18,
+            textColor=colors.darkblue,
+            spaceAfter=30,
+            alignment=1
+        )
+        
+        # Título
+        elements.append(Paragraph("REPORTE EJECUTIVO DE GASTOS POR TIENDA", titulo_style))
+        elements.append(Spacer(1, 20))
+        
+        # Información general
+        elements.append(Paragraph(f"Fecha de generación: {stats['fecha_proceso']}", styles['Normal']))
+        elements.append(Spacer(1, 10))
+        
+        # KPIs principales
+        kpi_data = [
+            ["KPI", "Valor"],
+            ["Total Guías Procesadas", f"{stats['guias_count']:,}"],
+            ["Guías con Factura", f"{stats['guias_con_subtotal']:,} ({stats['match_rate']:.1%})"],
+            ["Total Inversión", f"${stats['total_money']:,.2f}"],
+            ["Número de Grupos/Tiendas", f"{stats['tiendas_count']:,}"],
+            ["Promedio por Guía", f"${stats['promedio_por_guia']:,.2f}"],
+            ["Total Facturas", f"{stats['facturas_count']:,}"]
+        ]
+        
+        kpi_table = Table(kpi_data, colWidths=[200, 150])
+        kpi_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (1, 0), colors.darkblue),
+            ('TEXTCOLOR', (0, 0), (1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 12),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ]))
+        
+        elements.append(Paragraph("KPIs Principales", styles['Heading2']))
+        elements.append(Spacer(1, 10))
+        elements.append(kpi_table)
+        elements.append(Spacer(1, 20))
+        
+        # Validación de totales
+        elements.append(Paragraph("Validación de Totales", styles['Heading2']))
+        elements.append(Spacer(1, 10))
+        
+        validacion_data = [
+            ["Concepto", "Valor"],
+            ["Total Manifiesto", f"${validacion['total_manifiesto']:,.2f}"],
+            ["Total Facturas", f"${validacion['total_facturas']:,.2f}"],
+            ["Diferencia", f"${validacion['diferencia']:,.2f}"],
+            ["Porcentaje Diferencia", f"{validacion['porcentaje']:.2f}%"],
+            ["Estado", "✅ COINCIDEN" if validacion['coincide'] else "⚠️ DIFERENCIAS"]
+        ]
+        
+        validacion_table = Table(validacion_data, colWidths=[200, 150])
+        validacion_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (1, 0), colors.darkblue),
+            ('TEXTCOLOR', (0, 0), (1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 12),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ]))
+        
+        elements.append(validacion_table)
+        elements.append(Spacer(1, 20))
+        
+        # Top 5 Grupos/Tiendas
+        if stats.get('top_5_grupos'):
+            elements.append(Paragraph("Top 5 Grupos/Tiendas por Inversión", styles['Heading2']))
+            elements.append(Spacer(1, 10))
+            
+            top5_data = [["Grupo/Tienda", "Inversión Total"]]
+            for grupo, total in stats['top_5_grupos'].items():
+                top5_data.append([grupo, f"${total:,.2f}"])
+            
+            top5_table = Table(top5_data, colWidths=[300, 100])
+            top5_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (1, 0), colors.darkgreen),
+                ('TEXTCOLOR', (0, 0), (1, 0), colors.whitesmoke),
+                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, 0), 12),
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+                ('BACKGROUND', (0, 1), (-1, -1), colors.lightgrey),
+                ('GRID', (0, 0), (-1, -1), 1, colors.black),
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ]))
+            
+            elements.append(top5_table)
+            elements.append(Spacer(1, 20))
+        
+        # Resumen por Tipo de Tienda
+        if not resumen.empty:
+            elements.append(Paragraph("Resumen por Tipo de Tienda", styles['Heading2']))
+            elements.append(Spacer(1, 10))
+            
+            resumen_data = [["Tipo", "Guías", "Inversión", "Porcentaje", "Grupos"]]
+            for _, row in resumen.iterrows():
+                resumen_data.append([
+                    row['TIPO'],
+                    f"{row['GUIAS']:,}",
+                    f"${row['SUBTOTAL']:,.2f}",
+                    f"{row['PORCENTAJE']:.1f}%",
+                    f"{row['GRUPOS']:,}"
+                ])
+            
+            resumen_table = Table(resumen_data, colWidths=[100, 80, 100, 80, 80])
+            resumen_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.darkblue),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, 0), 10),
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+                ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+                ('GRID', (0, 0), (-1, -1), 1, colors.black),
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ]))
+            
+            elements.append(resumen_table)
+            elements.append(Spacer(1, 20))
+        
+        # Notas finales
+        elements.append(Paragraph("Observaciones y Notas", styles['Heading2']))
+        elements.append(Spacer(1, 10))
+        
+        notas = [
+            "1. Los datos han sido procesados con motor de Fuzzy Matching para agrupación inteligente.",
+            "2. Se utilizó un umbral de similitud del 80% para agrupar tiendas similares.",
+            "3. La validación de totales considera un margen de error de 0.01% o $1.",
+            "4. Las métricas incluyen tanto tiendas físicas como ventas web.",
+            "5. Reporte generado automáticamente por el Sistema de Gestión de Gastos por Tienda."
+        ]
+        
+        for nota in notas:
+            elements.append(Paragraph(nota, styles['Normal']))
+            elements.append(Spacer(1, 5))
+        
+        # Generar PDF
+        doc.build(elements)
+        return nombre_archivo
+    
+    @staticmethod
+    def generar_excel_completo(resultado: pd.DataFrame, metricas: pd.DataFrame, 
+                              resumen: pd.DataFrame, validacion: Dict, 
+                              stats: Dict, nombre_base: str = "gastos_tiendas"):
+        """Genera un archivo Excel completo con todas las hojas."""
+        output = BytesIO()
+        
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            # Hoja 1: Resumen Ejecutivo
+            resumen_ejecutivo = pd.DataFrame({
+                'KPI': [
+                    'Fecha de Proceso',
+                    'Total Guías Procesadas',
+                    'Guías con Factura',
+                    'Match Rate',
+                    'Total Inversión',
+                    'Número de Grupos/Tiendas',
+                    'Promedio por Guía',
+                    'Total Facturas',
+                    'Validación Estado'
+                ],
+                'Valor': [
+                    stats['fecha_proceso'],
+                    f"{stats['guias_count']:,}",
+                    f"{stats['guias_con_subtotal']:,}",
+                    f"{stats['match_rate']:.1%}",
+                    f"${stats['total_money']:,.2f}",
+                    f"{stats['tiendas_count']:,}",
+                    f"${stats['promedio_por_guia']:,.2f}",
+                    f"{stats['facturas_count']:,}",
+                    "✅ COINCIDEN" if validacion['coincide'] else "⚠️ DIFERENCIAS"
+                ]
+            })
+            resumen_ejecutivo.to_excel(writer, sheet_name='RESUMEN EJECUTIVO', index=False)
+            
+            # Hoja 2: Top 10 Grupos
+            if not metricas.empty:
+                top_10 = metricas.head(10).copy()
+                top_10['SUBTOTAL_FORMATO'] = top_10['SUBTOTAL'].apply(lambda x: f"${x:,.2f}")
+                top_10['PORCENTAJE_FORMATO'] = top_10['PORCENTAJE'].apply(lambda x: f"{x:.2f}%")
+                top_10.to_excel(writer, sheet_name='TOP 10 GRUPOS', index=False)
+            
+            # Hoja 3: Gastos por Grupo Completo
+            if not metricas.empty:
+                metricas_completo = metricas.copy()
+                metricas_completo['SUBTOTAL_FORMATO'] = metricas_completo['SUBTOTAL'].apply(lambda x: f"${x:,.2f}")
+                metricas_completo['PORCENTAJE_FORMATO'] = metricas_completo['PORCENTAJE'].apply(lambda x: f"{x:.2f}%")
+                metricas_completo.to_excel(writer, sheet_name='GASTOS POR GRUPO', index=False)
+            
+            # Hoja 4: Resumen por Tipo
+            if not resumen.empty:
+                resumen_completo = resumen.copy()
+                resumen_completo['SUBTOTAL_FORMATO'] = resumen_completo['SUBTOTAL'].apply(lambda x: f"${x:,.2f}")
+                resumen_completo['PORCENTAJE_FORMATO'] = resumen_completo['PORCENTAJE'].apply(lambda x: f"{x:.2f}%")
+                resumen_completo.to_excel(writer, sheet_name='RESUMEN POR TIPO', index=False)
+            
+            # Hoja 5: Validación
+            validacion_df = pd.DataFrame([validacion])
+            validacion_df.to_excel(writer, sheet_name='VALIDACIÓN', index=False)
+            
+            # Hoja 6: Datos Detallados
+            columnas_export = ['GUIA_LIMPIA', 'GRUPO', 'TIPO', 'DESTINATARIO', 
+                             'CIUDAD_DESTINO', 'SUBTOTAL_LIMPIO']
+            columnas_disponibles = [col for col in columnas_export if col in resultado.columns]
+            
+            if columnas_disponibles:
+                datos_detallados = resultado[columnas_disponibles].copy()
+                datos_detallados['SUBTOTAL_LIMPIO'] = datos_detallados['SUBTOTAL_LIMPIO'].apply(
+                    lambda x: f"${x:,.2f}" if pd.notna(x) else "$0.00"
+                )
+                datos_detallados.to_excel(writer, sheet_name='DATOS DETALLADOS', index=False)
+            
+            # Hoja 7: KPIs Avanzados
+            kpis_avanzados = pd.DataFrame({
+                'Métrica': [
+                    'Total Guías sin Factura',
+                    'Porcentaje Guías sin Factura',
+                    'Top 1 Grupo % del Total',
+                    'Top 3 Grupos % del Total',
+                    'Top 5 Grupos % del Total',
+                    'Diferencia Absoluta',
+                    'Margen Aceptable'
+                ],
+                'Valor': [
+                    f"{stats['guias_count'] - stats['guias_con_subtotal']:,}",
+                    f"{(stats['guias_count'] - stats['guias_con_subtotal']) / stats['guias_count']:.1%}" if stats['guias_count'] > 0 else "0%",
+                    f"{metricas.iloc[0]['PORCENTAJE']:.1f}%" if not metricas.empty else "0%",
+                    f"{metricas.head(3)['PORCENTAJE'].sum():.1f}%" if len(metricas) >= 3 else "0%",
+                    f"{metricas.head(5)['PORCENTAJE'].sum():.1f}%" if len(metricas) >= 5 else "0%",
+                    f"${validacion['diferencia']:,.2f}",
+                    f"${validacion['margen_aceptable']:,.2f}"
+                ]
+            })
+            kpis_avanzados.to_excel(writer, sheet_name='KPIs AVANZADOS', index=False)
+        
+        output.seek(0)
+        return output
+
+
+# ========== FUNCIÓN PRINCIPAL DEL MÓDULO ==========
 def show_reconciliacion_v8():
-    """Modulo de reconciliacion financiera"""
-    add_back_button()
-    show_module_header(
-        "💰 Reconciliacion V8",
-        "Conciliacion de facturas y manifiestos con IA"
-    )
+    """Módulo de reconciliación financiera con motor experto y fuzzy matching."""
+    
+    # Botón de retroceso y encabezado (asumimos que estas funciones existen en la app principal)
+    try:
+        add_back_button()
+        show_module_header(
+            "💰 Reconciliación V8",
+            "Conciliación de facturas y manifiestos con IA y Fuzzy Matching"
+        )
+    except NameError:
+        # Si no están definidas, se omite (para pruebas independientes)
+        pass
     
     st.markdown('<div class="module-content">', unsafe_allow_html=True)
     
     st.markdown("""
     <div class='main-header'>
-        <h1 class='header-title'>📦 Reconciliacion Logistica V8.0</h1>
-        <div class='header-subtitle'>Soporte avanzado para Piezas y Ventas Mayoristas (Jofre Santana)</div>
+        <h1 class='header-title'>📦 Reconciliación Logística V8.0</h1>
+        <div class='header-subtitle'>Motor de Auditoría Experto con Fuzzy Matching</div>
     </div>
     """, unsafe_allow_html=True)
+
+    # Inicializar motor y generador en session_state si no existen
+    if 'audit_engine' not in st.session_state:
+        st.session_state.audit_engine = AuditEngine()
+    if 'report_generator' not in st.session_state:
+        st.session_state.report_generator = ReportGenerator()
+    if 'reconciliacion_datos' not in st.session_state:
+        st.session_state.reconciliacion_datos = {
+            'manifesto': None,
+            'facturas': None,
+            'resultado': None,
+            'metricas': None,
+            'resumen': None,
+            'validacion': None,
+            'stats': None,
+            'config': {},
+            'procesado': False
+        }
 
     # Panel de carga de archivos
     st.markdown("""
@@ -3063,21 +3887,20 @@ def show_reconciliacion_v8():
     
     col1, col2 = st.columns(2)
     with col1:
-        f_manifiesto = st.file_uploader("Subir Manifiesto (Debe tener columna PIEZAS)", type=['xlsx', 'xls', 'csv'])
+        f_manifiesto = st.file_uploader("Subir Manifiesto (Excel o CSV)", type=['xlsx', 'xls', 'csv'], key="manifiesto_v8")
     with col2:
-        f_facturas = st.file_uploader("Subir Facturas (Debe tener VALORES)", type=['xlsx', 'xls', 'csv'])
+        f_facturas = st.file_uploader("Subir Facturas (Excel o CSV)", type=['xlsx', 'xls', 'csv'], key="facturas_v8")
     
-    # Datos de ejemplo para demostracion
-    use_sample = st.checkbox("Usar datos de demostracion", value=True)
+    # Datos de ejemplo para demostración
+    use_sample = st.checkbox("Usar datos de demostración", value=True, key="sample_v8")
     
     if use_sample or (f_manifiesto and f_facturas):
         try:
             if use_sample:
-                # Generar datos de ejemplo
+                # Generar datos de ejemplo (igual que en el código original pero adaptado)
                 np.random.seed(42)
                 num_rows = 50
                 
-                # Datos de manifiesto de ejemplo
                 df_m = pd.DataFrame({
                     'GUIA': [f'GUA-{i:04d}' for i in range(1001, 1001 + num_rows)],
                     'DESTINATARIO': np.random.choice([
@@ -3093,237 +3916,559 @@ def show_reconciliacion_v8():
                     'VALOR_DECLARADO': np.random.uniform(50, 500, num_rows).round(2)
                 })
                 
-                # Datos de facturas de ejemplo (algunas coinciden, otras no)
                 df_f = pd.DataFrame({
                     'GUIA_FACTURA': [f'GUA-{i:04d}' for i in range(1001, 1001 + int(num_rows * 0.8))],
                     'VALOR_COBRADO': np.random.uniform(45, 550, int(num_rows * 0.8)).round(2)
                 })
                 
-                st.success("✅ Usando datos de demostracion. Puede subir sus propios archivos para procesamiento real.")
+                st.session_state.reconciliacion_datos['manifesto'] = df_m
+                st.session_state.reconciliacion_datos['facturas'] = df_f
+                st.success("✅ Usando datos de demostración. Puede subir sus propios archivos para procesamiento real.")
             else:
-                # Lectura flexible de archivos subidos
-                df_m = pd.read_excel(f_manifiesto) if f_manifiesto.name.endswith(('xlsx', 'xls')) else pd.read_csv(f_manifiesto)
-                df_f = pd.read_excel(f_facturas) if f_facturas.name.endswith(('xlsx', 'xls')) else pd.read_csv(f_facturas)
+                # Carga real
+                manifesto = cargar_archivo_v8(f_manifiesto, "Manifiesto")
+                facturas = cargar_archivo_v8(f_facturas, "Facturas")
+                if manifesto is not None and facturas is not None:
+                    st.session_state.reconciliacion_datos['manifesto'] = manifesto
+                    st.session_state.reconciliacion_datos['facturas'] = facturas
 
-            # Configuracion de columnas
-            st.markdown("""
-            <div class='filter-panel'>
-                <h3 class='filter-title'>⚙️ Configuracion de Columnas</h3>
-            """, unsafe_allow_html=True)
+            # Si tenemos datos cargados, mostrar configuración
+            manifesto = st.session_state.reconciliacion_datos['manifesto']
+            facturas = st.session_state.reconciliacion_datos['facturas']
             
-            c1, c2 = st.columns(2)
-            with c1:
-                st.info("**Configuracion Manifiesto**")
-                cols_m = df_m.columns.tolist()
-                # Deteccion inteligente
-                idx_guia = next((i for i, c in enumerate(cols_m) if 'GUIA' in str(c).upper()), 0)
-                idx_dest = next((i for i, c in enumerate(cols_m) if any(x in str(c).upper() for x in ['DEST', 'CLIEN', 'NOMB'])), 0)
-                idx_piez = next((i for i, c in enumerate(cols_m) if any(x in str(c).upper() for x in ['PIEZA', 'CANT', 'BULT'])), 0)
-                idx_val = next((i for i, c in enumerate(cols_m) if any(x in str(c).upper() for x in ['VALOR', 'TOTAL'])), 0)
-
-                col_guia_m = st.selectbox("Columna Guia", cols_m, index=idx_guia, key='m_guia')
-                col_dest_m = st.selectbox("Columna Destinatario", cols_m, index=idx_dest, key='m_dest')
-                col_piezas_m = st.selectbox("Columna Piezas/Bultos", cols_m, index=idx_piez, key='m_piezas')
-                col_valor_m = st.selectbox("Columna Valor Declarado", cols_m, index=idx_val, key='m_val')
+            if manifesto is not None and facturas is not None:
+                st.markdown("""
+                <div class='filter-panel'>
+                    <h3 class='filter-title'>⚙️ Configuración de Columnas</h3>
+                """, unsafe_allow_html=True)
+                
+                # Detección automática de columnas
+                columnas_m = detectar_columnas_v8(manifesto)
+                columnas_f = detectar_columnas_v8(facturas)
+                
+                c1, c2 = st.columns(2)
+                with c1:
+                    st.info("**Configuración Manifiesto**")
+                    cols_m = manifesto.columns.tolist()
+                    
+                    # Guía en manifiesto
+                    default_guia_m = columnas_m.get('guia', cols_m[0] if cols_m else None)
+                    guia_m = st.selectbox("Columna Guía (Manifiesto)", cols_m, 
+                                          index=cols_m.index(default_guia_m) if default_guia_m in cols_m else 0, key='m_guia_v8')
+                    
+                    # Ciudad destino (opcional)
+                    default_ciudad = columnas_m.get('ciudad', cols_m[0] if cols_m else None)
+                    ciudad_m = st.selectbox("Columna Ciudad Destino (opcional)", ['(Ninguna)'] + cols_m,
+                                            index=0 if '(Ninguna)' else cols_m.index(default_ciudad)+1 if default_ciudad in cols_m else 0, key='m_ciudad_v8')
+                    
+                with c2:
+                    st.info("**Configuración Facturas**")
+                    cols_f = facturas.columns.tolist()
+                    
+                    # Guía en facturas
+                    default_guia_f = columnas_f.get('guia', cols_f[0] if cols_f else None)
+                    guia_f = st.selectbox("Columna Guía (Facturas)", cols_f,
+                                          index=cols_f.index(default_guia_f) if default_guia_f in cols_f else 0, key='f_guia_v8')
+                    
+                    # Destinatario
+                    default_dest = columnas_f.get('destinatario', cols_f[0] if cols_f else None)
+                    destinatario_f = st.selectbox("Columna Destinatario", cols_f,
+                                                  index=cols_f.index(default_dest) if default_dest in cols_f else 0, key='f_dest_v8')
+                    
+                    # Subtotal
+                    default_sub = columnas_f.get('subtotal', cols_f[0] if cols_f else None)
+                    subtotal_f = st.selectbox("Columna Subtotal / Valor", cols_f,
+                                              index=cols_f.index(default_sub) if default_sub in cols_f else 0, key='f_sub_v8')
+                    
+                    # Ciudad destino en facturas (opcional)
+                    default_ciudad_f = columnas_f.get('ciudad', cols_f[0] if cols_f else None)
+                    ciudad_f = st.selectbox("Columna Ciudad Destino (Facturas, opcional)", ['(Ninguna)'] + cols_f,
+                                            index=0 if '(Ninguna)' else cols_f.index(default_ciudad_f)+1 if default_ciudad_f in cols_f else 0, key='f_ciudad_v8')
+                
+                st.markdown("</div>", unsafe_allow_html=True)
+                
+                # Botón de ejecución
+                if st.button("🚀 EJECUTAR RECONCILIACIÓN V8.0", type="primary", use_container_width=True):
+                    with st.spinner("🔄 Ejecutando algoritmo V8.0 con Fuzzy Matching..."):
+                        try:
+                            # Construir configuración
+                            config = {
+                                'guia_m': guia_m,
+                                'ciudad_destino': ciudad_m if ciudad_m != '(Ninguna)' else None,
+                                'guia_f': guia_f,
+                                'destinatario': destinatario_f,
+                                'ciudad_destino_f': ciudad_f if ciudad_f != '(Ninguna)' else None,
+                                'subtotal': subtotal_f
+                            }
+                            
+                            # Ejecutar motor
+                            engine = st.session_state.audit_engine
+                            resultados = engine.run_audit(manifesto, facturas, config)
+                            
+                            # Guardar en sesión
+                            st.session_state.reconciliacion_datos['resultado'] = resultados['df_final']
+                            st.session_state.reconciliacion_datos['metricas'] = resultados['metricas']
+                            st.session_state.reconciliacion_datos['resumen'] = resultados['resumen']
+                            st.session_state.reconciliacion_datos['validacion'] = resultados['validacion']
+                            st.session_state.reconciliacion_datos['stats'] = resultados['stats']
+                            st.session_state.reconciliacion_datos['procesado'] = True
+                            
+                            st.success("✅ Procesamiento completado exitosamente")
+                            
+                        except Exception as e:
+                            st.error(f"❌ Error en el procesamiento: {str(e)}")
+                            with st.expander("🔍 Ver detalles del error"):
+                                st.exception(e)
             
-            with c2:
-                st.info("**Configuracion Facturas**")
-                cols_f = df_f.columns.tolist()
-                idx_guia_f = next((i for i, c in enumerate(cols_f) if 'GUIA' in str(c).upper()), 0)
-                idx_val_f = next((i for i, c in enumerate(cols_f) if any(x in str(c).upper() for x in ['VALOR', 'TOTAL', 'SUBT'])), 0)
-
-                col_guia_f = st.selectbox("Columna Guia", cols_f, index=idx_guia_f, key='f_guia')
-                col_valor_f = st.selectbox("Columna Valor Cobrado", cols_f, index=idx_val_f, key='f_val')
-            st.markdown("</div>", unsafe_allow_html=True)
-
-            # Boton de ejecucion
-            if st.button("🚀 EJECUTAR RECONCILIACION V8.0", type="primary", use_container_width=True):
-                with st.spinner("🔄 Ejecutando algoritmo V8.0..."):
-                    # Procesamiento
-                    df_m['GUIA_CLEAN'] = df_m[col_guia_m].astype(str).str.strip().str.upper()
-                    df_f['GUIA_CLEAN'] = df_f[col_guia_f].astype(str).str.strip().str.upper()
-                    
-                    # Merge
-                    df_final = pd.merge(df_m, df_f, on='GUIA_CLEAN', how='left', suffixes=('_MAN', '_FAC'))
-                    
-                    # Logica V8
-                    df_final['DESTINATARIO_NORM'] = df_final[col_dest_m].fillna('DESCONOCIDO')
-                    df_final['TIPO_TIENDA'] = df_final['DESTINATARIO_NORM'].apply(identificar_tipo_tienda_v8)
-                    
-                    # Manejo de Piezas y Valores
-                    df_final['PIEZAS_CALC'] = pd.to_numeric(df_final[col_piezas_m], errors='coerce').fillna(1)
-                    df_final['VALOR_REAL'] = df_final[col_valor_f].apply(procesar_subtotal_wilo).fillna(0)
-                    df_final['VALOR_MANIFIESTO'] = df_final[col_valor_m].apply(procesar_subtotal_wilo).fillna(0)
-                    
-                    # Creacion de Grupos
-                    def crear_grupo(row):
-                        tipo = row['TIPO_TIENDA']
-                        nom = normalizar_texto_wilo(row['DESTINATARIO_NORM'])
-                        if tipo == "VENTAS AL POR MAYOR": return "VENTAS AL POR MAYOR - JOFRE SANTANA"
-                        if tipo == "VENTA WEB": return f"WEB - {nom}"
-                        return f"TIENDA - {nom}"
-                    
-                    df_final['GRUPO'] = df_final.apply(crear_grupo, axis=1)
-
-                    # --- RESULTADOS ---
-                    st.markdown("""
-                    <div class='main-header'>
-                        <h2>📊 Resultados del Analisis V8.0</h2>
-                    </div>
-                    """, unsafe_allow_html=True)
-                    
-                    total_facturado = df_final['VALOR_REAL'].sum()
-                    total_piezas = df_final['PIEZAS_CALC'].sum()
-                    con_factura = df_final[df_final['VALOR_REAL'] > 0].shape[0]
-                    sin_factura = df_final[df_final['VALOR_REAL'] == 0].shape[0]
-                    
-                    # KPIs modernos
-                    st.markdown("<div class='stats-grid'>", unsafe_allow_html=True)
-                    k1, k2, k3, k4 = st.columns(4)
-                    
-                    with k1:
-                        st.markdown(f"""
-                        <div class='stat-card card-blue'>
-                            <div class='stat-icon'>💰</div>
-                            <div class='stat-title'>Total Facturado</div>
-                            <div class='stat-value'>${total_facturado:,.0f}</div>
-                        </div>
-                        """, unsafe_allow_html=True)
-                    
-                    with k2:
-                        st.markdown(f"""
-                        <div class='stat-card card-green'>
-                            <div class='stat-icon'>📦</div>
-                            <div class='stat-title'>Total Piezas</div>
-                            <div class='stat-value'>{total_piezas:,.0f}</div>
-                        </div>
-                        """, unsafe_allow_html=True)
-                    
-                    with k3:
-                        st.markdown(f"""
-                        <div class='stat-card card-purple'>
-                            <div class='stat-icon'>✅</div>
-                            <div class='stat-title'>Guias Conciliadas</div>
-                            <div class='stat-value'>{con_factura}</div>
-                            <div class='stat-change positive'>+{con_factura/len(df_final)*100:.1f}%</div>
-                        </div>
-                        """, unsafe_allow_html=True)
-                    
-                    with k4:
-                        st.markdown(f"""
-                        <div class='stat-card card-red'>
-                            <div class='stat-icon'>⚠️</div>
-                            <div class='stat-title'>Guias Sin Factura</div>
-                            <div class='stat-value'>{sin_factura}</div>
-                            <div class='stat-change {'negative' if sin_factura > 5 else 'positive'}">{'Revisar' if sin_factura > 5 else 'OK'}</div>
-                        </div>
-                        """, unsafe_allow_html=True)
-                    st.markdown("</div>", unsafe_allow_html=True)
-                    
-                    # Tabs para diferentes vistas
-                    tab1, tab2, tab3 = st.tabs(["📈 Resumen por Canal", "📋 Detalle por Grupo", "🔍 Datos Completos"])
-                    
-                    with tab1:
-                        resumen = df_final.groupby('TIPO_TIENDA').agg({
-                            'GUIA_CLEAN': 'count',
-                            'PIEZAS_CALC': 'sum',
-                            'VALOR_REAL': 'sum'
-                        }).reset_index()
-                        resumen.columns = ['Canal', 'Guias', 'Piezas', 'Valor Facturado']
-                        resumen['% Gasto'] = (resumen['Valor Facturado'] / total_facturado * 100).round(2)
-                        resumen['Valor Promedio'] = (resumen['Valor Facturado'] / resumen['Guias']).round(2)
-                        
-                        st.dataframe(
-                            resumen.style.format({
-                                'Valor Facturado': '${:,.2f}',
-                                '% Gasto': '{:.2f}%',
-                                'Valor Promedio': '${:,.2f}'
-                            }).background_gradient(subset=['% Gasto'], cmap='Blues'),
-                            use_container_width=True
-                        )
-                        
-                        # Graficos
-                        col_chart1, col_chart2 = st.columns(2)
-                        with col_chart1:
-                            st.markdown('<div class="chart-container">', unsafe_allow_html=True)
-                            fig = px.pie(resumen, values='Valor Facturado', names='Canal', 
-                                       title="Distribucion por Canal", 
-                                       color_discrete_sequence=['#0033A0', '#E4002B', '#10B981', '#8B5CF6'])
-                            st.plotly_chart(fig, use_container_width=True)
-                            st.markdown('</div>', unsafe_allow_html=True)
-                        
-                        with col_chart2:
-                            st.markdown('<div class="chart-container">', unsafe_allow_html=True)
-                            fig2 = px.bar(resumen, x='Canal', y='Guias', color='Canal',
-                                        title="Guias por Canal", text='Guias',
-                                        color_discrete_sequence=['#0033A0', '#E4002B', '#10B981', '#8B5CF6'])
-                            st.plotly_chart(fig2, use_container_width=True)
-                            st.markdown('</div>', unsafe_allow_html=True)
-
-                    with tab2:
-                        detalle = df_final.groupby('GRUPO').agg({
-                            'GUIA_CLEAN': 'count',
-                            'PIEZAS_CALC': 'sum',
-                            'VALOR_REAL': 'sum'
-                        }).sort_values('VALOR_REAL', ascending=False)
-                        detalle.columns = ['Guias', 'Piezas', 'Valor Total']
-                        
-                        # Agregar metricas
-                        detalle['Valor Promedio'] = (detalle['Valor Total'] / detalle['Guias']).round(2)
-                        detalle['% del Total'] = (detalle['Valor Total'] / total_facturado * 100).round(2)
-                        
-                        st.dataframe(
-                            detalle.style.format({
-                                'Valor Total': '${:,.2f}',
-                                'Valor Promedio': '${:,.2f}',
-                                '% del Total': '{:.2f}%'
-                            }).bar(subset=['Valor Total'], color='#5DA5DA'),
-                            use_container_width=True
-                        )
-
-                    with tab3:
-                        st.dataframe(
-                            df_final[['GUIA_CLEAN', 'DESTINATARIO_NORM', 'TIPO_TIENDA', 'GRUPO', 
-                                     'PIEZAS_CALC', 'VALOR_MANIFIESTO', 'VALOR_REAL']].head(50),
-                            use_container_width=True
-                        )
-                    
-                    # Exportacion
-                    st.markdown("### 💾 Exportar Datos")
-                    buffer = io.BytesIO()
-                    with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
-                        df_final.to_excel(writer, sheet_name='Data_Completa', index=False)
-                        resumen.to_excel(writer, sheet_name='Resumen_Canal', index=False)
-                        detalle.to_excel(writer, sheet_name='Detalle_Grupos', index=True)
-                    
-                    col_exp1, col_exp2 = st.columns(2)
-                    with col_exp1:
-                        st.download_button(
-                            label="📥 Descargar Excel Completo",
-                            data=buffer.getvalue(),
-                            file_name=f"conciliacion_v8_{datetime.now().date()}.xlsx",
-                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                            use_container_width=True
-                        )
-                    
-                    with col_exp2:
-                        # Exportar CSV rapido
-                        csv = df_final.to_csv(index=False)
-                        st.download_button(
-                            label="📄 Descargar CSV",
-                            data=csv,
-                            file_name=f"conciliacion_v8_{datetime.now().date()}.csv",
-                            mime="text/csv",
-                            use_container_width=True
-                        )
-
+            # Mostrar resultados si están disponibles
+            if st.session_state.reconciliacion_datos['procesado']:
+                mostrar_resultados_v8()
+                
         except Exception as e:
-            st.error(f"❌ Error en el procesamiento: {str(e)}")
+            st.error(f"❌ Error general: {str(e)}")
     else:
-        st.info("👆 Suba los archivos necesarios o active la opcion de datos de demostracion para comenzar.")
+        st.info("👆 Suba los archivos necesarios o active la opción de datos de demostración para comenzar.")
     
     st.markdown('</div>', unsafe_allow_html=True)
 
+
+# ========== FUNCIONES AUXILIARES ==========
+def cargar_archivo_v8(uploaded_file, nombre: str) -> Optional[pd.DataFrame]:
+    """Carga archivos Excel o CSV con manejo robusto."""
+    if uploaded_file is None:
+        return None
+    
+    try:
+        file_extension = uploaded_file.name.split('.')[-1].lower()
+        
+        if file_extension in ['xlsx', 'xls']:
+            df = pd.read_excel(uploaded_file)
+        elif file_extension == 'csv':
+            # Probar diferentes encodings
+            encodings = ['utf-8', 'latin-1', 'cp1252', 'iso-8859-1']
+            df = None
+            for encoding in encodings:
+                try:
+                    uploaded_file.seek(0)
+                    df = pd.read_csv(uploaded_file, encoding=encoding)
+                    break
+                except UnicodeDecodeError:
+                    continue
+            if df is None:
+                st.error(f"❌ No se pudo leer el CSV {nombre} con ningún encoding")
+                return None
+        else:
+            st.error(f"❌ Formato no soportado: {uploaded_file.name}")
+            return None
+        
+        # Limpieza básica
+        df = df.dropna(axis=1, how='all')
+        df = df.dropna(how='all')
+        df.columns = df.columns.astype(str)
+        
+        return df
+        
+    except Exception as e:
+        st.error(f"❌ Error al cargar {nombre}: {str(e)}")
+        return None
+
+
+def detectar_columnas_v8(df: pd.DataFrame) -> Dict[str, str]:
+    """Detecta automáticamente columnas importantes."""
+    if df.empty:
+        return {}
+    
+    columnas = {}
+    nombres_columnas = [str(col).upper() for col in df.columns]
+    
+    patrones = {
+        'guia': ['GUIA', 'GUÍA', 'NUMERO', 'N°', 'CODIGO', 'NO', 'NRO'],
+        'ciudad': ['CIUDAD', 'DESTINO', 'DES', 'CIUDAD DESTINO', 'ORIGEN'],
+        'destinatario': ['DESTINATARIO', 'CLIENTE', 'CONSIGNATARIO', 'SUCURSAL', 'NOMBRE', 'RAZON SOCIAL'],
+        'subtotal': ['SUBTOTAL', 'TOTAL', 'FLETE', 'COSTO', 'IMPORTE', 'VALOR', 'MONTO', 'PRECIO']
+    }
+    
+    for tipo_col, keywords in patrones.items():
+        for col_name, col_name_upper in zip(df.columns, nombres_columnas):
+            for keyword in keywords:
+                if keyword in col_name_upper:
+                    columnas[tipo_col] = col_name
+                    break
+            if tipo_col in columnas:
+                break
+    
+    return columnas
+
+
+def mostrar_resultados_v8():
+    """Muestra los resultados del procesamiento en pestañas."""
+    datos = st.session_state.reconciliacion_datos
+    resultado = datos['resultado']
+    metricas = datos['metricas']
+    resumen = datos['resumen']
+    validacion = datos['validacion']
+    stats = datos['stats']
+    
+    # KPIs principales (como en el código original)
+    st.markdown("<div class='stats-grid'>", unsafe_allow_html=True)
+    k1, k2, k3, k4 = st.columns(4)
+    
+    with k1:
+        st.markdown(f"""
+        <div class='stat-card card-blue'>
+            <div class='stat-icon'>💰</div>
+            <div class='stat-title'>Total Facturado</div>
+            <div class='stat-value'>${stats['total_money']:,.0f}</div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with k2:
+        # Si hay columna de piezas, mostrarla; si no, mostramos guías
+        piezas_totales = resultado['PIEZAS'].sum() if 'PIEZAS' in resultado.columns else stats['guias_count']
+        st.markdown(f"""
+        <div class='stat-card card-green'>
+            <div class='stat-icon'>📦</div>
+            <div class='stat-title'>Total {'Piezas' if 'PIEZAS' in resultado.columns else 'Guías'}</div>
+            <div class='stat-value'>{piezas_totales:,.0f}</div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with k3:
+        st.markdown(f"""
+        <div class='stat-card card-purple'>
+            <div class='stat-icon'>✅</div>
+            <div class='stat-title'>Guias Conciliadas</div>
+            <div class='stat-value'>{stats['guias_con_subtotal']}</div>
+            <div class='stat-change positive'>+{stats['match_rate']*100:.1f}%</div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with k4:
+        sin_factura = stats['guias_count'] - stats['guias_con_subtotal']
+        st.markdown(f"""
+        <div class='stat-card card-red'>
+            <div class='stat-icon'>⚠️</div>
+            <div class='stat-title'>Guias Sin Factura</div>
+            <div class='stat-value'>{sin_factura}</div>
+            <div class='stat-change {'negative' if sin_factura > 5 else 'positive'}">{'Revisar' if sin_factura > 5 else 'OK'}</div>
+        </div>
+        """, unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
+    
+    # Pestañas
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
+        "📊 Resumen", "✅ Validación", "🏪 Tiendas", "🌎 Geografía", "📋 Datos", "📈 KPIs", "💾 Exportar"
+    ])
+    
+    with tab1:
+        mostrar_resumen_v8(metricas, resumen, stats)
+    
+    with tab2:
+        mostrar_validacion_v8(validacion)
+    
+    with tab3:
+        mostrar_tiendas_v8(metricas)
+    
+    with tab4:
+        mostrar_geografia_v8(resultado)
+    
+    with tab5:
+        mostrar_datos_detallados_v8(resultado)
+    
+    with tab6:
+        mostrar_kpis_avanzados_v8(metricas, stats, validacion)
+    
+    with tab7:
+        mostrar_exportar_v8(resultado, metricas, resumen, validacion, stats)
+
+
+def mostrar_resumen_v8(metricas, resumen, stats):
+    """Pestaña de resumen ejecutivo."""
+    st.header("📊 Resumen Ejecutivo")
+    
+    # Métricas en columnas
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("Inversión Total", f"${stats['total_money']:,.2f}")
+    with col2:
+        st.metric("Total Guías", f"{stats['guias_count']:,}")
+    with col3:
+        st.metric("Grupos/Tiendas", f"{stats['tiendas_count']:,}")
+    with col4:
+        st.metric("Match Rate", f"{stats['match_rate']:.1%}")
+    
+    # Gráficos
+    col_chart1, col_chart2 = st.columns(2)
+    with col_chart1:
+        if not resumen.empty and 'TIPO' in resumen.columns:
+            fig = px.pie(resumen, values='SUBTOTAL', names='TIPO', 
+                         title="Distribución por Canal",
+                         hole=0.4, color_discrete_sequence=px.colors.qualitative.Set3)
+            st.plotly_chart(fig, use_container_width=True)
+    
+    with col_chart2:
+        if not metricas.empty and len(metricas) >= 5:
+            top5 = metricas.head(5).copy()
+            top5['GRUPO_SHORT'] = top5['GRUPO'].apply(lambda x: x[:20] + '...' if len(x) > 20 else x)
+            fig = px.bar(top5, x='GRUPO_SHORT', y='SUBTOTAL', title="Top 5 Grupos por Inversión",
+                         text='SUBTOTAL', color='SUBTOTAL', color_continuous_scale='Blues')
+            fig.update_traces(texttemplate='$%{text:,.2f}', textposition='outside')
+            st.plotly_chart(fig, use_container_width=True)
+    
+    # Tabla resumen por tipo
+    if not resumen.empty:
+        st.subheader("Resumen por Tipo de Tienda")
+        display = resumen.copy()
+        display['SUBTOTAL'] = display['SUBTOTAL'].apply(lambda x: f"${x:,.2f}")
+        display['PORCENTAJE'] = display['PORCENTAJE'].apply(lambda x: f"{x:.1f}%")
+        st.dataframe(display, use_container_width=True, hide_index=True)
+
+
+def mostrar_validacion_v8(validacion):
+    """Pestaña de validación de totales."""
+    st.header("✅ Validación de Totales")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        st.metric("Total Manifiesto", f"${validacion['total_manifiesto']:,.2f}")
+        st.metric("Total Facturas", f"${validacion['total_facturas']:,.2f}")
+    with col2:
+        st.metric("Diferencia", f"${validacion['diferencia']:,.2f}", 
+                  delta=f"{validacion['porcentaje']:.2f}%")
+        st.metric("Margen Aceptable", f"${validacion['margen_aceptable']:,.2f}")
+    
+    if validacion['coincide']:
+        st.success("✅ Los totales coinciden dentro del margen aceptable.")
+    else:
+        st.warning("⚠️ Los totales presentan diferencias significativas.")
+    
+    # Gráfico de comparación
+    fig = go.Figure(data=[
+        go.Bar(name='Manifiesto', x=['Total'], y=[validacion['total_manifiesto']], marker_color='#1f77b4'),
+        go.Bar(name='Facturas', x=['Total'], y=[validacion['total_facturas']], marker_color='#ff7f0e')
+    ])
+    fig.update_layout(title="Comparación de Totales", barmode='group')
+    st.plotly_chart(fig, use_container_width=True)
+
+
+def mostrar_tiendas_v8(metricas):
+    """Pestaña de análisis por tiendas/grupos."""
+    st.header("🏪 Análisis por Tiendas / Grupos")
+    
+    if metricas.empty:
+        st.info("No hay datos de grupos para mostrar.")
+        return
+    
+    # Filtro de búsqueda
+    busqueda = st.text_input("🔍 Buscar grupo:", "")
+    if busqueda:
+        metricas_filt = metricas[metricas['GRUPO'].str.contains(busqueda, case=False, na=False)]
+    else:
+        metricas_filt = metricas
+    
+    # Mostrar tabla
+    display = metricas_filt.copy()
+    display['SUBTOTAL'] = display['SUBTOTAL'].apply(lambda x: f"${x:,.2f}")
+    display['PORCENTAJE'] = display['PORCENTAJE'].apply(lambda x: f"{x:.2f}%")
+    st.dataframe(display, use_container_width=True, hide_index=True)
+
+
+def mostrar_geografia_v8(resultado):
+    """Pestaña de análisis geográfico."""
+    st.header("🌎 Análisis Geográfico")
+    
+    if 'CIUDAD_DESTINO' not in resultado.columns:
+        st.info("No hay información de ciudades disponible.")
+        return
+    
+    # Agrupar por ciudad
+    geo = resultado.groupby('CIUDAD_DESTINO').agg(
+        Guías=('GUIA_LIMPIA', 'count'),
+        Inversión=('SUBTOTAL_LIMPIO', 'sum')
+    ).reset_index().sort_values('Inversión', ascending=False)
+    
+    geo['Inversión'] = geo['Inversión'].apply(lambda x: f"${x:,.2f}")
+    st.dataframe(geo, use_container_width=True, hide_index=True)
+    
+    # Gráfico de barras
+    top_ciudades = geo.head(10).copy()
+    top_ciudades['Inversión_num'] = top_ciudades['Inversión'].replace('[\$,]', '', regex=True).astype(float)
+    fig = px.bar(top_ciudades, x='CIUDAD_DESTINO', y='Inversión_num', 
+                 title="Top 10 Ciudades por Inversión",
+                 color='Inversión_num', color_continuous_scale='Viridis')
+    st.plotly_chart(fig, use_container_width=True)
+
+
+def mostrar_datos_detallados_v8(resultado):
+    """Pestaña de datos detallados con filtros."""
+    st.header("📋 Datos Detallados")
+    
+    # Selección de columnas a mostrar
+    cols_disponibles = resultado.columns.tolist()
+    default_cols = ['GUIA_LIMPIA', 'GRUPO', 'TIPO', 'DESTINATARIO', 'CIUDAD_DESTINO', 'SUBTOTAL_LIMPIO']
+    default_cols = [c for c in default_cols if c in cols_disponibles]
+    
+    cols_seleccionadas = st.multiselect("Seleccionar columnas a mostrar", cols_disponibles, default=default_cols)
+    
+    if cols_seleccionadas:
+        st.dataframe(resultado[cols_seleccionadas].head(100), use_container_width=True)
+        st.caption(f"Mostrando primeras 100 filas de {len(resultado)} totales.")
+    else:
+        st.info("Seleccione al menos una columna.")
+
+
+def mostrar_kpis_avanzados_v8(metricas, stats, validacion):
+    """Pestaña de KPIs avanzados (Pareto, concentración)."""
+    st.header("📈 KPIs Avanzados")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.subheader("Concentración de Gastos")
+        if not metricas.empty:
+            total_grupos = len(metricas)
+            top1 = metricas.iloc[0]['PORCENTAJE'] if total_grupos > 0 else 0
+            top3 = metricas.head(3)['PORCENTAJE'].sum() if total_grupos >= 3 else 0
+            top5 = metricas.head(5)['PORCENTAJE'].sum() if total_grupos >= 5 else 0
+            top10 = metricas.head(10)['PORCENTAJE'].sum() if total_grupos >= 10 else 0
+            
+            conc_df = pd.DataFrame({
+                'Segmento': ['Top 1', 'Top 3', 'Top 5', 'Top 10'],
+                '% del Total': [f"{top1:.1f}%", f"{top3:.1f}%", f"{top5:.1f}%", f"{top10:.1f}%"]
+            })
+            st.dataframe(conc_df, use_container_width=True, hide_index=True)
+    
+    with col2:
+        st.subheader("Eficiencia de Match")
+        match_df = pd.DataFrame({
+            'Métrica': ['Guías Totales', 'Guías con Match', 'Match Rate', 'Diferencia'],
+            'Valor': [
+                f"{stats['guias_count']:,}",
+                f"{stats['guias_con_subtotal']:,}",
+                f"{stats['match_rate']:.1%}",
+                f"${validacion['diferencia']:,.2f}"
+            ]
+        })
+        st.dataframe(match_df, use_container_width=True, hide_index=True)
+    
+    # Análisis de Pareto
+    if not metricas.empty and len(metricas) > 1:
+        st.subheader("Análisis de Pareto (80/20)")
+        metricas_pareto = metricas.copy()
+        metricas_pareto['ACUMULADO'] = metricas_pareto['PORCENTAJE'].cumsum()
+        
+        # Encontrar cuántos grupos alcanzan el 80%
+        grupos_80 = metricas_pareto[metricas_pareto['ACUMULADO'] <= 80].shape[0]
+        if grupos_80 == 0:
+            grupos_80 = 1
+        
+        porcentaje_grupos = (grupos_80 / len(metricas_pareto)) * 100
+        
+        st.info(f"""
+        **Principio de Pareto:**  
+        - **{grupos_80} grupos** ({porcentaje_grupos:.1f}% del total) representan el **80% del gasto**.
+        - Enfocar esfuerzos en estos grupos puede optimizar la gestión.
+        """)
+        
+        # Gráfico de Pareto
+        fig = go.Figure()
+        fig.add_trace(go.Bar(x=metricas_pareto.index, y=metricas_pareto['PORCENTAJE'], name='% Individual'))
+        fig.add_trace(go.Scatter(x=metricas_pareto.index, y=metricas_pareto['ACUMULADO'], 
+                                  name='% Acumulado', yaxis='y2', line=dict(color='red', width=3)))
+        fig.update_layout(
+            title='Diagrama de Pareto',
+            xaxis_title='Grupos (ordenados)',
+            yaxis=dict(title='% Individual'),
+            yaxis2=dict(title='% Acumulado', overlaying='y', side='right')
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+
+def mostrar_exportar_v8(resultado, metricas, resumen, validacion, stats):
+    """Pestaña de exportación a Excel y PDF."""
+    st.header("💾 Exportar Resultados")
+    
+    export_format = st.radio(
+        "Seleccione formato:",
+        ['📊 Excel Completo', '📄 PDF Ejecutivo', '📁 Ambos (ZIP)'],
+        horizontal=True, key='export_format_v8'
+    )
+    
+    nombre_base = st.text_input(
+        "Nombre base para archivos:",
+        value=f"reconciliacion_v8_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+        key='export_name_v8'
+    )
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        if st.button("📥 Generar Excel", use_container_width=True):
+            try:
+                excel_data = ReportGenerator.generar_excel_completo(
+                    resultado, metricas, resumen, validacion, stats, nombre_base
+                )
+                st.download_button(
+                    label="📥 Descargar Excel",
+                    data=excel_data.getvalue(),
+                    file_name=f"{nombre_base}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True
+                )
+                st.success("✅ Excel generado")
+            except Exception as e:
+                st.error(f"Error: {e}")
+    
+    with col2:
+        if st.button("📥 Generar PDF", use_container_width=True):
+            try:
+                with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp:
+                    pdf_path = tmp.name
+                pdf_path = ReportGenerator.generar_pdf(stats, metricas, resumen, validacion, pdf_path)
+                with open(pdf_path, 'rb') as f:
+                    pdf_bytes = f.read()
+                st.download_button(
+                    label="📥 Descargar PDF",
+                    data=pdf_bytes,
+                    file_name=f"{nombre_base}_reporte.pdf",
+                    mime="application/pdf",
+                    use_container_width=True
+                )
+                os.unlink(pdf_path)
+                st.success("✅ PDF generado")
+            except Exception as e:
+                st.error(f"Error: {e}")
+    
+    with col3:
+        if st.button("📥 Generar Ambos (ZIP)", use_container_width=True):
+            try:
+                zip_buffer = BytesIO()
+                with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+                    # Excel
+                    excel_data = ReportGenerator.generar_excel_completo(
+                        resultado, metricas, resumen, validacion, stats, nombre_base
+                    )
+                    zip_file.writestr(f"{nombre_base}.xlsx", excel_data.getvalue())
+                    
+                    # PDF
+                    with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp:
+                        pdf_path = tmp.name
+                    pdf_path = ReportGenerator.generar_pdf(stats, metricas, resumen, validacion, pdf_path)
+                    with open(pdf_path, 'rb') as f:
+                        zip_file.writestr(f"{nombre_base}_reporte.pdf", f.read())
+                    os.unlink(pdf_path)
+                
+                zip_buffer.seek(0)
+                st.download_button(
+                    label="📥 Descargar ZIP",
+                    data=zip_buffer.getvalue(),
+                    file_name=f"{nombre_base}.zip",
+                    mime="application/zip",
+                    use_container_width=True
+                )
+                st.success("✅ Paquete generado")
+            except Exception as e:
+                st.error(f"Error: {e}")
 # ==============================================================================
 # 10. MODULO AUDITORIA DE CORREOS
 # ==============================================================================
