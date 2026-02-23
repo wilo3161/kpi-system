@@ -30,5 +30,5 @@ reportlab
 matplotlib
 seaborn
 google-generativeai
-fuzzywuzzy==0.18.0
-python-Levenshtein==0.25.1
+fuzzywuzzy
+python-Levenshtein
