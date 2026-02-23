@@ -3009,6 +3009,7 @@ def show_gestion_equipo():
 
 # ==============================================================================
 # 9. MODULO RECONCILIACION V8 (VERSIÓN PROFESIONAL CON FUZZY MATCHING)
+# CORRECCIÓN: Manejo de duplicados en facturas y cálculo exacto del total facturado
 # ==============================================================================
 
 import streamlit as st
@@ -3349,6 +3350,9 @@ class AuditEngine:
         m['GUIA_LIMPIA'] = self._clean_guide_column(m[guia_m_col])
         f['GUIA_LIMPIA'] = self._clean_guide_column(f[guia_f_col])
         
+        # Eliminar filas con guía vacía en facturas (posibles totales o filas basura)
+        f = f[f['GUIA_LIMPIA'].notna() & (f['GUIA_LIMPIA'] != '')]
+        
         # 2. Limpiar valores monetarios
         subtotal_col = config.get('subtotal')
         if not subtotal_col:
@@ -3386,48 +3390,48 @@ class AuditEngine:
         else:
             f['DESTINATARIO'] = 'SIN DESTINATARIO'
         
-        # 6. Cruce (Merge)
-        merge_columns = ['GUIA_LIMPIA', 'SUBTOTAL_LIMPIO', 'CIUDAD_DESTINO', 'DESTINATARIO']
-        merge_columns = [col for col in merge_columns if col in f.columns]
+        # 6. Agrupar facturas por guía para evitar duplicados (sumar subtotales si hay varias filas para la misma guía)
+        #    y tomar el primer valor de las otras columnas (ciudad, destinatario)
+        if f['GUIA_LIMPIA'].duplicated().any():
+            st.warning("⚠️ Se detectaron guías duplicadas en el archivo de facturas. Se sumarán los subtotales por guía.")
+            f_agrupado = f.groupby('GUIA_LIMPIA').agg({
+                'SUBTOTAL_LIMPIO': 'sum',
+                'CIUDAD_DESTINO': 'first',
+                'DESTINATARIO': 'first'
+            }).reset_index()
+        else:
+            f_agrupado = f[['GUIA_LIMPIA', 'SUBTOTAL_LIMPIO', 'CIUDAD_DESTINO', 'DESTINATARIO']].copy()
         
-        # Asegurar que las columnas existan
-        for col in ['SUBTOTAL_LIMPIO', 'CIUDAD_DESTINO', 'DESTINATARIO']:
-            if col not in f.columns:
-                f[col] = 0.0 if col == 'SUBTOTAL_LIMPIO' else 'SIN ASIGNAR'
-        
-        # Realizar el merge
+        # 7. Cruce (Merge) con facturas agrupadas
         audit_df = pd.merge(
             m,
-            f[['GUIA_LIMPIA', 'SUBTOTAL_LIMPIO', 'CIUDAD_DESTINO', 'DESTINATARIO']],
+            f_agrupado[['GUIA_LIMPIA', 'SUBTOTAL_LIMPIO', 'CIUDAD_DESTINO', 'DESTINATARIO']],
             on='GUIA_LIMPIA',
             how='left',
             suffixes=('_MANIFIESTO', '_FACTURA')
         )
         
-        # 7. Manejar valores nulos después del merge
+        # 8. Manejar valores nulos después del merge
         if 'SUBTOTAL_LIMPIO' not in audit_df.columns:
             audit_df['SUBTOTAL_LIMPIO'] = 0.0
-        
         audit_df['SUBTOTAL_LIMPIO'] = audit_df['SUBTOTAL_LIMPIO'].fillna(0.0)
         
         if 'DESTINATARIO' not in audit_df.columns:
             audit_df['DESTINATARIO'] = 'SIN DESTINATARIO'
-        
         audit_df['DESTINATARIO'] = audit_df['DESTINATARIO'].fillna('SIN DESTINATARIO')
         
         if 'CIUDAD_DESTINO' not in audit_df.columns:
             audit_df['CIUDAD_DESTINO'] = 'CIUDAD DESCONOCIDA'
-        
         audit_df['CIUDAD_DESTINO'] = audit_df['CIUDAD_DESTINO'].fillna('CIUDAD DESCONOCIDA')
         
-        # 8. Agrupar tiendas
+        # 9. Agrupar tiendas
         audit_df = self.group_stores(audit_df, 'DESTINATARIO')
         
-        # 9. Calcular métricas
+        # 10. Calcular métricas
         metricas = self._calcular_metricas(audit_df)
         resumen = self._calcular_resumen(audit_df)
-        validacion = self._validar_totales(audit_df, f)
-        stats = self._calcular_estadisticas(audit_df, f)
+        validacion = self._validar_totales(audit_df, f_agrupado)  # pasamos el df agrupado
+        stats = self._calcular_estadisticas(audit_df, f_agrupado)
         
         return {
             'df_final': audit_df,
@@ -3507,14 +3511,10 @@ class AuditEngine:
         resumen = resumen.sort_values('SUBTOTAL', ascending=False)
         return resumen
     
-    def _validar_totales(self, audit_df: pd.DataFrame, facturas_df: pd.DataFrame) -> Dict[str, Any]:
+    def _validar_totales(self, audit_df: pd.DataFrame, facturas_agrupadas: pd.DataFrame) -> Dict[str, Any]:
         """Valida que los totales coincidan."""
         total_audit = audit_df['SUBTOTAL_LIMPIO'].sum()
-        
-        if 'SUBTOTAL_LIMPIO' in facturas_df.columns:
-            total_facturas = facturas_df['SUBTOTAL_LIMPIO'].sum()
-        else:
-            total_facturas = 0.0
+        total_facturas = facturas_agrupadas['SUBTOTAL_LIMPIO'].sum()
         
         diferencia = total_audit - total_facturas
         
@@ -3536,7 +3536,7 @@ class AuditEngine:
             'margen_aceptable': margen_absoluto
         }
     
-    def _calcular_estadisticas(self, audit_df: pd.DataFrame, facturas_df: pd.DataFrame) -> Dict[str, Any]:
+    def _calcular_estadisticas(self, audit_df: pd.DataFrame, facturas_agrupadas: pd.DataFrame) -> Dict[str, Any]:
         """Calcula estadísticas generales."""
         guias_count = len(audit_df)
         guias_con_subtotal = (audit_df['SUBTOTAL_LIMPIO'] > 0).sum()
@@ -3559,7 +3559,7 @@ class AuditEngine:
             'tiendas_count': audit_df['GRUPO'].nunique() if 'GRUPO' in audit_df.columns else 0,
             'total_money': audit_df['SUBTOTAL_LIMPIO'].sum(),
             'match_rate': match_rate,
-            'facturas_count': len(facturas_df),
+            'facturas_count': len(facturas_agrupadas),
             'top_5_grupos': top_grupos_dict,
             'promedio_por_guia': audit_df['SUBTOTAL_LIMPIO'].mean() if guias_count > 0 else 0,
             'fecha_proceso': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -4403,72 +4403,75 @@ def mostrar_exportar_v8(resultado, metricas, resumen, validacion, stats):
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        if st.button("📥 Generar Excel", use_container_width=True):
-            try:
-                excel_data = ReportGenerator.generar_excel_completo(
-                    resultado, metricas, resumen, validacion, stats, nombre_base
-                )
-                st.download_button(
-                    label="📥 Descargar Excel",
-                    data=excel_data.getvalue(),
-                    file_name=f"{nombre_base}.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    use_container_width=True
-                )
-                st.success("✅ Excel generado")
-            except Exception as e:
-                st.error(f"Error: {e}")
-    
-    with col2:
-        if st.button("📥 Generar PDF", use_container_width=True):
-            try:
-                with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp:
-                    pdf_path = tmp.name
-                pdf_path = ReportGenerator.generar_pdf(stats, metricas, resumen, validacion, pdf_path)
-                with open(pdf_path, 'rb') as f:
-                    pdf_bytes = f.read()
-                st.download_button(
-                    label="📥 Descargar PDF",
-                    data=pdf_bytes,
-                    file_name=f"{nombre_base}_reporte.pdf",
-                    mime="application/pdf",
-                    use_container_width=True
-                )
-                os.unlink(pdf_path)
-                st.success("✅ PDF generado")
-            except Exception as e:
-                st.error(f"Error: {e}")
-    
-    with col3:
-        if st.button("📥 Generar Ambos (ZIP)", use_container_width=True):
-            try:
-                zip_buffer = BytesIO()
-                with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-                    # Excel
+        if export_format in ['📊 Excel Completo', '📁 Ambos (ZIP)']:
+            if st.button("📥 Generar Excel", use_container_width=True):
+                try:
                     excel_data = ReportGenerator.generar_excel_completo(
                         resultado, metricas, resumen, validacion, stats, nombre_base
                     )
-                    zip_file.writestr(f"{nombre_base}.xlsx", excel_data.getvalue())
-                    
-                    # PDF
+                    st.download_button(
+                        label="📥 Descargar Excel",
+                        data=excel_data.getvalue(),
+                        file_name=f"{nombre_base}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        use_container_width=True
+                    )
+                    st.success("✅ Excel generado")
+                except Exception as e:
+                    st.error(f"Error: {e}")
+    
+    with col2:
+        if export_format in ['📄 PDF Ejecutivo', '📁 Ambos (ZIP)']:
+            if st.button("📥 Generar PDF", use_container_width=True):
+                try:
                     with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp:
                         pdf_path = tmp.name
                     pdf_path = ReportGenerator.generar_pdf(stats, metricas, resumen, validacion, pdf_path)
                     with open(pdf_path, 'rb') as f:
-                        zip_file.writestr(f"{nombre_base}_reporte.pdf", f.read())
+                        pdf_bytes = f.read()
+                    st.download_button(
+                        label="📥 Descargar PDF",
+                        data=pdf_bytes,
+                        file_name=f"{nombre_base}_reporte.pdf",
+                        mime="application/pdf",
+                        use_container_width=True
+                    )
                     os.unlink(pdf_path)
-                
-                zip_buffer.seek(0)
-                st.download_button(
-                    label="📥 Descargar ZIP",
-                    data=zip_buffer.getvalue(),
-                    file_name=f"{nombre_base}.zip",
-                    mime="application/zip",
-                    use_container_width=True
-                )
-                st.success("✅ Paquete generado")
-            except Exception as e:
-                st.error(f"Error: {e}")
+                    st.success("✅ PDF generado")
+                except Exception as e:
+                    st.error(f"Error: {e}")
+    
+    with col3:
+        if export_format == '📁 Ambos (ZIP)':
+            if st.button("📥 Generar ZIP", use_container_width=True):
+                try:
+                    zip_buffer = BytesIO()
+                    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+                        # Excel
+                        excel_data = ReportGenerator.generar_excel_completo(
+                            resultado, metricas, resumen, validacion, stats, nombre_base
+                        )
+                        zip_file.writestr(f"{nombre_base}.xlsx", excel_data.getvalue())
+                        
+                        # PDF
+                        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp:
+                            pdf_path = tmp.name
+                        pdf_path = ReportGenerator.generar_pdf(stats, metricas, resumen, validacion, pdf_path)
+                        with open(pdf_path, 'rb') as f:
+                            zip_file.writestr(f"{nombre_base}_reporte.pdf", f.read())
+                        os.unlink(pdf_path)
+                    
+                    zip_buffer.seek(0)
+                    st.download_button(
+                        label="📥 Descargar ZIP",
+                        data=zip_buffer.getvalue(),
+                        file_name=f"{nombre_base}.zip",
+                        mime="application/zip",
+                        use_container_width=True
+                    )
+                    st.success("✅ Paquete generado")
+                except Exception as e:
+                    st.error(f"Error: {e}")
 # ==============================================================================
 # 10. MODULO AUDITORIA DE CORREOS
 # ==============================================================================
