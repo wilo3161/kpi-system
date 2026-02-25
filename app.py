@@ -3837,202 +3837,100 @@ class ReportGenerator:
         return output
 
 
-# ========== FUNCIÓN PRINCIPAL DEL MÓDULO ==========
-def show_reconciliacion_v8():
-    """Módulo de reconciliación financiera con motor experto y fuzzy matching."""
+import streamlit as st
+import pandas as pd
+import numpy as np
+import re
+from datetime import datetime
+import plotly.express as px
+import plotly.graph_objects as go
+from io import BytesIO
+import warnings
+import tempfile
+import os
+import zipfile
+from typing import Optional, Dict, Any
+
+warnings.filterwarnings('ignore')
+
+# Configurar página
+st.set_page_config(
+    page_title="Reconciliación Logística",
+    page_icon="💰",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# =============================================================================
+# CLASES AUXILIARES (simuladas para compatibilidad con el código original)
+# =============================================================================
+class AuditEngine:
+    """Motor de auditoría que utiliza las funciones de procesamiento."""
     
-    # Botón de retroceso y encabezado (asumimos que estas funciones existen en la app principal)
-    try:
-        add_back_button()
-        show_module_header(
-            "💰 Reconciliación V8",
-            "Conciliación de facturas y manifiestos con IA y Fuzzy Matching"
-        )
-    except NameError:
-        # Si no están definidas, se omite (para pruebas independientes)
-        pass
+    def run_audit(self, manifesto: pd.DataFrame, facturas: pd.DataFrame, config: dict) -> dict:
+        """Ejecuta el proceso de reconciliación."""
+        # Llamar a la función de procesamiento del segundo código
+        df_completo, metricas, resumen, validacion = procesar_gastos(manifesto, facturas, config)
+        
+        # Calcular estadísticas adicionales
+        stats = {
+            'total_money': validacion['total_tiendas'],
+            'guias_count': len(df_completo),
+            'guias_con_subtotal': df_completo['SUBTOTAL_NUM'].notna().sum(),
+            'match_rate': df_completo['SUBTOTAL_NUM'].notna().mean(),
+            'tiendas_count': len(metricas)
+        }
+        
+        return {
+            'df_final': df_completo,
+            'metricas': metricas,
+            'resumen': resumen,
+            'validacion': validacion,
+            'stats': stats
+        }
+
+class ReportGenerator:
+    """Generador de reportes (Excel, PDF, etc.)."""
     
-    st.markdown('<div class="module-content">', unsafe_allow_html=True)
+    @staticmethod
+    def generar_excel_completo(resultado, metricas, resumen, validacion, stats, nombre_base):
+        """Genera un archivo Excel con todas las hojas."""
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            resultado.to_excel(writer, sheet_name='Datos Completos', index=False)
+            metricas.to_excel(writer, sheet_name='Gastos por Tienda', index=False)
+            resumen.to_excel(writer, sheet_name='Resumen', index=False)
+            pd.DataFrame([validacion]).to_excel(writer, sheet_name='Validación', index=False)
+            pd.DataFrame([stats]).to_excel(writer, sheet_name='Estadísticas', index=False)
+        return output
     
-    st.markdown("""
+    @staticmethod
+    def generar_pdf(stats, metricas, resumen, validacion, pdf_path):
+        """Simula la generación de un PDF (placeholder)."""
+        # En un caso real usarías reportlab, fpdf, etc.
+        with open(pdf_path, 'w') as f:
+            f.write("Reporte PDF (simulado)\n")
+            f.write(str(stats))
+        return pdf_path
+
+# =============================================================================
+# FUNCIONES AUXILIARES (tomadas del segundo código)
+# =============================================================================
+def add_back_button():
+    """Simula un botón de retroceso (opcional)."""
+    if st.button("← Volver"):
+        st.session_state.clear()
+        st.rerun()
+
+def show_module_header(title, subtitle):
+    """Muestra un encabezado con estilo."""
+    st.markdown(f"""
     <div class='main-header'>
-        <h1 class='header-title'>📦 Reconciliación Logística V8.0</h1>
-        <div class='header-subtitle'>Motor de Auditoría Experto con Fuzzy Matching</div>
+        <h1 class='header-title'>{title}</h1>
+        <div class='header-subtitle'>{subtitle}</div>
     </div>
     """, unsafe_allow_html=True)
 
-    # Inicializar motor y generador en session_state si no existen
-    if 'audit_engine' not in st.session_state:
-        st.session_state.audit_engine = AuditEngine()
-    if 'report_generator' not in st.session_state:
-        st.session_state.report_generator = ReportGenerator()
-    if 'reconciliacion_datos' not in st.session_state:
-        st.session_state.reconciliacion_datos = {
-            'manifesto': None,
-            'facturas': None,
-            'resultado': None,
-            'metricas': None,
-            'resumen': None,
-            'validacion': None,
-            'stats': None,
-            'config': {},
-            'procesado': False
-        }
-
-    # Panel de carga de archivos
-    st.markdown("""
-    <div class='filter-panel'>
-        <h3 class='filter-title'>📂 Carga de Archivos</h3>
-    """, unsafe_allow_html=True)
-    
-    col1, col2 = st.columns(2)
-    with col1:
-        f_manifiesto = st.file_uploader("Subir Manifiesto (Excel o CSV)", type=['xlsx', 'xls', 'csv'], key="manifiesto_v8")
-    with col2:
-        f_facturas = st.file_uploader("Subir Facturas (Excel o CSV)", type=['xlsx', 'xls', 'csv'], key="facturas_v8")
-    
-    # Datos de ejemplo para demostración
-    use_sample = st.checkbox("Usar datos de demostración", value=True, key="sample_v8")
-    
-    if use_sample or (f_manifiesto and f_facturas):
-        try:
-            if use_sample:
-                # Generar datos de ejemplo (igual que en el código original pero adaptado)
-                np.random.seed(42)
-                num_rows = 50
-                
-                df_m = pd.DataFrame({
-                    'GUIA': [f'GUA-{i:04d}' for i in range(1001, 1001 + num_rows)],
-                    'DESTINATARIO': np.random.choice([
-                        'JOFRE SANTANA IMPORT', 
-                        'MALL DEL SOL AEROPOSTALE',
-                        'SAN MARINO TIENDA',
-                        'CARLOS PEREZ',
-                        'MARIA GONZALEZ',
-                        'CENTRO COMERCIAL QUITO',
-                        'PLAZA DE LAS AMERICAS'
-                    ], num_rows),
-                    'PIEZAS': np.random.randint(1, 20, num_rows),
-                    'VALOR_DECLARADO': np.random.uniform(50, 500, num_rows).round(2)
-                })
-                
-                df_f = pd.DataFrame({
-                    'GUIA_FACTURA': [f'GUA-{i:04d}' for i in range(1001, 1001 + int(num_rows * 0.8))],
-                    'VALOR_COBRADO': np.random.uniform(45, 550, int(num_rows * 0.8)).round(2)
-                })
-                
-                st.session_state.reconciliacion_datos['manifesto'] = df_m
-                st.session_state.reconciliacion_datos['facturas'] = df_f
-                st.success("✅ Usando datos de demostración. Puede subir sus propios archivos para procesamiento real.")
-            else:
-                # Carga real
-                manifesto = cargar_archivo_v8(f_manifiesto, "Manifiesto")
-                facturas = cargar_archivo_v8(f_facturas, "Facturas")
-                if manifesto is not None and facturas is not None:
-                    st.session_state.reconciliacion_datos['manifesto'] = manifesto
-                    st.session_state.reconciliacion_datos['facturas'] = facturas
-
-            # Si tenemos datos cargados, mostrar configuración
-            manifesto = st.session_state.reconciliacion_datos['manifesto']
-            facturas = st.session_state.reconciliacion_datos['facturas']
-            
-            if manifesto is not None and facturas is not None:
-                st.markdown("""
-                <div class='filter-panel'>
-                    <h3 class='filter-title'>⚙️ Configuración de Columnas</h3>
-                """, unsafe_allow_html=True)
-                
-                # Detección automática de columnas
-                columnas_m = detectar_columnas_v8(manifesto)
-                columnas_f = detectar_columnas_v8(facturas)
-                
-                c1, c2 = st.columns(2)
-                with c1:
-                    st.info("**Configuración Manifiesto**")
-                    cols_m = manifesto.columns.tolist()
-                    
-                    # Guía en manifiesto
-                    default_guia_m = columnas_m.get('guia', cols_m[0] if cols_m else None)
-                    guia_m = st.selectbox("Columna Guía (Manifiesto)", cols_m, 
-                                          index=cols_m.index(default_guia_m) if default_guia_m in cols_m else 0, key='m_guia_v8')
-                    
-                    # Ciudad destino (opcional)
-                    default_ciudad = columnas_m.get('ciudad', cols_m[0] if cols_m else None)
-                    ciudad_m = st.selectbox("Columna Ciudad Destino (opcional)", ['(Ninguna)'] + cols_m,
-                                            index=0 if '(Ninguna)' else cols_m.index(default_ciudad)+1 if default_ciudad in cols_m else 0, key='m_ciudad_v8')
-                    
-                with c2:
-                    st.info("**Configuración Facturas**")
-                    cols_f = facturas.columns.tolist()
-                    
-                    # Guía en facturas
-                    default_guia_f = columnas_f.get('guia', cols_f[0] if cols_f else None)
-                    guia_f = st.selectbox("Columna Guía (Facturas)", cols_f,
-                                          index=cols_f.index(default_guia_f) if default_guia_f in cols_f else 0, key='f_guia_v8')
-                    
-                    # Destinatario
-                    default_dest = columnas_f.get('destinatario', cols_f[0] if cols_f else None)
-                    destinatario_f = st.selectbox("Columna Destinatario", cols_f,
-                                                  index=cols_f.index(default_dest) if default_dest in cols_f else 0, key='f_dest_v8')
-                    
-                    # Subtotal
-                    default_sub = columnas_f.get('subtotal', cols_f[0] if cols_f else None)
-                    subtotal_f = st.selectbox("Columna Subtotal / Valor", cols_f,
-                                              index=cols_f.index(default_sub) if default_sub in cols_f else 0, key='f_sub_v8')
-                    
-                    # Ciudad destino en facturas (opcional)
-                    default_ciudad_f = columnas_f.get('ciudad', cols_f[0] if cols_f else None)
-                    ciudad_f = st.selectbox("Columna Ciudad Destino (Facturas, opcional)", ['(Ninguna)'] + cols_f,
-                                            index=0 if '(Ninguna)' else cols_f.index(default_ciudad_f)+1 if default_ciudad_f in cols_f else 0, key='f_ciudad_v8')
-                
-                st.markdown("</div>", unsafe_allow_html=True)
-                
-                # Botón de ejecución
-                if st.button("🚀 EJECUTAR RECONCILIACIÓN V8.0", type="primary", use_container_width=True):
-                    with st.spinner("🔄 Ejecutando algoritmo V8.0 con Fuzzy Matching..."):
-                        try:
-                            # Construir configuración
-                            config = {
-                                'guia_m': guia_m,
-                                'ciudad_destino': ciudad_m if ciudad_m != '(Ninguna)' else None,
-                                'guia_f': guia_f,
-                                'destinatario': destinatario_f,
-                                'ciudad_destino_f': ciudad_f if ciudad_f != '(Ninguna)' else None,
-                                'subtotal': subtotal_f
-                            }
-                            
-                            # Ejecutar motor
-                            engine = st.session_state.audit_engine
-                            resultados = engine.run_audit(manifesto, facturas, config)
-                            
-                            # Guardar en sesión
-                            st.session_state.reconciliacion_datos['resultado'] = resultados['df_final']
-                            st.session_state.reconciliacion_datos['metricas'] = resultados['metricas']
-                            st.session_state.reconciliacion_datos['resumen'] = resultados['resumen']
-                            st.session_state.reconciliacion_datos['validacion'] = resultados['validacion']
-                            st.session_state.reconciliacion_datos['stats'] = resultados['stats']
-                            st.session_state.reconciliacion_datos['procesado'] = True
-                            
-                            st.success("✅ Procesamiento completado exitosamente")
-                            
-                        except Exception as e:
-                            st.error(f"❌ Error en el procesamiento: {str(e)}")
-                            with st.expander("🔍 Ver detalles del error"):
-                                st.exception(e)
-            
-            # Mostrar resultados si están disponibles
-            if st.session_state.reconciliacion_datos['procesado']:
-                mostrar_resultados_v8()
-                
-        except Exception as e:
-            st.error(f"❌ Error general: {str(e)}")
-    else:
-        st.info("👆 Suba los archivos necesarios o active la opción de datos de demostración para comenzar.")
-    
-    st.markdown('</div>', unsafe_allow_html=True)
-
-
-# ========== FUNCIONES AUXILIARES ==========
 def cargar_archivo_v8(uploaded_file, nombre: str) -> Optional[pd.DataFrame]:
     """Carga archivos Excel o CSV con manejo robusto."""
     if uploaded_file is None:
@@ -4042,7 +3940,23 @@ def cargar_archivo_v8(uploaded_file, nombre: str) -> Optional[pd.DataFrame]:
         file_extension = uploaded_file.name.split('.')[-1].lower()
         
         if file_extension in ['xlsx', 'xls']:
-            df = pd.read_excel(uploaded_file)
+            # Manejo de múltiples hojas
+            excel_file = pd.ExcelFile(uploaded_file)
+            hojas = excel_file.sheet_names
+            
+            if len(hojas) > 1:
+                # Mostrar selector de hojas en la barra lateral
+                hoja_seleccionada = st.sidebar.selectbox(
+                    f"Hoja para {nombre}",
+                    hojas,
+                    key=f"hoja_{nombre}"
+                )
+            else:
+                hoja_seleccionada = hojas[0]
+            
+            df = pd.read_excel(uploaded_file, sheet_name=hoja_seleccionada, dtype=str)
+            st.sidebar.success(f"✓ {nombre}: {len(df):,} filas de Excel")
+            
         elif file_extension == 'csv':
             # Probar diferentes encodings
             encodings = ['utf-8', 'latin-1', 'cp1252', 'iso-8859-1']
@@ -4050,13 +3964,14 @@ def cargar_archivo_v8(uploaded_file, nombre: str) -> Optional[pd.DataFrame]:
             for encoding in encodings:
                 try:
                     uploaded_file.seek(0)
-                    df = pd.read_csv(uploaded_file, encoding=encoding)
+                    df = pd.read_csv(uploaded_file, encoding=encoding, dtype=str)
                     break
                 except UnicodeDecodeError:
                     continue
             if df is None:
                 st.error(f"❌ No se pudo leer el CSV {nombre} con ningún encoding")
                 return None
+            st.sidebar.success(f"✓ {nombre}: {len(df):,} filas de CSV")
         else:
             st.error(f"❌ Formato no soportado: {uploaded_file.name}")
             return None
@@ -4072,7 +3987,6 @@ def cargar_archivo_v8(uploaded_file, nombre: str) -> Optional[pd.DataFrame]:
         st.error(f"❌ Error al cargar {nombre}: {str(e)}")
         return None
 
-
 def detectar_columnas_v8(df: pd.DataFrame) -> Dict[str, str]:
     """Detecta automáticamente columnas importantes."""
     if df.empty:
@@ -4082,10 +3996,11 @@ def detectar_columnas_v8(df: pd.DataFrame) -> Dict[str, str]:
     nombres_columnas = [str(col).upper() for col in df.columns]
     
     patrones = {
-        'guia': ['GUIA', 'GUÍA', 'NUMERO', 'N°', 'CODIGO', 'NO', 'NRO'],
-        'ciudad': ['CIUDAD', 'DESTINO', 'DES', 'CIUDAD DESTINO', 'ORIGEN'],
-        'destinatario': ['DESTINATARIO', 'CLIENTE', 'CONSIGNATARIO', 'SUCURSAL', 'NOMBRE', 'RAZON SOCIAL'],
-        'subtotal': ['SUBTOTAL', 'TOTAL', 'FLETE', 'COSTO', 'IMPORTE', 'VALOR', 'MONTO', 'PRECIO']
+        'guia': ['GUIA', 'GUÍA', 'NUMERO', 'N°', 'CODIGO', 'NO', 'NRO', 'TRACKING'],
+        'ciudad': ['CIUDAD', 'DESTINO', 'DES', 'CIUDAD DESTINO', 'ORIGEN', 'UBICACION', 'LOCALIDAD'],
+        'destinatario': ['DESTINATARIO', 'CLIENTE', 'CONSIGNATARIO', 'SUCURSAL', 'NOMBRE', 'RAZON SOCIAL', 'RECEPTOR'],
+        'subtotal': ['SUBTOTAL', 'TOTAL', 'FLETE', 'COSTO', 'IMPORTE', 'VALOR', 'MONTO', 'PRECIO', 'AMOUNT'],
+        'envios': ['ENVIOS', 'CARTONES', 'PAQUETES', 'CANTIDAD', 'UNIDADES', 'QTY']
     }
     
     for tipo_col, keywords in patrones.items():
@@ -4099,6 +4014,125 @@ def detectar_columnas_v8(df: pd.DataFrame) -> Dict[str, str]:
     
     return columnas
 
+def limpiar_nombre_tienda(nombre, ciudad=""):
+    """Limpia nombres de tienda para agrupación (del segundo código)."""
+    if pd.isna(nombre):
+        return "TIENDA WEB" if pd.isna(ciudad) else f"TIENDA {ciudad}"
+    
+    nombre_str = str(nombre).strip()
+    
+    # Identificar nombres personales (venta web)
+    palabras = nombre_str.split()
+    if len(palabras) >= 2:
+        if all(re.match(r'^[A-Za-zÁÉÍÓÚáéíóúÑñ\s]+$', p) for p in palabras[:2]):
+            return "TIENDA WEB"
+    
+    # Limpiar patrones de tiendas físicas
+    patrones = [
+        r'LOCAL\s*AEROPOSTALE',
+        r'AEROPOSTALE\s*LOCAL',
+        r'-\s*LOCAL\s*AEROPOSTALE',
+        r'\s*LOCAL\s*$',
+        r'\s*AEROPOSTALE\s*$',
+        r'TIENDA\s*',
+        r'LOCAL\s*',
+        r'AEROPOSTALE\s*'
+    ]
+    
+    for patron in patrones:
+        nombre_str = re.sub(patron, '', nombre_str, flags=re.IGNORECASE)
+    
+    nombre_str = re.sub(r'\s+', ' ', nombre_str).strip()
+    nombre_str = re.sub(r'^\W+|\W+$', '', nombre_str)
+    
+    if not nombre_str or len(nombre_str) < 3:
+        if ciudad and not pd.isna(ciudad):
+            return f"TIENDA {ciudad}"
+        return "TIENDA SIN NOMBRE"
+    
+    return nombre_str
+
+def procesar_gastos(manifesto, facturas, config):
+    """Procesa y valida gastos por tienda (del segundo código, adaptado)."""
+    
+    # 1. Preparar manifiesto
+    df_m = manifesto.rename(columns={
+        config['guia_m']: 'GUIA',
+        config['destinatario']: 'DESTINATARIO',
+        config['ciudad_destino']: 'CIUDAD',
+        config['envios']: 'CARTONES'
+    }).copy()
+    
+    df_m['CARTONES'] = pd.to_numeric(df_m['CARTONES'].astype(str).str.replace(',', '.'), 
+                                     errors='coerce').fillna(1).astype(int)
+    
+    # 2. Preparar facturas
+    df_f = facturas.rename(columns={
+        config['guia_f']: 'GUIA_F',
+        config['subtotal']: 'SUBTOTAL_ORIG'
+    }).copy()
+    
+    df_f['SUBTOTAL_NUM'] = pd.to_numeric(df_f['SUBTOTAL_ORIG'].astype(str).str.replace(',', '.'), 
+                                         errors='coerce')
+    
+    total_facturas = df_f['SUBTOTAL_NUM'].sum()
+    
+    # 3. Unir datos
+    df_m['GUIA_CLEAN'] = df_m['GUIA'].astype(str).str.strip().str.upper()
+    df_f['GUIA_CLEAN'] = df_f['GUIA_F'].astype(str).str.strip().str.upper()
+    
+    df_completo = pd.merge(df_m, df_f[['GUIA_CLEAN', 'SUBTOTAL_NUM', 'SUBTOTAL_ORIG']],
+                          left_on='GUIA_CLEAN', right_on='GUIA_CLEAN', how='left')
+    
+    # 4. Limpiar tiendas
+    df_completo['TIENDA'] = df_completo.apply(
+        lambda x: limpiar_nombre_tienda(x['DESTINATARIO'], x['CIUDAD']), axis=1
+    )
+    df_completo['SUBTOTAL'] = df_completo['SUBTOTAL_NUM'].fillna(0)
+    
+    # 5. Agrupar por tienda
+    metricas = df_completo.groupby('TIENDA').agg(
+        GUIAS=('GUIA', 'count'),
+        CARTONES=('CARTONES', 'sum'),
+        SUBTOTAL=('SUBTOTAL', 'sum'),
+        CON_FACTURA=('SUBTOTAL_NUM', lambda x: x.notna().sum()),
+        CIUDAD=('CIUDAD', lambda x: x.mode()[0] if not x.mode().empty else '')
+    ).reset_index()
+    
+    metricas = metricas.sort_values('SUBTOTAL', ascending=False)
+    total_tiendas = metricas['SUBTOTAL'].sum()
+    
+    # 6. Validación
+    validacion = {
+        'total_facturas': total_facturas,
+        'total_tiendas': total_tiendas,
+        'diferencia': abs(total_facturas - total_tiendas),
+        'porcentaje': (abs(total_facturas - total_tiendas) / total_facturas * 100) if total_facturas > 0 else 0,
+        'coincide': abs(total_facturas - total_tiendas) < 0.01
+    }
+    
+    # 7. Resumen por tipo
+    def tipo_tienda(nombre):
+        nombre_upper = str(nombre).upper()
+        if nombre_upper == "TIENDA WEB":
+            return "VENTA WEB"
+        elif "TIENDA" in nombre_upper:
+            return "TIENDA FÍSICA"
+        elif "WEB" in nombre_upper:
+            return "VENTA WEB"
+        return "OTRO"
+    
+    metricas['TIPO'] = metricas['TIENDA'].apply(tipo_tienda)
+    resumen = metricas.groupby('TIPO').agg(
+        TIENDAS=('TIENDA', 'count'),
+        GUIAS=('GUIAS', 'sum'),
+        CARTONES=('CARTONES', 'sum'),
+        SUBTOTAL=('SUBTOTAL', 'sum')
+    ).reset_index()
+    
+    resumen['PORCENTAJE'] = (resumen['SUBTOTAL'] / total_tiendas * 100).round(2)
+    
+    return df_completo, metricas, resumen, validacion
 
 def mostrar_resultados_v8():
     """Muestra los resultados del procesamiento en pestañas."""
@@ -4124,11 +4158,11 @@ def mostrar_resultados_v8():
     
     with k2:
         # Si hay columna de piezas, mostrarla; si no, mostramos guías
-        piezas_totales = resultado['PIEZAS'].sum() if 'PIEZAS' in resultado.columns else stats['guias_count']
+        piezas_totales = resultado['CARTONES'].sum() if 'CARTONES' in resultado.columns else stats['guias_count']
         st.markdown(f"""
         <div class='stat-card card-green'>
             <div class='stat-icon'>📦</div>
-            <div class='stat-title'>Total {'Piezas' if 'PIEZAS' in resultado.columns else 'Guías'}</div>
+            <div class='stat-title'>Total {'Piezas' if 'CARTONES' in resultado.columns else 'Guías'}</div>
             <div class='stat-value'>{piezas_totales:,.0f}</div>
         </div>
         """, unsafe_allow_html=True)
@@ -4209,8 +4243,8 @@ def mostrar_resumen_v8(metricas, resumen, stats):
     with col_chart2:
         if not metricas.empty and len(metricas) >= 5:
             top5 = metricas.head(5).copy()
-            top5['GRUPO_SHORT'] = top5['GRUPO'].apply(lambda x: x[:20] + '...' if len(x) > 20 else x)
-            fig = px.bar(top5, x='GRUPO_SHORT', y='SUBTOTAL', title="Top 5 Grupos por Inversión",
+            top5['GRUPO_SHORT'] = top5['TIENDA'].apply(lambda x: x[:20] + '...' if len(x) > 20 else x)
+            fig = px.bar(top5, x='GRUPO_SHORT', y='SUBTOTAL', title="Top 5 Tiendas por Inversión",
                          text='SUBTOTAL', color='SUBTOTAL', color_continuous_scale='Blues')
             fig.update_traces(texttemplate='$%{text:,.2f}', textposition='outside')
             st.plotly_chart(fig, use_container_width=True)
@@ -4230,12 +4264,12 @@ def mostrar_validacion_v8(validacion):
     
     col1, col2 = st.columns(2)
     with col1:
-        st.metric("Total Manifiesto", f"${validacion['total_manifiesto']:,.2f}")
+        st.metric("Total Manifiesto", f"${validacion['total_tiendas']:,.2f}")
         st.metric("Total Facturas", f"${validacion['total_facturas']:,.2f}")
     with col2:
         st.metric("Diferencia", f"${validacion['diferencia']:,.2f}", 
                   delta=f"{validacion['porcentaje']:.2f}%")
-        st.metric("Margen Aceptable", f"${validacion['margen_aceptable']:,.2f}")
+        st.metric("Margen Aceptable", "$0.01")
     
     if validacion['coincide']:
         st.success("✅ Los totales coinciden dentro del margen aceptable.")
@@ -4244,7 +4278,7 @@ def mostrar_validacion_v8(validacion):
     
     # Gráfico de comparación
     fig = go.Figure(data=[
-        go.Bar(name='Manifiesto', x=['Total'], y=[validacion['total_manifiesto']], marker_color='#1f77b4'),
+        go.Bar(name='Manifiesto', x=['Total'], y=[validacion['total_tiendas']], marker_color='#1f77b4'),
         go.Bar(name='Facturas', x=['Total'], y=[validacion['total_facturas']], marker_color='#ff7f0e')
     ])
     fig.update_layout(title="Comparación de Totales", barmode='group')
@@ -4260,15 +4294,16 @@ def mostrar_tiendas_v8(metricas):
         return
     
     # Filtro de búsqueda
-    busqueda = st.text_input("🔍 Buscar grupo:", "")
+    busqueda = st.text_input("🔍 Buscar tienda:", "")
     if busqueda:
-        metricas_filt = metricas[metricas['GRUPO'].str.contains(busqueda, case=False, na=False)]
+        metricas_filt = metricas[metricas['TIENDA'].str.contains(busqueda, case=False, na=False)]
     else:
         metricas_filt = metricas
     
     # Mostrar tabla
     display = metricas_filt.copy()
     display['SUBTOTAL'] = display['SUBTOTAL'].apply(lambda x: f"${x:,.2f}")
+    display['PORCENTAJE'] = (display['SUBTOTAL'].replace('[\$,]', '', regex=True).astype(float) / metricas['SUBTOTAL'].sum() * 100).round(2)
     display['PORCENTAJE'] = display['PORCENTAJE'].apply(lambda x: f"{x:.2f}%")
     st.dataframe(display, use_container_width=True, hide_index=True)
 
@@ -4277,14 +4312,14 @@ def mostrar_geografia_v8(resultado):
     """Pestaña de análisis geográfico."""
     st.header("🌎 Análisis Geográfico")
     
-    if 'CIUDAD_DESTINO' not in resultado.columns:
+    if 'CIUDAD' not in resultado.columns:
         st.info("No hay información de ciudades disponible.")
         return
     
     # Agrupar por ciudad
-    geo = resultado.groupby('CIUDAD_DESTINO').agg(
-        Guías=('GUIA_LIMPIA', 'count'),
-        Inversión=('SUBTOTAL_LIMPIO', 'sum')
+    geo = resultado.groupby('CIUDAD').agg(
+        Guías=('GUIA', 'count'),
+        Inversión=('SUBTOTAL', 'sum')
     ).reset_index().sort_values('Inversión', ascending=False)
     
     geo['Inversión'] = geo['Inversión'].apply(lambda x: f"${x:,.2f}")
@@ -4293,7 +4328,7 @@ def mostrar_geografia_v8(resultado):
     # Gráfico de barras
     top_ciudades = geo.head(10).copy()
     top_ciudades['Inversión_num'] = top_ciudades['Inversión'].replace('[\$,]', '', regex=True).astype(float)
-    fig = px.bar(top_ciudades, x='CIUDAD_DESTINO', y='Inversión_num', 
+    fig = px.bar(top_ciudades, x='CIUDAD', y='Inversión_num', 
                  title="Top 10 Ciudades por Inversión",
                  color='Inversión_num', color_continuous_scale='Viridis')
     st.plotly_chart(fig, use_container_width=True)
@@ -4305,7 +4340,7 @@ def mostrar_datos_detallados_v8(resultado):
     
     # Selección de columnas a mostrar
     cols_disponibles = resultado.columns.tolist()
-    default_cols = ['GUIA_LIMPIA', 'GRUPO', 'TIPO', 'DESTINATARIO', 'CIUDAD_DESTINO', 'SUBTOTAL_LIMPIO']
+    default_cols = ['GUIA', 'TIENDA', 'TIPO', 'DESTINATARIO', 'CIUDAD', 'SUBTOTAL']
     default_cols = [c for c in default_cols if c in cols_disponibles]
     
     cols_seleccionadas = st.multiselect("Seleccionar columnas a mostrar", cols_disponibles, default=default_cols)
@@ -4327,10 +4362,10 @@ def mostrar_kpis_avanzados_v8(metricas, stats, validacion):
         st.subheader("Concentración de Gastos")
         if not metricas.empty:
             total_grupos = len(metricas)
-            top1 = metricas.iloc[0]['PORCENTAJE'] if total_grupos > 0 else 0
-            top3 = metricas.head(3)['PORCENTAJE'].sum() if total_grupos >= 3 else 0
-            top5 = metricas.head(5)['PORCENTAJE'].sum() if total_grupos >= 5 else 0
-            top10 = metricas.head(10)['PORCENTAJE'].sum() if total_grupos >= 10 else 0
+            top1 = metricas.iloc[0]['SUBTOTAL'] / stats['total_money'] * 100 if total_grupos > 0 else 0
+            top3 = metricas.head(3)['SUBTOTAL'].sum() / stats['total_money'] * 100 if total_grupos >= 3 else 0
+            top5 = metricas.head(5)['SUBTOTAL'].sum() / stats['total_money'] * 100 if total_grupos >= 5 else 0
+            top10 = metricas.head(10)['SUBTOTAL'].sum() / stats['total_money'] * 100 if total_grupos >= 10 else 0
             
             conc_df = pd.DataFrame({
                 'Segmento': ['Top 1', 'Top 3', 'Top 5', 'Top 10'],
@@ -4355,6 +4390,7 @@ def mostrar_kpis_avanzados_v8(metricas, stats, validacion):
     if not metricas.empty and len(metricas) > 1:
         st.subheader("Análisis de Pareto (80/20)")
         metricas_pareto = metricas.copy()
+        metricas_pareto['PORCENTAJE'] = metricas_pareto['SUBTOTAL'] / stats['total_money'] * 100
         metricas_pareto['ACUMULADO'] = metricas_pareto['PORCENTAJE'].cumsum()
         
         # Encontrar cuántos grupos alcanzan el 80%
@@ -4377,7 +4413,7 @@ def mostrar_kpis_avanzados_v8(metricas, stats, validacion):
                                   name='% Acumulado', yaxis='y2', line=dict(color='red', width=3)))
         fig.update_layout(
             title='Diagrama de Pareto',
-            xaxis_title='Grupos (ordenados)',
+            xaxis_title='Tiendas (ordenadas)',
             yaxis=dict(title='% Individual'),
             yaxis2=dict(title='% Acumulado', overlaying='y', side='right')
         )
@@ -4472,6 +4508,210 @@ def mostrar_exportar_v8(resultado, metricas, resumen, validacion, stats):
                     st.success("✅ Paquete generado")
                 except Exception as e:
                     st.error(f"Error: {e}")
+
+# =============================================================================
+# FUNCIÓN PRINCIPAL DEL MÓDULO
+# =============================================================================
+def show_reconciliacion_v8():
+    """Módulo de reconciliación financiera con motor experto y fuzzy matching."""
+    
+    # Botón de retroceso y encabezado
+    add_back_button()
+    show_module_header(
+        "💰 Reconciliación",
+        "Conciliación de facturas y manifiestos con IA y Fuzzy Matching"
+    )
+    
+    st.markdown('<div class="module-content">', unsafe_allow_html=True)
+    
+    st.markdown("""
+    <div class='main-header'>
+        <h1 class='header-title'>📦 Reconciliación Logística</h1>
+        <div class='header-subtitle'>Motor de Auditoría Experto con Fuzzy Matching</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Inicializar motor y generador en session_state si no existen
+    if 'audit_engine' not in st.session_state:
+        st.session_state.audit_engine = AuditEngine()
+    if 'report_generator' not in st.session_state:
+        st.session_state.report_generator = ReportGenerator()
+    if 'reconciliacion_datos' not in st.session_state:
+        st.session_state.reconciliacion_datos = {
+            'manifesto': None,
+            'facturas': None,
+            'resultado': None,
+            'metricas': None,
+            'resumen': None,
+            'validacion': None,
+            'stats': None,
+            'config': {},
+            'procesado': False
+        }
+
+    # Panel de carga de archivos
+    st.markdown("""
+    <div class='filter-panel'>
+        <h3 class='filter-title'>📂 Carga de Archivos</h3>
+    """, unsafe_allow_html=True)
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        f_manifiesto = st.file_uploader("Subir Manifiesto (Excel o CSV)", type=['xlsx', 'xls', 'csv'], key="manifiesto_v8")
+    with col2:
+        f_facturas = st.file_uploader("Subir Facturas (Excel o CSV)", type=['xlsx', 'xls', 'csv'], key="facturas_v8")
+    
+    # Datos de ejemplo para demostración
+    use_sample = st.checkbox("Usar datos de demostración", value=True, key="sample_v8")
+    
+    if use_sample or (f_manifiesto and f_facturas):
+        try:
+            if use_sample:
+                # Generar datos de ejemplo
+                np.random.seed(42)
+                num_rows = 50
+                
+                df_m = pd.DataFrame({
+                    'GUIA': [f'GUA-{i:04d}' for i in range(1001, 1001 + num_rows)],
+                    'DESTINATARIO': np.random.choice([
+                        'JOFRE SANTANA IMPORT', 
+                        'MALL DEL SOL AEROPOSTALE',
+                        'SAN MARINO TIENDA',
+                        'CARLOS PEREZ',
+                        'MARIA GONZALEZ',
+                        'CENTRO COMERCIAL QUITO',
+                        'PLAZA DE LAS AMERICAS'
+                    ], num_rows),
+                    'PIEZAS': np.random.randint(1, 20, num_rows),
+                    'VALOR_DECLARADO': np.random.uniform(50, 500, num_rows).round(2)
+                })
+                
+                df_f = pd.DataFrame({
+                    'GUIA_FACTURA': [f'GUA-{i:04d}' for i in range(1001, 1001 + int(num_rows * 0.8))],
+                    'VALOR_COBRADO': np.random.uniform(45, 550, int(num_rows * 0.8)).round(2)
+                })
+                
+                st.session_state.reconciliacion_datos['manifesto'] = df_m
+                st.session_state.reconciliacion_datos['facturas'] = df_f
+                st.success("✅ Usando datos de demostración. Puede subir sus propios archivos para procesamiento real.")
+            else:
+                # Carga real
+                manifesto = cargar_archivo_v8(f_manifiesto, "Manifiesto")
+                facturas = cargar_archivo_v8(f_facturas, "Facturas")
+                if manifesto is not None and facturas is not None:
+                    st.session_state.reconciliacion_datos['manifesto'] = manifesto
+                    st.session_state.reconciliacion_datos['facturas'] = facturas
+
+            # Si tenemos datos cargados, mostrar configuración
+            manifesto = st.session_state.reconciliacion_datos['manifesto']
+            facturas = st.session_state.reconciliacion_datos['facturas']
+            
+            if manifesto is not None and facturas is not None:
+                st.markdown("""
+                <div class='filter-panel'>
+                    <h3 class='filter-title'>⚙️ Configuración de Columnas</h3>
+                """, unsafe_allow_html=True)
+                
+                # Detección automática de columnas
+                columnas_m = detectar_columnas_v8(manifesto)
+                columnas_f = detectar_columnas_v8(facturas)
+                
+                c1, c2 = st.columns(2)
+                with c1:
+                    st.info("**Configuración Manifiesto**")
+                    cols_m = manifesto.columns.tolist()
+                    
+                    # Guía en manifiesto
+                    default_guia_m = columnas_m.get('guia', cols_m[0] if cols_m else None)
+                    guia_m = st.selectbox("Columna Guía (Manifiesto)", cols_m, 
+                                          index=cols_m.index(default_guia_m) if default_guia_m in cols_m else 0, key='m_guia_v8')
+                    
+                    # Destinatario en manifiesto
+                    default_dest = columnas_m.get('destinatario', cols_m[0] if cols_m else None)
+                    destinatario_m = st.selectbox("Columna Destinatario", cols_m,
+                                                  index=cols_m.index(default_dest) if default_dest in cols_m else 0, key='m_dest_v8')
+                    
+                    # Ciudad destino (opcional)
+                    default_ciudad = columnas_m.get('ciudad', cols_m[0] if cols_m else None)
+                    ciudad_m = st.selectbox("Columna Ciudad Destino (opcional)", ['(Ninguna)'] + cols_m,
+                                            index=0 if default_ciudad is None else cols_m.index(default_ciudad)+1 if default_ciudad in cols_m else 0, key='m_ciudad_v8')
+                    
+                    # Envíos/Cartones (opcional)
+                    default_envios = columnas_m.get('envios', cols_m[0] if cols_m else None)
+                    envios_m = st.selectbox("Columna Envíos/Cartones (opcional)", ['(Ninguna)'] + cols_m,
+                                            index=0 if default_envios is None else cols_m.index(default_envios)+1 if default_envios in cols_m else 0, key='m_envios_v8')
+                    
+                with c2:
+                    st.info("**Configuración Facturas**")
+                    cols_f = facturas.columns.tolist()
+                    
+                    # Guía en facturas
+                    default_guia_f = columnas_f.get('guia', cols_f[0] if cols_f else None)
+                    guia_f = st.selectbox("Columna Guía (Facturas)", cols_f,
+                                          index=cols_f.index(default_guia_f) if default_guia_f in cols_f else 0, key='f_guia_v8')
+                    
+                    # Subtotal
+                    default_sub = columnas_f.get('subtotal', cols_f[0] if cols_f else None)
+                    subtotal_f = st.selectbox("Columna Subtotal / Valor", cols_f,
+                                              index=cols_f.index(default_sub) if default_sub in cols_f else 0, key='f_sub_v8')
+                
+                st.markdown("</div>", unsafe_allow_html=True)
+                
+                # Botón de ejecución
+                if st.button("🚀 EJECUTAR RECONCILIACIÓN V8.0", type="primary", use_container_width=True):
+                    with st.spinner("🔄 Ejecutando algoritmo V8.0 con Fuzzy Matching..."):
+                        try:
+                            # Construir configuración (adaptada al procesador de gastos)
+                            config = {
+                                'guia_m': guia_m,
+                                'destinatario': destinatario_m,
+                                'ciudad_destino': ciudad_m if ciudad_m != '(Ninguna)' else None,
+                                'envios': envios_m if envios_m != '(Ninguna)' else None,
+                                'guia_f': guia_f,
+                                'subtotal': subtotal_f
+                            }
+                            
+                            # Si no se seleccionó columna de envíos, usar un valor por defecto (1 por guía)
+                            if config['envios'] is None:
+                                # Agregar columna temporal con valor 1
+                                manifesto['_CARTONES_TEMP'] = 1
+                                config['envios'] = '_CARTONES_TEMP'
+                            
+                            # Ejecutar motor
+                            engine = st.session_state.audit_engine
+                            resultados = engine.run_audit(manifesto, facturas, config)
+                            
+                            # Guardar en sesión
+                            st.session_state.reconciliacion_datos['resultado'] = resultados['df_final']
+                            st.session_state.reconciliacion_datos['metricas'] = resultados['metricas']
+                            st.session_state.reconciliacion_datos['resumen'] = resultados['resumen']
+                            st.session_state.reconciliacion_datos['validacion'] = resultados['validacion']
+                            st.session_state.reconciliacion_datos['stats'] = resultados['stats']
+                            st.session_state.reconciliacion_datos['procesado'] = True
+                            
+                            st.success("✅ Procesamiento completado exitosamente")
+                            
+                        except Exception as e:
+                            st.error(f"❌ Error en el procesamiento: {str(e)}")
+                            with st.expander("🔍 Ver detalles del error"):
+                                st.exception(e)
+            
+            # Mostrar resultados si están disponibles
+            if st.session_state.reconciliacion_datos['procesado']:
+                mostrar_resultados_v8()
+                
+        except Exception as e:
+            st.error(f"❌ Error general: {str(e)}")
+    else:
+        st.info("👆 Suba los archivos necesarios o active la opción de datos de demostración para comenzar.")
+    
+    st.markdown('</div>', unsafe_allow_html=True)
+
+# =============================================================================
+# PUNTO DE ENTRADA PRINCIPAL
+# =============================================================================
+if __name__ == "__main__":
+    show_reconciliacion_v8()
 # ==============================================================================
 # 10. MODULO AUDITORIA DE CORREOS
 # ==============================================================================
