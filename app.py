@@ -3034,40 +3034,69 @@ class ReconciliationAuditEngine:
             else:
                 df_f.loc[idx_f, '_MATCH_STATUS'] = 'UNMATCHED'
         
-        # Calcular métricas
-        df_completo = df_m.copy()
-        total_facturas = df_f['SUBTOTAL_NUM'].sum() if 'SUBTOTAL_NUM' in df_f.columns else 0
-        total_manifesto = df_completo['SUBTOTAL_NUM'].sum() if 'SUBTOTAL_NUM' in df_completo.columns else 0
+       # Calcular métricas
+    df_completo = df_m.copy()
+    total_facturas = df_f['SUBTOTAL_NUM'].sum() if 'SUBTOTAL_NUM' in df_f.columns else 0
+    total_manifesto = df_completo['SUBTOTAL_NUM'].sum() if 'SUBTOTAL_NUM' in df_completo.columns else 0
+    
+    metricas = self._calcular_metricas(df_completo, df_f)
+    
+    # --- NUEVO: Crear resumen por tipo/canal ---
+    if not metricas.empty:
+        # Clasificar tiendas por tipo (simplificado)
+        def clasificar_tienda(nombre):
+            nombre_upper = str(nombre).upper()
+            if 'WEB' in nombre_upper or 'MOVIL' in nombre_upper:
+                return 'VENTA WEB'
+            elif 'PRICE' in nombre_upper:
+                return 'PRICE CLUB'
+            elif any(x in nombre_upper for x in ['MALL', 'CENTRO', 'PLAZA']):
+                return 'CENTRO COMERCIAL'
+            else:
+                return 'TIENDA FÍSICA'
         
-        metricas = self._calcular_metricas(df_completo, df_f)
-        validacion = self._validar_totales(total_manifesto, total_facturas)
-        
-        stats = {
-            'total_manifesto': total_manifesto,
-            'total_facturas': total_facturas,
-            'guias_manifesto': len(df_m),
-            'guias_factura': len(df_f),
-            'guias_match': len(matched_indices),
-            'guias_sin_match': len(unmatched_manifesto),
-            'facturas_sin_usar': len(df_f) - len(matched_indices),
-            'match_rate': len(matched_indices) / len(df_m) if len(df_m) > 0 else 0,
-            'cobertura_facturas': len(matched_indices) / len(df_f) if len(df_f) > 0 else 0
-        }
-        
-        self.audit_log.append({
-            'timestamp': datetime.now(),
-            'action': 'FIN',
-            'details': f'Match rate: {stats["match_rate"]:.1%}'
-        })
-        
-        return {
-            'df_final': df_completo,
-            'facturas_procesadas': df_f,
-            'metricas': metricas,
-            'validacion': validacion,
-            'stats': stats,
-            'audit_log': pd.DataFrame(self.audit_log)
-        }
+        metricas['TIPO'] = metricas['TIENDA'].apply(clasificar_tienda)
+        resumen = metricas.groupby('TIPO').agg({
+            'TIENDA': 'count',
+            'GUIAS_TOTALES': 'sum',
+            'GUIAS_MATCH': 'sum',
+            'SUBTOTAL': 'sum'
+        }).reset_index()
+        resumen['PORCENTAJE'] = (resumen['SUBTOTAL'] / resumen['SUBTOTAL'].sum() * 100).round(2)
+        resumen = resumen.rename(columns={'TIENDA': 'TIENDAS'})
+    else:
+        resumen = pd.DataFrame(columns=['TIPO', 'TIENDAS', 'GUIAS_TOTALES', 'GUIAS_MATCH', 'SUBTOTAL', 'PORCENTAJE'])
+    # -------------------------------------------------
+    
+    validacion = self._validar_totales(total_manifesto, total_facturas)
+    
+    stats = {
+        'total_manifesto': total_manifesto,
+        'total_facturas': total_facturas,
+        'guias_manifesto': len(df_m),
+        'guias_factura': len(df_f),
+        'guias_match': len(matched_indices),
+        'guias_sin_match': len(unmatched_manifesto),
+        'facturas_sin_usar': len(df_f) - len(matched_indices),
+        'match_rate': len(matched_indices) / len(df_m) if len(df_m) > 0 else 0,
+        'cobertura_facturas': len(matched_indices) / len(df_f) if len(df_f) > 0 else 0
+    }
+    
+    self.audit_log.append({
+        'timestamp': datetime.now(),
+        'action': 'FIN',
+        'details': f'Match rate: {stats["match_rate"]:.1%}'
+    })
+    
+    return {
+        'df_final': df_completo,
+        'facturas_procesadas': df_f,
+        'metricas': metricas,
+        'resumen': resumen,  # ← AHORA SÍ ESTÁ INCLUIDO
+        'validacion': validacion,
+        'stats': stats,
+        'audit_log': pd.DataFrame(self.audit_log)
+    }
     
     def _calcular_metricas(self, df_completo, df_facturas):
         """Calcula métricas detalladas por tienda/grupo"""
@@ -3372,12 +3401,21 @@ def limpiar_nombre_tienda(nombre, ciudad=""):
 def mostrar_resultados_v8():
     """Muestra los resultados del procesamiento en pestañas."""
     datos = st.session_state.reconciliacion_datos
-    resultado = datos['resultado']
-    facturas = datos['facturas_procesadas']
-    metricas = datos['metricas']
-    validacion = datos['validacion']
-    stats = datos['stats']
+    
+    # Verificar que todas las claves existan
+    resultado = datos.get('resultado', pd.DataFrame())
+    facturas = datos.get('facturas_procesadas', pd.DataFrame())
+    metricas = datos.get('metricas', pd.DataFrame())
+    resumen = datos.get('resumen', pd.DataFrame())  # ← OBTENER RESUMEN
+    validacion = datos.get('validacion', {})
+    stats = datos.get('stats', {})
     audit_log = datos.get('audit_log', pd.DataFrame())
+    
+    # Si no hay datos, mostrar mensaje
+    if resultado.empty:
+        st.warning("No hay datos para mostrar. Ejecute la reconciliación primero.")
+        return
+
     
     st.markdown("<div class='stats-grid'>", unsafe_allow_html=True)
     
@@ -3436,8 +3474,16 @@ def mostrar_resultados_v8():
         "📋 Detalle", "🔍 Auditoría", "💾 Exportar"
     ])
     
-    with tab1:
-        st.header("📊 Dashboard de Reconciliación")
+    with tab1:  # Pestaña de Dashboard/Resumen
+    st.header("📊 Dashboard de Reconciliación")
+    
+    # Usar resumen si existe, sino metricas
+    df_resumen = resumen if not resumen.empty else metricas
+    if not df_resumen.empty and 'TIPO' in df_resumen.columns:
+        fig = px.pie(df_resumen, values='SUBTOTAL', names='TIPO', 
+                    title="Distribución por Canal",
+                    hole=0.4, color_discrete_sequence=px.colors.qualitative.Set3)
+        st.plotly_chart(fig, use_container_width=True)
         
         col_ch1, col_ch2 = st.columns(2)
         
