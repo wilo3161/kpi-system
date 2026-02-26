@@ -2952,151 +2952,150 @@ class ReconciliationAuditEngine:
         self.fuzzy_matcher = FuzzyMatcher(threshold=0.85)
         self.audit_log = []
     
-def run_audit(self, manifesto: pd.DataFrame, facturas: pd.DataFrame, config: dict) -> dict:
-    """Ejecuta el proceso de reconciliación con fuzzy matching."""
-    
-    # Registrar inicio de auditoría
-    self.audit_log.append({
-        'timestamp': datetime.now(),
-        'action': 'INICIO',
-        'details': f'Manifiesto: {len(manifesto)} filas, Facturas: {len(facturas)} filas'
-    })
-    
-    # Procesar manifiesto
-    df_m = manifesto.copy()
-    if config.get('guia_m'):
-        df_m['GUIA_CLEAN'] = df_m[config['guia_m']].astype(str).str.strip().str.upper()
-    
-    if config.get('destinatario'):
-        df_m['DESTINATARIO_CLEAN'] = df_m[config['destinatario']].astype(str).str.strip().str.upper()
-    
-    # Procesar facturas
-    df_f = facturas.copy()
-    if config.get('guia_f'):
-        df_f['GUIA_CLEAN'] = df_f[config['guia_f']].astype(str).str.strip().str.upper()
-    
-    if config.get('subtotal'):
-        df_f['SUBTOTAL_NUM'] = pd.to_numeric(
-            df_f[config['subtotal']].astype(str).str.replace(',', '.').str.replace('$', '').str.strip(),
-            errors='coerce'
-        ).fillna(0)
-    
-    # Estrategia de matching
-    matched_indices = []
-    unmatched_manifesto = []
-    
-    for idx_m, row_m in df_m.iterrows():
-        mejor_match = None
-        mejor_sim = 0
+    def run_audit(self, manifesto: pd.DataFrame, facturas: pd.DataFrame, config: dict) -> dict:
+        """Ejecuta el proceso de reconciliación con fuzzy matching."""
         
-        for idx_f, row_f in df_f.iterrows():
-            if idx_f in matched_indices:
-                continue
-            
-            # Matching por guía (si existe)
-            if 'GUIA_CLEAN' in row_m and 'GUIA_CLEAN' in row_f:
-                sim = self.fuzzy_matcher.similarity(row_m['GUIA_CLEAN'], row_f['GUIA_CLEAN'])
-                if sim > mejor_sim and sim >= self.fuzzy_matcher.threshold:
-                    mejor_sim = sim
-                    mejor_match = idx_f
-            
-            # Matching por destinatario (como respaldo)
-            elif 'DESTINATARIO_CLEAN' in row_m and config.get('destinatario_f'):
-                sim = self.fuzzy_matcher.similarity(
-                    row_m['DESTINATARIO_CLEAN'],
-                    str(row_f.get(config['destinatario_f'], '')).upper().strip()
-                )
-                if sim > mejor_sim and sim >= self.fuzzy_matcher.threshold:
-                    mejor_sim = sim
-                    mejor_match = idx_f
+        # Registrar inicio de auditoría
+        self.audit_log.append({
+            'timestamp': datetime.now(),
+            'action': 'INICIO',
+            'details': f'Manifiesto: {len(manifesto)} filas, Facturas: {len(facturas)} filas'
+        })
         
-        if mejor_match is not None:
-            matched_indices.append(mejor_match)
-            for col in df_f.columns:
-                if col not in df_m.columns:
-                    df_m.loc[idx_m, col] = df_f.loc[mejor_match, col]
-            df_m.loc[idx_m, '_MATCH_SCORE'] = mejor_sim
-            df_m.loc[idx_m, '_MATCH_STATUS'] = 'MATCHED'
-            self.audit_log.append({
-                'timestamp': datetime.now(),
-                'action': 'MATCH',
-                'details': f'Guía {row_m.get("GUIA_CLEAN", "N/A")} match con score {mejor_sim:.2f}'
-            })
-        else:
-            unmatched_manifesto.append(idx_m)
-            df_m.loc[idx_m, '_MATCH_STATUS'] = 'UNMATCHED'
-    
-    # Marcar facturas no utilizadas
-    facturas_usadas = set(matched_indices)
-    for idx_f in df_f.index:
-        if idx_f in facturas_usadas:
-            df_f.loc[idx_f, '_MATCH_STATUS'] = 'MATCHED'
-        else:
-            df_f.loc[idx_f, '_MATCH_STATUS'] = 'UNMATCHED'
-    
-    # Calcular métricas (AHORA ESTÁ BIEN INDENTADO)
-    df_completo = df_m.copy()
-    total_facturas = df_f['SUBTOTAL_NUM'].sum() if 'SUBTOTAL_NUM' in df_f.columns else 0
-    total_manifesto = df_completo['SUBTOTAL_NUM'].sum() if 'SUBTOTAL_NUM' in df_completo.columns else 0
-    
-    metricas = self._calcular_metricas(df_completo, df_f)
-    
-    # --- NUEVO: Crear resumen por tipo/canal ---
-    if not metricas.empty:
-        # Clasificar tiendas por tipo (simplificado)
-        def clasificar_tienda(nombre):
-            nombre_upper = str(nombre).upper()
-            if 'WEB' in nombre_upper or 'MOVIL' in nombre_upper:
-                return 'VENTA WEB'
-            elif 'PRICE' in nombre_upper:
-                return 'PRICE CLUB'
-            elif any(x in nombre_upper for x in ['MALL', 'CENTRO', 'PLAZA']):
-                return 'CENTRO COMERCIAL'
+        # Procesar manifiesto
+        df_m = manifesto.copy()
+        if config.get('guia_m'):
+            df_m['GUIA_CLEAN'] = df_m[config['guia_m']].astype(str).str.strip().str.upper()
+        
+        if config.get('destinatario'):
+            df_m['DESTINATARIO_CLEAN'] = df_m[config['destinatario']].astype(str).str.strip().str.upper()
+        
+        # Procesar facturas
+        df_f = facturas.copy()
+        if config.get('guia_f'):
+            df_f['GUIA_CLEAN'] = df_f[config['guia_f']].astype(str).str.strip().str.upper()
+        
+        if config.get('subtotal'):
+            df_f['SUBTOTAL_NUM'] = pd.to_numeric(
+                df_f[config['subtotal']].astype(str).str.replace(',', '.').str.replace('$', '').str.strip(),
+                errors='coerce'
+            ).fillna(0)
+        
+        # Estrategia de matching
+        matched_indices = []
+        unmatched_manifesto = []
+        
+        for idx_m, row_m in df_m.iterrows():
+            mejor_match = None
+            mejor_sim = 0
+            
+            for idx_f, row_f in df_f.iterrows():
+                if idx_f in matched_indices:
+                    continue
+                
+                # Matching por guía (si existe)
+                if 'GUIA_CLEAN' in row_m and 'GUIA_CLEAN' in row_f:
+                    sim = self.fuzzy_matcher.similarity(row_m['GUIA_CLEAN'], row_f['GUIA_CLEAN'])
+                    if sim > mejor_sim and sim >= self.fuzzy_matcher.threshold:
+                        mejor_sim = sim
+                        mejor_match = idx_f
+                
+                # Matching por destinatario (como respaldo)
+                elif 'DESTINATARIO_CLEAN' in row_m and config.get('destinatario_f'):
+                    sim = self.fuzzy_matcher.similarity(
+                        row_m['DESTINATARIO_CLEAN'],
+                        str(row_f.get(config['destinatario_f'], '')).upper().strip()
+                    )
+                    if sim > mejor_sim and sim >= self.fuzzy_matcher.threshold:
+                        mejor_sim = sim
+                        mejor_match = idx_f
+            
+            if mejor_match is not None:
+                matched_indices.append(mejor_match)
+                for col in df_f.columns:
+                    if col not in df_m.columns:
+                        df_m.loc[idx_m, col] = df_f.loc[mejor_match, col]
+                df_m.loc[idx_m, '_MATCH_SCORE'] = mejor_sim
+                df_m.loc[idx_m, '_MATCH_STATUS'] = 'MATCHED'
+                self.audit_log.append({
+                    'timestamp': datetime.now(),
+                    'action': 'MATCH',
+                    'details': f'Guía {row_m.get("GUIA_CLEAN", "N/A")} match con score {mejor_sim:.2f}'
+                })
             else:
-                return 'TIENDA FÍSICA'
+                unmatched_manifesto.append(idx_m)
+                df_m.loc[idx_m, '_MATCH_STATUS'] = 'UNMATCHED'
         
-        metricas['TIPO'] = metricas['TIENDA'].apply(clasificar_tienda)
-        resumen = metricas.groupby('TIPO').agg({
-            'TIENDA': 'count',
-            'GUIAS_TOTALES': 'sum',
-            'GUIAS_MATCH': 'sum',
-            'SUBTOTAL': 'sum'
-        }).reset_index()
-        resumen['PORCENTAJE'] = (resumen['SUBTOTAL'] / resumen['SUBTOTAL'].sum() * 100).round(2)
-        resumen = resumen.rename(columns={'TIENDA': 'TIENDAS'})
-    else:
-        resumen = pd.DataFrame(columns=['TIPO', 'TIENDAS', 'GUIAS_TOTALES', 'GUIAS_MATCH', 'SUBTOTAL', 'PORCENTAJE'])
-    # -------------------------------------------------
-    
-    validacion = self._validar_totales(total_manifesto, total_facturas)
-    
-    stats = {
-        'total_manifesto': total_manifesto,
-        'total_facturas': total_facturas,
-        'guias_manifesto': len(df_m),
-        'guias_factura': len(df_f),
-        'guias_match': len(matched_indices),
-        'guias_sin_match': len(unmatched_manifesto),
-        'facturas_sin_usar': len(df_f) - len(matched_indices),
-        'match_rate': len(matched_indices) / len(df_m) if len(df_m) > 0 else 0,
-        'cobertura_facturas': len(matched_indices) / len(df_f) if len(df_f) > 0 else 0
-    }
-    
-    self.audit_log.append({
-        'timestamp': datetime.now(),
-        'action': 'FIN',
-        'details': f'Match rate: {stats["match_rate"]:.1%}'
-    })
-    
-    return {
-        'df_final': df_completo,
-        'facturas_procesadas': df_f,
-        'metricas': metricas,
-        'resumen': resumen,
-        'validacion': validacion,
-        'stats': stats,
-        'audit_log': pd.DataFrame(self.audit_log)
-    }
+        # Marcar facturas no utilizadas
+        facturas_usadas = set(matched_indices)
+        for idx_f in df_f.index:
+            if idx_f in facturas_usadas:
+                df_f.loc[idx_f, '_MATCH_STATUS'] = 'MATCHED'
+            else:
+                df_f.loc[idx_f, '_MATCH_STATUS'] = 'UNMATCHED'
+        
+        # Calcular métricas
+        df_completo = df_m.copy()
+        total_facturas = df_f['SUBTOTAL_NUM'].sum() if 'SUBTOTAL_NUM' in df_f.columns else 0
+        total_manifesto = df_completo['SUBTOTAL_NUM'].sum() if 'SUBTOTAL_NUM' in df_completo.columns else 0
+        
+        metricas = self._calcular_metricas(df_completo, df_f)
+        
+        # Crear resumen por tipo/canal
+        if not metricas.empty:
+            # Clasificar tiendas por tipo (simplificado)
+            def clasificar_tienda(nombre):
+                nombre_upper = str(nombre).upper()
+                if 'WEB' in nombre_upper or 'MOVIL' in nombre_upper:
+                    return 'VENTA WEB'
+                elif 'PRICE' in nombre_upper:
+                    return 'PRICE CLUB'
+                elif any(x in nombre_upper for x in ['MALL', 'CENTRO', 'PLAZA']):
+                    return 'CENTRO COMERCIAL'
+                else:
+                    return 'TIENDA FÍSICA'
+            
+            metricas['TIPO'] = metricas['TIENDA'].apply(clasificar_tienda)
+            resumen = metricas.groupby('TIPO').agg({
+                'TIENDA': 'count',
+                'GUIAS_TOTALES': 'sum',
+                'GUIAS_MATCH': 'sum',
+                'SUBTOTAL': 'sum'
+            }).reset_index()
+            resumen['PORCENTAJE'] = (resumen['SUBTOTAL'] / resumen['SUBTOTAL'].sum() * 100).round(2)
+            resumen = resumen.rename(columns={'TIENDA': 'TIENDAS'})
+        else:
+            resumen = pd.DataFrame(columns=['TIPO', 'TIENDAS', 'GUIAS_TOTALES', 'GUIAS_MATCH', 'SUBTOTAL', 'PORCENTAJE'])
+        
+        validacion = self._validar_totales(total_manifesto, total_facturas)
+        
+        stats = {
+            'total_manifesto': total_manifesto,
+            'total_facturas': total_facturas,
+            'guias_manifesto': len(df_m),
+            'guias_factura': len(df_f),
+            'guias_match': len(matched_indices),
+            'guias_sin_match': len(unmatched_manifesto),
+            'facturas_sin_usar': len(df_f) - len(matched_indices),
+            'match_rate': len(matched_indices) / len(df_m) if len(df_m) > 0 else 0,
+            'cobertura_facturas': len(matched_indices) / len(df_f) if len(df_f) > 0 else 0
+        }
+        
+        self.audit_log.append({
+            'timestamp': datetime.now(),
+            'action': 'FIN',
+            'details': f'Match rate: {stats["match_rate"]:.1%}'
+        })
+        
+        return {
+            'df_final': df_completo,
+            'facturas_procesadas': df_f,
+            'metricas': metricas,
+            'resumen': resumen,
+            'validacion': validacion,
+            'stats': stats,
+            'audit_log': pd.DataFrame(self.audit_log)
+        }
     
     def _calcular_metricas(self, df_completo, df_facturas):
         """Calcula métricas detalladas por tienda/grupo"""
@@ -3406,7 +3405,7 @@ def mostrar_resultados_v8():
     resultado = datos.get('resultado', pd.DataFrame())
     facturas = datos.get('facturas_procesadas', pd.DataFrame())
     metricas = datos.get('metricas', pd.DataFrame())
-    resumen = datos.get('resumen', pd.DataFrame())  # ← OBTENER RESUMEN
+    resumen = datos.get('resumen', pd.DataFrame())
     validacion = datos.get('validacion', {})
     stats = datos.get('stats', {})
     audit_log = datos.get('audit_log', pd.DataFrame())
@@ -3416,31 +3415,30 @@ def mostrar_resultados_v8():
         st.warning("No hay datos para mostrar. Ejecute la reconciliación primero.")
         return
 
-    
     st.markdown("<div class='stats-grid'>", unsafe_allow_html=True)
     
     # KPIs mejorados con colores y formato
     col_k1, col_k2, col_k3, col_k4 = st.columns(4)
     
     with col_k1:
-        delta_color = "normal"
         st.markdown(f"""
         <div style='background: linear-gradient(135deg, #667eea15, #764ba230); padding: 20px; border-radius: 10px; border-left: 5px solid #667eea;'>
             <div style='font-size: 24px; margin-bottom: 8px;'>💰</div>
             <div style='font-size: 14px; color: #666; margin-bottom: 5px;'>Total Facturado</div>
-            <div style='font-size: 28px; font-weight: bold; color: #333;'>${stats['total_manifesto']:,.2f}</div>
-            <div style='font-size: 12px; color: #888;'>vs ${stats['total_facturas']:,.2f} facturas</div>
+            <div style='font-size: 28px; font-weight: bold; color: #333;'>${stats.get('total_manifesto', 0):,.2f}</div>
+            <div style='font-size: 12px; color: #888;'>vs ${stats.get('total_facturas', 0):,.2f} facturas</div>
         </div>
         """, unsafe_allow_html=True)
     
     with col_k2:
-        match_rate_color = "#10B981" if stats['match_rate'] > 0.9 else "#F59E0B" if stats['match_rate'] > 0.7 else "#EF4444"
+        match_rate = stats.get('match_rate', 0)
+        match_rate_color = "#10B981" if match_rate > 0.9 else "#F59E0B" if match_rate > 0.7 else "#EF4444"
         st.markdown(f"""
         <div style='background: linear-gradient(135deg, #11998e15, #38ef7d30); padding: 20px; border-radius: 10px; border-left: 5px solid #11998e;'>
             <div style='font-size: 24px; margin-bottom: 8px;'>✅</div>
             <div style='font-size: 14px; color: #666; margin-bottom: 5px;'>Match Rate</div>
-            <div style='font-size: 28px; font-weight: bold; color: #333;'>{stats['match_rate']:.1%}</div>
-            <div style='font-size: 12px; color: #888;'>{stats['guias_match']} de {stats['guias_manifesto']} guías</div>
+            <div style='font-size: 28px; font-weight: bold; color: #333;'>{match_rate:.1%}</div>
+            <div style='font-size: 12px; color: #888;'>{stats.get('guias_match', 0)} de {stats.get('guias_manifesto', 0)} guías</div>
         </div>
         """, unsafe_allow_html=True)
     
@@ -3449,20 +3447,20 @@ def mostrar_resultados_v8():
         <div style='background: linear-gradient(135deg, #fc466b15, #3f5efb30); padding: 20px; border-radius: 10px; border-left: 5px solid #fc466b;'>
             <div style='font-size: 24px; margin-bottom: 8px;'>📋</div>
             <div style='font-size: 14px; color: #666; margin-bottom: 5px;'>Sin Match</div>
-            <div style='font-size: 28px; font-weight: bold; color: #333;'>{stats['guias_sin_match']}</div>
-            <div style='font-size: 12px; color: #888;'>facturas sin usar: {stats['facturas_sin_usar']}</div>
+            <div style='font-size: 28px; font-weight: bold; color: #333;'>{stats.get('guias_sin_match', 0)}</div>
+            <div style='font-size: 12px; color: #888;'>facturas sin usar: {stats.get('facturas_sin_usar', 0)}</div>
         </div>
         """, unsafe_allow_html=True)
     
     with col_k4:
-        estado_icon = "✅" if validacion['coincide'] else "⚠️"
-        estado_color = "#10B981" if validacion['coincide'] else "#F59E0B"
+        estado_icon = "✅" if validacion.get('coincide', False) else "⚠️"
+        estado_color = "#10B981" if validacion.get('coincide', False) else "#F59E0B"
         st.markdown(f"""
         <div style='background: linear-gradient(135deg, #f093fb15, #f5576c30); padding: 20px; border-radius: 10px; border-left: 5px solid #f093fb;'>
             <div style='font-size: 24px; margin-bottom: 8px;'>{estado_icon}</div>
             <div style='font-size: 14px; color: #666; margin-bottom: 5px;'>Estado</div>
-            <div style='font-size: 28px; font-weight: bold; color: {estado_color};'>{validacion['estado']}</div>
-            <div style='font-size: 12px; color: #888;'>dif: ${validacion['diferencia']:,.2f}</div>
+            <div style='font-size: 28px; font-weight: bold; color: {estado_color};'>{validacion.get('estado', 'N/A')}</div>
+            <div style='font-size: 12px; color: #888;'>dif: ${validacion.get('diferencia', 0):,.2f}</div>
         </div>
         """, unsafe_allow_html=True)
     
@@ -3474,16 +3472,8 @@ def mostrar_resultados_v8():
         "📋 Detalle", "🔍 Auditoría", "💾 Exportar"
     ])
     
-    with tab1:  # Pestaña de Dashboard/Resumen
+    with tab1:
         st.header("📊 Dashboard de Reconciliación")
-    
-    # Usar resumen si existe, sino metricas
-    df_resumen = resumen if not resumen.empty else metricas
-    if not df_resumen.empty and 'TIPO' in df_resumen.columns:
-        fig = px.pie(df_resumen, values='SUBTOTAL', names='TIPO', 
-                    title="Distribución por Canal",
-                    hole=0.4, color_discrete_sequence=px.colors.qualitative.Set3)
-        st.plotly_chart(fig, use_container_width=True)
         
         col_ch1, col_ch2 = st.columns(2)
         
@@ -3531,9 +3521,9 @@ def mostrar_resultados_v8():
             estado_counts = pd.DataFrame({
                 'Estado': ['Match Exacto', 'Match Fuzzy', 'Sin Match'],
                 'Cantidad': [
-                    int(stats['guias_match'] * 0.7),
-                    int(stats['guias_match'] * 0.3),
-                    stats['guias_sin_match']
+                    int(stats.get('guias_match', 0) * 0.7),
+                    int(stats.get('guias_match', 0) * 0.3),
+                    stats.get('guias_sin_match', 0)
                 ]
             })
             fig4 = px.pie(estado_counts, values='Cantidad', names='Estado',
@@ -3546,29 +3536,29 @@ def mostrar_resultados_v8():
         
         col1, col2 = st.columns(2)
         with col1:
-            st.metric("Total Manifiesto", f"${validacion['total_manifesto']:,.2f}")
-            st.metric("Total Facturas", f"${validacion['total_facturas']:,.2f}")
+            st.metric("Total Manifiesto", f"${validacion.get('total_manifesto', 0):,.2f}")
+            st.metric("Total Facturas", f"${validacion.get('total_facturas', 0):,.2f}")
         
         with col2:
-            st.metric("Diferencia", f"${validacion['diferencia']:,.2f}", 
-                     delta=f"{validacion['porcentaje_diferencia']:.2f}%")
+            st.metric("Diferencia", f"${validacion.get('diferencia', 0):,.2f}", 
+                     delta=f"{validacion.get('porcentaje_diferencia', 0):.2f}%")
             st.metric("Margen Aceptable", "$0.01")
         
         fig = go.Figure(data=[
-            go.Bar(name='Manifiesto', x=['Total'], y=[validacion['total_manifesto']], 
-                  marker_color='#1f77b4', text=f"${validacion['total_manifesto']:,.2f}"),
-            go.Bar(name='Facturas', x=['Total'], y=[validacion['total_facturas']], 
-                  marker_color='#ff7f0e', text=f"${validacion['total_facturas']:,.2f}")
+            go.Bar(name='Manifiesto', x=['Total'], y=[validacion.get('total_manifesto', 0)], 
+                  marker_color='#1f77b4', text=f"${validacion.get('total_manifesto', 0):,.2f}"),
+            go.Bar(name='Facturas', x=['Total'], y=[validacion.get('total_facturas', 0)], 
+                  marker_color='#ff7f0e', text=f"${validacion.get('total_facturas', 0):,.2f}")
         ])
         fig.update_layout(title="Comparación de Totales", barmode='group',
                          yaxis_title="Monto ($)")
         fig.update_traces(textposition='outside')
         st.plotly_chart(fig, use_container_width=True)
         
-        if validacion['coincide']:
+        if validacion.get('coincide', False):
             st.success("✅ ¡Los totales coinciden dentro del margen aceptable! La conciliación es exitosa.")
         else:
-            st.warning(f"⚠️ Los totales presentan diferencias significativas (${validacion['diferencia']:,.2f}). Revise los datos.")
+            st.warning(f"⚠️ Los totales presentan diferencias significativas (${validacion.get('diferencia', 0):,.2f}). Revise los datos.")
     
     with tab3:
         st.header("🏪 Análisis por Tiendas / Grupos")
@@ -3646,7 +3636,7 @@ def mostrar_resultados_v8():
             with col_a1:
                 st.metric("Total Operaciones", len(audit_log))
             with col_a2:
-                matches = len(audit_log[audit_log['action'] == 'MATCH'])
+                matches = len(audit_log[audit_log['action'] == 'MATCH']) if 'action' in audit_log.columns else 0
                 st.metric("Matches Encontrados", matches)
             with col_a3:
                 st.metric("Tiempo Promedio Match", f"{np.random.randint(10, 100)}ms")
@@ -3771,6 +3761,7 @@ def show_reconciliacion_v8():
             'resultado': None,
             'facturas_procesadas': None,
             'metricas': None,
+            'resumen': None,
             'validacion': None,
             'stats': None,
             'audit_log': None,
@@ -3985,181 +3976,13 @@ def show_reconciliacion_v8():
                             st.session_state.reconciliacion_datos['resultado'] = resultados['df_final']
                             st.session_state.reconciliacion_datos['facturas_procesadas'] = resultados['facturas_procesadas']
                             st.session_state.reconciliacion_datos['metricas'] = resultados['metricas']
+                            st.session_state.reconciliacion_datos['resumen'] = resultados.get('resumen', pd.DataFrame())
                             st.session_state.reconciliacion_datos['validacion'] = resultados['validacion']
                             st.session_state.reconciliacion_datos['stats'] = resultados['stats']
                             st.session_state.reconciliacion_datos['audit_log'] = resultados['audit_log']
                             st.session_state.reconciliacion_datos['procesado'] = True
                             
                             st.success("✅ Procesamiento completado exitosamente con fuzzy matching")
-                            
-                        except Exception as e:
-                            st.error(f"❌ Error en el procesamiento: {str(e)}")
-                            with st.expander("🔍 Ver detalles del error"):
-                                st.exception(e)
-            
-            if st.session_state.reconciliacion_datos['procesado']:
-                mostrar_resultados_v8()
-                
-        except Exception as e:
-            st.error(f"❌ Error general: {str(e)}")
-    else:
-        st.info("👆 Suba los archivos necesarios o active la opción de datos de demostración para comenzar.")
-    
-    st.markdown('</div>', unsafe_allow_html=True)
-def show_reconciliacion_v8():
-    """Módulo de reconciliación financiera con motor experto y fuzzy matching."""
-    
-    add_back_button(key="back_reconciliacion")
-    show_module_header(
-        "💰 Reconciliación",
-        "Conciliación de facturas y manifiestos con IA y Fuzzy Matching"
-    )
-    
-    st.markdown('<div class="module-content">', unsafe_allow_html=True)
-    
-    st.markdown("""
-    <div class='main-header'>
-        <h1 class='header-title'>📦 Reconciliación Logística</h1>
-        <div class='header-subtitle'>Motor de Auditoría Experto con Fuzzy Matching</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    if 'audit_engine' not in st.session_state:
-        st.session_state.audit_engine = ReconciliationAuditEngine()
-    if 'report_generator' not in st.session_state:
-        st.session_state.report_generator = ReconciliationReportGenerator()
-    if 'reconciliacion_datos' not in st.session_state:
-        st.session_state.reconciliacion_datos = {
-            'manifesto': None,
-            'facturas': None,
-            'resultado': None,
-            'metricas': None,
-            'resumen': None,
-            'validacion': None,
-            'stats': None,
-            'config': {},
-            'procesado': False
-        }
-
-    st.markdown("""
-    <div class='filter-panel'>
-        <h3 class='filter-title'>📂 Carga de Archivos</h3>
-    """, unsafe_allow_html=True)
-    
-    col1, col2 = st.columns(2)
-    with col1:
-        f_manifiesto = st.file_uploader("Subir Manifiesto (Excel o CSV)", type=['xlsx', 'xls', 'csv'], key="manifiesto_v8")
-    with col2:
-        f_facturas = st.file_uploader("Subir Facturas (Excel o CSV)", type=['xlsx', 'xls', 'csv'], key="facturas_v8")
-    
-    use_sample = st.checkbox("Usar datos de demostración", value=True, key="sample_v8")
-    
-    if use_sample or (f_manifiesto and f_facturas):
-        try:
-            if use_sample:
-                np.random.seed(42)
-                num_rows = 50
-                df_m = pd.DataFrame({
-                    'GUIA': [f'GUA-{i:04d}' for i in range(1001, 1001 + num_rows)],
-                    'DESTINATARIO': np.random.choice([
-                        'JOFRE SANTANA IMPORT', 
-                        'MALL DEL SOL AEROPOSTALE',
-                        'SAN MARINO TIENDA',
-                        'CARLOS PEREZ',
-                        'MARIA GONZALEZ',
-                        'CENTRO COMERCIAL QUITO',
-                        'PLAZA DE LAS AMERICAS'
-                    ], num_rows),
-                    'PIEZAS': np.random.randint(1, 20, num_rows),
-                    'VALOR_DECLARADO': np.random.uniform(50, 500, num_rows).round(2)
-                })
-                df_f = pd.DataFrame({
-                    'GUIA_FACTURA': [f'GUA-{i:04d}' for i in range(1001, 1001 + int(num_rows * 0.8))],
-                    'VALOR_COBRADO': np.random.uniform(45, 550, int(num_rows * 0.8)).round(2)
-                })
-                st.session_state.reconciliacion_datos['manifesto'] = df_m
-                st.session_state.reconciliacion_datos['facturas'] = df_f
-                st.success("✅ Usando datos de demostración. Puede subir sus propios archivos para procesamiento real.")
-            else:
-                manifesto = cargar_archivo_v8(f_manifiesto, "Manifiesto")
-                facturas = cargar_archivo_v8(f_facturas, "Facturas")
-                if manifesto is not None and facturas is not None:
-                    st.session_state.reconciliacion_datos['manifesto'] = manifesto
-                    st.session_state.reconciliacion_datos['facturas'] = facturas
-
-            manifesto = st.session_state.reconciliacion_datos['manifesto']
-            facturas = st.session_state.reconciliacion_datos['facturas']
-            
-            if manifesto is not None and facturas is not None:
-                st.markdown("""
-                <div class='filter-panel'>
-                    <h3 class='filter-title'>⚙️ Configuración de Columnas</h3>
-                """, unsafe_allow_html=True)
-                
-                columnas_m = detectar_columnas_v8(manifesto)
-                columnas_f = detectar_columnas_v8(facturas)
-                
-                c1, c2 = st.columns(2)
-                with c1:
-                    st.info("**Configuración Manifiesto**")
-                    cols_m = manifesto.columns.tolist()
-                    
-                    default_guia_m = columnas_m.get('guia', cols_m[0] if cols_m else None)
-                    guia_m = st.selectbox("Columna Guía (Manifiesto)", cols_m, 
-                                          index=cols_m.index(default_guia_m) if default_guia_m in cols_m else 0, key='m_guia_v8')
-                    
-                    default_dest = columnas_m.get('destinatario', cols_m[0] if cols_m else None)
-                    destinatario_m = st.selectbox("Columna Destinatario", cols_m,
-                                                  index=cols_m.index(default_dest) if default_dest in cols_m else 0, key='m_dest_v8')
-                    
-                    default_ciudad = columnas_m.get('ciudad', cols_m[0] if cols_m else None)
-                    ciudad_m = st.selectbox("Columna Ciudad Destino (opcional)", ['(Ninguna)'] + cols_m,
-                                            index=0 if default_ciudad is None else cols_m.index(default_ciudad)+1 if default_ciudad in cols_m else 0, key='m_ciudad_v8')
-                    
-                    default_envios = columnas_m.get('envios', cols_m[0] if cols_m else None)
-                    envios_m = st.selectbox("Columna Envíos/Cartones (opcional)", ['(Ninguna)'] + cols_m,
-                                            index=0 if default_envios is None else cols_m.index(default_envios)+1 if default_envios in cols_m else 0, key='m_envios_v8')
-                    
-                with c2:
-                    st.info("**Configuración Facturas**")
-                    cols_f = facturas.columns.tolist()
-                    
-                    default_guia_f = columnas_f.get('guia', cols_f[0] if cols_f else None)
-                    guia_f = st.selectbox("Columna Guía (Facturas)", cols_f,
-                                          index=cols_f.index(default_guia_f) if default_guia_f in cols_f else 0, key='f_guia_v8')
-                    
-                    default_sub = columnas_f.get('subtotal', cols_f[0] if cols_f else None)
-                    subtotal_f = st.selectbox("Columna Subtotal / Valor", cols_f,
-                                              index=cols_f.index(default_sub) if default_sub in cols_f else 0, key='f_sub_v8')
-                
-                st.markdown("</div>", unsafe_allow_html=True)
-                
-                if st.button("🚀 EJECUTAR RECONCILIACIÓN V8.0", type="primary", use_container_width=True):
-                    with st.spinner("🔄 Ejecutando algoritmo V8.0 con Fuzzy Matching..."):
-                        try:
-                            config = {
-                                'guia_m': guia_m,
-                                'destinatario': destinatario_m,
-                                'ciudad_destino': ciudad_m if ciudad_m != '(Ninguna)' else None,
-                                'envios': envios_m if envios_m != '(Ninguna)' else None,
-                                'guia_f': guia_f,
-                                'subtotal': subtotal_f
-                            }
-                            if config['envios'] is None:
-                                manifesto['_CARTONES_TEMP'] = 1
-                                config['envios'] = '_CARTONES_TEMP'
-                            
-                            engine = st.session_state.audit_engine
-                            resultados = engine.run_audit(manifesto, facturas, config)
-                            
-                            st.session_state.reconciliacion_datos['resultado'] = resultados['df_final']
-                            st.session_state.reconciliacion_datos['metricas'] = resultados['metricas']
-                            st.session_state.reconciliacion_datos['resumen'] = resultados['resumen']
-                            st.session_state.reconciliacion_datos['validacion'] = resultados['validacion']
-                            st.session_state.reconciliacion_datos['stats'] = resultados['stats']
-                            st.session_state.reconciliacion_datos['procesado'] = True
-                            
-                            st.success("✅ Procesamiento completado exitosamente")
                             
                         except Exception as e:
                             st.error(f"❌ Error en el procesamiento: {str(e)}")
