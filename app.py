@@ -2952,89 +2952,89 @@ class ReconciliationAuditEngine:
         self.fuzzy_matcher = FuzzyMatcher(threshold=0.85)
         self.audit_log = []
     
-    def run_audit(self, manifesto: pd.DataFrame, facturas: pd.DataFrame, config: dict) -> dict:
-        """Ejecuta el proceso de reconciliación con fuzzy matching."""
+def run_audit(self, manifesto: pd.DataFrame, facturas: pd.DataFrame, config: dict) -> dict:
+    """Ejecuta el proceso de reconciliación con fuzzy matching."""
+    
+    # Registrar inicio de auditoría
+    self.audit_log.append({
+        'timestamp': datetime.now(),
+        'action': 'INICIO',
+        'details': f'Manifiesto: {len(manifesto)} filas, Facturas: {len(facturas)} filas'
+    })
+    
+    # Procesar manifiesto
+    df_m = manifesto.copy()
+    if config.get('guia_m'):
+        df_m['GUIA_CLEAN'] = df_m[config['guia_m']].astype(str).str.strip().str.upper()
+    
+    if config.get('destinatario'):
+        df_m['DESTINATARIO_CLEAN'] = df_m[config['destinatario']].astype(str).str.strip().str.upper()
+    
+    # Procesar facturas
+    df_f = facturas.copy()
+    if config.get('guia_f'):
+        df_f['GUIA_CLEAN'] = df_f[config['guia_f']].astype(str).str.strip().str.upper()
+    
+    if config.get('subtotal'):
+        df_f['SUBTOTAL_NUM'] = pd.to_numeric(
+            df_f[config['subtotal']].astype(str).str.replace(',', '.').str.replace('$', '').str.strip(),
+            errors='coerce'
+        ).fillna(0)
+    
+    # Estrategia de matching
+    matched_indices = []
+    unmatched_manifesto = []
+    
+    for idx_m, row_m in df_m.iterrows():
+        mejor_match = None
+        mejor_sim = 0
         
-        # Registrar inicio de auditoría
-        self.audit_log.append({
-            'timestamp': datetime.now(),
-            'action': 'INICIO',
-            'details': f'Manifiesto: {len(manifesto)} filas, Facturas: {len(facturas)} filas'
-        })
-        
-        # Procesar manifiesto
-        df_m = manifesto.copy()
-        if config.get('guia_m'):
-            df_m['GUIA_CLEAN'] = df_m[config['guia_m']].astype(str).str.strip().str.upper()
-        
-        if config.get('destinatario'):
-            df_m['DESTINATARIO_CLEAN'] = df_m[config['destinatario']].astype(str).str.strip().str.upper()
-        
-        # Procesar facturas
-        df_f = facturas.copy()
-        if config.get('guia_f'):
-            df_f['GUIA_CLEAN'] = df_f[config['guia_f']].astype(str).str.strip().str.upper()
-        
-        if config.get('subtotal'):
-            df_f['SUBTOTAL_NUM'] = pd.to_numeric(
-                df_f[config['subtotal']].astype(str).str.replace(',', '.').str.replace('$', '').str.strip(),
-                errors='coerce'
-            ).fillna(0)
-        
-        # Estrategia de matching
-        matched_indices = []
-        unmatched_manifesto = []
-        
-        for idx_m, row_m in df_m.iterrows():
-            mejor_match = None
-            mejor_sim = 0
+        for idx_f, row_f in df_f.iterrows():
+            if idx_f in matched_indices:
+                continue
             
-            for idx_f, row_f in df_f.iterrows():
-                if idx_f in matched_indices:
-                    continue
-                
-                # Matching por guía (si existe)
-                if 'GUIA_CLEAN' in row_m and 'GUIA_CLEAN' in row_f:
-                    sim = self.fuzzy_matcher.similarity(row_m['GUIA_CLEAN'], row_f['GUIA_CLEAN'])
-                    if sim > mejor_sim and sim >= self.fuzzy_matcher.threshold:
-                        mejor_sim = sim
-                        mejor_match = idx_f
-                
-                # Matching por destinatario (como respaldo)
-                elif 'DESTINATARIO_CLEAN' in row_m and config.get('destinatario_f'):
-                    sim = self.fuzzy_matcher.similarity(
-                        row_m['DESTINATARIO_CLEAN'],
-                        str(row_f.get(config['destinatario_f'], '')).upper().strip()
-                    )
-                    if sim > mejor_sim and sim >= self.fuzzy_matcher.threshold:
-                        mejor_sim = sim
-                        mejor_match = idx_f
+            # Matching por guía (si existe)
+            if 'GUIA_CLEAN' in row_m and 'GUIA_CLEAN' in row_f:
+                sim = self.fuzzy_matcher.similarity(row_m['GUIA_CLEAN'], row_f['GUIA_CLEAN'])
+                if sim > mejor_sim and sim >= self.fuzzy_matcher.threshold:
+                    mejor_sim = sim
+                    mejor_match = idx_f
             
-            if mejor_match is not None:
-                matched_indices.append(mejor_match)
-                for col in df_f.columns:
-                    if col not in df_m.columns:
-                        df_m.loc[idx_m, col] = df_f.loc[mejor_match, col]
-                df_m.loc[idx_m, '_MATCH_SCORE'] = mejor_sim
-                df_m.loc[idx_m, '_MATCH_STATUS'] = 'MATCHED'
-                self.audit_log.append({
-                    'timestamp': datetime.now(),
-                    'action': 'MATCH',
-                    'details': f'Guía {row_m.get("GUIA_CLEAN", "N/A")} match con score {mejor_sim:.2f}'
-                })
-            else:
-                unmatched_manifesto.append(idx_m)
-                df_m.loc[idx_m, '_MATCH_STATUS'] = 'UNMATCHED'
+            # Matching por destinatario (como respaldo)
+            elif 'DESTINATARIO_CLEAN' in row_m and config.get('destinatario_f'):
+                sim = self.fuzzy_matcher.similarity(
+                    row_m['DESTINATARIO_CLEAN'],
+                    str(row_f.get(config['destinatario_f'], '')).upper().strip()
+                )
+                if sim > mejor_sim and sim >= self.fuzzy_matcher.threshold:
+                    mejor_sim = sim
+                    mejor_match = idx_f
         
-        # Marcar facturas no utilizadas
-        facturas_usadas = set(matched_indices)
-        for idx_f in df_f.index:
-            if idx_f in facturas_usadas:
-                df_f.loc[idx_f, '_MATCH_STATUS'] = 'MATCHED'
-            else:
-                df_f.loc[idx_f, '_MATCH_STATUS'] = 'UNMATCHED'
-        
-       # Calcular métricas
+        if mejor_match is not None:
+            matched_indices.append(mejor_match)
+            for col in df_f.columns:
+                if col not in df_m.columns:
+                    df_m.loc[idx_m, col] = df_f.loc[mejor_match, col]
+            df_m.loc[idx_m, '_MATCH_SCORE'] = mejor_sim
+            df_m.loc[idx_m, '_MATCH_STATUS'] = 'MATCHED'
+            self.audit_log.append({
+                'timestamp': datetime.now(),
+                'action': 'MATCH',
+                'details': f'Guía {row_m.get("GUIA_CLEAN", "N/A")} match con score {mejor_sim:.2f}'
+            })
+        else:
+            unmatched_manifesto.append(idx_m)
+            df_m.loc[idx_m, '_MATCH_STATUS'] = 'UNMATCHED'
+    
+    # Marcar facturas no utilizadas
+    facturas_usadas = set(matched_indices)
+    for idx_f in df_f.index:
+        if idx_f in facturas_usadas:
+            df_f.loc[idx_f, '_MATCH_STATUS'] = 'MATCHED'
+        else:
+            df_f.loc[idx_f, '_MATCH_STATUS'] = 'UNMATCHED'
+    
+    # Calcular métricas (AHORA ESTÁ BIEN INDENTADO)
     df_completo = df_m.copy()
     total_facturas = df_f['SUBTOTAL_NUM'].sum() if 'SUBTOTAL_NUM' in df_f.columns else 0
     total_manifesto = df_completo['SUBTOTAL_NUM'].sum() if 'SUBTOTAL_NUM' in df_completo.columns else 0
@@ -3092,7 +3092,7 @@ class ReconciliationAuditEngine:
         'df_final': df_completo,
         'facturas_procesadas': df_f,
         'metricas': metricas,
-        'resumen': resumen,  # ← AHORA SÍ ESTÁ INCLUIDO
+        'resumen': resumen,
         'validacion': validacion,
         'stats': stats,
         'audit_log': pd.DataFrame(self.audit_log)
