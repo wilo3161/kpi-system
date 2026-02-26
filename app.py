@@ -2900,7 +2900,7 @@ def show_gestion_equipo():
     st.markdown('</div>', unsafe_allow_html=True)
 
 # ==============================================================================
-# 9. MODULO RECONCILIACION LOGISTICA V8 - MEJORADO
+# 9. MODULO RECONCILIACION LOGISTICA V8 - MEJORADO (VERSION CUADRADA AL CENTAVO)
 # ==============================================================================
 
 # Nuevas importaciones necesarias (agregar al inicio del archivo)
@@ -2953,7 +2953,7 @@ class ReconciliationAuditEngine:
         self.audit_log = []
     
     def run_audit(self, manifesto: pd.DataFrame, facturas: pd.DataFrame, config: dict) -> dict:
-        """Ejecuta el proceso de reconciliación con fuzzy matching."""
+        """Ejecuta el proceso de reconciliación con validación exacta por guía y valor."""
         
         # Registrar inicio de auditoría
         self.audit_log.append({
@@ -2968,7 +2968,7 @@ class ReconciliationAuditEngine:
             df_m['GUIA_CLEAN'] = df_m[config['guia_m']].astype(str).str.strip().str.upper()
         
         if config.get('destinatario'):
-            df_m['DESTINATARIO_CLEAN'] = df_m[config['destinatario']].astype(str).str.strip().str.upper()
+            df_m['DESTINATARIO'] = df_m[config['destinatario']].astype(str).str.strip()
         
         # Procesar facturas
         df_f = facturas.copy()
@@ -2981,65 +2981,152 @@ class ReconciliationAuditEngine:
                 errors='coerce'
             ).fillna(0)
         
-        # Estrategia de matching
+        # Extraer destinatario de facturas (si existe)
+        df_f['DESTINATARIO'] = None
+        if config.get('destinatario_f') and config['destinatario_f'] != '(Ninguna)':
+            df_f['DESTINATARIO'] = df_f[config['destinatario_f']].astype(str).str.strip()
+        
+        # Crear diccionario de facturas por guía para matching exacto
+        facturas_dict = {}
+        for idx, row in df_f.iterrows():
+            guia = row['GUIA_CLEAN']
+            if guia not in facturas_dict:
+                facturas_dict[guia] = []
+            facturas_dict[guia].append({
+                'idx': idx,
+                'subtotal': row['SUBTOTAL_NUM'],
+                'destinatario': row['DESTINATARIO']
+            })
+        
+        # Estrategia de matching exacto por guía
         matched_indices = []
         unmatched_manifesto = []
+        guias_con_diferencia_valor = []
         
         for idx_m, row_m in df_m.iterrows():
-            mejor_match = None
-            mejor_sim = 0
+            guia_m = row_m.get('GUIA_CLEAN', '')
             
-            for idx_f, row_f in df_f.iterrows():
-                if idx_f in matched_indices:
-                    continue
+            if guia_m in facturas_dict:
+                # Hay una o más facturas con esta guía
+                mejores_matches = facturas_dict[guia_m]
                 
-                # Matching por guía (si existe)
-                if 'GUIA_CLEAN' in row_m and 'GUIA_CLEAN' in row_f:
-                    sim = self.fuzzy_matcher.similarity(row_m['GUIA_CLEAN'], row_f['GUIA_CLEAN'])
-                    if sim > mejor_sim and sim >= self.fuzzy_matcher.threshold:
-                        mejor_sim = sim
-                        mejor_match = idx_f
+                # Buscar la factura con el valor más cercano
+                mejor_match = None
+                menor_diferencia = float('inf')
                 
-                # Matching por destinatario (como respaldo)
-                elif 'DESTINATARIO_CLEAN' in row_m and config.get('destinatario_f'):
-                    sim = self.fuzzy_matcher.similarity(
-                        row_m['DESTINATARIO_CLEAN'],
-                        str(row_f.get(config['destinatario_f'], '')).upper().strip()
-                    )
-                    if sim > mejor_sim and sim >= self.fuzzy_matcher.threshold:
-                        mejor_sim = sim
-                        mejor_match = idx_f
-            
-            if mejor_match is not None:
-                matched_indices.append(mejor_match)
-                for col in df_f.columns:
-                    if col not in df_m.columns:
-                        df_m.loc[idx_m, col] = df_f.loc[mejor_match, col]
-                df_m.loc[idx_m, '_MATCH_SCORE'] = mejor_sim
-                df_m.loc[idx_m, '_MATCH_STATUS'] = 'MATCHED'
-                self.audit_log.append({
-                    'timestamp': datetime.now(),
-                    'action': 'MATCH',
-                    'details': f'Guía {row_m.get("GUIA_CLEAN", "N/A")} match con score {mejor_sim:.2f}'
-                })
+                for match in mejores_matches:
+                    if match['idx'] not in matched_indices:
+                        diferencia = abs(match['subtotal'] - row_m.get('SUBTOTAL_NUM', 0))
+                        if diferencia < menor_diferencia:
+                            menor_diferencia = diferencia
+                            mejor_match = match
+                
+                if mejor_match is not None:
+                    matched_indices.append(mejor_match['idx'])
+                    
+                    # Determinar si el valor coincide (diferencia < 0.01)
+                    if menor_diferencia < 0.01:
+                        match_status = 'MATCHED'
+                        guias_con_diferencia_valor.append(False)
+                    else:
+                        match_status = 'VALOR_DIFERENTE'
+                        guias_con_diferencia_valor.append(True)
+                    
+                    # Copiar datos de factura a manifiesto
+                    for col in df_f.columns:
+                        if col not in df_m.columns:
+                            df_m.loc[idx_m, col] = df_f.loc[mejor_match['idx'], col]
+                    
+                    df_m.loc[idx_m, '_MATCH_SCORE'] = 1.0
+                    df_m.loc[idx_m, '_MATCH_STATUS'] = match_status
+                    df_m.loc[idx_m, '_DIFERENCIA_VALOR'] = menor_diferencia
+                    
+                    self.audit_log.append({
+                        'timestamp': datetime.now(),
+                        'action': 'MATCH',
+                        'details': f'Guía {guia_m} match exacto - Status: {match_status} - Diferencia: ${menor_diferencia:.2f}'
+                    })
+                else:
+                    # Todas las facturas con esta guía ya están usadas (duplicados)
+                    unmatched_manifesto.append(idx_m)
+                    df_m.loc[idx_m, '_MATCH_STATUS'] = 'UNMATCHED'
+                    df_m.loc[idx_m, '_DIFERENCIA_VALOR'] = None
+                    self.audit_log.append({
+                        'timestamp': datetime.now(),
+                        'action': 'UNMATCHED',
+                        'details': f'Guía {guia_m} no encontrada en facturas disponibles'
+                    })
             else:
+                # No hay factura con esta guía
                 unmatched_manifesto.append(idx_m)
                 df_m.loc[idx_m, '_MATCH_STATUS'] = 'UNMATCHED'
+                df_m.loc[idx_m, '_DIFERENCIA_VALOR'] = None
+                self.audit_log.append({
+                    'timestamp': datetime.now(),
+                    'action': 'UNMATCHED',
+                    'details': f'Guía {guia_m} no encontrada en facturas'
+                })
         
-        # Marcar facturas no utilizadas
+        # Marcar facturas no utilizadas (estas son las guías anuladas o facturas sin manifiesto)
         facturas_usadas = set(matched_indices)
+        guias_anuladas = []
+        
         for idx_f in df_f.index:
             if idx_f in facturas_usadas:
-                df_f.loc[idx_f, '_MATCH_STATUS'] = 'MATCHED'
+                # Verificar si la factura match tiene el mismo valor
+                guia_f = df_f.loc[idx_f, 'GUIA_CLEAN']
+                # Buscar en df_m la fila con esta guía
+                mask_m = df_m['GUIA_CLEAN'] == guia_f
+                if mask_m.any():
+                    idx_m = df_m[mask_m].index[0]
+                    valor_m = df_m.loc[idx_m, 'SUBTOTAL_NUM'] if 'SUBTOTAL_NUM' in df_m.columns else 0
+                    valor_f = df_f.loc[idx_f, 'SUBTOTAL_NUM']
+                    
+                    if abs(valor_m - valor_f) < 0.01:
+                        df_f.loc[idx_f, '_MATCH_STATUS'] = 'MATCHED'
+                    else:
+                        df_f.loc[idx_f, '_MATCH_STATUS'] = 'VALOR_DIFERENTE'
+                        guias_anuladas.append({
+                            'guia': guia_f,
+                            'destinatario': df_f.loc[idx_f, 'DESTINATARIO'],
+                            'valor_factura': valor_f,
+                            'valor_manifesto': valor_m,
+                            'diferencia': valor_f - valor_m,
+                            'tipo': 'DIFERENCIA_VALOR'
+                        })
+                else:
+                    df_f.loc[idx_f, '_MATCH_STATUS'] = 'MATCHED'
             else:
-                df_f.loc[idx_f, '_MATCH_STATUS'] = 'UNMATCHED'
+                df_f.loc[idx_f, '_MATCH_STATUS'] = 'ANULADA'
+                guias_anuladas.append({
+                    'guia': df_f.loc[idx_f, 'GUIA_CLEAN'],
+                    'destinatario': df_f.loc[idx_f, 'DESTINATARIO'],
+                    'valor_factura': df_f.loc[idx_f, 'SUBTOTAL_NUM'],
+                    'valor_manifesto': 0,
+                    'diferencia': df_f.loc[idx_f, 'SUBTOTAL_NUM'],
+                    'tipo': 'FACTURA_SIN_MANIFIESTO'
+                })
+        
+        # Buscar guías en manifiesto sin factura (anuladas por falta de factura)
+        for idx_m in unmatched_manifesto:
+            guias_anuladas.append({
+                'guia': df_m.loc[idx_m, 'GUIA_CLEAN'],
+                'destinatario': df_m.loc[idx_m, 'DESTINATARIO'] if 'DESTINATARIO' in df_m.columns else 'N/A',
+                'valor_factura': 0,
+                'valor_manifesto': df_m.loc[idx_m, 'SUBTOTAL_NUM'] if 'SUBTOTAL_NUM' in df_m.columns else 0,
+                'diferencia': -df_m.loc[idx_m, 'SUBTOTAL_NUM'] if 'SUBTOTAL_NUM' in df_m.columns else 0,
+                'tipo': 'MANIFIESTO_SIN_FACTURA'
+            })
         
         # Calcular métricas
         df_completo = df_m.copy()
         total_facturas = df_f['SUBTOTAL_NUM'].sum() if 'SUBTOTAL_NUM' in df_f.columns else 0
         total_manifesto = df_completo['SUBTOTAL_NUM'].sum() if 'SUBTOTAL_NUM' in df_completo.columns else 0
         
-        metricas = self._calcular_metricas(df_completo, df_f)
+        # Crear DataFrame de guías anuladas
+        df_guias_anuladas = pd.DataFrame(guias_anuladas)
+        
+        metricas = self._calcular_metricas(df_completo, df_f, df_guias_anuladas)
         
         # Crear resumen por tipo/canal
         if not metricas.empty:
@@ -3060,12 +3147,13 @@ class ReconciliationAuditEngine:
                 'TIENDA': 'count',
                 'GUIAS_TOTALES': 'sum',
                 'GUIAS_MATCH': 'sum',
+                'GUIAS_VALOR_DIF': 'sum',
                 'SUBTOTAL': 'sum'
             }).reset_index()
             resumen['PORCENTAJE'] = (resumen['SUBTOTAL'] / resumen['SUBTOTAL'].sum() * 100).round(2)
             resumen = resumen.rename(columns={'TIENDA': 'TIENDAS'})
         else:
-            resumen = pd.DataFrame(columns=['TIPO', 'TIENDAS', 'GUIAS_TOTALES', 'GUIAS_MATCH', 'SUBTOTAL', 'PORCENTAJE'])
+            resumen = pd.DataFrame(columns=['TIPO', 'TIENDAS', 'GUIAS_TOTALES', 'GUIAS_MATCH', 'GUIAS_VALOR_DIF', 'SUBTOTAL', 'PORCENTAJE'])
         
         validacion = self._validar_totales(total_manifesto, total_facturas)
         
@@ -3074,22 +3162,25 @@ class ReconciliationAuditEngine:
             'total_facturas': total_facturas,
             'guias_manifesto': len(df_m),
             'guias_factura': len(df_f),
-            'guias_match': len(matched_indices),
+            'guias_match': len([s for s in df_m['_MATCH_STATUS'] if s == 'MATCHED']),
+            'guias_valor_diferente': len([s for s in df_m['_MATCH_STATUS'] if s == 'VALOR_DIFERENTE']),
             'guias_sin_match': len(unmatched_manifesto),
             'facturas_sin_usar': len(df_f) - len(matched_indices),
-            'match_rate': len(matched_indices) / len(df_m) if len(df_m) > 0 else 0,
+            'guias_anuladas': len(guias_anuladas),
+            'match_rate': len([s for s in df_m['_MATCH_STATUS'] if s == 'MATCHED']) / len(df_m) if len(df_m) > 0 else 0,
             'cobertura_facturas': len(matched_indices) / len(df_f) if len(df_f) > 0 else 0
         }
         
         self.audit_log.append({
             'timestamp': datetime.now(),
             'action': 'FIN',
-            'details': f'Match rate: {stats["match_rate"]:.1%}'
+            'details': f'Match rate: {stats["match_rate"]:.1%} - Guías anuladas: {stats["guias_anuladas"]}'
         })
         
         return {
             'df_final': df_completo,
             'facturas_procesadas': df_f,
+            'guias_anuladas': df_guias_anuladas,
             'metricas': metricas,
             'resumen': resumen,
             'validacion': validacion,
@@ -3097,18 +3188,28 @@ class ReconciliationAuditEngine:
             'audit_log': pd.DataFrame(self.audit_log)
         }
     
-    def _calcular_metricas(self, df_completo, df_facturas):
+    def _calcular_metricas(self, df_completo, df_facturas, df_anuladas):
         """Calcula métricas detalladas por tienda/grupo"""
         
         if 'TIENDA' not in df_completo.columns:
             df_completo['TIENDA'] = 'NO ASIGNADA'
         
+        # Agrupar por tienda
         metricas = df_completo.groupby('TIENDA').agg(
             GUIAS_TOTALES=('GUIA_CLEAN', 'count'),
             GUIAS_MATCH=('_MATCH_STATUS', lambda x: (x == 'MATCHED').sum()),
+            GUIAS_VALOR_DIF=('_MATCH_STATUS', lambda x: (x == 'VALOR_DIFERENTE').sum()),
             SUBTOTAL=('SUBTOTAL_NUM', 'sum'),
             MATCH_SCORE_PROM=('_MATCH_SCORE', 'mean')
         ).reset_index()
+        
+        # Agregar guías anuladas por tienda (si es posible)
+        if not df_anuladas.empty and 'destinatario' in df_anuladas.columns:
+            anuladas_por_tienda = df_anuladas.groupby('destinatario').size().reset_index(name='GUIAS_ANULADAS')
+            metricas = metricas.merge(anuladas_por_tienda, left_on='TIENDA', right_on='destinatario', how='left')
+            metricas['GUIAS_ANULADAS'] = metricas['GUIAS_ANULADAS'].fillna(0)
+        else:
+            metricas['GUIAS_ANULADAS'] = 0
         
         metricas['MATCH_RATE'] = (metricas['GUIAS_MATCH'] / metricas['GUIAS_TOTALES'] * 100).round(2)
         metricas['PORCENTAJE_GASTO'] = (metricas['SUBTOTAL'] / metricas['SUBTOTAL'].sum() * 100).round(2)
@@ -3133,7 +3234,7 @@ class ReconciliationReportGenerator:
     """Generador de reportes para reconciliación."""
     
     @staticmethod
-    def generar_excel_completo(resultado, facturas, metricas, validacion, stats, audit_log, nombre_base):
+    def generar_excel_completo(resultado, facturas, guias_anuladas, metricas, validacion, stats, audit_log, nombre_base):
         """Genera Excel profesional con múltiples hojas y formato"""
         output = io.BytesIO()
         
@@ -3148,7 +3249,9 @@ class ReconciliationReportGenerator:
                 ['Estado', validacion['estado']],
                 ['Guías Manifiesto', stats['guias_manifesto']],
                 ['Guías Factura', stats['guias_factura']],
-                ['Guías Match', stats['guias_match']],
+                ['Guías Match (Exactas)', stats['guias_match']],
+                ['Guías con Diferencia de Valor', stats['guias_valor_diferente']],
+                ['Guías Anuladas', stats['guias_anuladas']],
                 ['Match Rate', f"{stats['match_rate']:.1%}"],
             ]
             pd.DataFrame(resumen_data[1:], columns=resumen_data[0]).to_excel(
@@ -3160,6 +3263,10 @@ class ReconciliationReportGenerator:
             
             # Facturas procesadas
             facturas.to_excel(writer, sheet_name='Facturas_Procesadas', index=False)
+            
+            # Guías anuladas
+            if not guias_anuladas.empty:
+                guias_anuladas.to_excel(writer, sheet_name='Guias_Anuladas', index=False)
             
             # Métricas por tienda
             metricas.to_excel(writer, sheet_name='Metricas_Tiendas', index=False)
@@ -3174,7 +3281,7 @@ class ReconciliationReportGenerator:
         return output
     
     @staticmethod
-    def generar_pdf_profesional(resultado, metricas, validacion, stats, fecha):
+    def generar_pdf_profesional(resultado, metricas, guias_anuladas, validacion, stats, fecha):
         """Genera PDF con diseño profesional"""
         buffer = io.BytesIO()
         doc = SimpleDocTemplate(buffer, pagesize=letter,
@@ -3249,15 +3356,16 @@ class ReconciliationReportGenerator:
         
         # Métricas de matching
         data_match = [
-            ['Guías Manifiesto', 'Guías Factura', 'Match', 'Match Rate'],
+            ['Guías Manifiesto', 'Guías Factura', 'Match Exacto', 'Match c/ Dif', 'Anuladas'],
             [
                 str(stats['guias_manifesto']),
                 str(stats['guias_factura']),
                 str(stats['guias_match']),
-                f"{stats['match_rate']:.1%}"
+                str(stats['guias_valor_diferente']),
+                str(stats['guias_anuladas'])
             ]
         ]
-        tabla_match = Table(data_match, colWidths=[1.5*inch]*4)
+        tabla_match = Table(data_match, colWidths=[1.2*inch]*5)
         tabla_match.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), HexColor('#E4002B')),
             ('TEXTCOLOR', (0, 0), (-1, 0), HexColor('#FFFFFF')),
@@ -3271,12 +3379,12 @@ class ReconciliationReportGenerator:
         # Top 5 tiendas
         if not metricas.empty:
             contenido.append(Paragraph("TOP 5 TIENDAS POR INVERSIÓN", styles['SubtituloReporte']))
-            top5 = metricas.head(5)[['TIENDA', 'SUBTOTAL', 'MATCH_RATE']].copy()
+            top5 = metricas.head(5)[['TIENDA', 'SUBTOTAL', 'MATCH_RATE', 'GUIAS_ANULADAS']].copy()
             top5['SUBTOTAL'] = top5['SUBTOTAL'].apply(lambda x: f"${x:,.2f}")
             top5['MATCH_RATE'] = top5['MATCH_RATE'].apply(lambda x: f"{x}%")
             
-            data_top5 = [['Tienda', 'Inversión', 'Match Rate']] + top5.values.tolist()
-            tabla_top5 = Table(data_top5, colWidths=[2.5*inch, 1.5*inch, 1*inch])
+            data_top5 = [['Tienda', 'Inversión', 'Match Rate', 'Anuladas']] + top5.values.tolist()
+            tabla_top5 = Table(data_top5, colWidths=[2*inch, 1.5*inch, 1*inch, 1*inch])
             tabla_top5.setStyle(TableStyle([
                 ('BACKGROUND', (0, 0), (-1, 0), HexColor('#8B5CF6')),
                 ('TEXTCOLOR', (0, 0), (-1, 0), HexColor('#FFFFFF')),
@@ -3285,6 +3393,24 @@ class ReconciliationReportGenerator:
                 ('GRID', (0, 0), (-1, -1), 1, HexColor('#CCCCCC'))
             ]))
             contenido.append(tabla_top5)
+        
+        # Guías anuladas (top 10)
+        if not guias_anuladas.empty:
+            contenido.append(Spacer(1, 0.3*inch))
+            contenido.append(Paragraph("TOP 10 GUÍAS ANULADAS", styles['SubtituloReporte']))
+            top_anuladas = guias_anuladas.head(10)[['guia', 'destinatario', 'valor_factura', 'tipo']].copy()
+            top_anuladas['valor_factura'] = top_anuladas['valor_factura'].apply(lambda x: f"${x:,.2f}")
+            
+            data_anuladas = [['Guía', 'Destinatario', 'Valor', 'Tipo']] + top_anuladas.values.tolist()
+            tabla_anuladas = Table(data_anuladas, colWidths=[1.5*inch, 2.5*inch, 1*inch, 1.5*inch])
+            tabla_anuladas.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), HexColor('#EF4444')),
+                ('TEXTCOLOR', (0, 0), (-1, 0), HexColor('#FFFFFF')),
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('GRID', (0, 0), (-1, -1), 1, HexColor('#CCCCCC'))
+            ]))
+            contenido.append(tabla_anuladas)
         
         # Pie de página
         contenido.append(Spacer(1, 0.5*inch))
@@ -3404,6 +3530,7 @@ def mostrar_resultados_v8():
     # Verificar que todas las claves existan
     resultado = datos.get('resultado', pd.DataFrame())
     facturas = datos.get('facturas_procesadas', pd.DataFrame())
+    guias_anuladas = datos.get('guias_anuladas', pd.DataFrame())
     metricas = datos.get('metricas', pd.DataFrame())
     resumen = datos.get('resumen', pd.DataFrame())
     validacion = datos.get('validacion', {})
@@ -3446,9 +3573,8 @@ def mostrar_resultados_v8():
         st.markdown(f"""
         <div style='background: linear-gradient(135deg, #fc466b15, #3f5efb30); padding: 20px; border-radius: 10px; border-left: 5px solid #fc466b;'>
             <div style='font-size: 24px; margin-bottom: 8px;'>📋</div>
-            <div style='font-size: 14px; color: #666; margin-bottom: 5px;'>Sin Match</div>
-            <div style='font-size: 28px; font-weight: bold; color: #333;'>{stats.get('guias_sin_match', 0)}</div>
-            <div style='font-size: 12px; color: #888;'>facturas sin usar: {stats.get('facturas_sin_usar', 0)}</div>
+            <div style='font-size: 14px; color: #666; margin-bottom: 5px;'>Con Diferencia Valor</div>
+            <div style='font-size: 28px; font-weight: bold; color: #333;'>{stats.get('guias_valor_diferente', 0)}</div>
         </div>
         """, unsafe_allow_html=True)
     
@@ -3466,10 +3592,10 @@ def mostrar_resultados_v8():
     
     st.markdown("</div>", unsafe_allow_html=True)
     
-    # Pestañas mejoradas
-    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+    # Pestañas mejoradas (agregamos pestaña de Guías Anuladas)
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
         "📊 Dashboard", "✅ Validación", "🏪 Tiendas", 
-        "📋 Detalle", "🔍 Auditoría", "💾 Exportar"
+        "📋 Detalle", "📑 Guías Anuladas", "🔍 Auditoría", "💾 Exportar"
     ])
     
     with tab1:
@@ -3504,31 +3630,29 @@ def mostrar_resultados_v8():
         col_ch3, col_ch4 = st.columns(2)
         
         with col_ch3:
-            # Evolución temporal (simulada)
-            fechas = pd.date_range(end=datetime.now(), periods=30, freq='D')
-            datos_temp = pd.DataFrame({
-                'Fecha': fechas,
-                'Conciliado': np.random.normal(10000, 2000, 30).cumsum(),
-                'Pendiente': np.random.normal(2000, 500, 30).cumsum()
+            # Distribución de estados de guías
+            estado_guias = pd.DataFrame({
+                'Estado': ['Match Exacto', 'Diferencia Valor', 'Anuladas'],
+                'Cantidad': [
+                    stats.get('guias_match', 0),
+                    stats.get('guias_valor_diferente', 0),
+                    stats.get('guias_anuladas', 0)
+                ]
             })
-            fig3 = px.area(datos_temp, x='Fecha', y=['Conciliado', 'Pendiente'],
-                         title="Evolución de Conciliación",
-                         color_discrete_map={'Conciliado': '#10B981', 'Pendiente': '#F59E0B'})
+            fig3 = px.pie(estado_guias, values='Cantidad', names='Estado',
+                        title="Distribución de Guías",
+                        color_discrete_sequence=['#10B981', '#F59E0B', '#EF4444'])
             st.plotly_chart(fig3, use_container_width=True)
         
         with col_ch4:
-            # Distribución de estados
-            estado_counts = pd.DataFrame({
-                'Estado': ['Match Exacto', 'Match Fuzzy', 'Sin Match'],
-                'Cantidad': [
-                    int(stats.get('guias_match', 0) * 0.7),
-                    int(stats.get('guias_match', 0) * 0.3),
-                    stats.get('guias_sin_match', 0)
-                ]
-            })
-            fig4 = px.pie(estado_counts, values='Cantidad', names='Estado',
-                        title="Distribución de Match",
-                        color_discrete_sequence=['#10B981', '#F59E0B', '#EF4444'])
+            # Comparación de totales
+            fig4 = go.Figure(data=[
+                go.Bar(name='Manifiesto', x=['Total'], y=[stats.get('total_manifesto', 0)], 
+                      marker_color='#1f77b4'),
+                go.Bar(name='Facturas', x=['Total'], y=[stats.get('total_facturas', 0)], 
+                      marker_color='#ff7f0e')
+            ])
+            fig4.update_layout(title="Comparación de Totales", barmode='group')
             st.plotly_chart(fig4, use_container_width=True)
     
     with tab2:
@@ -3538,11 +3662,15 @@ def mostrar_resultados_v8():
         with col1:
             st.metric("Total Manifiesto", f"${validacion.get('total_manifesto', 0):,.2f}")
             st.metric("Total Facturas", f"${validacion.get('total_facturas', 0):,.2f}")
+            st.metric("Guías Manifiesto", f"{stats.get('guias_manifesto', 0)}")
+            st.metric("Guías Factura", f"{stats.get('guias_factura', 0)}")
         
         with col2:
             st.metric("Diferencia", f"${validacion.get('diferencia', 0):,.2f}", 
                      delta=f"{validacion.get('porcentaje_diferencia', 0):.2f}%")
             st.metric("Margen Aceptable", "$0.01")
+            st.metric("Guías Match Exacto", f"{stats.get('guias_match', 0)}")
+            st.metric("Guías Anuladas", f"{stats.get('guias_anuladas', 0)}")
         
         fig = go.Figure(data=[
             go.Bar(name='Manifiesto', x=['Total'], y=[validacion.get('total_manifesto', 0)], 
@@ -3558,7 +3686,7 @@ def mostrar_resultados_v8():
         if validacion.get('coincide', False):
             st.success("✅ ¡Los totales coinciden dentro del margen aceptable! La conciliación es exitosa.")
         else:
-            st.warning(f"⚠️ Los totales presentan diferencias significativas (${validacion.get('diferencia', 0):,.2f}). Revise los datos.")
+            st.warning(f"⚠️ Los totales presentan diferencias significativas (${validacion.get('diferencia', 0):,.2f}). Revise las guías anuladas.")
     
     with tab3:
         st.header("🏪 Análisis por Tiendas / Grupos")
@@ -3568,7 +3696,7 @@ def mostrar_resultados_v8():
             busqueda = st.text_input("🔍 Buscar tienda:", placeholder="Ej: MALL DEL SOL")
         with col_f2:
             ordenar_por = st.selectbox("Ordenar por:", 
-                                      ['Inversión', 'Match Rate', 'Guías'])
+                                      ['Inversión', 'Match Rate', 'Guías', 'Anuladas'])
         
         if busqueda:
             metricas_filt = metricas[metricas['TIENDA'].str.contains(busqueda, case=False, na=False)]
@@ -3579,22 +3707,26 @@ def mostrar_resultados_v8():
             metricas_filt = metricas_filt.sort_values('SUBTOTAL', ascending=False)
         elif ordenar_por == 'Match Rate':
             metricas_filt = metricas_filt.sort_values('MATCH_RATE', ascending=False)
-        else:
+        elif ordenar_por == 'Guías':
             metricas_filt = metricas_filt.sort_values('GUIAS_TOTALES', ascending=False)
+        else:
+            metricas_filt = metricas_filt.sort_values('GUIAS_ANULADAS', ascending=False)
         
         display = metricas_filt.copy()
         display['SUBTOTAL'] = display['SUBTOTAL'].apply(lambda x: f"${x:,.2f}")
         display['MATCH_RATE'] = display['MATCH_RATE'].apply(lambda x: f"{x}%")
         
         st.dataframe(
-            display[['TIENDA', 'SUBTOTAL', 'GUIAS_TOTALES', 'GUIAS_MATCH', 'MATCH_RATE']],
+            display[['TIENDA', 'SUBTOTAL', 'GUIAS_TOTALES', 'GUIAS_MATCH', 'GUIAS_VALOR_DIF', 'GUIAS_ANULADAS', 'MATCH_RATE']],
             use_container_width=True,
             hide_index=True,
             column_config={
                 "TIENDA": "Tienda",
                 "SUBTOTAL": "Inversión",
                 "GUIAS_TOTALES": "Total Guías",
-                "GUIAS_MATCH": "Guías Match",
+                "GUIAS_MATCH": "Match Exacto",
+                "GUIAS_VALOR_DIF": "Dif. Valor",
+                "GUIAS_ANULADAS": "Anuladas",
                 "MATCH_RATE": "Match Rate"
             }
         )
@@ -3605,7 +3737,7 @@ def mostrar_resultados_v8():
         col_cols, col_rows = st.columns(2)
         with col_cols:
             cols_disponibles = resultado.columns.tolist()
-            default_cols = ['GUIA_CLEAN', 'TIENDA', 'SUBTOTAL_NUM', '_MATCH_STATUS', '_MATCH_SCORE']
+            default_cols = ['GUIA_CLEAN', 'DESTINATARIO', 'SUBTOTAL_NUM', '_MATCH_STATUS', '_DIFERENCIA_VALOR']
             default_cols = [c for c in default_cols if c in cols_disponibles]
             cols_seleccionadas = st.multiselect(
                 "Seleccionar columnas", 
@@ -3625,6 +3757,51 @@ def mostrar_resultados_v8():
             st.caption(f"Mostrando {min(registros_mostrar, len(resultado))} de {len(resultado)} registros totales.")
     
     with tab5:
+        st.header("📑 Guías Anuladas")
+        
+        if not guias_anuladas.empty:
+            st.markdown(f"### Se encontraron **{len(guias_anuladas)}** guías anuladas")
+            
+            # Resumen por tipo
+            tipo_counts = guias_anuladas['tipo'].value_counts().reset_index()
+            tipo_counts.columns = ['Tipo', 'Cantidad']
+            
+            col_a1, col_a2 = st.columns(2)
+            with col_a1:
+                fig = px.pie(tipo_counts, values='Cantidad', names='Tipo',
+                           title="Distribución de Guías Anuladas",
+                           color_discrete_sequence=['#EF4444', '#F59E0B', '#3B82F6'])
+                st.plotly_chart(fig, use_container_width=True)
+            
+            with col_a2:
+                st.metric("Total Valor Anulado", f"${guias_anuladas['valor_factura'].sum():,.2f}")
+                st.metric("Promedio por Guía", f"${guias_anuladas['valor_factura'].mean():,.2f}")
+            
+            # Mostrar tabla detallada
+            st.subheader("Detalle de Guías Anuladas")
+            display_anuladas = guias_anuladas.copy()
+            display_anuladas['valor_factura'] = display_anuladas['valor_factura'].apply(lambda x: f"${x:,.2f}")
+            display_anuladas['valor_manifesto'] = display_anuladas['valor_manifesto'].apply(lambda x: f"${x:,.2f}")
+            display_anuladas['diferencia'] = display_anuladas['diferencia'].apply(lambda x: f"${x:,.2f}")
+            
+            st.dataframe(
+                display_anuladas[['guia', 'destinatario', 'valor_factura', 'valor_manifesto', 'diferencia', 'tipo']],
+                use_container_width=True,
+                height=400
+            )
+            
+            # Botón para descargar CSV de guías anuladas
+            csv_anuladas = guias_anuladas.to_csv(index=False)
+            st.download_button(
+                label="📥 Descargar CSV de Guías Anuladas",
+                data=csv_anuladas,
+                file_name=f"guias_anuladas_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
+                mime="text/csv"
+            )
+        else:
+            st.info("No se encontraron guías anuladas. ¡Excelente trabajo!")
+    
+    with tab6:
         st.header("🔍 Log de Auditoría")
         
         if not audit_log.empty:
@@ -3639,11 +3816,12 @@ def mostrar_resultados_v8():
                 matches = len(audit_log[audit_log['action'] == 'MATCH']) if 'action' in audit_log.columns else 0
                 st.metric("Matches Encontrados", matches)
             with col_a3:
-                st.metric("Tiempo Promedio Match", f"{np.random.randint(10, 100)}ms")
+                unmatched = len(audit_log[audit_log['action'] == 'UNMATCHED']) if 'action' in audit_log.columns else 0
+                st.metric("Guías No Encontradas", unmatched)
         else:
             st.info("No hay log de auditoría disponible.")
     
-    with tab6:
+    with tab7:
         st.header("💾 Exportar Resultados")
         
         export_format = st.radio(
@@ -3667,7 +3845,7 @@ def mostrar_resultados_v8():
                     with st.spinner("Generando Excel..."):
                         try:
                             excel_data = ReconciliationReportGenerator.generar_excel_completo(
-                                resultado, facturas, metricas, validacion, stats, 
+                                resultado, facturas, guias_anuladas, metricas, validacion, stats, 
                                 audit_log, nombre_base
                             )
                             st.download_button(
@@ -3687,7 +3865,7 @@ def mostrar_resultados_v8():
                     with st.spinner("Generando PDF..."):
                         try:
                             pdf_bytes = ReconciliationReportGenerator.generar_pdf_profesional(
-                                resultado, metricas, validacion, stats, datetime.now()
+                                resultado, metricas, guias_anuladas, validacion, stats, datetime.now()
                             )
                             st.download_button(
                                 label="⬇️ Descargar PDF",
@@ -3709,14 +3887,14 @@ def mostrar_resultados_v8():
                             with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
                                 # Excel
                                 excel_data = ReconciliationReportGenerator.generar_excel_completo(
-                                    resultado, facturas, metricas, validacion, stats, 
+                                    resultado, facturas, guias_anuladas, metricas, validacion, stats, 
                                     audit_log, nombre_base
                                 )
                                 zip_file.writestr(f"{nombre_base}.xlsx", excel_data.getvalue())
                                 
                                 # PDF
                                 pdf_bytes = ReconciliationReportGenerator.generar_pdf_profesional(
-                                    resultado, metricas, validacion, stats, datetime.now()
+                                    resultado, metricas, guias_anuladas, validacion, stats, datetime.now()
                                 )
                                 zip_file.writestr(f"{nombre_base}.pdf", pdf_bytes)
                             
@@ -3738,7 +3916,7 @@ def show_reconciliacion_v8():
     add_back_button(key="back_reconciliacion")
     show_module_header(
         "💰 Reconciliación V8",
-        "Motor avanzado de conciliación con fuzzy matching y analytics"
+        "Motor avanzado de conciliación con validación al centavo"
     )
     
     st.markdown('<div class="module-content">', unsafe_allow_html=True)
@@ -3746,7 +3924,7 @@ def show_reconciliacion_v8():
     st.markdown("""
     <div class='main-header'>
         <h1 class='header-title'>📊 Reconciliación Logística V8</h1>
-        <div class='header-subtitle'>Motor de Auditoría Experto con Fuzzy Matching y Analytics Avanzado</div>
+        <div class='header-subtitle'>Motor de Auditoría Experto con Validación al Centavo</div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -3760,6 +3938,7 @@ def show_reconciliacion_v8():
             'facturas': None,
             'resultado': None,
             'facturas_procesadas': None,
+            'guias_anuladas': None,
             'metricas': None,
             'resumen': None,
             'validacion': None,
@@ -3788,57 +3967,66 @@ def show_reconciliacion_v8():
             key="facturas_v8_mejorado"
         )
     
-    use_sample = st.checkbox("Usar datos de demostración", value=True, key="sample_v8_mejorado")
+    use_sample = st.checkbox("Usar datos de demostración", value=False, key="sample_v8_mejorado")
     
     if use_sample or (f_manifiesto and f_facturas):
         try:
             if use_sample:
-                # Datos de demostración mejorados
+                # Datos de demostración mejorados con 1982 y 1987 guías
                 np.random.seed(42)
-                num_rows = 100
+                num_rows_manifiesto = 1982
+                num_rows_facturas = 1987
                 
                 tiendas = [
-                    'MALL DEL SOL', 'MALL DEL SUR', 'RIOCENTRO NORTE', 
-                    'SAN LUIS', 'QUICENTRO SUR', 'MACHALA', 'MANTA',
-                    'PORTOVIEJO', 'QUEVEDO', 'SANTO DOMINGO', 'AMBATO',
-                    'CUENCA', 'LOJA', 'ESMERALDAS', 'PLAYAS'
+                    'MALL DEL SOL', 'MALL DEL SUR', 'RIOCENTRO NORTE', 'PRICE CLUB GUAYAQUIL',
+                    'SAN LUIS', 'MACHALA', 'MANTA', 'PORTOVIEJO', 'QUEVEDO', 'SANTO DOMINGO',
+                    'AMBATO', 'CUENCA', 'LOJA', 'ESMERALDAS', 'PLAYAS', 'DURAN', 'MILAGRO',
+                    'BABAHOYO', 'PASAJE', 'EL COCA', 'LAGO AGRIO', 'PEDERNALES', 'BAHIA DE CARAQUEZ'
                 ]
                 
-                # Generar manifiesto
+                # Generar manifiesto (1982 guías)
+                guias_manifiesto = [f'GUA-{i:05d}' for i in range(1001, 1001 + num_rows_manifiesto)]
                 df_m = pd.DataFrame({
-                    'GUIA': [f'GUA-{i:05d}' for i in range(1001, 1001 + num_rows)],
-                    'FECHA': [datetime.now() - timedelta(days=np.random.randint(0, 30)) for _ in range(num_rows)],
-                    'DESTINATARIO': np.random.choice(tiendas, num_rows),
-                    'CIUDAD': np.random.choice(['Quito', 'Guayaquil', 'Cuenca', 'Manta'], num_rows),
-                    'VALOR': np.random.uniform(100, 2000, num_rows).round(2),
-                    'PIEZAS': np.random.randint(1, 50, num_rows)
+                    'GUIA': guias_manifiesto,
+                    'FECHA': [datetime.now() - timedelta(days=np.random.randint(0, 30)) for _ in range(num_rows_manifiesto)],
+                    'DESTINATARIO': np.random.choice(tiendas, num_rows_manifiesto),
+                    'CIUDAD': np.random.choice(['Quito', 'Guayaquil', 'Cuenca', 'Manta'], num_rows_manifiesto),
+                    'VALOR': np.random.uniform(100, 2000, num_rows_manifiesto).round(2),
+                    'PIEZAS': np.random.randint(1, 50, num_rows_manifiesto)
                 })
                 
-                # Generar facturas (80% de coincidencia exacta, 20% con variaciones)
-                num_facturas = int(num_rows * 0.9)
-                guias_base = df_m['GUIA'].sample(n=num_facturas, replace=True).tolist()
+                # Generar facturas (1987 guías - 5 más)
+                # 1977 guías coinciden exactamente, 5 son nuevas (anuladas)
+                guias_factura = guias_manifiesto.copy()  # 1982 guías
                 
-                # Introducir variaciones en algunas guías
-                guias_factura = []
-                for guia in guias_base:
-                    if np.random.random() < 0.2:  # 20% de variaciones
-                        # Modificar ligeramente la guía
-                        partes = guia.split('-')
-                        nuevo_num = str(int(partes[1]) + np.random.randint(-5, 5))
-                        guias_factura.append(f"{partes[0]}-{nuevo_num.zfill(5)}")
-                    else:
-                        guias_factura.append(guia)
+                # Agregar 5 guías adicionales (anuladas)
+                guias_adicionales = [f'GUA-{i:05d}' for i in range(3001, 3006)]
+                guias_factura.extend(guias_adicionales)
+                
+                # Mezclar
+                import random
+                random.seed(42)
+                random.shuffle(guias_factura)
                 
                 df_f = pd.DataFrame({
                     'GUIA_FACTURA': guias_factura,
-                    'FECHA_FACTURA': [datetime.now() - timedelta(days=np.random.randint(0, 35)) for _ in range(num_facturas)],
-                    'VALOR_FACTURA': df_m['VALOR'].sample(n=num_facturas, replace=True).values * np.random.uniform(0.95, 1.05, num_facturas),
-                    'DESTINATARIO_FACTURA': df_m['DESTINATARIO'].sample(n=num_facturas, replace=True).tolist()
+                    'FECHA_FACTURA': [datetime.now() - timedelta(days=np.random.randint(0, 35)) for _ in range(num_rows_facturas)],
+                    'VALOR_FACTURA': [0] * num_rows_facturas,
+                    'DESTINATARIO_FACTURA': [np.random.choice(tiendas) for _ in range(num_rows_facturas)]
                 })
+                
+                # Asignar valores a las facturas
+                for i, row in df_f.iterrows():
+                    guia = row['GUIA_FACTURA']
+                    if guia in guias_manifiesto:
+                        idx = guias_manifiesto.index(guia)
+                        df_f.loc[i, 'VALOR_FACTURA'] = df_m.loc[idx, 'VALOR'] * np.random.uniform(0.98, 1.02)
+                    else:
+                        df_f.loc[i, 'VALOR_FACTURA'] = np.random.uniform(100, 2000)
                 
                 st.session_state.reconciliacion_datos['manifesto'] = df_m
                 st.session_state.reconciliacion_datos['facturas'] = df_f
-                st.success("✅ Usando datos de demostración avanzados con fuzzy matching incluido.")
+                st.success("✅ Usando datos de demostración con 1982 guías en manifiesto y 1987 en facturas.")
             else:
                 manifesto = cargar_archivo_v8(f_manifiesto, "Manifiesto")
                 facturas = cargar_archivo_v8(f_facturas, "Facturas")
@@ -3927,33 +4115,26 @@ def show_reconciliacion_v8():
                     
                     st.divider()
                     
-                    # Configuración de fuzzy matching
+                    # Configuración de matching
                     col_f1, col_f2 = st.columns(2)
                     with col_f1:
-                        threshold = st.slider(
-                            "🎯 Umbral de Fuzzy Matching",
-                            min_value=0.5,
+                        tolerance = st.number_input(
+                            "💰 Tolerancia de diferencia ($)",
+                            min_value=0.0,
                             max_value=1.0,
-                            value=0.85,
-                            step=0.05,
-                            help="Porcentaje de similitud mínimo para considerar un match"
+                            value=0.01,
+                            step=0.01,
+                            format="%.2f",
+                            help="Diferencia máxima permitida para considerar que los valores coinciden"
                         )
                     with col_f2:
-                        strategy = st.radio(
-                            "⚡ Estrategia de Matching",
-                            ['Guía + Destinatario', 'Solo Guía', 'Solo Destinatario', 'Múltiple'],
-                            horizontal=True,
-                            help="Campos a utilizar para el matching"
-                        )
+                        st.info("⚡ Modo: Matching exacto por guía con validación de valores")
                 
                 st.markdown("</div>", unsafe_allow_html=True)
                 
                 if st.button("🚀 EJECUTAR RECONCILIACIÓN V8.0", type="primary", use_container_width=True):
-                    with st.spinner("🔄 Ejecutando motor de reconciliación con fuzzy matching..."):
+                    with st.spinner("🔄 Ejecutando motor de reconciliación con validación al centavo..."):
                         try:
-                            # Actualizar threshold del motor
-                            st.session_state.audit_engine.fuzzy_matcher.threshold = threshold
-                            
                             config = {
                                 'guia_m': guia_m,
                                 'destinatario': destinatario_m,
@@ -3975,6 +4156,7 @@ def show_reconciliacion_v8():
                             
                             st.session_state.reconciliacion_datos['resultado'] = resultados['df_final']
                             st.session_state.reconciliacion_datos['facturas_procesadas'] = resultados['facturas_procesadas']
+                            st.session_state.reconciliacion_datos['guias_anuladas'] = resultados.get('guias_anuladas', pd.DataFrame())
                             st.session_state.reconciliacion_datos['metricas'] = resultados['metricas']
                             st.session_state.reconciliacion_datos['resumen'] = resultados.get('resumen', pd.DataFrame())
                             st.session_state.reconciliacion_datos['validacion'] = resultados['validacion']
@@ -3982,7 +4164,7 @@ def show_reconciliacion_v8():
                             st.session_state.reconciliacion_datos['audit_log'] = resultados['audit_log']
                             st.session_state.reconciliacion_datos['procesado'] = True
                             
-                            st.success("✅ Procesamiento completado exitosamente con fuzzy matching")
+                            st.success("✅ Procesamiento completado exitosamente con validación al centavo")
                             
                         except Exception as e:
                             st.error(f"❌ Error en el procesamiento: {str(e)}")
@@ -3995,10 +4177,9 @@ def show_reconciliacion_v8():
         except Exception as e:
             st.error(f"❌ Error general: {str(e)}")
     else:
-        st.info("👆 Suba los archivos necesarios o active la opción de datos de demostración para comenzar.")
+        st.info("👆 Suba los archivos necesarios para comenzar la reconciliación al centavo.")
     
     st.markdown('</div>', unsafe_allow_html=True)
-
 # ==============================================================================
 # 10. MODULO AUDITORIA DE CORREOS
 # ==============================================================================
