@@ -3475,7 +3475,7 @@ def mostrar_resultados_v8():
     ])
     
     with tab1:  # Pestaña de Dashboard/Resumen
-    st.header("📊 Dashboard de Reconciliación")
+        st.header("📊 Dashboard de Reconciliación")
     
     # Usar resumen si existe, sino metricas
     df_resumen = resumen if not resumen.empty else metricas
