@@ -22,6 +22,9 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
 from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_RIGHT
 from reportlab.lib.colors import HexColor
+from openpyxl import Workbook
+from openpyxl.styles import Border, Side, PatternFill, Font, Alignment
+from openpyxl.utils import get_column_letter
 
 # --- CONFIGURACION DE PAGINA ---
 st.set_page_config(
@@ -865,6 +868,19 @@ def initialize_session_state():
         st.session_state.qr_images = {}
     if 'logos' not in st.session_state:
         st.session_state.logos = {}
+    
+    # Para gestion de gastos
+    if 'gastos_datos' not in st.session_state:
+        st.session_state.gastos_datos = {
+            'manifesto': None,
+            'facturas': None,
+            'resultado': None,
+            'metricas': None,
+            'resumen': None,
+            'validacion': None,
+            'guias_anuladas': None,
+            'procesado': False
+        }
 
 def navigate_to_module(module_key):
     """Navega al modulo seleccionado"""
@@ -1244,1770 +1260,8 @@ def show_dashboard_kpis():
     st.markdown('</div>', unsafe_allow_html=True)
 
 # ==============================================================================
-# 7. MODULO DASHBOARD LOGISTICO
+# 7. FUNCIONES PARA EL MODULO DE RECONCILIACION (GESTION DE GASTOS)
 # ==============================================================================
-
-# Constantes para el dashboard logistico
-TIENDAS_REGULARES = 42
-PRICE_CLUBS = 5
-TIENDA_WEB = 1
-VENTAS_POR_MAYOR = 1
-FALLAS = 1
-
-PRICE_KEYWORDS = ['PRICE', 'OIL']
-WEB_KEYWORDS = ['WEB', 'TIENDA MOVIL', 'MOVIL']
-FALLAS_KEYWORDS = ['FALLAS']
-VENTAS_MAYOR_KEYWORDS = ['MAYOR', 'MAYORISTA']
-
-TIENDAS_REGULARES_LISTA = [
-    'AERO CCI', 'AERO DAULE', 'AERO LAGO AGRIO', 'AERO MALL DEL RIO GYE',
-    'AERO PLAYAS', 'AEROPOSTALE 6 DE DICIEMBRE', 'AEROPOSTALE BOMBOLI',
-    'AEROPOSTALE CAYAMBE', 'AEROPOSTALE EL COCA', 'AEROPOSTALE PASAJE',
-    'AEROPOSTALE PEDERNALES', 'AMBATO', 'BABAHOYO', 'BAHIA DE CARAQUEZ',
-    'CARAPUNGO', 'CEIBOS', 'CONDADO SHOPPING', 'CUENCA', 'CUENCA CENTRO HISTORICO',
-    'DURAN', 'LA PLAZA SHOPPING', 'MACHALA', 'MAL DEL SUR', 'MALL DEL PACIFICO',
-    'MALL DEL SOL', 'MANTA', 'MILAGRO', 'MULTIPLAZA RIOBAMBA', 'PASEO AMBATO',
-    'PENINSULA', 'PORTOVIEJO', 'QUEVEDO', 'RIOBAMBA', 'RIOCENTRO EL DORADO',
-    'RIOCENTRO NORTE', 'SAN LUIS', 'SANTO DOMINGO'
-]
-
-COLORS = {
-    'PRICE CLUB': '#0033A0',
-    'TIENDAS AEROPOSTALE': '#E4002B',
-    'VENTAS POR MAYOR': '#10B981',
-    'TIENDA WEB': '#8B5CF6',
-    'FALLAS': '#F59E0B',
-    'FUNDAS': '#EC4899'
-}
-
-GRADIENTS = {
-    'PRICE CLUB': 'linear-gradient(135deg, #0033A015, #0033A030)',
-    'TIENDAS AEROPOSTALE': 'linear-gradient(135deg, #E4002B15, #E4002B30)',
-    'VENTAS POR MAYOR': 'linear-gradient(135deg, #10B98115, #10B98130)',
-    'TIENDA WEB': 'linear-gradient(135deg, #8B5CF615, #8B5CF630)',
-    'FALLAS': 'linear-gradient(135deg, #F59E0B15, #F59E0B30)',
-    'FUNDAS': 'linear-gradient(135deg, #EC489915, #EC489930)'
-}
-
-CHART_COLORS = ['#0033A0', '#E4002B', '#10B981', '#8B5CF6', '#F59E0B', '#3B82F6']
-
-# Diccionarios para clasificación de productos
-GENDER_MAP = {
-    'GIRLS': 'Mujer', 'TOPMUJER': 'Mujer', 'WOMEN': 'Mujer',
-    'LADIES': 'Mujer', 'FEMALE': 'Mujer', 'MUJER': 'Mujer',
-    'GUYS': 'Hombre', 'MEN': 'Hombre', 'MAN': 'Hombre',
-    'HOMBRE': 'Hombre', 'MALE': 'Hombre',
-    'UNISEX': 'Unisex', 'KIDS': 'Niño/a', 'CHILD': 'Niño/a',
-    'BOYS': 'Niño', 'GIRLSKIDS': 'Niña',
-    'BABY': 'Bebé', 'INFANT': 'Bebé'
-}
-
-CATEGORY_MAP = {
-    'TEES': 'Camiseta', 'TEE': 'Camiseta', 'T-SHIRT': 'Camiseta',
-    'TANK': 'Camiseta sin mangas', 'TANK TOP': 'Camiseta sin mangas',
-    'TOP': 'Top', 'TOPS': 'Top', 'BARE': 'Blusa', 'CORE': 'Blusa',
-    'GRAPHIC': 'Camiseta estampada', 'GRAPHICS': 'Camiseta estampada',
-    'POLO': 'Polo', 'POLOS': 'Polo', 'SHIRT': 'Camisa',
-    'BUTTON-DOWN': 'Camisa', 'BUTTONDOWN': 'Camisa',
-    'DRESS': 'Vestido', 'DRESSES': 'Vestido', 'SUNDRESS': 'Vestido',
-    'PANTS': 'Pantalón', 'PANT': 'Pantalón', 'TROUSERS': 'Pantalón',
-    'JEANS': 'Jeans', 'JEAN': 'Jeans', 'DENIM': 'Jeans',
-    'BOOTCUT': 'Pantalón bootcut', 'SKINNY': 'Pantalón ajustado',
-    'STRAIGHT': 'Pantalón recto', 'FLARE': 'Pantalón campana',
-    'SHORTS': 'Short', 'SHORT': 'Short', 'BERMUDA': 'Bermuda',
-    'JACKET': 'Chaqueta', 'JACKETS': 'Chaqueta', 'HOODIE': 'Sudadera',
-    'SWEATSHIRT': 'Sudadera', 'SWEATER': 'Suéter', 'BLAZER': 'Blazer',
-    'BVD': 'Ropa interior', 'BOXER': 'Boxer', 'BOXERS': 'Boxer',
-    'UNDERWEAR': 'Ropa interior', 'BRIEF': 'Calzoncillo',
-    'BELT': 'Cinturón', 'BELTS': 'Cinturón', 'HAT': 'Gorro',
-    'CAP': 'Gorra', 'SOCKS': 'Medias', 'SOCK': 'Medias',
-    'WOVEN': 'Tejido', 'KNIT': 'Tejido', 'KNITTED': 'Tejido',
-    'SOLID': 'Sólido', 'BASIC': 'Básico', 'BASICO': 'Básico',
-    'LEATHER': 'Cuero', 'DENIM': 'Denim',
-    'SUMMER': 'Verano', 'WINTER': 'Invierno', 'SPRING': 'Primavera',
-    'FALL': 'Otoño', 'AUTUMN': 'Otoño'
-}
-
-COLOR_MAP = {
-    'BLACK': 'Negro', 'BLACK/DARK': 'Negro', 'DARK BLACK': 'Negro Oscuro',
-    'WHITE': 'Blanco', 'WHITE/LIGHT': 'Blanco',
-    'RED': 'Rojo', 'RASPBERRY': 'Frambuesa', 'EARTH RED': 'Rojo Tierra',
-    'BLUE': 'Azul', 'NAVY': 'Azul Marino', 'LIGHT BLUE': 'Azul Claro',
-    'GREEN': 'Verde', 'GREEN GABLES': 'Verde Gabardina',
-    'YELLOW': 'Amarillo', 'GOLD': 'Dorado',
-    'PINK': 'Rosa', 'HOT PINK': 'Rosa Fuerte',
-    'PURPLE': 'Morado', 'VIOLET': 'Violeta',
-    'ORANGE': 'Naranja', 'BROWN': 'Marrón',
-    'GRAY': 'Gris', 'GREY': 'Gris', 'SILVER': 'Plateado',
-    'BEIGE': 'Beige', 'KHAKI': 'Caqui',
-    'BLEACH': 'Blanqueado', 'LIGHT WASH': 'Lavado Claro',
-    'DARK': 'Oscuro', 'LIGHT': 'Claro',
-    'MULTI': 'Multicolor', 'MULTICOLOR': 'Multicolor'
-}
-
-SIZE_HIERARCHY = [
-    '3XS', '2XS', 'XS', 'XSMALL', 'S', 'SMALL',
-    'M', 'MEDIUM', 'L', 'LARGE', 'XL', 'XLARGE',
-    '2XL', '3XL', '4XL', 'XXLARGE', 'XXXLARGE'
-]
-
-IGNORE_WORDS = {'AERO', 'OF', 'THE', 'AND', 'IN', 'WITH', 'FOR', 'BY', 'ON', 'AT', 'TO'}
-
-WAREHOUSE_GROUPS = {
-    'PRICE': 'Price Club',
-    'AERO': 'Aeropostale',
-    'MALL': 'Centro Comercial',
-    'RIOCENTRO': 'Riocentro',
-    'CONDADO': 'Condado',
-    'SAN': 'San',
-    'LOS': 'Los'
-}
-
-class TextileClassifier:
-    """Clasificador inteligente para productos textiles"""
-    
-    def __init__(self):
-        self.gender_map = GENDER_MAP
-        self.category_map = CATEGORY_MAP
-        self.color_map = COLOR_MAP
-        self.size_hierarchy = SIZE_HIERARCHY
-        self.ignore_words = IGNORE_WORDS
-        
-    def classify_product(self, product_name: str) -> dict:
-        if not product_name or not isinstance(product_name, str):
-            return self._get_empty_classification()
-        
-        product_name = str(product_name).upper().strip()
-        words = product_name.split()
-        
-        classification = {
-            'Genero': 'Unisex',
-            'Categoria': 'General',
-            'Subcategoria': '',
-            'Color': 'No Especificado',
-            'Talla': 'Única',
-            'Material': '',
-            'Estilo': ''
-        }
-        
-        classification['Genero'] = self._detect_gender(words)
-        category_info = self._detect_category(words)
-        classification['Categoria'] = category_info['categoria']
-        classification['Subcategoria'] = category_info['subcategoria']
-        classification['Color'] = self._detect_color(words)
-        classification['Talla'] = self._detect_size(words)
-        style_info = self._detect_style(words)
-        classification['Material'] = style_info['material']
-        classification['Estilo'] = style_info['estilo']
-        
-        return self._clean_classification(classification)
-    
-    def _detect_gender(self, words):
-        for word in words:
-            if word in self.gender_map:
-                return self.gender_map[word]
-        text = ' '.join(words)
-        if any(x in text for x in ['WOMEN', 'LADIES', 'FEMALE']):
-            return 'Mujer'
-        if any(x in text for x in ['MEN', 'MAN', 'MALE']):
-            return 'Hombre'
-        return 'Unisex'
-    
-    def _detect_category(self, words):
-        categoria = 'General'
-        subcategoria = ''
-        found = []
-        for word in words:
-            if word in self.category_map:
-                found.append(self.category_map[word])
-            elif word not in self.ignore_words and len(word) > 2:
-                subcategoria += word.capitalize() + ' '
-        if found:
-            main = ['Polo', 'Camiseta', 'Jeans', 'Pantalón', 'Vestido', 'Chaqueta']
-            for m in main:
-                if m in found:
-                    categoria = m
-                    break
-            else:
-                categoria = found[0]
-            other = [c for c in found if c != categoria]
-            if other:
-                subcategoria = ' '.join(other) + ' ' + subcategoria.strip()
-        return {'categoria': categoria.strip(), 'subcategoria': subcategoria.strip()}
-    
-    def _detect_color(self, words):
-        for word in words:
-            if word in self.color_map:
-                return self.color_map[word]
-        text = ' '.join(words)
-        for eng, esp in self.color_map.items():
-            if eng in text:
-                return esp
-        return 'No Especificado'
-    
-    def _detect_size(self, words):
-        for size in self.size_hierarchy:
-            if f' {size} ' in f' {" ".join(words)} ':
-                return size
-        return 'Única'
-    
-    def _detect_style(self, words):
-        material = ''
-        estilo = ''
-        materials = ['COTTON', 'POLYESTER', 'DENIM', 'LEATHER', 'WOOL', 'SILK']
-        for w in words:
-            if w in materials:
-                material = w.lower().capitalize()
-                break
-        style_kw = {
-            'GRAPHIC': 'Estampado', 'PRINTED': 'Estampado',
-            'SOLID': 'Liso', 'STRIPED': 'Rayado',
-            'BASIC': 'Básico', 'PREMIUM': 'Premium'
-        }
-        for w in words:
-            if w in style_kw:
-                estilo = style_kw[w]
-                break
-        return {'material': material, 'estilo': estilo}
-    
-    def _clean_classification(self, cls):
-        size_map = {'XSMALL': 'XS', 'SMALL': 'S', 'MEDIUM': 'M',
-                    'LARGE': 'L', 'XLARGE': 'XL', 'XXLARGE': '2XL'}
-        if cls['Talla'] in size_map:
-            cls['Talla'] = size_map[cls['Talla']]
-        for k, v in cls.items():
-            if isinstance(v, str):
-                cls[k] = v.strip()
-        return cls
-    
-    def _get_empty_classification(self):
-        return {
-            'Genero': 'No Identificado',
-            'Categoria': 'No Identificado',
-            'Subcategoria': '',
-            'Color': 'No Especificado',
-            'Talla': 'No Especificado',
-            'Material': '',
-            'Estilo': ''
-        }
-
-class DataProcessor:
-    """Procesador de archivos de transferencias - Versión mejorada con mapeo flexible de columnas"""
-    
-    def __init__(self):
-        self.classifier = TextileClassifier()
-    
-    def process_excel_file(self, file) -> pd.DataFrame:
-        try:
-            if file.name.endswith('.csv'):
-                df = pd.read_csv(file, encoding='utf-8')
-            else:
-                df = pd.read_excel(file, engine='openpyxl')
-            
-            df.columns = [str(c).strip() for c in df.columns]
-            
-            required_std = ['Producto', 'Fecha', 'Cantidad', 'Bodega Recibe']
-            dest_aliases = ['Bodega Destino', 'Sucursal Destino', 'Destino', 'Bodega', 'Sucursal']
-            
-            col_mapping = {}
-            missing = []
-            
-            for req in required_std:
-                found = False
-                for col in df.columns:
-                    if col.lower() == req.lower():
-                        col_mapping[col] = req
-                        found = True
-                        break
-                if not found:
-                    for col in df.columns:
-                        if req.lower() in col.lower():
-                            col_mapping[col] = req
-                            found = True
-                            break
-                if not found and req == 'Bodega Recibe':
-                    for alias in dest_aliases:
-                        for col in df.columns:
-                            if alias.lower() in col.lower():
-                                col_mapping[col] = req
-                                found = True
-                                break
-                        if found:
-                            break
-                if not found:
-                    missing.append(req)
-            
-            if missing:
-                st.error(f"❌ No se encontraron las siguientes columnas en el archivo: {', '.join(missing)}")
-                st.info("Columnas detectadas: " + ", ".join(df.columns))
-                return pd.DataFrame()
-            
-            df.rename(columns=col_mapping, inplace=True)
-            df['Cantidad'] = self._process_quantity(df['Cantidad'])
-            df['Fecha'] = pd.to_datetime(df['Fecha'], errors='coerce', dayfirst=True, infer_datetime_format=True)
-            if df['Fecha'].isna().all():
-                df['Fecha'] = pd.to_datetime(df['Fecha'], errors='coerce', format='%d/%m/%Y')
-            df = df.dropna(subset=['Fecha'])
-            if df.empty:
-                st.warning("No se pudo interpretar la columna 'Fecha'. Verifique el formato (use dd/mm/aaaa).")
-                return pd.DataFrame()
-            
-            df = self._classify_products(df)
-            df['Grupo_Bodega'] = df['Bodega Recibe'].apply(self._group_warehouse)
-            
-            sec_col = None
-            posibles_sec = ['Secuencial - Factura', 'Secuencial', 'Factura', 'ID Transferencia', 'Transferencia']
-            for col in df.columns:
-                if any(ps.lower() in col.lower() for ps in posibles_sec):
-                    sec_col = col
-                    break
-            if sec_col:
-                df['ID_Transferencia'] = df[sec_col].astype(str) + '_' + df['Fecha'].dt.strftime('%Y%m%d')
-            else:
-                df['ID_Transferencia'] = df.index.astype(str) + '_' + df['Fecha'].dt.strftime('%Y%m%d')
-            
-            df = df.sort_values('Fecha', ascending=False).reset_index(drop=True)
-            st.success(f"✅ Archivo procesado: {len(df)} registros")
-            return df
-        except Exception as e:
-            st.error(f"Error al procesar el archivo: {e}")
-            return pd.DataFrame()
-    
-    def _process_quantity(self, s):
-        quantities = []
-        for val in s:
-            if pd.isna(val):
-                quantities.append(0)
-            elif isinstance(val, (int, float)):
-                if float(val).is_integer():
-                    quantities.append(int(val))
-                else:
-                    quantities.append(float(val))
-            elif isinstance(val, str):
-                val = val.strip().replace(',', '')
-                try:
-                    f = float(val)
-                    if f.is_integer():
-                        quantities.append(int(f))
-                    else:
-                        quantities.append(f)
-                except:
-                    quantities.append(0)
-            else:
-                quantities.append(0)
-        return pd.Series(quantities)
-    
-    def _classify_products(self, df):
-        classifications = []
-        for prod in df['Producto']:
-            classifications.append(self.classifier.classify_product(prod))
-        class_df = pd.DataFrame(classifications)
-        
-        # --- NUEVO: Crear Producto_Base eliminando talla y "REGULAR" del nombre original ---
-        import re
-        # Construir patrón con todas las tallas de SIZE_HIERARCHY
-        size_pattern = '|'.join(SIZE_HIERARCHY)  # ej. '3XS|2XS|XS|XSMALL|S|SMALL|...'
-        # Eliminar la talla y la palabra "REGULAR" (opcional) al final
-        # El patrón busca un espacio, luego la talla o "REGULAR", luego opcionalmente más espacios, y fin de cadena
-        pattern = r'\s+(' + size_pattern + r'|REGULAR)\s*$'
-        df['Producto_Base'] = df['Producto'].str.upper().str.replace(pattern, '', regex=True).str.strip()
-        # Si después de limpiar queda vacío, asignar "No especificado"
-        df['Producto_Base'] = df['Producto_Base'].replace('', 'No especificado')
-        # --------------------------------------------------------------------------------
-        
-        cols_to_drop = [col for col in class_df.columns if col in df.columns]
-        if cols_to_drop:
-            df = df.drop(columns=cols_to_drop)
-        return pd.concat([df, class_df], axis=1)
-    
-    def _group_warehouse(self, name):
-        if not isinstance(name, str):
-            return 'Otros'
-        up = name.upper()
-        for key, group in WAREHOUSE_GROUPS.items():
-            if key in up:
-                return group
-        if 'PRICE' in up:
-            return 'Price Club'
-        if 'AERO' in up:
-            return 'Aeropostale'
-        if any(x in up for x in ['MALL', 'CENTRO', 'SHOPPING']):
-            return 'Centro Comercial'
-        if any(x in up for x in ['TIENDA', 'STORE', 'LOCAL']):
-            return 'Tienda Física'
-        if any(x in up for x in ['WEB', 'ONLINE', 'MOVIL']):
-            return 'Tienda Online'
-        return 'Otros'
-
-class ReportGenerator:
-    def __init__(self):
-        pass
-    
-    def generate_detailed_report(self, df: pd.DataFrame, fecha_inicio=None, fecha_fin=None) -> io.BytesIO:
-        if df.empty:
-            return None
-        
-        if fecha_inicio and fecha_fin and 'Fecha' in df.columns:
-            mask = (df['Fecha'].dt.date >= fecha_inicio) & (df['Fecha'].dt.date <= fecha_fin)
-            df = df[mask].copy()
-        
-        output = io.BytesIO()
-        with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            summary = []
-            total_units = int(df['Cantidad'].sum())
-            total_transfers = df['ID_Transferencia'].nunique() if 'ID_Transferencia' in df.columns else len(df)
-            bodegas = df['Bodega Recibe'].nunique()
-            productos = df['Producto'].nunique()
-            summary.append(['KPIs PRINCIPALES', ''])
-            summary.append(['Total Unidades', f'{total_units:,}'])
-            summary.append(['Transferencias', f'{total_transfers:,}'])
-            summary.append(['Bodegas Destino', f'{bodegas:,}'])
-            summary.append(['Productos Únicos', f'{productos:,}'])
-            summary.append(['', ''])
-            
-            top_bodegas = df.groupby('Bodega Recibe')['Cantidad'].sum().nlargest(5)
-            summary.append(['TOP 5 BODEGAS', 'Unidades'])
-            for b, c in top_bodegas.items():
-                summary.append([b, f'{int(c):,}'])
-            summary.append(['', ''])
-            
-            if 'Categoria' in df.columns:
-                top_cat = df.groupby('Categoria')['Cantidad'].sum().nlargest(5)
-                summary.append(['TOP 5 CATEGORÍAS', 'Unidades'])
-                for cat, cant in top_cat.items():
-                    summary.append([cat, f'{int(cant):,}'])
-            
-            pd.DataFrame(summary, columns=['Métrica', 'Valor']).to_excel(writer, sheet_name='Resumen', index=False)
-            df.to_excel(writer, sheet_name='Detalle', index=False)
-            
-            if 'Bodega Recibe' in df.columns:
-                w_sum = df.groupby('Bodega Recibe').agg({'Cantidad': ['sum', 'count'], 'Producto': 'nunique'})
-                w_sum.columns = ['Unidades', 'Transferencias', 'Productos']
-                w_sum.sort_values('Unidades', ascending=False).to_excel(writer, sheet_name='Por_Bodega')
-            
-            if 'Categoria' in df.columns:
-                cat_sum = df.groupby(['Categoria', 'Genero']).agg({'Cantidad': ['sum', 'count'], 'Producto': 'nunique'})
-                cat_sum.columns = ['Unidades', 'Transferencias', 'Productos']
-                cat_sum.sort_values('Unidades', ascending=False).to_excel(writer, sheet_name='Por_Categoria')
-            
-            if 'Fecha' in df.columns:
-                df['Fecha_Dia'] = df['Fecha'].dt.date
-                daily = df.groupby('Fecha_Dia').agg({'Cantidad': 'sum', 'ID_Transferencia': 'nunique'}).reset_index()
-                daily.columns = ['Fecha', 'Unidades', 'Transferencias']
-                daily.sort_values('Fecha').to_excel(writer, sheet_name='Tendencias', index=False)
-            
-            # --- NUEVAS HOJAS: Productos_Base y Producto_Talla ---
-            if 'Producto_Base' in df.columns:
-                # Resumen por producto base
-                prod_base = df.groupby('Producto_Base').agg({
-                    'Cantidad': 'sum',
-                    'ID_Transferencia': 'nunique',
-                    'Producto': 'nunique'
-                }).reset_index().rename(columns={
-                    'ID_Transferencia': 'Transferencias',
-                    'Producto': 'Variantes'
-                }).sort_values('Cantidad', ascending=False)
-                prod_base.to_excel(writer, sheet_name='Productos_Base', index=False)
-                
-                # Tabla pivotante producto vs talla (solo tallas no nulas)
-                if 'Talla' in df.columns:
-                    pivot = df.pivot_table(
-                        values='Cantidad',
-                        index='Producto_Base',
-                        columns='Talla',
-                        aggfunc='sum',
-                        fill_value=0,
-                        margins=True,
-                        margins_name='Total'
-                    )
-                    pivot.to_excel(writer, sheet_name='Producto_Talla')
-        
-        output.seek(0)
-        return output
-
-# Funciones originales del módulo (clasificación de transferencias)
-def clasificar_transferencia(row):
-    sucursal = str(row.get('Sucursal Destino', row.get('Bodega Destino', ''))).upper()
-    cantidad = row.get('Cantidad_Entera', 0)
-    if cantidad >= 500 and cantidad % 100 == 0:
-        return 'Fundas'
-    if any(kw in sucursal for kw in PRICE_KEYWORDS): return 'Price Club'
-    if any(kw in sucursal for kw in WEB_KEYWORDS): return 'Tienda Web'
-    if any(kw in sucursal for kw in FALLAS_KEYWORDS): return 'Fallas'
-    if any(kw in sucursal for kw in VENTAS_MAYOR_KEYWORDS): return 'Ventas por Mayor'
-    if any(tienda.upper() in sucursal for tienda in TIENDAS_REGULARES_LISTA): return 'Tiendas'
-    tiendas_kw = ['AERO', 'MALL', 'CENTRO', 'SHOPPING', 'PLAZA', 'RIOCENTRO']
-    if any(kw in sucursal for kw in tiendas_kw): return 'Tiendas'
-    return 'Ventas por Mayor'
-
-def procesar_transferencias_diarias(df):
-    df = df.dropna(subset=['Secuencial'])
-    df['Secuencial'] = df['Secuencial'].astype(str).str.strip()
-    df = df[df['Secuencial'] != '']
-    df['Cantidad_Entera'] = df['Cantidad Prendas'].apply(extraer_entero)
-    df['Categoria'] = df.apply(clasificar_transferencia, axis=1)
-    res = {
-        'fecha': datetime.now(),
-        'transferencias': int(df['Secuencial'].nunique()),
-        'total_unidades': int(df['Cantidad_Entera'].sum()),
-        'por_categoria': {},
-        'detalle_categoria': {},
-        'conteo_sucursales': {},
-        'df_procesado': df
-    }
-    categorias = ['Price Club', 'Tiendas', 'Ventas por Mayor', 'Tienda Web', 'Fallas', 'Fundas']
-    for cat in categorias:
-        df_cat = df[df['Categoria'] == cat]
-        res['por_categoria'][cat] = df_cat['Cantidad_Entera'].sum()
-        if not df_cat.empty:
-            res['detalle_categoria'][cat] = {
-                'cantidad': int(df_cat['Cantidad_Entera'].sum()),
-                'transf': int(df_cat['Secuencial'].nunique()),
-                'unicas': int(df_cat['Sucursal Destino'].nunique())
-            }
-            res['conteo_sucursales'][cat] = res['detalle_categoria'][cat]['unicas']
-        else:
-            res['detalle_categoria'][cat] = {'cantidad': 0, 'transf': 0, 'unicas': 0}
-            res['conteo_sucursales'][cat] = 0
-    return res
-
-def mostrar_kpi_diario():
-    """Dashboard de KPI Diario con clasificación inteligente - SIN HISTORIAL PERSISTENTE"""
-    
-    if 'kdi_current_data' not in st.session_state:
-        st.session_state.kdi_current_data = pd.DataFrame()
-        st.session_state.kdi_loaded = False
-    
-    processor = DataProcessor()
-    report_gen = ReportGenerator()
-    
-    st.markdown("### 📂 Cargar archivo de transferencias diarias")
-    col_up1, col_up2 = st.columns([3, 1])
-    with col_up1:
-        uploaded = st.file_uploader(
-            "Seleccionar archivo Excel",
-            type=['xlsx', 'xls', 'csv'],
-            key="kdi_upload",
-            label_visibility="collapsed"
-        )
-    with col_up2:
-        if st.button("🔄 Limpiar datos", key="kdi_clear"):
-            st.session_state.kdi_current_data = pd.DataFrame()
-            st.session_state.kdi_loaded = False
-            st.rerun()
-    
-    if uploaded:
-        with st.spinner("Procesando archivo..."):
-            new_data = processor.process_excel_file(uploaded)
-            if not new_data.empty:
-                st.session_state.kdi_current_data = new_data
-                st.session_state.kdi_loaded = True
-                st.success("Datos cargados exitosamente")
-            else:
-                st.warning("El archivo no pudo ser procesado. Revise el formato.")
-    
-    if not st.session_state.kdi_loaded or st.session_state.kdi_current_data.empty:
-        st.info("👆 Sube un archivo para comenzar el análisis.")
-        with st.expander("📋 Estructura esperada del archivo"):
-            st.markdown("""
-            **Columnas requeridas (se detectan automáticamente aunque tengan nombres similares):**
-            - `Producto`: nombre del producto
-            - `Fecha`: fecha de la transferencia (ej. 15/01/2024)
-            - `Cantidad`: número de unidades
-            - `Bodega Recibe` (o `Bodega Destino`, `Sucursal Destino`, etc.): destino de la mercadería
-            
-            **Columna opcional:**
-            - `Secuencial - Factura` (o similar): identificador único de la transferencia
-            """)
-        return
-    
-    st.markdown("### 🔍 Filtros")
-    data = st.session_state.kdi_current_data
-    filtered = data.copy()
-    
-    col_f1, col_f2, col_f3, col_f4 = st.columns(4)
-    with col_f1:
-        if 'Fecha' in filtered.columns and not filtered.empty:
-            min_d = filtered['Fecha'].min().date()
-            max_d = filtered['Fecha'].max().date()
-            dr = st.date_input("Rango de fechas", [min_d, max_d], key="kdi_fecha")
-            if len(dr) == 2:
-                mask = (filtered['Fecha'].dt.date >= dr[0]) & (filtered['Fecha'].dt.date <= dr[1])
-                filtered = filtered[mask].copy()
-    with col_f2:
-        if 'Bodega Recibe' in filtered.columns:
-            opts = ['Todas'] + sorted(filtered['Bodega Recibe'].dropna().unique())
-            sel = st.selectbox("Bodega", opts, key="kdi_bod")
-            if sel != 'Todas':
-                filtered = filtered[filtered['Bodega Recibe'] == sel]
-    with col_f3:
-        if 'Genero' in filtered.columns:
-            opts = ['Todos'] + sorted(filtered['Genero'].dropna().unique())
-            sel = st.selectbox("Género", opts, key="kdi_gen")
-            if sel != 'Todos':
-                filtered = filtered[filtered['Genero'] == sel]
-    with col_f4:
-        if 'Categoria' in filtered.columns:
-            opts = ['Todas'] + sorted(filtered['Categoria'].dropna().unique())
-            sel = st.selectbox("Categoría", opts, key="kdi_cat")
-            if sel != 'Todas':
-                filtered = filtered[filtered['Categoria'] == sel]
-    
-    st.markdown("---")
-    
-    if filtered.empty:
-        st.warning("No hay datos con los filtros actuales.")
-        return
-    
-    total_units = int(filtered['Cantidad'].sum()) if 'Cantidad' in filtered.columns else 0
-    n_bodegas = filtered['Bodega Recibe'].nunique() if 'Bodega Recibe' in filtered.columns else 0
-    n_transfers = filtered['ID_Transferencia'].nunique() if 'ID_Transferencia' in filtered.columns else len(filtered)
-    n_products = filtered['Producto'].nunique() if 'Producto' in filtered.columns else 0
-    
-    k1, k2, k3, k4 = st.columns(4)
-    with k1:
-        st.markdown(f"""
-        <div style='background: linear-gradient(135deg, #667eea15, #764ba230); padding: 20px; border-radius: 10px; border-left: 5px solid #667eea;'>
-            <div style='font-size: 24px; margin-bottom: 8px;'>📦</div>
-            <div style='font-size: 14px; color: #666; margin-bottom: 5px;'>Unidades Totales</div>
-            <div style='font-size: 28px; font-weight: bold; color: #333;'>{total_units:,}</div>
-        </div>
-        """, unsafe_allow_html=True)
-    with k2:
-        st.markdown(f"""
-        <div style='background: linear-gradient(135deg, #11998e15, #38ef7d30); padding: 20px; border-radius: 10px; border-left: 5px solid #11998e;'>
-            <div style='font-size: 24px; margin-bottom: 8px;'>🏪</div>
-            <div style='font-size: 14px; color: #666; margin-bottom: 5px;'>Bodegas Destino</div>
-            <div style='font-size: 28px; font-weight: bold; color: #333;'>{n_bodegas}</div>
-        </div>
-        """, unsafe_allow_html=True)
-    with k3:
-        st.markdown(f"""
-        <div style='background: linear-gradient(135deg, #fc466b15, #3f5efb30); padding: 20px; border-radius: 10px; border-left: 5px solid #fc466b;'>
-            <div style='font-size: 24px; margin-bottom: 8px;'>📋</div>
-            <div style='font-size: 14px; color: #666; margin-bottom: 5px;'>Transferencias</div>
-            <div style='font-size: 28px; font-weight: bold; color: #333;'>{n_transfers}</div>
-        </div>
-        """, unsafe_allow_html=True)
-    with k4:
-        st.markdown(f"""
-        <div style='background: linear-gradient(135deg, #f093fb15, #f5576c30); padding: 20px; border-radius: 10px; border-left: 5px solid #f093fb;'>
-            <div style='font-size: 24px; margin-bottom: 8px;'>👕</div>
-            <div style='font-size: 14px; color: #666; margin-bottom: 5px;'>Productos Únicos</div>
-            <div style='font-size: 28px; font-weight: bold; color: #333;'>{n_products}</div>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    st.markdown("---")
-    st.markdown("### 📊 Análisis por Dimensiones")
-    
-    # --- MODIFICADO: Ahora son 5 pestañas (se añade "📦 Productos") ---
-    dim_tab1, dim_tab2, dim_tab3, dim_tab4, dim_tab5 = st.tabs([
-        "🎨 Color", "📏 Talla", "⚧ Género", "🏷️ Categoría/Departamento", "📦 Productos"
-    ])
-    
-    with dim_tab1:
-        if 'Color' in filtered.columns:
-            col_stats = filtered.groupby('Color').agg({'Cantidad': ['sum', 'count']}).reset_index()
-            col_stats.columns = ['Color', 'Unidades', 'Frecuencia']
-            col_stats['Porcentaje'] = (col_stats['Unidades'] / total_units * 100).round(2)
-            col_stats = col_stats.sort_values('Unidades', ascending=False)
-            col1, col2 = st.columns([2, 1])
-            with col1:
-                fig = px.pie(col_stats, values='Unidades', names='Color', 
-                           title="Distribución por Color",
-                           color_discrete_sequence=px.colors.qualitative.Set3)
-                fig.update_traces(textposition='inside', textinfo='percent+label')
-                st.plotly_chart(fig, use_container_width=True)
-            with col2:
-                st.dataframe(col_stats[['Color', 'Unidades', 'Porcentaje']].style.format({
-                    'Unidades': '{:,}',
-                    'Porcentaje': '{:.2f}%'
-                }), use_container_width=True, height=400)
-        else:
-            st.info("No hay datos de color disponibles")
-    
-    with dim_tab2:
-        if 'Talla' in filtered.columns:
-            talla_stats = filtered.groupby('Talla').agg({'Cantidad': ['sum', 'count']}).reset_index()
-            talla_stats.columns = ['Talla', 'Unidades', 'Frecuencia']
-            talla_stats['Porcentaje'] = (talla_stats['Unidades'] / total_units * 100).round(2)
-            # Usar jerarquía de tallas definida en SIZE_HIERARCHY para ordenar
-            size_order = ['XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', 'Única']
-            talla_stats['Talla_Order'] = talla_stats['Talla'].apply(
-                lambda x: size_order.index(x) if x in size_order else 999
-            )
-            talla_stats = talla_stats.sort_values('Talla_Order')
-            col1, col2 = st.columns([2, 1])
-            with col1:
-                fig = px.bar(talla_stats, x='Talla', y='Unidades', 
-                           title="Distribución por Talla",
-                           color='Unidades',
-                           color_continuous_scale='Viridis')
-                st.plotly_chart(fig, use_container_width=True)
-            with col2:
-                st.dataframe(talla_stats[['Talla', 'Unidades', 'Porcentaje']].style.format({
-                    'Unidades': '{:,}',
-                    'Porcentaje': '{:.2f}%'
-                }), use_container_width=True, height=400)
-        else:
-            st.info("No hay datos de talla disponibles")
-    
-    with dim_tab3:
-        if 'Genero' in filtered.columns:
-            gen_stats = filtered.groupby('Genero').agg({'Cantidad': ['sum', 'count']}).reset_index()
-            gen_stats.columns = ['Genero', 'Unidades', 'Frecuencia']
-            gen_stats['Porcentaje'] = (gen_stats['Unidades'] / total_units * 100).round(2)
-            gen_stats = gen_stats.sort_values('Unidades', ascending=False)
-            col1, col2 = st.columns([2, 1])
-            with col1:
-                fig = px.pie(gen_stats, values='Unidades', names='Genero', 
-                           title="Distribución por Género",
-                           color_discrete_sequence=['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4'])
-                fig.update_traces(textposition='inside', textinfo='percent+label')
-                st.plotly_chart(fig, use_container_width=True)
-            with col2:
-                st.dataframe(gen_stats[['Genero', 'Unidades', 'Porcentaje']].style.format({
-                    'Unidades': '{:,}',
-                    'Porcentaje': '{:.2f}%'
-                }), use_container_width=True, height=400)
-        else:
-            st.info("No hay datos de género disponibles")
-    
-    with dim_tab4:
-        if 'Categoria' in filtered.columns:
-            cat_stats = filtered.groupby('Categoria').agg({'Cantidad': ['sum', 'count']}).reset_index()
-            cat_stats.columns = ['Categoria', 'Unidades', 'Frecuencia']
-            cat_stats['Porcentaje'] = (cat_stats['Unidades'] / total_units * 100).round(2)
-            cat_stats = cat_stats.sort_values('Unidades', ascending=False)
-            col1, col2 = st.columns([2, 1])
-            with col1:
-                fig = px.bar(cat_stats, x='Categoria', y='Unidades', 
-                           title="Distribución por Categoría",
-                           color='Unidades',
-                           color_continuous_scale='Plasma')
-                st.plotly_chart(fig, use_container_width=True)
-            with col2:
-                st.dataframe(cat_stats[['Categoria', 'Unidades', 'Porcentaje']].style.format({
-                    'Unidades': '{:,}',
-                    'Porcentaje': '{:.2f}%'
-                }), use_container_width=True, height=400)
-        else:
-            st.info("No hay datos de categoría disponibles")
-    
-    # --- NUEVA PESTAÑA: Productos ---
-    with dim_tab5:
-        st.markdown("### 📊 Análisis por Producto")
-        
-        if 'Producto_Base' in filtered.columns:
-            # Top productos base
-            top_productos = filtered.groupby('Producto_Base').agg({
-                'Cantidad': 'sum',
-                'ID_Transferencia': 'nunique',
-                'Producto': 'nunique'
-            }).reset_index().rename(columns={
-                'ID_Transferencia': 'Transferencias',
-                'Producto': 'Variantes'
-            }).sort_values('Cantidad', ascending=False)
-            
-            top_productos['Porcentaje'] = (top_productos['Cantidad'] / total_units * 100).round(2)
-            
-            col_p1, col_p2 = st.columns([2, 1])
-            with col_p1:
-                # Gráfico top 10
-                top10 = top_productos.head(10)
-                fig = px.bar(top10, x='Cantidad', y='Producto_Base', orientation='h',
-                             title='Top 10 Productos Base por Unidades',
-                             color='Cantidad', color_continuous_scale='Blues')
-                fig.update_layout(yaxis={'categoryorder':'total ascending'})
-                st.plotly_chart(fig, use_container_width=True)
-            
-            with col_p2:
-                st.dataframe(top_productos.head(10)[['Producto_Base', 'Cantidad', 'Porcentaje']],
-                             use_container_width=True, height=350)
-            
-            # Selector para ver detalle de tallas de un producto
-            st.markdown("#### 🔍 Detalle de tallas por producto")
-            producto_seleccionado = st.selectbox(
-                "Selecciona un producto base para ver distribución por talla",
-                options=[''] + list(top_productos['Producto_Base'].unique())
-            )
-            
-            if producto_seleccionado:
-                df_prod = filtered[filtered['Producto_Base'] == producto_seleccionado]
-                talla_stats = df_prod.groupby('Talla')['Cantidad'].sum().reset_index()
-                # Ordenar tallas según jerarquía
-                talla_order = ['XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', 'Única']
-                talla_stats['Talla_Order'] = talla_stats['Talla'].apply(
-                    lambda x: talla_order.index(x) if x in talla_order else 999
-                )
-                talla_stats = talla_stats.sort_values('Talla_Order')
-                
-                col_t1, col_t2 = st.columns([2, 1])
-                with col_t1:
-                    fig2 = px.bar(talla_stats, x='Talla', y='Cantidad',
-                                  title=f'Distribución por talla - {producto_seleccionado}',
-                                  color='Cantidad', color_continuous_scale='Oranges')
-                    st.plotly_chart(fig2, use_container_width=True)
-                with col_t2:
-                    st.dataframe(talla_stats[['Talla', 'Cantidad']], use_container_width=True)
-            
-            # Tabla pivotante general Producto vs Talla
-            st.markdown("#### 📋 Tabla de Producto vs Talla")
-            # Para no saturar, mostramos solo productos con al menos una unidad
-            productos_con_datos = top_productos[top_productos['Cantidad'] > 0]['Producto_Base'].tolist()
-            if productos_con_datos:
-                pivot_data = filtered[filtered['Producto_Base'].isin(productos_con_datos)]
-                pivot = pivot_data.pivot_table(
-                    values='Cantidad',
-                    index='Producto_Base',
-                    columns='Talla',
-                    aggfunc='sum',
-                    fill_value=0,
-                    margins=True,
-                    margins_name='Total'
-                )
-                # Ordenar por total descendente
-                pivot = pivot.sort_values('Total', ascending=False)
-                st.dataframe(pivot, use_container_width=True, height=500)
-            else:
-                st.info("No hay datos para mostrar la tabla pivotante.")
-        else:
-            st.info("No se pudo generar la columna Producto_Base. Verificar clasificación.")
-    
-    st.markdown("---")
-    col_g1, col_g2 = st.columns(2)
-    with col_g1:
-        st.subheader("📊 Top 10 Bodegas")
-        if 'Bodega Recibe' in filtered.columns:
-            top_bod = filtered.groupby('Bodega Recibe')['Cantidad'].sum().nlargest(10)
-            if not top_bod.empty:
-                fig = px.bar(
-                    x=top_bod.values, y=top_bod.index,
-                    orientation='h', color=top_bod.values,
-                    color_continuous_scale='Viridis',
-                    labels={'x': 'Unidades', 'y': ''}
-                )
-                fig.update_layout(height=350)
-                st.plotly_chart(fig, use_container_width=True)
-    with col_g2:
-        st.subheader("📈 Tendencia Diaria")
-        if 'Fecha' in filtered.columns:
-            daily = filtered.groupby(filtered['Fecha'].dt.date)['Cantidad'].sum().reset_index()
-            daily.columns = ['Fecha', 'Unidades']
-            fig = px.line(daily, x='Fecha', y='Unidades', markers=True)
-            st.plotly_chart(fig, use_container_width=True)
-    
-    st.markdown("---")
-    st.subheader("📋 Detalle de Transferencias")
-    cols_display = ['Fecha', 'Bodega Recibe', 'Producto', 'Genero', 'Categoria', 'Color', 'Talla', 'Cantidad']
-    cols_display = [c for c in cols_display if c in filtered.columns]
-    st.dataframe(filtered[cols_display].sort_values('Fecha', ascending=False), use_container_width=True, height=300)
-    
-    st.markdown("---")
-    st.subheader("📄 Generar Reporte")
-    col_r1, col_r2, col_r3 = st.columns([1, 1, 2])
-    with col_r1:
-        r_start = st.date_input("Fecha inicio", filtered['Fecha'].min().date(), key="r_start")
-    with col_r2:
-        r_end = st.date_input("Fecha fin", filtered['Fecha'].max().date(), key="r_end")
-    with col_r3:
-        if st.button("📥 Descargar reporte Excel", use_container_width=True):
-            with st.spinner("Generando reporte..."):
-                excel = report_gen.generate_detailed_report(filtered, r_start, r_end)
-                if excel:
-                    ts = datetime.now().strftime('%Y%m%d_%H%M%S')
-                    st.download_button(
-                        label="⬇️ Descargar",
-                        data=excel,
-                        file_name=f"KPI_Diario_{ts}.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                        use_container_width=True
-                    )
-
-def mostrar_dashboard_transferencias():
-    st.markdown("""
-    <div class='main-header'>
-        <h1 class='header-title'>📊 Dashboard de Transferencias Diarias</h1>
-        <div class='header-subtitle'>Analisis de distribucion por categorias y sucursales</div>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    tab1, tab2, tab3 = st.tabs(["📊 Transferencias Diarias", "📦 Mercadería en Tránsito (KPI Diario)", "📈 Análisis de Stock"])
-    
-    with tab1:
-        st.markdown("""
-        <div class='filter-panel'>
-            <h4>📂 Carga de Archivo de Transferencias</h4>
-            <p class='section-description'>Sube el archivo Excel de transferencias diarias (ej: 322026.xlsx)</p>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        with st.container():
-            col_u1, col_u2 = st.columns([3, 1])
-            with col_u1:
-                file_diario = st.file_uploader(
-                    "Selecciona el archivo Excel",
-                    type=['xlsx'],
-                    key="diario_transferencias",
-                    label_visibility="collapsed"
-                )
-            with col_u2:
-                if st.button("🔄 Limpiar", use_container_width=True):
-                    st.rerun()
-        
-        if not file_diario:
-            st.info("👆 **Por favor, sube un archivo Excel desde el panel superior para comenzar el analisis.**")
-            st.markdown("### 📋 Estructura del archivo esperado:")
-            ejemplo_data = pd.DataFrame({
-                'Secuencial': ['TR001', 'TR002', 'TR003', 'TR004'],
-                'Sucursal Destino': ['PRICE CLUB QUITO', 'AERO MALL DEL SOL', 'VENTAS POR MAYOR', 'TIENDA WEB'],
-                'Cantidad Prendas': [1500, 245, 5000, 120],
-                'Bodega Destino': ['BODEGA CENTRAL', 'BODEGA NORTE', 'BODEGA CENTRAL', 'BODEGA WEB']
-            })
-            st.dataframe(ejemplo_data, use_container_width=True)
-            st.markdown("""
-            ### 📝 Columnas requeridas:
-            1. **Secuencial**: Numero unico de transferencia
-            2. **Sucursal Destino** o **Bodega Destino**: Nombre de la tienda destino
-            3. **Cantidad Prendas**: Cantidad de unidades a transferir
-            
-            ### 🎯 Categorias automaticas:
-            - **Price Club**: Contiene "PRICE" o "OIL" en el nombre
-            - **Tienda Web**: Contiene "WEB", "TIENDA MOVIL" o "MOVIL"
-            - **Fallas**: Contiene "FALLAS"
-            - **Ventas por Mayor**: Contiene "MAYOR" o "MAYORISTA"
-            - **Fundas**: Cantidad ≥ 500 y multiplo de 100
-            - **Tiendas**: Todas las demas transferencias
-            """)
-        else:
-            try:
-                df_diario = pd.read_excel(file_diario)
-                st.success(f"✅ Archivo cargado exitosamente: {file_diario.name}")
-                with st.expander("🔍 Vista previa del archivo cargado", expanded=True):
-                    st.dataframe(df_diario.head(10), use_container_width=True)
-                    st.info(f"📊 **Total de filas:** {len(df_diario)} | **Total de columnas:** {len(df_diario.columns)}")
-                    st.write("**Columnas detectadas:**")
-                    for col in df_diario.columns:
-                        st.write(f"- `{col}`")
-                
-                columnas_requeridas = ['Secuencial', 'Cantidad Prendas']
-                columnas_destino = ['Sucursal Destino', 'Bodega Destino']
-                faltan_requeridas = [col for col in columnas_requeridas if col not in df_diario.columns]
-                if faltan_requeridas:
-                    st.error(f"❌ **Columnas faltantes:** {faltan_requeridas}")
-                else:
-                    tiene_destino = any(col in df_diario.columns for col in columnas_destino)
-                    if not tiene_destino:
-                        st.error("❌ **No se encontro columna de destino.**")
-                    else:
-                        res = procesar_transferencias_diarias(df_diario)
-                        st.header("📈 KPIs por Categoria")
-                        categorias_display = {
-                            'Price Club': 'PRICE CLUB',
-                            'Tiendas': 'TIENDAS AEROPOSTALE',
-                            'Ventas por Mayor': 'VENTAS POR MAYOR',
-                            'Tienda Web': 'TIENDA WEB',
-                            'Fallas': 'FALLAS',
-                            'Fundas': 'FUNDAS'
-                        }
-                        sucursales_esperadas = {
-                            'Price Club': PRICE_CLUBS,
-                            'Tiendas': TIENDAS_REGULARES,
-                            'Ventas por Mayor': VENTAS_POR_MAYOR,
-                            'Tienda Web': TIENDA_WEB,
-                            'Fallas': FALLAS,
-                            'Fundas': None
-                        }
-                        
-                        color_keys = {
-                            'Price Club': 'PRICE CLUB',
-                            'Tiendas': 'TIENDAS AEROPOSTALE',
-                            'Ventas por Mayor': 'VENTAS POR MAYOR',
-                            'Tienda Web': 'TIENDA WEB',
-                            'Fallas': 'FALLAS',
-                            'Fundas': 'FUNDAS'
-                        }
-                        
-                        cols = st.columns(3)
-                        for i, (cat, cat_display) in enumerate(categorias_display.items()):
-                            cantidad = res['por_categoria'].get(cat, 0)
-                            sucursales_activas = res['conteo_sucursales'].get(cat, 0)
-                            esperadas = sucursales_esperadas.get(cat)
-                            color_key = color_keys.get(cat)
-                            bg_gradient = GRADIENTS.get(color_key, 'linear-gradient(135deg, #f0f0f015, #e0e0e030)')
-                            border_color = COLORS.get(color_key, '#cccccc')
-                            
-                            with cols[i % 3]:
-                                if cat == 'Fundas':
-                                    st.markdown(f"""
-                                    <div style='background: {bg_gradient}; padding: 20px; border-radius: 10px; border-left: 5px solid {border_color}; margin-bottom: 15px;'>
-                                        <div style='font-size: 12px; color: #666; text-transform: uppercase; margin-bottom: 5px;'>{cat_display}</div>
-                                        <div style='font-size: 32px; font-weight: bold; color: {border_color}; margin-bottom: 5px;'>{cantidad:,}</div>
-                                        <div style='font-size: 11px; color: #888;'>Multiplos de 100 ≥ 500 unidades</div>
-                                    </div>
-                                    """, unsafe_allow_html=True)
-                                else:
-                                    st.markdown(f"""
-                                    <div style='background: {bg_gradient}; padding: 20px; border-radius: 10px; border-left: 5px solid {border_color}; margin-bottom: 15px;'>
-                                        <div style='font-size: 12px; color: #666; text-transform: uppercase; margin-bottom: 5px;'>{cat_display}</div>
-                                        <div style='font-size: 32px; font-weight: bold; color: {border_color}; margin-bottom: 5px;'>{cantidad:,}</div>
-                                        <div style='font-size: 11px; color: #888;'>{sucursales_activas} sucursales | {esperadas} esperadas</div>
-                                    </div>
-                                    """, unsafe_allow_html=True)
-                            if i == 2:
-                                cols = st.columns(3)
-                        st.divider()
-                        
-                        st.header("📊 Analisis Visual")
-                        col1, col2 = st.columns([2, 1])
-                        with col1:
-                            categorias_pie = list(res['por_categoria'].keys())
-                            valores_pie = list(res['por_categoria'].values())
-                            df_pie = pd.DataFrame({'Categoria': categorias_pie, 'Unidades': valores_pie})
-                            df_pie = df_pie[df_pie['Unidades'] > 0]
-                            if not df_pie.empty:
-                                color_map_pie = {
-                                    'Price Club': COLORS['PRICE CLUB'],
-                                    'Tiendas': COLORS['TIENDAS AEROPOSTALE'],
-                                    'Ventas por Mayor': COLORS['VENTAS POR MAYOR'],
-                                    'Tienda Web': COLORS['TIENDA WEB'],
-                                    'Fallas': COLORS['FALLAS'],
-                                    'Fundas': COLORS['FUNDAS']
-                                }
-                                fig_pie = px.pie(
-                                    df_pie,
-                                    values='Unidades',
-                                    names='Categoria',
-                                    title="Distribucion por Categoria",
-                                    color='Categoria',
-                                    color_discrete_map=color_map_pie,
-                                    hole=0.3
-                                )
-                                fig_pie.update_traces(textposition='inside', textinfo='percent+label')
-                                fig_pie.update_layout(height=500, showlegend=True)
-                                st.plotly_chart(fig_pie, use_container_width=True)
-                            else:
-                                st.info("No hay datos para mostrar el grafico de pastel")
-                        with col2:
-                            st.subheader("TOTAL GENERAL")
-                            st.markdown(f"""
-                            <div style='background: linear-gradient(135deg, #667eea20, #764ba240); padding: 20px; border-radius: 10px; text-align: center; margin-bottom: 15px;'>
-                                <div style='font-size: 14px; color: #555; margin-bottom: 10px;'>Suma de todas las unidades</div>
-                                <div style='font-size: 36px; font-weight: bold; color: #333;'>{res['total_unidades']:,}</div>
-                            </div>
-                            """, unsafe_allow_html=True)
-                            promedio = res['total_unidades'] / res['transferencias'] if res['transferencias'] > 0 else 0
-                            st.markdown(f"""
-                            <div style='background: #f8f9fa; padding: 15px; border-radius: 8px; text-align: center; margin-bottom: 15px;'>
-                                <div style='font-size: 12px; color: #666; margin-bottom: 5px;'>PROMEDIO X TRANSFERENCIA</div>
-                                <div style='font-size: 24px; font-weight: bold; color: #333;'>{promedio:,.0f}</div>
-                            </div>
-                            """, unsafe_allow_html=True)
-                            categorias_activas = sum(1 for cat in res['por_categoria'].values() if cat > 0)
-                            st.markdown(f"""
-                            <div style='background: #f8f9fa; padding: 15px; border-radius: 8px; text-align: center; margin-bottom: 15px;'>
-                                <div style='font-size: 12px; color: #666; margin-bottom: 5px;'>CATEGORIAS ACTIVAS</div>
-                                <div style='font-size: 24px; font-weight: bold; color: #333;'>{categorias_activas}/6</div>
-                            </div>
-                            """, unsafe_allow_html=True)
-                            porcentaje_fundas = (res['por_categoria'].get('Fundas', 0) / res['total_unidades']) * 100 if res['total_unidades'] > 0 else 0
-                            st.markdown(f"""
-                            <div style='background: #f8f9fa; padding: 15px; border-radius: 8px; text-align: center;'>
-                                <div style='font-size: 12px; color: #666; margin-bottom: 5px;'>% FUNDAS</div>
-                                <div style='font-size: 24px; font-weight: bold; color: {COLORS['FUNDAS']};'>{porcentaje_fundas:.1f}%</div>
-                            </div>
-                            """, unsafe_allow_html=True)
-                        st.divider()
-                        
-                        st.header("📊 Distribucion Excluyendo Fundas")
-                        categorias_excl = ['Price Club', 'Tiendas', 'Ventas por Mayor', 'Tienda Web', 'Fallas']
-                        valores_excl = [res['por_categoria'].get(cat, 0) for cat in categorias_excl]
-                        total_excl = sum(valores_excl)
-                        if total_excl > 0:
-                            df_barras = pd.DataFrame({
-                                'Categoria': ['Tienda Web', 'Price Club', 'Ventas por Mayor', 'Tiendas', 'Fallas'],
-                                'Unidades': [res['por_categoria'].get('Tienda Web', 0),
-                                             res['por_categoria'].get('Price Club', 0),
-                                             res['por_categoria'].get('Ventas por Mayor', 0),
-                                             res['por_categoria'].get('Tiendas', 0),
-                                             res['por_categoria'].get('Fallas', 0)]
-                            })
-                            df_barras['Porcentaje'] = (df_barras['Unidades'] / total_excl) * 100
-                            
-                            color_map_bar = {
-                                'Tienda Web': COLORS['TIENDA WEB'],
-                                'Price Club': COLORS['PRICE CLUB'],
-                                'Ventas por Mayor': COLORS['VENTAS POR MAYOR'],
-                                'Tiendas': COLORS['TIENDAS AEROPOSTALE'],
-                                'Fallas': COLORS['FALLAS']
-                            }
-                            
-                            fig_barras = go.Figure(data=[
-                                go.Bar(
-                                    x=df_barras['Categoria'],
-                                    y=df_barras['Porcentaje'],
-                                    text=[f"{p:.1f}%" for p in df_barras['Porcentaje']],
-                                    textposition='auto',
-                                    marker_color=[color_map_bar.get(cat, '#cccccc') for cat in df_barras['Categoria']]
-                                )
-                            ])
-                            fig_barras.update_layout(title="Distribucion por Categoria (excl. Fundas)", yaxis_title="Porcentaje (%)", xaxis_title="Categoria", template="plotly_white", height=400)
-                            st.plotly_chart(fig_barras, use_container_width=True)
-                            st.dataframe(df_barras[['Categoria', 'Unidades', 'Porcentaje']].sort_values('Porcentaje', ascending=False), use_container_width=True)
-                        else:
-                            st.info("No hay datos para mostrar la distribucion (excluyendo Fundas)")
-                        st.divider()
-                        
-                        st.header("📄 Detalle por Secuencial")
-                        df_detalle = res['df_procesado'][['Sucursal Destino', 'Secuencial', 'Cantidad_Entera', 'Categoria']].copy()
-                        with st.expander("📋 Resumen Estadistico", expanded=True):
-                            st.dataframe(
-                                pd.DataFrame.from_dict(res['detalle_categoria'], orient='index')
-                                .reset_index()
-                                .rename(columns={'index': 'Categoria', 'cantidad': 'Unidades', 'transf': 'Transferencias', 'unicas': 'Sucursales Unicas'}),
-                                use_container_width=True
-                            )
-                        col_d1, col_d2 = st.columns([1, 4])
-                        with col_d1:
-                            excel_data = to_excel(df_detalle)
-                            st.download_button(
-                                label="📥 Descargar Excel",
-                                data=excel_data,
-                                file_name=f"detalle_transferencias_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
-                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                                use_container_width=True
-                            )
-                        st.dataframe(
-                            df_detalle.rename(columns={'Sucursal Destino': 'Sucursal', 'Cantidad_Entera': 'Cantidad', 'Categoria': 'Categoria'}),
-                            use_container_width=True, height=400
-                        )
-            except Exception as e:
-                st.error(f"❌ **Error al procesar el archivo:** {str(e)}")
-    
-    with tab2:
-        mostrar_kpi_diario()
-    
-    with tab3:
-        st.header("📈 Analisis de Stock y Ventas")
-        with st.container():
-            st.subheader("📂 Carga de Datos para Analisis")
-            col_stock1, col_stock2 = st.columns(2)
-            with col_stock1:
-                stock_file = st.file_uploader("Archivo de Stock Actual", type=['xlsx', 'csv'], key="stock_file")
-            with col_stock2:
-                ventas_file = st.file_uploader("Archivo Historico de Ventas", type=['xlsx', 'csv'], key="ventas_file")
-            
-            if stock_file and ventas_file:
-                try:
-                    df_stock = pd.read_excel(stock_file) if stock_file.name.endswith('.xlsx') else pd.read_csv(stock_file)
-                    df_ventas = pd.read_excel(ventas_file) if ventas_file.name.endswith('.xlsx') else pd.read_csv(ventas_file)
-                    
-                    st.subheader("📊 Metricas Rapidas")
-                    col_metrics1, col_metrics2, col_metrics3, col_metrics4 = st.columns(4)
-                    with col_metrics1:
-                        st.markdown(f"""
-                        <div class='metric-card'>
-                            <div class='metric-title'>Total SKUs</div>
-                            <div class='metric-value'>{len(df_stock):,}</div>
-                        </div>
-                        """, unsafe_allow_html=True)
-                    with col_metrics2:
-                        if 'Stock' in df_stock.columns:
-                            total_stock = df_stock['Stock'].sum()
-                            st.markdown(f"""
-                            <div class='metric-card'>
-                                <div class='metric-title'>Total Unidades</div>
-                                <div class='metric-value'>{total_stock:,}</div>
-                            </div>
-                            """, unsafe_allow_html=True)
-                        else:
-                            st.info("Columna 'Stock' no encontrada")
-                    with col_metrics3:
-                        if 'VENTAS' in df_ventas.columns:
-                            total_ventas = df_ventas['VENTAS'].sum()
-                            st.markdown(f"""
-                            <div class='metric-card'>
-                                <div class='metric-title'>Ventas Totales</div>
-                                <div class='metric-value'>{total_ventas:,}</div>
-                            </div>
-                            """, unsafe_allow_html=True)
-                        else:
-                            st.info("Columna 'VENTAS' no encontrada")
-                    with col_metrics4:
-                        if 'FECHA' in df_ventas.columns:
-                            df_ventas['FECHA'] = pd.to_datetime(df_ventas['FECHA'], errors='coerce')
-                            dias_analizados = df_ventas['FECHA'].nunique()
-                            st.markdown(f"""
-                            <div class='metric-card'>
-                                <div class='metric-title'>Dias Analizados</div>
-                                <div class='metric-value'>{dias_analizados}</div>
-                            </div>
-                            """, unsafe_allow_html=True)
-                        else:
-                            st.info("Columna 'FECHA' no encontrada")
-                    
-                    st.subheader("📊 Analisis ABC de Stock")
-                    if 'Stock' in df_stock.columns and 'CODIGO' in df_stock.columns:
-                        df_stock_sorted = df_stock.sort_values('Stock', ascending=False)
-                        df_stock_sorted['Stock_Acumulado'] = df_stock_sorted['Stock'].cumsum()
-                        total_stock_val = df_stock_sorted['Stock'].sum()
-                        df_stock_sorted['Porcentaje_Acumulado'] = (df_stock_sorted['Stock_Acumulado'] / total_stock_val) * 100
-                        df_stock_sorted['Clasificacion_ABC'] = pd.cut(
-                            df_stock_sorted['Porcentaje_Acumulado'],
-                            bins=[0, 80, 95, 100],
-                            labels=['A', 'B', 'C']
-                        )
-                        resumen_abc = df_stock_sorted.groupby('Clasificacion_ABC').agg({
-                            'CODIGO': 'count',
-                            'Stock': 'sum'
-                        }).rename(columns={'CODIGO': 'SKUs', 'Stock': 'Unidades'})
-                        fig_abc = px.pie(
-                            resumen_abc.reset_index(),
-                            values='Unidades',
-                            names='Clasificacion_ABC',
-                            title="Distribucion ABC del Stock",
-                            color_discrete_sequence=['#0033A0', '#E4002B', '#10B981'],
-                            hole=0.4
-                        )
-                        col_abc1, col_abc2 = st.columns([2, 1])
-                        with col_abc1:
-                            st.plotly_chart(fig_abc, use_container_width=True)
-                        with col_abc2:
-                            st.dataframe(resumen_abc, use_container_width=True)
-                    else:
-                        st.warning("Para el analisis ABC se requieren las columnas 'CODIGO' y 'Stock'")
-                    
-                    st.subheader("🔄 Analisis de Rotacion")
-                    if 'VENTAS' in df_ventas.columns and 'CODIGO' in df_ventas.columns:
-                        ventas_por_producto = df_ventas.groupby('CODIGO')['VENTAS'].sum().reset_index()
-                        if 'CODIGO' in df_stock.columns and 'Stock' in df_stock.columns:
-                            df_rotacion = pd.merge(
-                                df_stock[['CODIGO', 'Stock']],
-                                ventas_por_producto,
-                                on='CODIGO',
-                                how='left'
-                            )
-                            df_rotacion['VENTAS'] = df_rotacion['VENTAS'].fillna(0)
-                            df_rotacion['Rotacion'] = df_rotacion.apply(
-                                lambda x: x['VENTAS'] / x['Stock'] if x['Stock'] > 0 else 0,
-                                axis=1
-                            )
-                            df_rotacion['Nivel_Rotacion'] = pd.cut(
-                                df_rotacion['Rotacion'],
-                                bins=[-1, 0.1, 0.5, 1, 10, float('inf')],
-                                labels=['Muy Baja', 'Baja', 'Media', 'Alta', 'Muy Alta']
-                            )
-                            resumen_rotacion = df_rotacion.groupby('Nivel_Rotacion').agg({
-                                'CODIGO': 'count',
-                                'Stock': 'sum',
-                                'VENTAS': 'sum'
-                            }).rename(columns={'CODIGO': 'SKUs', 'Stock': 'Stock_Total', 'VENTAS': 'Ventas_Total'})
-                            st.dataframe(resumen_rotacion, use_container_width=True)
-                            fig_rotacion = go.Figure(data=[
-                                go.Bar(
-                                    x=resumen_rotacion.index,
-                                    y=resumen_rotacion['SKUs'],
-                                    text=resumen_rotacion['SKUs'],
-                                    textposition='auto',
-                                    marker_color='#FFA07A'
-                                )
-                            ])
-                            fig_rotacion.update_layout(title="SKUs por Nivel de Rotacion", xaxis_title="Nivel de Rotacion", yaxis_title="Cantidad de SKUs", template="plotly_white", height=400)
-                            st.plotly_chart(fig_rotacion, use_container_width=True)
-                    else:
-                        st.info("Para el analisis de rotacion se requieren las columnas 'CODIGO' y 'VENTAS'")
-                    
-                    st.subheader("🔮 Prediccion con Random Forest")
-                    st.info("Funcionalidad en Desarrollo...")
-                    
-                    with st.expander("📋 Ver Datos Cargados"):
-                        col_raw1, col_raw2 = st.columns(2)
-                        with col_raw1:
-                            st.write("**Datos de Stock:**")
-                            st.dataframe(df_stock.head(20), use_container_width=True)
-                        with col_raw2:
-                            st.write("**Datos de Ventas:**")
-                            st.dataframe(df_ventas.head(20), use_container_width=True)
-                except Exception as e:
-                    st.error(f"Error al procesar los archivos: {str(e)}")
-            else:
-                st.info("👈 Por favor, carga ambos archivos para realizar el analisis de stock y ventas.")
-                with st.expander("ℹ️ Informacion sobre los archivos requeridos"):
-                    st.markdown("""
-                    **Archivo de Stock Actual debe contener:**
-                    - CODIGO: Codigo del producto
-                    - PRODUCTO: Descripcion del producto
-                    - Stock: Cantidad disponible
-                    - DEPARTAMENTO: Categoria del producto
-                    
-                    **Archivo Historico de Ventas debe contener:**
-                    - CODIGO: Codigo del producto
-                    - FECHA: Fecha de la venta
-                    - VENTAS: Cantidad vendida
-                    - SUCURSAL: Sucursal donde se realizo la venta
-                    """)
-
-def show_dashboard_logistico():
-    """Dashboard de logistica y transferencias - MEJORADO"""
-    add_back_button(key="back_logistico")
-    show_module_header(
-        "📦 Dashboard Logistico",
-        "Control de transferencias y distribucion en tiempo real"
-    )
-    st.markdown('<div class="module-content">', unsafe_allow_html=True)
-    mostrar_dashboard_transferencias()
-    st.markdown('</div>', unsafe_allow_html=True)
-
-# ==============================================================================
-# 8. MODULO GESTION DE EQUIPO
-# ==============================================================================
-
-def show_gestion_equipo():
-    """Gestion de personal"""
-    add_back_button(key="back_equipo")
-    show_module_header(
-        "👥 Gestion de Equipo",
-        "Administracion del personal del Centro de Distribucion"
-    )
-    
-    st.markdown('<div class="module-content">', unsafe_allow_html=True)
-    
-    st.markdown("""
-    <div class='main-header'>
-        <h1 class='header-title'>👥 Gestion de Personal</h1>
-        <div class='header-subtitle'>Administracion del equipo de trabajo por areas</div>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    tab1, tab2, tab3, tab4 = st.tabs(["📋 Estructura Organizacional", "➕ Gestionar Personal", "📊 Estadisticas", "⚙️ Configuracion"])
-    
-    estructura_base = {
-        "Liderazgo y Control": [
-            {"id": 1, "nombre": "Wilson Perez", "cargo": "Jefe de Logistica", "subarea": "Cabeza del C.D.", "estado": "Activo", "es_base": True},
-            {"id": 2, "nombre": "Andres Cadena", "cargo": "Jefe de Inventarios", "subarea": "Control de Inventarios", "estado": "Activo", "es_base": True}
-        ],
-        "Gestion de Transferencias": [
-            {"id": 3, "nombre": "Cesar Yepez", "cargo": "Responsable", "subarea": "Transferencias Fashion", "estado": "Activo", "es_base": True},
-            {"id": 4, "nombre": "Luis Perugachi", "cargo": "Encargado", "subarea": "Pivote de transferencias Price y Distribucion", "estado": "Activo", "es_base": True},
-            {"id": 5, "nombre": "Josue Imbacuan", "cargo": "Responsable", "subarea": "Transferencias Tempo", "estado": "Activo", "es_base": True}
-        ],
-        "Distribucion, Empaque y Envios": [
-            {"id": 6, "nombre": "Jessica Suarez", "cargo": "Distribucion Aero", "subarea": "", "estado": "Activo", "es_base": True},
-            {"id": 7, "nombre": "Norma Paredes", "cargo": "Distribucion Price", "subarea": "", "estado": "Activo", "es_base": True},
-            {"id": 8, "nombre": "Jhonny Villa", "cargo": "Empaque y Guias", "subarea": "", "estado": "Activo", "es_base": True},
-            {"id": 9, "nombre": "Simon Vera", "cargo": "Guias y Envios", "subarea": "", "estado": "Activo", "es_base": True}
-        ],
-        "Ventas al Por Mayor": [
-            {"id": 10, "nombre": "Jhonny Guadalupe", "cargo": "Encargado", "subarea": "Bodega y Packing", "estado": "Activo", "es_base": True},
-            {"id": 11, "nombre": "Rocio Cadena", "cargo": "Responsable", "subarea": "Picking y Distribucion", "estado": "Activo", "es_base": True}
-        ],
-        "Reproceso y Calidad": [
-            {"id": 12, "nombre": "Diana Garcia", "cargo": "Encargada", "subarea": "Reprocesado de prendas en cuarentena", "estado": "Activo", "es_base": True}
-        ]
-    }
-    
-    try:
-        trabajadores = local_db.query('trabajadores')
-        if not trabajadores:
-            st.info("📝 Inicializando estructura organizacional base...")
-            todos_base = []
-            for area, lista in estructura_base.items():
-                for trabajador in lista:
-                    trabajador['area'] = area
-                    trabajador['fecha_ingreso'] = datetime.now().strftime('%Y-%m-%d')
-                    todos_base.append(trabajador)
-            for trab in todos_base:
-                local_db.insert('trabajadores', trab)
-            st.success("✅ Estructura base inicializada correctamente")
-            trabajadores = local_db.query('trabajadores')
-    except Exception as e:
-        st.error(f"Error al cargar trabajadores: {str(e)}")
-        trabajadores = []
-    
-    with tab1:
-        st.markdown("""
-        <div class='filter-panel'>
-            <h4>🏢 Estructura Organizacional del Centro de Distribucion</h4>
-            <p class='section-description'>Responsables por area (estructura base)</p>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        for area, personal in estructura_base.items():
-            with st.expander(f"📌 {area} ({len(personal)} personas)", expanded=True):
-                cols = st.columns(3)
-                for idx, trab in enumerate(personal):
-                    col_idx = idx % 3
-                    with cols[col_idx]:
-                        st.markdown(f"""
-                        <div style='background: white; border-radius: 10px; padding: 15px; margin-bottom: 10px; border-left: 4px solid #0033A0; box-shadow: 0 2px 4px rgba(0,0,0,0.1);'>
-                            <div style='font-weight: bold; font-size: 16px; color: #1e3a8a; margin-bottom: 5px;'>{trab['nombre']}</div>
-                            <div style='font-size: 14px; color: #374151; margin-bottom: 3px;'>{trab['cargo']}</div>
-                            <div style='font-size: 12px; color: #6b7280; font-style: italic; margin-bottom: 5px;'>{trab['subarea'] if trab['subarea'] else ''}</div>
-                            <div style='background-color: #10B981; color: white; padding: 2px 8px; border-radius: 12px; font-size: 12px; display: inline-block;'>Activo</div>
-                        </div>
-                        """, unsafe_allow_html=True)
-        
-        st.markdown("---")
-        col_res1, col_res2, col_res3 = st.columns(3)
-        with col_res1:
-            total_personal = sum(len(p) for p in estructura_base.values())
-            st.metric("👥 Total Personal Base", total_personal)
-        with col_res2:
-            st.metric("🏭 Areas Definidas", len(estructura_base))
-        with col_res3:
-            cargos_unicos = len(set([t['cargo'] for area in estructura_base.values() for t in area]))
-            st.metric("🎯 Cargos Unicos", cargos_unicos)
-    
-    with tab2:
-        st.markdown("""
-        <div class='filter-panel'>
-            <h4>📝 Gestion de Personal por Area</h4>
-            <p class='section-description'>Agregar o eliminar trabajadores en cada area</p>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        try:
-            trabajadores_db = local_db.query('trabajadores')
-            if trabajadores_db is None:
-                trabajadores_db = []
-        except:
-            trabajadores_db = trabajadores
-        
-        area_tabs = st.tabs(list(estructura_base.keys()))
-        
-        for idx, (area, trabajadores_area_base) in enumerate(estructura_base.items()):
-            with area_tabs[idx]:
-                col1, col2 = st.columns([2, 1])
-                
-                with col1:
-                    st.subheader(f"Personal en {area}")
-                    trabajadores_area_actual = [t for t in trabajadores_db if t.get('area') == area]
-                    
-                    if trabajadores_area_actual:
-                        data = []
-                        for trab in trabajadores_area_actual:
-                            data.append({
-                                'ID': trab.get('id', ''),
-                                'Nombre': trab.get('nombre', ''),
-                                'Cargo': trab.get('cargo', ''),
-                                'Subarea': trab.get('subarea', ''),
-                                'Estado': trab.get('estado', ''),
-                                'Tipo': 'Base' if trab.get('es_base', False) else 'Adicional'
-                            })
-                        
-                        df_area = pd.DataFrame(data)
-                        for i, row in df_area.iterrows():
-                            col_d1, col_d2, col_d3, col_d4, col_d5, col_d6 = st.columns([1, 3, 2, 2, 1, 1])
-                            with col_d1:
-                                st.write(f"**{row['ID']}**")
-                            with col_d2:
-                                st.write(row['Nombre'])
-                            with col_d3:
-                                st.write(row['Cargo'])
-                            with col_d4:
-                                st.write(row['Subarea'] if row['Subarea'] else "-")
-                            with col_d5:
-                                tipo_color = "🟢" if row['Tipo'] == 'Base' else "🔵"
-                                st.write(f"{tipo_color} {row['Tipo']}")
-                            with col_d6:
-                                if row['Tipo'] != 'Base':
-                                    trabajador_id = row['ID']
-                                    if st.button("🗑️", key=f"eliminar_{area}_{trabajador_id}"):
-                                        try:
-                                            local_db.delete('trabajadores', int(trabajador_id))
-                                            st.success(f"✅ Trabajador {row['Nombre']} eliminado de {area}")
-                                            st.rerun()
-                                        except Exception as e:
-                                            st.error(f"❌ Error al eliminar: {str(e)}")
-                                else:
-                                    st.write("🔒")
-                    else:
-                        st.info(f"No hay personal registrado en {area}")
-                
-                with col2:
-                    st.subheader("Agregar Personal")
-                    with st.form(key=f"form_{area}"):
-                        nombre_nuevo = st.text_input("Nombre Completo", key=f"nombre_{area}")
-                        cargo_nuevo = st.text_input("Cargo", key=f"cargo_{area}")
-                        subarea_nuevo = st.text_input("Area especifica/Subarea", key=f"subarea_{area}")
-                        estado_nuevo = st.selectbox("Estado", ["Activo", "Inactivo"], key=f"estado_{area}")
-                        
-                        submit = st.form_submit_button(f"➕ Agregar a {area}")
-                        
-                        if submit:
-                            if nombre_nuevo and cargo_nuevo:
-                                try:
-                                    if trabajadores_db:
-                                        max_id = max([t.get('id', 0) for t in trabajadores_db])
-                                    else:
-                                        max_id = 12
-                                    nuevo_id = max_id + 1
-                                    nuevo_trabajador = {
-                                        'id': nuevo_id,
-                                        'nombre': nombre_nuevo,
-                                        'cargo': cargo_nuevo,
-                                        'area': area,
-                                        'subarea': subarea_nuevo,
-                                        'estado': estado_nuevo,
-                                        'es_base': False,
-                                        'fecha_ingreso': datetime.now().strftime('%Y-%m-%d')
-                                    }
-                                    local_db.insert('trabajadores', nuevo_trabajador)
-                                    st.success(f"✅ {nombre_nuevo} agregado a {area}")
-                                    st.rerun()
-                                except Exception as e:
-                                    st.error(f"❌ Error al agregar trabajador: {str(e)}")
-                            else:
-                                st.error("❌ Nombre y Cargo son obligatorios")
-    
-    with tab3:
-        st.markdown("""
-        <div class='filter-panel'>
-            <h4>📊 Estadisticas del Personal</h4>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        try:
-            trabajadores_db = local_db.query('trabajadores')
-            if trabajadores_db is None:
-                trabajadores_db = trabajadores
-        except:
-            trabajadores_db = trabajadores
-        
-        if trabajadores_db:
-            df_todos = pd.DataFrame(trabajadores_db)
-            
-            col_m1, col_m2, col_m3, col_m4 = st.columns(4)
-            with col_m1:
-                total = len(df_todos)
-                st.metric("👥 Total Personal", total)
-            with col_m2:
-                if 'estado' in df_todos.columns:
-                    activos = len(df_todos[df_todos['estado'] == 'Activo'])
-                else:
-                    activos = total
-                st.metric("🟢 Activos", activos, delta=f"{activos/total*100:.1f}%" if total > 0 else "0%")
-            with col_m3:
-                if 'es_base' in df_todos.columns:
-                    base = len(df_todos[df_todos['es_base'] == True])
-                else:
-                    base = len(estructura_base) * 2
-                st.metric("🏛️ Personal Base", base)
-            with col_m4:
-                if 'es_base' in df_todos.columns:
-                    adicional = len(df_todos[df_todos['es_base'] == False])
-                else:
-                    adicional = max(0, total - base)
-                st.metric("➕ Adicionales", adicional)
-            
-            if total > 0:
-                col_g1, col_g2 = st.columns(2)
-                with col_g1:
-                    if 'area' in df_todos.columns:
-                        dist_area = df_todos['area'].value_counts()
-                        fig1 = px.bar(
-                            x=dist_area.index, 
-                            y=dist_area.values,
-                            title="Distribucion por Area",
-                            labels={'x': 'Area', 'y': 'Cantidad'},
-                            color=dist_area.values,
-                            color_continuous_scale='blues'
-                        )
-                        fig1.update_layout(showlegend=False)
-                        st.plotly_chart(fig1, use_container_width=True)
-                with col_g2:
-                    if 'estado' in df_todos.columns:
-                        estado_counts = df_todos['estado'].value_counts()
-                        fig2 = px.pie(
-                            values=estado_counts.values, 
-                            names=estado_counts.index,
-                            title="Estado del Personal",
-                            color_discrete_sequence=['#10B981', '#EF4444']
-                        )
-                        st.plotly_chart(fig2, use_container_width=True)
-            
-            st.subheader("📋 Resumen por Area")
-            resumen_data = []
-            for area in estructura_base.keys():
-                if 'area' in df_todos.columns:
-                    area_data = df_todos[df_todos['area'] == area]
-                    activos_area = len(area_data[area_data['estado'] == 'Activo']) if 'estado' in df_todos.columns else len(area_data)
-                    base_area = len(area_data[area_data.get('es_base', False) == True]) if 'es_base' in df_todos.columns else 0
-                    resumen_data.append({
-                        'Area': area,
-                        'Total': len(area_data),
-                        'Activos': activos_area,
-                        'Base': base_area,
-                        'Adicional': len(area_data) - base_area
-                    })
-            
-            if resumen_data:
-                df_resumen = pd.DataFrame(resumen_data)
-                st.dataframe(df_resumen, use_container_width=True)
-            else:
-                st.info("No hay datos de areas para mostrar")
-        else:
-            st.info("No hay datos para mostrar estadisticas.")
-    
-    with tab4:
-        st.markdown("""
-        <div class='filter-panel'>
-            <h4>⚙️ Configuracion del Sistema</h4>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        col_c1, col_c2 = st.columns(2)
-        
-        with col_c1:
-            st.subheader("Restaurar Estructura Base")
-            st.warning("⚠️ Esta accion eliminara todo el personal adicional y restaurara la estructura original")
-            
-            if st.button("🔄 Restaurar Estructura Base", type="secondary"):
-                try:
-                    trabajadores_actuales = local_db.query('trabajadores')
-                    if trabajadores_actuales:
-                        for trab in trabajadores_actuales:
-                            if not trab.get('es_base', False):
-                                local_db.delete('trabajadores', trab['id'])
-                    st.success("✅ Estructura base restaurada exitosamente")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"❌ Error al restaurar: {str(e)}")
-        
-        with col_c2:
-            st.subheader("Exportar Datos")
-            try:
-                trabajadores_db = local_db.query('trabajadores')
-                if trabajadores_db:
-                    df_export = pd.DataFrame(trabajadores_db)
-                    export_cols = ['nombre', 'cargo', 'area', 'subarea', 'estado', 'fecha_ingreso']
-                    available_cols = [col for col in export_cols if col in df_export.columns]
-                    df_export = df_export[available_cols]
-                    csv = df_export.to_csv(index=False)
-                    st.download_button(
-                        label="📥 Descargar como CSV",
-                        data=csv,
-                        file_name="personal_cd.csv",
-                        mime="text/csv",
-                        help="Descargar todos los datos del personal"
-                    )
-                else:
-                    st.info("No hay datos para exportar")
-            except Exception as e:
-                st.error(f"❌ Error al exportar datos: {str(e)}")
-    
-    st.markdown('</div>', unsafe_allow_html=True)
-
-import streamlit as st
-import pandas as pd
-import numpy as np
-import re
-from datetime import datetime
-import plotly.express as px
-import plotly.graph_objects as go
-from io import BytesIO
-import warnings
-import unicodedata
-from difflib import SequenceMatcher
-from reportlab.lib import colors
-from reportlab.lib.pagesizes import letter, landscape
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.units import inch
-from reportlab.pdfgen import canvas
-from reportlab.lib.utils import ImageReader
-import tempfile
-import base64
-import os
-from openpyxl import Workbook
-from openpyxl.styles import Border, Side, PatternFill, Font, Alignment, NamedStyle
-from openpyxl.utils import get_column_letter
-from openpyxl.formatting.rule import CellIsRule
-
-warnings.filterwarnings('ignore')
-
-# Configurar página
-st.set_page_config(
-    page_title="Gestión de Gastos por Tienda - Mejorado",
-    page_icon="💰",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
-
-# Título
-st.title("💰 Sistema de Gestión de Gastos por Tienda - MEJORADO")
-st.markdown("**Soporte completo para Excel (.xlsx, .xls) y CSV**")
-st.markdown("**✨ Nuevo: Guías anuladas y formato exacto**")
-st.markdown("---")
-
-# Inicializar estado
-if 'datos' not in st.session_state:
-    st.session_state.datos = {
-        'manifesto': None,
-        'facturas': None,
-        'resultado': None,
-        'metricas': None,
-        'resumen': None,
-        'validacion': None,
-        'guias_anuladas': None,
-        'procesado': False
-    }
-
-def cargar_archivo(uploaded_file, nombre):
-    """Carga archivos Excel o CSV con mejor manejo de formatos"""
-    try:
-        if uploaded_file.name.endswith(('.xlsx', '.xls')):
-            # Cargar Excel
-            excel_file = pd.ExcelFile(uploaded_file)
-            hojas = excel_file.sheet_names
-            
-            # Filtrar hojas vacías y seleccionar la primera con datos significativos
-            hoja_seleccionada = None
-            for hoja in hojas:
-                temp_df = pd.read_excel(uploaded_file, sheet_name=hoja, nrows=5)
-                if not temp_df.empty and len(temp_df.columns) > 1:
-                    hoja_seleccionada = hoja
-                    break
-            
-            if hoja_seleccionada is None:
-                hoja_seleccionada = hojas[0]
-            
-            st.sidebar.info(f"Hoja seleccionada automáticamente: {hoja_seleccionada}")
-            df = pd.read_excel(uploaded_file, sheet_name=hoja_seleccionada)
-            st.sidebar.success(f"✓ {nombre}: {len(df):,} filas de Excel")
-            
-        elif uploaded_file.name.endswith('.csv'):
-            # Probar diferentes encodings
-            encodings = ['utf-8', 'latin-1', 'cp1252', 'ISO-8859-1']
-            df = None
-            for encoding in encodings:
-                try:
-                    df = pd.read_csv(uploaded_file, encoding=encoding)
-                    st.sidebar.success(f"✓ {nombre}: {len(df):,} filas de CSV ({encoding})")
-                    break
-                except UnicodeDecodeError:
-                    if encoding == encodings[-1]:
-                        raise
-                    continue
-        else:
-            st.sidebar.error(f"✗ Formato no soportado: {uploaded_file.name}")
-            return None
-        
-        # Limpiar columnas vacías
-        df = df.dropna(axis=1, how='all')
-        df = df.dropna(how='all')
-        
-        # Verificar que el DataFrame no esté vacío
-        if df.empty:
-            st.sidebar.error(f"✗ {nombre}: Archivo vacío o sin datos válidos")
-            return None
-        
-        return df
-        
-    except Exception as e:
-        st.sidebar.error(f"✗ Error al cargar {nombre}: {str(e)}")
-        return None
 
 def normalizar_texto(texto):
     """Normaliza texto eliminando acentos, caracteres especiales y espacios extra"""
@@ -3990,875 +2244,880 @@ def generar_pdf_reporte(metricas, resumen, validacion, filtros_aplicados=None):
         st.error(f"Error al generar PDF: {str(e)}")
         return None
 
-# Sidebar
-with st.sidebar:
-    st.header("📁 Carga de Archivos")
-    st.markdown("**Formatos soportados:** Excel (.xlsx, .xls) y CSV")
-    
-    uploaded_manifesto = st.file_uploader(
-        "Manifiesto (con DESTINATARIO y PIEZAS)",
-        type=['csv', 'xlsx', 'xls'],
-        key="manifesto_upload"
+# ==============================================================================
+# 8. MODULO DE RECONCILIACION (GESTION DE GASTOS POR TIENDA)
+# ==============================================================================
+
+def show_reconciliacion_v8():
+    """Modulo de reconciliacion financiera y gestion de gastos por tienda"""
+    add_back_button(key="back_reconciliacion")
+    show_module_header(
+        "💰 Gestión de Gastos por Tienda",
+        "Conciliación financiera y análisis de facturas"
     )
     
-    uploaded_facturas = st.file_uploader(
-        "Facturas (solo GUÍA y VALOR)", 
-        type=['csv', 'xlsx', 'xls'],
-        key="facturas_upload"
-    )
+    st.markdown('<div class="module-content">', unsafe_allow_html=True)
     
-    if uploaded_manifesto and uploaded_facturas:
-        if st.button("📥 Cargar Archivos", type="primary", use_container_width=True):
-            with st.spinner("Cargando archivos..."):
-                # Cargar manifiesto
-                manifesto = cargar_archivo(uploaded_manifesto, "Manifiesto")
-                
-                # Cargar facturas
-                facturas = cargar_archivo(uploaded_facturas, "Facturas")
-                
-                if manifesto is not None and facturas is not None:
-                    st.session_state.datos['manifesto'] = manifesto
-                    st.session_state.datos['facturas'] = facturas
+    # Sidebar para carga de archivos
+    with st.sidebar:
+        st.header("📁 Carga de Archivos")
+        st.markdown("**Formatos soportados:** Excel (.xlsx, .xls) y CSV")
+        
+        uploaded_manifesto = st.file_uploader(
+            "Manifiesto (con DESTINATARIO y PIEZAS)",
+            type=['csv', 'xlsx', 'xls'],
+            key="manifesto_upload"
+        )
+        
+        uploaded_facturas = st.file_uploader(
+            "Facturas (solo GUÍA y VALOR)", 
+            type=['csv', 'xlsx', 'xls'],
+            key="facturas_upload"
+        )
+        
+        if uploaded_manifesto and uploaded_facturas:
+            if st.button("📥 Cargar Archivos", type="primary", use_container_width=True):
+                with st.spinner("Cargando archivos..."):
+                    # Cargar manifiesto
+                    manifesto = cargar_archivo_reconciliacion(uploaded_manifesto, "Manifiesto")
                     
-                    # Mostrar estadísticas
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        st.metric("Registros (Manifiesto)", f"{len(manifesto):,}")
-                        st.caption(f"{len(manifesto.columns)} columnas")
-                    with col2:
-                        st.metric("Registros (Facturas)", f"{len(facturas):,}")
-                        st.caption(f"{len(facturas.columns)} columnas")
-
-# Contenido principal
-if st.session_state.datos['manifesto'] is not None:
-    manifesto = st.session_state.datos['manifesto']
-    facturas = st.session_state.datos['facturas']
+                    # Cargar facturas
+                    facturas = cargar_archivo_reconciliacion(uploaded_facturas, "Facturas")
+                    
+                    if manifesto is not None and facturas is not None:
+                        st.session_state.gastos_datos['manifesto'] = manifesto
+                        st.session_state.gastos_datos['facturas'] = facturas
+                        
+                        # Mostrar estadísticas
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.metric("Registros (Manifiesto)", f"{len(manifesto):,}")
+                            st.caption(f"{len(manifesto.columns)} columnas")
+                        with col2:
+                            st.metric("Registros (Facturas)", f"{len(facturas):,}")
+                            st.caption(f"{len(facturas.columns)} columnas")
     
-    st.header("⚙️ Configuración de Procesamiento")
-    
-    st.subheader("🔍 Detección Automática de Columnas")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.write("**Manifiesto**")
+    # Contenido principal
+    if st.session_state.gastos_datos['manifesto'] is not None:
+        manifesto = st.session_state.gastos_datos['manifesto']
+        facturas = st.session_state.gastos_datos['facturas']
         
-        # Columna de guía en manifiesto
-        guia_opciones_m = [col for col in manifesto.columns if 'GUIA' in str(col).upper() or 'GUÍA' in str(col).upper()]
-        if not guia_opciones_m:
-            guia_opciones_m = manifesto.columns.tolist()
+        st.header("⚙️ Configuración de Procesamiento")
         
-        guia_m = st.selectbox("Columna Guía", guia_opciones_m, 
-                             index=0 if guia_opciones_m else 0,
-                             help="Columna que contiene el número de guía")
+        st.subheader("🔍 Detección Automática de Columnas")
         
-        # Subtotal en manifiesto
-        subtotal_opciones_m = [col for col in manifesto.columns if 'SUBT' in str(col).upper() or 'TOTAL' in str(col).upper() or 'VALOR' in str(col).upper()]
-        if not subtotal_opciones_m:
-            subtotal_opciones_m = manifesto.columns.tolist()
-        
-        subtotal_m = st.selectbox("Columna Subtotal/Valor", subtotal_opciones_m,
-                                index=0 if subtotal_opciones_m else 0,
-                                help="Columna que contiene el valor en el manifiesto")
-        
-        # Ciudad destino en manifiesto
-        ciudad_opciones_m = [col for col in manifesto.columns if 'CIUDAD' in str(col).upper() or 'DES' in str(col).upper() or 'DESTINO' in str(col).upper()]
-        if not ciudad_opciones_m:
-            ciudad_opciones_m = manifesto.columns.tolist()
-        
-        ciudad_destino = st.selectbox("Columna Ciudad Destino", ciudad_opciones_m,
-                                    index=0 if ciudad_opciones_m else 0,
-                                    help="Columna que contiene la ciudad de destino")
-        
-        # Mostrar posibles columnas de destinatario
-        st.caption("⚠ **IMPORTANTE:** Para agrupar gastos se usará SOLO el DESTINATARIO del manifiesto")
-        destinatario_opciones_m = [col for col in manifesto.columns if any(palabra in str(col).upper() for palabra in ['DEST', 'CONSIG', 'CLIEN', 'NOMB', 'RAZON'])]
-        if destinatario_opciones_m:
-            st.info(f"Columnas de destinatario detectadas: {', '.join(destinatario_opciones_m)}")
-    
-    with col2:
-        st.write("**Facturas**")
-        
-        # Columna de guía en facturas
-        guia_opciones_f = [col for col in facturas.columns if 'GUIA' in str(col).upper() or 'GUÍA' in str(col).upper()]
-        if not guia_opciones_f:
-            guia_opciones_f = facturas.columns.tolist()
-        
-        guia_f = st.selectbox("Columna Guía (Facturas)", guia_opciones_f,
-                             index=0 if guia_opciones_f else 0,
-                             help="Columna que contiene el número de guía en las facturas")
-        
-        # Subtotal en facturas
-        subtotal_opciones_f = [col for col in facturas.columns if 'SUBTOTAL' in str(col).upper() or 'TOTAL' in str(col).upper() or 'IMPORTE' in str(col).upper() or 'VALOR' in str(col).upper()]
-        if not subtotal_opciones_f:
-            subtotal_opciones_f = facturas.columns.tolist()
-        
-        subtotal_f = st.selectbox("Columna Subtotal (Facturas)", subtotal_opciones_f,
-                                index=0 if subtotal_opciones_f else 0,
-                                help="Columna que contiene el monto REAL cobrado en las facturas")
-        
-        # Mostrar previsualización
-        if subtotal_f in facturas.columns:
-            st.caption("Previsualización de valores de facturas:")
-            valores = facturas[subtotal_f].dropna().head(3).tolist()
-            for i, val in enumerate(valores, 1):
-                st.code(f"{i}. {val}")
-    
-    # Configuración
-    config = {
-        'guia_m': guia_m,
-        'subtotal_m': subtotal_m,
-        'ciudad_destino': ciudad_destino,
-        'guia_f': guia_f,
-        'subtotal': subtotal_f
-    }
-    
-    # Botón para procesar
-    if st.button("🚀 Procesar Gastos por Tienda", type="primary", use_container_width=True):
-        with st.spinner("Procesando y validando datos..."):
-            try:
-                resultado, metricas, resumen, validacion, guias_anuladas = procesar_gastos(
-                    manifesto, facturas, config
-                )
-                
-                st.session_state.datos['resultado'] = resultado
-                st.session_state.datos['metricas'] = metricas
-                st.session_state.datos['resumen'] = resumen
-                st.session_state.datos['validacion'] = validacion
-                st.session_state.datos['guias_anuladas'] = guias_anuladas
-                st.session_state.datos['procesado'] = True
-                
-                st.success("✅ Procesamiento completado exitosamente")
-                
-                # Mostrar validación
-                if validacion['coincide']:
-                    st.balloons()
-                    st.success(f"✅ Validación exitosa: Los totales coinciden dentro del margen aceptable")
-                else:
-                    st.warning(f"⚠ Hay una diferencia de ${validacion['diferencia']:,.2f} ({validacion['porcentaje']:.2f}%)")
-                
-                # Mostrar información clave
-                st.info(f"""
-                🎯 **Resumen del procesamiento:**
-                - Guías totales procesadas: {validacion['guias_procesadas']:,}
-                - Guías facturadas: {validacion['guias_facturadas']:,} ({validacion['porcentaje_facturadas']:.1f}%)
-                - **Guías anuladas:** {validacion['guias_anuladas']:,} ({validacion['porcentaje_anuladas']:.1f}%)
-                - Piezas totales: {validacion['piezas_totales']:,}
-                - Grupos de tiendas identificados: {validacion['grupos_identificados']:,}
-                - **Total facturado:** ${validacion['total_facturas']:,.2f}
-                - **Total manifiesto:** ${validacion['total_manifiesto']:,.2f}
-                """)
-                
-            except Exception as e:
-                st.error(f"Error en el procesamiento: {str(e)}")
-                st.exception(e)
-
-# Mostrar resultados
-if st.session_state.datos['procesado']:
-    resultado = st.session_state.datos['resultado']
-    metricas = st.session_state.datos['metricas']
-    resumen = st.session_state.datos['resumen']
-    validacion = st.session_state.datos['validacion']
-    guias_anuladas = st.session_state.datos['guias_anuladas']
-    
-    # Pestañas
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
-        "📊 Resumen", "✅ Validación", "🏪 Todas las Tiendas", "🚫 Guías Anuladas", "🌎 Geografía", "📋 Datos", "💾 Exportar", "📄 Reporte PDF"
-    ])
-    
-    with tab1:
-        st.header("📊 Resumen Ejecutivo")
-        
-        # Métricas principales
-        col1, col2, col3, col4, col5 = st.columns(5)
-        with col1:
-            st.metric("Grupos de Tiendas", f"{len(metricas):,}")
-        with col2:
-            st.metric("Total Guías", f"{len(resultado):,}")
-        with col3:
-            st.metric("Guías Anuladas", f"{validacion['guias_anuladas']:,}")
-        with col4:
-            st.metric("Piezas Totales", f"{validacion['piezas_totales']:,}")
-        with col5:
-            st.metric("Total Facturado", f"${metricas['SUBTOTAL'].sum():,.2f}")
-        
-        # Gráfico de distribución por tipo
-        st.subheader("Distribución por Tipo de Tienda")
-        
-        if not resumen.empty:
-            fig = px.pie(resumen, values='SUBTOTAL', names='TIPO', 
-                        title='Distribución de Gastos por Tipo de Tienda', hole=0.4,
-                        color_discrete_sequence=px.colors.qualitative.Set3)
-            
-            fig.update_traces(textposition='inside', textinfo='percent+label')
-            st.plotly_chart(fig, use_container_width=True)
-        
-        # Tabla de resumen CON PIEZAS
-        st.subheader("Resumen por Tipo de Tienda")
-        if not resumen.empty:
-            # Crear copia para formateo
-            resumen_display = resumen.copy()
-            resumen_display['PIEZAS_POR_GUIA'] = (resumen_display['PIEZAS'] / resumen_display['GUIAS']).round(2)
-            
-            st.dataframe(resumen_display.style.format({
-                'SUBTOTAL': '${:,.2f}',
-                'PORCENTAJE': '{:.2f}%',
-                'PIEZAS_POR_GUIA': '{:.2f}'
-            }), use_container_width=True, hide_index=True)
-    
-    with tab2:
-        st.header("✅ Validación de Totales")
-        
-        col1, col2, col3, col4, col5 = st.columns(5)
-        with col1:
-            st.metric("Total Manifiesto", f"${validacion['total_manifiesto']:,.2f}")
-        with col2:
-            st.metric("Total Facturas", f"${validacion['total_facturas']:,.2f}")
-        with col3:
-            st.metric("Diferencia", f"${validacion['diferencia']:,.2f}")
-        with col4:
-            st.metric("% Diferencia", f"{validacion['porcentaje']:.2f}%")
-        with col5:
-            st.metric("Guías Anuladas", f"{validacion['guias_anuladas']:,}")
-        
-        if validacion['coincide']:
-            st.success("""
-            ✅ **Validación Exitosa**
-            
-            Los totales coinciden dentro del margen aceptable:
-            - El cálculo realizado agrupa correctamente los gastos por destinatario del manifiesto
-            - La diferencia es menor a $0.01, lo que indica precisión en el procesamiento
-            - Los datos son consistentes y confiables para análisis
-            """)
-        else:
-            st.warning(f"""
-            ⚠ **Validación con Diferencia**
-            
-            Hay una diferencia de **${validacion['diferencia']:,.2f}** ({validacion['porcentaje']:.2f}%)
-            
-            **Posibles causas:**
-            1. Guías anuladas sin factura asociada
-            2. Diferencias en los montos registrados entre sistemas
-            3. Errores en la coincidencia de números de guía
-            
-            **Recomendación:** Revisar las guías anuladas en la pestaña correspondiente
-            """)
-        
-        # Métricas de coincidencia
-        st.info(f"""
-        **📈 Métricas de Coincidencia:**
-        - Guías totales procesadas: {validacion['guias_procesadas']:,}
-        - Guías facturadas: {validacion['guias_facturadas']:,} ({validacion['porcentaje_facturadas']:.1f}%)
-        - **Guías anuladas:** {validacion['guias_anuladas']:,} ({validacion['porcentaje_anuladas']:.1f}%)
-        - Piezas totales: {validacion['piezas_totales']:,}
-        - Promedio piezas/guía: {(validacion['piezas_totales']/validacion['guias_procesadas']):.1f}
-        """)
-    
-    with tab3:
-        st.header("🏪 Gastos por Tienda/Grupo - TODAS LAS TIENDAS")
-        
-        # Información sobre clasificación
-        st.info("""
-        **🏷️ Clasificación Automática:**
-        - **TIENDA FÍSICA:** Nombres comerciales (MALL, PLAZA, CENTRO COMERCIAL, etc.)
-        - **VENTA WEB:** Nombres personales (ROCIO, ALEJANDRA, MARIA, etc.)
-        - **VENTAS AL POR MAYOR:** JOFRE SANTANA (clasificado automáticamente)
-        """)
-        
-        # Filtros mejorados
-        col1, col2, col3, col4 = st.columns(4)
-        with col1:
-            min_gasto = st.number_input("Gasto mínimo", value=0.0, step=10.0, format="%.2f", key="min_gasto_todas")
-        with col2:
-            tipo_filtro = st.multiselect("Tipo", 
-                                        metricas['TIPO'].unique() if 'TIPO' in metricas.columns else [],
-                                        default=[],
-                                        key="tipo_filtro_todas")
-        with col3:
-            ciudad_filtro = st.text_input("Ciudad (parcial)", "", key="ciudad_filtro_todas")
-        with col4:
-            min_piezas = st.number_input("Mín. piezas", value=0, step=1, key="min_piezas_todas")
-        
-        # Búsqueda avanzada
-        buscar_grupo = st.text_input("🔍 Buscar grupo, destinatario o ciudad:", key="buscar_grupo_todas")
-        
-        # Ordenar
         col1, col2 = st.columns(2)
+        
         with col1:
-            orden_campo = st.selectbox("Ordenar por campo:", 
-                                      ['SUBTOTAL', 'GUIAS', 'PIEZAS', 'PORCENTAJE', 'PROMEDIO_POR_PIEZA'],
-                                      key="orden_campo_todas")
+            st.write("**Manifiesto**")
+            
+            # Columna de guía en manifiesto
+            guia_opciones_m = [col for col in manifesto.columns if 'GUIA' in str(col).upper() or 'GUÍA' in str(col).upper()]
+            if not guia_opciones_m:
+                guia_opciones_m = manifesto.columns.tolist()
+            
+            guia_m = st.selectbox("Columna Guía", guia_opciones_m, 
+                                 index=0 if guia_opciones_m else 0,
+                                 help="Columna que contiene el número de guía")
+            
+            # Subtotal en manifiesto
+            subtotal_opciones_m = [col for col in manifesto.columns if 'SUBT' in str(col).upper() or 'TOTAL' in str(col).upper() or 'VALOR' in str(col).upper()]
+            if not subtotal_opciones_m:
+                subtotal_opciones_m = manifesto.columns.tolist()
+            
+            subtotal_m = st.selectbox("Columna Subtotal/Valor", subtotal_opciones_m,
+                                    index=0 if subtotal_opciones_m else 0,
+                                    help="Columna que contiene el valor en el manifiesto")
+            
+            # Ciudad destino en manifiesto
+            ciudad_opciones_m = [col for col in manifesto.columns if 'CIUDAD' in str(col).upper() or 'DES' in str(col).upper() or 'DESTINO' in str(col).upper()]
+            if not ciudad_opciones_m:
+                ciudad_opciones_m = manifesto.columns.tolist()
+            
+            ciudad_destino = st.selectbox("Columna Ciudad Destino", ciudad_opciones_m,
+                                        index=0 if ciudad_opciones_m else 0,
+                                        help="Columna que contiene la ciudad de destino")
+            
+            # Mostrar posibles columnas de destinatario
+            st.caption("⚠ **IMPORTANTE:** Para agrupar gastos se usará SOLO el DESTINATARIO del manifiesto")
+            destinatario_opciones_m = [col for col in manifesto.columns if any(palabra in str(col).upper() for palabra in ['DEST', 'CONSIG', 'CLIEN', 'NOMB', 'RAZON'])]
+            if destinatario_opciones_m:
+                st.info(f"Columnas de destinatario detectadas: {', '.join(destinatario_opciones_m)}")
+        
         with col2:
-            orden_direccion = st.selectbox("Dirección:", 
-                                          ['Descendente', 'Ascendente'],
-                                          key="orden_direccion_todas")
-        
-        # Filtrar métricas - TODAS LAS TIENDAS
-        metricas_filt = metricas.copy()
-        
-        if min_gasto > 0:
-            metricas_filt = metricas_filt[metricas_filt['SUBTOTAL'] >= min_gasto]
-        
-        if tipo_filtro:
-            metricas_filt = metricas_filt[metricas_filt['TIPO'].isin(tipo_filtro)]
-        
-        if ciudad_filtro:
-            metricas_filt = metricas_filt[
-                metricas_filt['CIUDADES'].str.contains(ciudad_filtro, case=False, na=False)
-            ]
-        
-        if min_piezas > 0:
-            metricas_filt = metricas_filt[metricas_filt['PIEZAS'] >= min_piezas]
-        
-        if buscar_grupo:
-            metricas_filt = metricas_filt[
-                metricas_filt['GRUPO'].str.contains(buscar_grupo, case=False, na=False) |
-                metricas_filt['DESTINATARIOS'].str.contains(buscar_grupo, case=False, na=False) |
-                metricas_filt['CIUDADES'].str.contains(buscar_grupo, case=False, na=False)
-            ]
-        
-        # Ordenar
-        if orden_direccion == 'Descendente':
-            metricas_filt = metricas_filt.sort_values(orden_campo, ascending=False)
-        else:
-            metricas_filt = metricas_filt.sort_values(orden_campo, ascending=True)
-        
-        # Mostrar contador
-        st.subheader(f"📋 Todas las Tiendas ({len(metricas_filt):,} grupos)")
-        
-        # Crear gráfico para TODAS las tiendas filtradas
-        if len(metricas_filt) > 0:
-            st.subheader("📊 Distribución de Todas las Tiendas Filtradas")
+            st.write("**Facturas**")
             
-            fig = px.bar(
-                metricas_filt.head(30), 
-                x='SUBTOTAL', 
-                y='GRUPO', 
-                orientation='h',
-                title='Distribución de Gastos por Tienda',
-                color='TIPO',
-                text='SUBTOTAL',
-                hover_data=['GUIAS', 'PIEZAS', 'PORCENTAJE', 'DESTINATARIOS', 'CIUDADES', 'PROMEDIO_POR_PIEZA'],
-                color_discrete_sequence=px.colors.qualitative.Set3
-            )
-            fig.update_traces(texttemplate='$%{text:,.2f}', textposition='outside')
-            fig.update_layout(
-                yaxis={'categoryorder': 'total ascending'},
-                height=max(400, len(metricas_filt.head(30)) * 25),
-                showlegend=True,
-                legend=dict(
-                    orientation="h",
-                    yanchor="bottom",
-                    y=1.02,
-                    xanchor="right",
-                    x=1
-                )
-            )
-            st.plotly_chart(fig, use_container_width=True)
+            # Columna de guía en facturas
+            guia_opciones_f = [col for col in facturas.columns if 'GUIA' in str(col).upper() or 'GUÍA' in str(col).upper()]
+            if not guia_opciones_f:
+                guia_opciones_f = facturas.columns.tolist()
+            
+            guia_f = st.selectbox("Columna Guía (Facturas)", guia_opciones_f,
+                                 index=0 if guia_opciones_f else 0,
+                                 help="Columna que contiene el número de guía en las facturas")
+            
+            # Subtotal en facturas
+            subtotal_opciones_f = [col for col in facturas.columns if 'SUBTOTAL' in str(col).upper() or 'TOTAL' in str(col).upper() or 'IMPORTE' in str(col).upper() or 'VALOR' in str(col).upper()]
+            if not subtotal_opciones_f:
+                subtotal_opciones_f = facturas.columns.tolist()
+            
+            subtotal_f = st.selectbox("Columna Subtotal (Facturas)", subtotal_opciones_f,
+                                    index=0 if subtotal_opciones_f else 0,
+                                    help="Columna que contiene el monto REAL cobrado en las facturas")
+            
+            # Mostrar previsualización
+            if subtotal_f in facturas.columns:
+                st.caption("Previsualización de valores de facturas:")
+                valores = facturas[subtotal_f].dropna().head(3).tolist()
+                for i, val in enumerate(valores, 1):
+                    st.code(f"{i}. {val}")
         
-        # Tabla completa con TODAS las tiendas filtradas
-        st.subheader("📋 Tabla Completa de Todas las Tiendas")
+        # Configuración
+        config = {
+            'guia_m': guia_m,
+            'subtotal_m': subtotal_m,
+            'ciudad_destino': ciudad_destino,
+            'guia_f': guia_f,
+            'subtotal': subtotal_f
+        }
         
-        if not metricas_filt.empty:
-            # Crear DataFrame para mostrar con todas las métricas
-            metricas_display = metricas_filt[[
-                'GRUPO', 'TIPO', 'GUIAS', 'PIEZAS', 'SUBTOTAL', 
-                'PORCENTAJE', 'PROMEDIO_POR_PIEZA', 'DESTINATARIOS', 'CIUDADES'
-            ]].copy()
+        # Botón para procesar
+        if st.button("🚀 Procesar Gastos por Tienda", type="primary", use_container_width=True):
+            with st.spinner("Procesando y validando datos..."):
+                try:
+                    resultado, metricas, resumen, validacion, guias_anuladas = procesar_gastos(
+                        manifesto, facturas, config
+                    )
+                    
+                    st.session_state.gastos_datos['resultado'] = resultado
+                    st.session_state.gastos_datos['metricas'] = metricas
+                    st.session_state.gastos_datos['resumen'] = resumen
+                    st.session_state.gastos_datos['validacion'] = validacion
+                    st.session_state.gastos_datos['guias_anuladas'] = guias_anuladas
+                    st.session_state.gastos_datos['procesado'] = True
+                    
+                    st.success("✅ Procesamiento completado exitosamente")
+                    
+                    # Mostrar validación
+                    if validacion['coincide']:
+                        st.balloons()
+                        st.success(f"✅ Validación exitosa: Los totales coinciden dentro del margen aceptable")
+                    else:
+                        st.warning(f"⚠ Hay una diferencia de ${validacion['diferencia']:,.2f} ({validacion['porcentaje']:.2f}%)")
+                    
+                    # Mostrar información clave
+                    st.info(f"""
+                    🎯 **Resumen del procesamiento:**
+                    - Guías totales procesadas: {validacion['guias_procesadas']:,}
+                    - Guías facturadas: {validacion['guias_facturadas']:,} ({validacion['porcentaje_facturadas']:.1f}%)
+                    - **Guías anuladas:** {validacion['guias_anuladas']:,} ({validacion['porcentaje_anuladas']:.1f}%)
+                    - Piezas totales: {validacion['piezas_totales']:,}
+                    - Grupos de tiendas identificados: {validacion['grupos_identificados']:,}
+                    - **Total facturado:** ${validacion['total_facturas']:,.2f}
+                    - **Total manifiesto:** ${validacion['total_manifiesto']:,.2f}
+                    """)
+                    
+                except Exception as e:
+                    st.error(f"Error en el procesamiento: {str(e)}")
+                    st.exception(e)
+    
+    # Mostrar resultados
+    if st.session_state.gastos_datos['procesado']:
+        resultado = st.session_state.gastos_datos['resultado']
+        metricas = st.session_state.gastos_datos['metricas']
+        resumen = st.session_state.gastos_datos['resumen']
+        validacion = st.session_state.gastos_datos['validacion']
+        guias_anuladas = st.session_state.gastos_datos['guias_anuladas']
+        
+        # Pestañas
+        tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
+            "📊 Resumen", "✅ Validación", "🏪 Todas las Tiendas", "🚫 Guías Anuladas", "🌎 Geografía", "📋 Datos", "💾 Exportar", "📄 Reporte PDF"
+        ])
+        
+        with tab1:
+            st.header("📊 Resumen Ejecutivo")
             
-            # Formatear la tabla
-            styled_df = metricas_display.style.format({
-                'SUBTOTAL': '${:,.2f}',
-                'PORCENTAJE': '{:.2f}%',
-                'PROMEDIO_POR_PIEZA': '${:,.2f}'
-            }).background_gradient(
-                subset=['SUBTOTAL', 'PORCENTAJE'], 
-                cmap='Blues'
-            )
+            # Métricas principales
+            col1, col2, col3, col4, col5 = st.columns(5)
+            with col1:
+                st.metric("Grupos de Tiendas", f"{len(metricas):,}")
+            with col2:
+                st.metric("Total Guías", f"{len(resultado):,}")
+            with col3:
+                st.metric("Guías Anuladas", f"{validacion['guias_anuladas']:,}")
+            with col4:
+                st.metric("Piezas Totales", f"{validacion['piezas_totales']:,}")
+            with col5:
+                st.metric("Total Facturado", f"${metricas['SUBTOTAL'].sum():,.2f}")
             
-            # Mostrar tabla con scroll
-            st.dataframe(styled_df, use_container_width=True, height=600)
+            # Gráfico de distribución por tipo
+            st.subheader("Distribución por Tipo de Tienda")
             
-            # Estadísticas de la tabla filtrada
-            st.subheader("📈 Estadísticas de la Tabla Filtrada")
+            if not resumen.empty:
+                fig = px.pie(resumen, values='SUBTOTAL', names='TIPO', 
+                            title='Distribución de Gastos por Tipo de Tienda', hole=0.4,
+                            color_discrete_sequence=px.colors.qualitative.Set3)
+                
+                fig.update_traces(textposition='inside', textinfo='percent+label')
+                st.plotly_chart(fig, use_container_width=True)
             
+            # Tabla de resumen CON PIEZAS
+            st.subheader("Resumen por Tipo de Tienda")
+            if not resumen.empty:
+                # Crear copia para formateo
+                resumen_display = resumen.copy()
+                resumen_display['PIEZAS_POR_GUIA'] = (resumen_display['PIEZAS'] / resumen_display['GUIAS']).round(2)
+                
+                st.dataframe(resumen_display.style.format({
+                    'SUBTOTAL': '${:,.2f}',
+                    'PORCENTAJE': '{:.2f}%',
+                    'PIEZAS_POR_GUIA': '{:.2f}'
+                }), use_container_width=True, hide_index=True)
+        
+        with tab2:
+            st.header("✅ Validación de Totales")
+            
+            col1, col2, col3, col4, col5 = st.columns(5)
+            with col1:
+                st.metric("Total Manifiesto", f"${validacion['total_manifiesto']:,.2f}")
+            with col2:
+                st.metric("Total Facturas", f"${validacion['total_facturas']:,.2f}")
+            with col3:
+                st.metric("Diferencia", f"${validacion['diferencia']:,.2f}")
+            with col4:
+                st.metric("% Diferencia", f"{validacion['porcentaje']:.2f}%")
+            with col5:
+                st.metric("Guías Anuladas", f"{validacion['guias_anuladas']:,}")
+            
+            if validacion['coincide']:
+                st.success("""
+                ✅ **Validación Exitosa**
+                
+                Los totales coinciden dentro del margen aceptable:
+                - El cálculo realizado agrupa correctamente los gastos por destinatario del manifiesto
+                - La diferencia es menor a $0.01, lo que indica precisión en el procesamiento
+                - Los datos son consistentes y confiables para análisis
+                """)
+            else:
+                st.warning(f"""
+                ⚠ **Validación con Diferencia**
+                
+                Hay una diferencia de **${validacion['diferencia']:,.2f}** ({validacion['porcentaje']:.2f}%)
+                
+                **Posibles causas:**
+                1. Guías anuladas sin factura asociada
+                2. Diferencias en los montos registrados entre sistemas
+                3. Errores en la coincidencia de números de guía
+                
+                **Recomendación:** Revisar las guías anuladas en la pestaña correspondiente
+                """)
+            
+            # Métricas de coincidencia
+            st.info(f"""
+            **📈 Métricas de Coincidencia:**
+            - Guías totales procesadas: {validacion['guias_procesadas']:,}
+            - Guías facturadas: {validacion['guias_facturadas']:,} ({validacion['porcentaje_facturadas']:.1f}%)
+            - **Guías anuladas:** {validacion['guias_anuladas']:,} ({validacion['porcentaje_anuladas']:.1f}%)
+            - Piezas totales: {validacion['piezas_totales']:,}
+            - Promedio piezas/guía: {(validacion['piezas_totales']/validacion['guias_procesadas']):.1f}
+            """)
+        
+        with tab3:
+            st.header("🏪 Gastos por Tienda/Grupo - TODAS LAS TIENDAS")
+            
+            # Información sobre clasificación
+            st.info("""
+            **🏷️ Clasificación Automática:**
+            - **TIENDA FÍSICA:** Nombres comerciales (MALL, PLAZA, CENTRO COMERCIAL, etc.)
+            - **VENTA WEB:** Nombres personales (ROCIO, ALEJANDRA, MARIA, etc.)
+            - **VENTAS AL POR MAYOR:** JOFRE SANTANA (clasificado automáticamente)
+            """)
+            
+            # Filtros mejorados
             col1, col2, col3, col4 = st.columns(4)
             with col1:
-                st.metric("Grupos Mostrados", len(metricas_filt))
+                min_gasto = st.number_input("Gasto mínimo", value=0.0, step=10.0, format="%.2f", key="min_gasto_todas")
             with col2:
-                st.metric("Subtotal Total", f"${metricas_filt['SUBTOTAL'].sum():,.2f}")
+                tipo_filtro = st.multiselect("Tipo", 
+                                            metricas['TIPO'].unique() if 'TIPO' in metricas.columns else [],
+                                            default=[],
+                                            key="tipo_filtro_todas")
             with col3:
-                st.metric("Piezas Totales", f"{metricas_filt['PIEZAS'].sum():,.0f}")
+                ciudad_filtro = st.text_input("Ciudad (parcial)", "", key="ciudad_filtro_todas")
             with col4:
-                st.metric("Promedio por Pieza", f"${(metricas_filt['SUBTOTAL'].sum()/metricas_filt['PIEZAS'].sum()):.2f}")
-    
-    with tab4:
-        st.header("🚫 Guías Anuladas")
-        
-        if not guias_anuladas.empty:
-            st.info(f"📊 **Total de guías anuladas:** {len(guias_anuladas):,} ({validacion['porcentaje_anuladas']:.1f}% del total)")
+                min_piezas = st.number_input("Mín. piezas", value=0, step=1, key="min_piezas_todas")
             
-            # Mostrar resumen de guías anuladas
-            col1, col2, col3, col4 = st.columns(4)
+            # Búsqueda avanzada
+            buscar_grupo = st.text_input("🔍 Buscar grupo, destinatario o ciudad:", key="buscar_grupo_todas")
+            
+            # Ordenar
+            col1, col2 = st.columns(2)
             with col1:
-                st.metric("Total Guías", len(guias_anuladas))
+                orden_campo = st.selectbox("Ordenar por campo:", 
+                                          ['SUBTOTAL', 'GUIAS', 'PIEZAS', 'PORCENTAJE', 'PROMEDIO_POR_PIEZA'],
+                                          key="orden_campo_todas")
             with col2:
-                total_manifiesto_anuladas = guias_anuladas['SUBTOTAL_MANIFIESTO'].sum()
-                st.metric("Valor Manifiesto", f"${total_manifiesto_anuladas:,.2f}")
-            with col3:
-                total_piezas_anuladas = guias_anuladas['PIEZAS'].sum()
-                st.metric("Piezas", f"{total_piezas_anuladas:,}")
-            with col4:
-                st.metric("Destinatarios Únicos", guias_anuladas['DESTINATARIO'].nunique())
+                orden_direccion = st.selectbox("Dirección:", 
+                                              ['Descendente', 'Ascendente'],
+                                              key="orden_direccion_todas")
             
-            # Filtros para guías anuladas
-            st.subheader("🔍 Filtros para Guías Anuladas")
+            # Filtrar métricas - TODAS LAS TIENDAS
+            metricas_filt = metricas.copy()
             
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                min_valor = st.number_input("Valor mínimo", value=0.0, step=1.0, key="min_valor_anuladas")
-            with col2:
-                buscar_destinatario = st.text_input("Buscar destinatario", "", key="buscar_dest_anuladas")
-            with col3:
-                buscar_ciudad = st.text_input("Buscar ciudad", "", key="buscar_ciudad_anuladas")
+            if min_gasto > 0:
+                metricas_filt = metricas_filt[metricas_filt['SUBTOTAL'] >= min_gasto]
             
-            # Aplicar filtros
-            guias_anuladas_filt = guias_anuladas.copy()
+            if tipo_filtro:
+                metricas_filt = metricas_filt[metricas_filt['TIPO'].isin(tipo_filtro)]
             
-            if min_valor > 0:
-                guias_anuladas_filt = guias_anuladas_filt[guias_anuladas_filt['SUBTOTAL_MANIFIESTO'] >= min_valor]
-            
-            if buscar_destinatario:
-                guias_anuladas_filt = guias_anuladas_filt[
-                    guias_anuladas_filt['DESTINATARIO'].str.contains(buscar_destinatario, case=False, na=False)
+            if ciudad_filtro:
+                metricas_filt = metricas_filt[
+                    metricas_filt['CIUDADES'].str.contains(ciudad_filtro, case=False, na=False)
                 ]
             
-            if buscar_ciudad:
-                guias_anuladas_filt = guias_anuladas_filt[
-                    guias_anuladas_filt['CIUDAD'].str.contains(buscar_ciudad, case=False, na=False)
+            if min_piezas > 0:
+                metricas_filt = metricas_filt[metricas_filt['PIEZAS'] >= min_piezas]
+            
+            if buscar_grupo:
+                metricas_filt = metricas_filt[
+                    metricas_filt['GRUPO'].str.contains(buscar_grupo, case=False, na=False) |
+                    metricas_filt['DESTINATARIOS'].str.contains(buscar_grupo, case=False, na=False) |
+                    metricas_filt['CIUDADES'].str.contains(buscar_grupo, case=False, na=False)
                 ]
             
-            st.subheader(f"📋 Guías Anuladas Filtradas ({len(guias_anuladas_filt):,})")
+            # Ordenar
+            if orden_direccion == 'Descendente':
+                metricas_filt = metricas_filt.sort_values(orden_campo, ascending=False)
+            else:
+                metricas_filt = metricas_filt.sort_values(orden_campo, ascending=True)
             
-            # Mostrar tabla de guías anuladas
-            columnas_mostrar = ['FECHA_MANIFIESTO', 'GUIA', 'DESTINATARIO', 'CIUDAD', 'PIEZAS', 'SUBTOTAL_MANIFIESTO', 'TIPO']
-            columnas_disponibles = [col for col in columnas_mostrar if col in guias_anuladas_filt.columns]
+            # Mostrar contador
+            st.subheader(f"📋 Todas las Tiendas ({len(metricas_filt):,} grupos)")
             
-            # Formatear fecha para mostrar
-            guias_display = guias_anuladas_filt[columnas_disponibles].copy()
-            if 'FECHA_MANIFIESTO' in guias_display.columns:
-                guias_display['FECHA_MANIFIESTO'] = pd.to_datetime(guias_display['FECHA_MANIFIESTO'], errors='coerce').dt.strftime('%d/%m/%Y')
-            
-            if not guias_display.empty:
-                st.dataframe(
-                    guias_display.style.format({
-                        'SUBTOTAL_MANIFIESTO': '${:,.2f}'
-                    }),
-                    use_container_width=True,
-                    height=400
-                )
+            # Crear gráfico para TODAS las tiendas filtradas
+            if len(metricas_filt) > 0:
+                st.subheader("📊 Distribución de Todas las Tiendas Filtradas")
                 
-                # Gráfico de guías anuladas por tipo
-                st.subheader("📊 Distribución de Guías Anuladas por Tipo")
-                
-                anuladas_por_tipo = guias_anuladas_filt.groupby('TIPO').agg(
-                    CANTIDAD=('GUIA', 'count'),
-                    VALOR=('SUBTOTAL_MANIFIESTO', 'sum')
-                ).reset_index()
-                
-                if not anuladas_por_tipo.empty:
-                    fig = px.bar(
-                        anuladas_por_tipo, 
-                        x='VALOR', 
-                        y='TIPO', 
-                        orientation='h',
-                        title='Valor de Guías Anuladas por Tipo',
-                        color='CANTIDAD',
-                        text='VALOR',
-                        color_continuous_scale='Reds'
-                    )
-                    fig.update_traces(texttemplate='$%{text:,.2f}', textposition='outside')
-                    fig.update_layout(
-                        yaxis={'categoryorder': 'total ascending'},
-                        height=400
-                    )
-                    st.plotly_chart(fig, use_container_width=True)
-                
-                # Opción para descargar guías anuladas
-                st.download_button(
-                    label="📥 Descargar Guías Anuladas (CSV)",
-                    data=guias_display.to_csv(index=False),
-                    file_name=f"guias_anuladas_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                    mime="text/csv",
-                    use_container_width=True
-                )
-        else:
-            st.success("✅ No hay guías anuladas. Todas las guías del manifiesto tienen factura asociada.")
-    
-    with tab5:
-        st.header("🌎 Distribución Geográfica")
-        
-        if 'CIUDAD' in resultado.columns:
-            # Filtrar solo guías facturadas para distribución geográfica
-            df_facturadas = resultado[resultado['ESTADO'] == 'FACTURADA']
-            
-            # Agrupar por ciudad CON PIEZAS
-            ciudad_agrupada = df_facturadas.groupby('CIUDAD').agg({
-                'GUIA_LIMPIA': 'count',
-                'PIEZAS': 'sum',
-                'SUBTOTAL': 'sum'
-            }).reset_index()
-            
-            ciudad_agrupada = ciudad_agrupada.rename(columns={
-                'GUIA_LIMPIA': 'TOTAL_GUIAS',
-                'PIEZAS': 'TOTAL_PIEZAS',
-                'SUBTOTAL': 'TOTAL_SUBTOTAL'
-            })
-            
-            ciudad_agrupada = ciudad_agrupada.sort_values('TOTAL_SUBTOTAL', ascending=False)
-            
-            # Gráfico de ciudades
-            st.subheader("Top 15 Ciudades por Gasto (Facturadas)")
-            
-            if not ciudad_agrupada.empty:
                 fig = px.bar(
-                    ciudad_agrupada.head(15), 
-                    x='TOTAL_SUBTOTAL', 
-                    y='CIUDAD',
-                    orientation='h', 
-                    title='Distribución por Ciudad',
-                    color='TOTAL_PIEZAS', 
-                    color_continuous_scale='Viridis',
-                    text='TOTAL_SUBTOTAL',
-                    hover_data=['TOTAL_GUIAS', 'TOTAL_PIEZAS']
+                    metricas_filt.head(30), 
+                    x='SUBTOTAL', 
+                    y='GRUPO', 
+                    orientation='h',
+                    title='Distribución de Gastos por Tienda',
+                    color='TIPO',
+                    text='SUBTOTAL',
+                    hover_data=['GUIAS', 'PIEZAS', 'PORCENTAJE', 'DESTINATARIOS', 'CIUDADES', 'PROMEDIO_POR_PIEZA'],
+                    color_discrete_sequence=px.colors.qualitative.Set3
                 )
                 fig.update_traces(texttemplate='$%{text:,.2f}', textposition='outside')
-                fig.update_layout(yaxis={'categoryorder': 'total ascending'}, height=600)
-                st.plotly_chart(fig, use_container_width=True)
-                
-                # Tabla de ciudades
-                st.subheader("Tabla Detallada por Ciudad")
-                ciudad_agrupada['PORCENTAJE'] = (ciudad_agrupada['TOTAL_SUBTOTAL'] / ciudad_agrupada['TOTAL_SUBTOTAL'].sum() * 100).round(2)
-                ciudad_agrupada['PROMEDIO_POR_PIEZA'] = (ciudad_agrupada['TOTAL_SUBTOTAL'] / ciudad_agrupada['TOTAL_PIEZAS']).round(2)
-                st.dataframe(
-                    ciudad_agrupada.style.format({
-                        'TOTAL_SUBTOTAL': '${:,.2f}',
-                        'PORCENTAJE': '{:.2f}%',
-                        'PROMEDIO_POR_PIEZA': '${:,.2f}'
-                    }),
-                    use_container_width=True,
-                    height=400
+                fig.update_layout(
+                    yaxis={'categoryorder': 'total ascending'},
+                    height=max(400, len(metricas_filt.head(30)) * 25),
+                    showlegend=True,
+                    legend=dict(
+                        orientation="h",
+                        yanchor="bottom",
+                        y=1.02,
+                        xanchor="right",
+                        x=1
+                    )
                 )
-    
-    with tab6:
-        st.header("📋 Datos Detallados")
-        
-        # Filtros avanzados
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            grupo_filtro = st.multiselect(
-                "Filtrar por Grupo:",
-                sorted(resultado['GRUPO'].unique()),
-                default=[],
-                key="filtro_grupo_detalle"
-            )
-        
-        with col2:
-            estado_filtro = st.selectbox(
-                "Estado:",
-                ['TODOS', 'FACTURADA', 'ANULADA'],
-                key="estado_filtro_detalle"
-            )
-        
-        with col3:
-            min_subtotal = st.number_input(
-                "Mínimo subtotal:",
-                min_value=0.0,
-                value=0.0,
-                step=1.0,
-                key="min_subtotal_detalle"
-            )
-        
-        # Búsqueda
-        buscar = st.text_input("🔍 Buscar por guía, destinatario o ciudad:", key="buscar_detalle")
-        
-        # Aplicar filtros
-        datos_filt = resultado.copy()
-        
-        if grupo_filtro:
-            datos_filt = datos_filt[datos_filt['GRUPO'].isin(grupo_filtro)]
-        
-        if estado_filtro == 'FACTURADA':
-            datos_filt = datos_filt[datos_filt['ESTADO'] == 'FACTURADA']
-        elif estado_filtro == 'ANULADA':
-            datos_filt = datos_filt[datos_filt['ESTADO'] == 'ANULADA']
-        
-        datos_filt = datos_filt[datos_filt['SUBTOTAL_MANIFIESTO'] >= min_subtotal]
-        
-        if buscar:
-            datos_filt = datos_filt[
-                datos_filt['GUIA_LIMPIA'].astype(str).str.contains(buscar, case=False, na=False) |
-                datos_filt['DESTINATARIO'].astype(str).str.contains(buscar, case=False, na=False) |
-                datos_filt['CIUDAD'].astype(str).str.contains(buscar, case=False, na=False) |
-                datos_filt['GRUPO'].str.contains(buscar, case=False, na=False)
-            ]
-        
-        # Mostrar datos
-        columnas_mostrar = ['FECHA_MANIFIESTO', 'GUIA_LIMPIA', 'ESTADO', 'GRUPO', 'DESTINATARIO', 'CIUDAD', 'PIEZAS', 
-                          'SUBTOTAL_MANIFIESTO', 'SUBTOTAL', 'DIFERENCIA', 'TIPO']
-        columnas_disponibles = [col for col in columnas_mostrar if col in datos_filt.columns]
-        
-        st.subheader(f"Registros filtrados: {len(datos_filt):,}")
-        
-        if not datos_filt.empty:
-            # Crear copia para mostrar con fecha formateada
-            datos_display = datos_filt[columnas_disponibles].copy()
-            if 'FECHA_MANIFIESTO' in datos_display.columns:
-                datos_display['FECHA_MANIFIESTO'] = pd.to_datetime(datos_display['FECHA_MANIFIESTO'], errors='coerce').dt.strftime('%d/%m/%Y')
+                st.plotly_chart(fig, use_container_width=True)
             
-            # Mostrar tabla con formato
-            styled_datos = datos_display.style.format({
-                'SUBTOTAL_MANIFIESTO': '${:,.2f}',
-                'SUBTOTAL': '${:,.2f}',
-                'DIFERENCIA': '${:,.2f}'
-            })
+            # Tabla completa con TODAS las tiendas filtradas
+            st.subheader("📋 Tabla Completa de Todas las Tiendas")
             
-            # Aplicar color condicional al estado
-            def color_estado(val):
-                if val == 'ANULADA':
-                    return 'background-color: #ffcccc'
-                elif val == 'FACTURADA':
-                    return 'background-color: #ccffcc'
-                return ''
+            if not metricas_filt.empty:
+                # Crear DataFrame para mostrar con todas las métricas
+                metricas_display = metricas_filt[[
+                    'GRUPO', 'TIPO', 'GUIAS', 'PIEZAS', 'SUBTOTAL', 
+                    'PORCENTAJE', 'PROMEDIO_POR_PIEZA', 'DESTINATARIOS', 'CIUDADES'
+                ]].copy()
+                
+                # Formatear la tabla
+                styled_df = metricas_display.style.format({
+                    'SUBTOTAL': '${:,.2f}',
+                    'PORCENTAJE': '{:.2f}%',
+                    'PROMEDIO_POR_PIEZA': '${:,.2f}'
+                }).background_gradient(
+                    subset=['SUBTOTAL', 'PORCENTAJE'], 
+                    cmap='Blues'
+                )
+                
+                # Mostrar tabla con scroll
+                st.dataframe(styled_df, use_container_width=True, height=600)
+                
+                # Estadísticas de la tabla filtrada
+                st.subheader("📈 Estadísticas de la Tabla Filtrada")
+                
+                col1, col2, col3, col4 = st.columns(4)
+                with col1:
+                    st.metric("Grupos Mostrados", len(metricas_filt))
+                with col2:
+                    st.metric("Subtotal Total", f"${metricas_filt['SUBTOTAL'].sum():,.2f}")
+                with col3:
+                    st.metric("Piezas Totales", f"{metricas_filt['PIEZAS'].sum():,.0f}")
+                with col4:
+                    st.metric("Promedio por Pieza", f"${(metricas_filt['SUBTOTAL'].sum()/metricas_filt['PIEZAS'].sum()):.2f}")
+        
+        with tab4:
+            st.header("🚫 Guías Anuladas")
             
-            styled_datos = styled_datos.applymap(color_estado, subset=['ESTADO'])
-            
-            st.dataframe(
-                styled_datos,
-                use_container_width=True,
-                height=500
-            )
-            
-            # Descargar datos filtrados
-            st.download_button(
-                label="📥 Descargar datos filtrados (CSV)",
-                data=datos_display.to_csv(index=False),
-                file_name=f"datos_filtrados_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                mime="text/csv",
-                use_container_width=True
-            )
-        
-        # Estadísticas
-        st.subheader("📈 Estadísticas de los Datos Filtrados")
-        
-        if not datos_filt.empty:
-            col1, col2, col3, col4 = st.columns(4)
-            with col1:
-                st.metric("Registros", len(datos_filt))
-                st.caption(f"Facturadas: {len(datos_filt[datos_filt['ESTADO']=='FACTURADA']):,}")
-                st.caption(f"Anuladas: {len(datos_filt[datos_filt['ESTADO']=='ANULADA']):,}")
-            with col2:
-                st.metric("Subtotal Total", f"${datos_filt['SUBTOTAL'].sum():,.2f}")
-            with col3:
-                st.metric("Piezas Totales", f"{datos_filt['PIEZAS'].sum():,.0f}")
-            with col4:
-                st.metric("Promedio por Pieza", f"${(datos_filt['SUBTOTAL'].sum()/datos_filt['PIEZAS'].sum()):.2f}")
-    
-    with tab7:
-        st.header("💾 Exportar Resultados")
-        
-        # Opciones de exportación
-        formato = st.radio(
-            "Seleccione el formato de exportación:",
-            ['Excel Formato Exacto (.xlsx)', 'Excel Normal (.xlsx)', 'CSV (.csv)', 'JSON (.json)'],
-            horizontal=True,
-            key="formato_export"
-        )
-        
-        # Nombre base
-        nombre_base = st.text_input(
-            "Nombre base para los archivos:",
-            value=f"gastos_tiendas_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
-            key="nombre_base_export"
-        )
-        
-        st.markdown("---")
-        st.subheader("📤 Exportaciones Principales")
-        
-        col1, col2, col3 = st.columns(3)
-        
-        if formato == 'Excel Formato Exacto (.xlsx)':
-            # Exportar Excel con formato exacto (3 hojas + detalle)
-            if st.button("📊 Excel Formato Exacto", use_container_width=True, type="primary"):
-                with st.spinner("Generando Excel con formato exacto..."):
-                    excel_output = generar_excel_con_formato_exacto(
-                        metricas, 
-                        resultado, 
-                        guias_anuladas, 
-                        manifesto
+            if not guias_anuladas.empty:
+                st.info(f"📊 **Total de guías anuladas:** {len(guias_anuladas):,} ({validacion['porcentaje_anuladas']:.1f}% del total)")
+                
+                # Mostrar resumen de guías anuladas
+                col1, col2, col3, col4 = st.columns(4)
+                with col1:
+                    st.metric("Total Guías", len(guias_anuladas))
+                with col2:
+                    total_manifiesto_anuladas = guias_anuladas['SUBTOTAL_MANIFIESTO'].sum()
+                    st.metric("Valor Manifiesto", f"${total_manifiesto_anuladas:,.2f}")
+                with col3:
+                    total_piezas_anuladas = guias_anuladas['PIEZAS'].sum()
+                    st.metric("Piezas", f"{total_piezas_anuladas:,}")
+                with col4:
+                    st.metric("Destinatarios Únicos", guias_anuladas['DESTINATARIO'].nunique())
+                
+                # Filtros para guías anuladas
+                st.subheader("🔍 Filtros para Guías Anuladas")
+                
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    min_valor = st.number_input("Valor mínimo", value=0.0, step=1.0, key="min_valor_anuladas")
+                with col2:
+                    buscar_destinatario = st.text_input("Buscar destinatario", "", key="buscar_dest_anuladas")
+                with col3:
+                    buscar_ciudad = st.text_input("Buscar ciudad", "", key="buscar_ciudad_anuladas")
+                
+                # Aplicar filtros
+                guias_anuladas_filt = guias_anuladas.copy()
+                
+                if min_valor > 0:
+                    guias_anuladas_filt = guias_anuladas_filt[guias_anuladas_filt['SUBTOTAL_MANIFIESTO'] >= min_valor]
+                
+                if buscar_destinatario:
+                    guias_anuladas_filt = guias_anuladas_filt[
+                        guias_anuladas_filt['DESTINATARIO'].str.contains(buscar_destinatario, case=False, na=False)
+                    ]
+                
+                if buscar_ciudad:
+                    guias_anuladas_filt = guias_anuladas_filt[
+                        guias_anuladas_filt['CIUDAD'].str.contains(buscar_ciudad, case=False, na=False)
+                    ]
+                
+                st.subheader(f"📋 Guías Anuladas Filtradas ({len(guias_anuladas_filt):,})")
+                
+                # Mostrar tabla de guías anuladas
+                columnas_mostrar = ['FECHA_MANIFIESTO', 'GUIA', 'DESTINATARIO', 'CIUDAD', 'PIEZAS', 'SUBTOTAL_MANIFIESTO', 'TIPO']
+                columnas_disponibles = [col for col in columnas_mostrar if col in guias_anuladas_filt.columns]
+                
+                # Formatear fecha para mostrar
+                guias_display = guias_anuladas_filt[columnas_disponibles].copy()
+                if 'FECHA_MANIFIESTO' in guias_display.columns:
+                    guias_display['FECHA_MANIFIESTO'] = pd.to_datetime(guias_display['FECHA_MANIFIESTO'], errors='coerce').dt.strftime('%d/%m/%Y')
+                
+                if not guias_display.empty:
+                    st.dataframe(
+                        guias_display.style.format({
+                            'SUBTOTAL_MANIFIESTO': '${:,.2f}'
+                        }),
+                        use_container_width=True,
+                        height=400
                     )
                     
-                    if excel_output:
-                        col1.download_button(
-                            label="📥 Descargar Excel Formato Exacto",
-                            data=excel_output.getvalue(),
-                            file_name=f"{nombre_base}_formato_exacto.xlsx",
-                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                            use_container_width=True,
-                            help="Formato exacto con 4 hojas: Reporte, Tiendas, Guías Anuladas, Detalle"
+                    # Gráfico de guías anuladas por tipo
+                    st.subheader("📊 Distribución de Guías Anuladas por Tipo")
+                    
+                    anuladas_por_tipo = guias_anuladas_filt.groupby('TIPO').agg(
+                        CANTIDAD=('GUIA', 'count'),
+                        VALOR=('SUBTOTAL_MANIFIESTO', 'sum')
+                    ).reset_index()
+                    
+                    if not anuladas_por_tipo.empty:
+                        fig = px.bar(
+                            anuladas_por_tipo, 
+                            x='VALOR', 
+                            y='TIPO', 
+                            orientation='h',
+                            title='Valor de Guías Anuladas por Tipo',
+                            color='CANTIDAD',
+                            text='VALOR',
+                            color_continuous_scale='Reds'
                         )
+                        fig.update_traces(texttemplate='$%{text:,.2f}', textposition='outside')
+                        fig.update_layout(
+                            yaxis={'categoryorder': 'total ascending'},
+                            height=400
+                        )
+                        st.plotly_chart(fig, use_container_width=True)
+                    
+                    # Opción para descargar guías anuladas
+                    st.download_button(
+                        label="📥 Descargar Guías Anuladas (CSV)",
+                        data=guias_display.to_csv(index=False),
+                        file_name=f"guias_anuladas_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                        mime="text/csv",
+                        use_container_width=True
+                    )
+            else:
+                st.success("✅ No hay guías anuladas. Todas las guías del manifiesto tienen factura asociada.")
         
-        elif formato == 'Excel Normal (.xlsx)':
-            # Exportar Excel normal (sin formato especial)
-            output = BytesIO()
-            try:
-                with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                    # Hoja 1: Métricas por grupo CON PIEZAS
-                    metricas.to_excel(writer, sheet_name='Gastos por Grupo', index=False)
-                    
-                    # Hoja 2: Datos completos CON PIEZAS y FECHA
-                    columnas_export = ['FECHA_MANIFIESTO', 'GUIA_LIMPIA', 'ESTADO', 'GRUPO', 'DESTINATARIO', 'CIUDAD', 'PIEZAS', 
-                                      'SUBTOTAL_MANIFIESTO', 'SUBTOTAL', 'DIFERENCIA', 'TIPO']
-                    columnas_export = [col for col in columnas_export if col in resultado.columns]
-                    resultado[columnas_export].to_excel(writer, sheet_name='Datos Completos', index=False)
-                    
-                    # Hoja 3: Resumen por tipo CON PIEZAS
-                    resumen.to_excel(writer, sheet_name='Resumen por Tipo', index=False)
-                    
-                    # Hoja 4: Validación
-                    validacion_df = pd.DataFrame([validacion])
-                    validacion_df.to_excel(writer, sheet_name='Validación', index=False)
-                    
-                    # Hoja 5: Guías anuladas
-                    if not guias_anuladas.empty:
-                        guias_anuladas.to_excel(writer, sheet_name='Guias Anuladas', index=False)
+        with tab5:
+            st.header("🌎 Distribución Geográfica")
+            
+            if 'CIUDAD' in resultado.columns:
+                # Filtrar solo guías facturadas para distribución geográfica
+                df_facturadas = resultado[resultado['ESTADO'] == 'FACTURADA']
                 
-                col2.download_button(
-                    label="📥 Excel Normal",
-                    data=output.getvalue(),
-                    file_name=f"{nombre_base}.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                # Agrupar por ciudad CON PIEZAS
+                ciudad_agrupada = df_facturadas.groupby('CIUDAD').agg({
+                    'GUIA_LIMPIA': 'count',
+                    'PIEZAS': 'sum',
+                    'SUBTOTAL': 'sum'
+                }).reset_index()
+                
+                ciudad_agrupada = ciudad_agrupada.rename(columns={
+                    'GUIA_LIMPIA': 'TOTAL_GUIAS',
+                    'PIEZAS': 'TOTAL_PIEZAS',
+                    'SUBTOTAL': 'TOTAL_SUBTOTAL'
+                })
+                
+                ciudad_agrupada = ciudad_agrupada.sort_values('TOTAL_SUBTOTAL', ascending=False)
+                
+                # Gráfico de ciudades
+                st.subheader("Top 15 Ciudades por Gasto (Facturadas)")
+                
+                if not ciudad_agrupada.empty:
+                    fig = px.bar(
+                        ciudad_agrupada.head(15), 
+                        x='TOTAL_SUBTOTAL', 
+                        y='CIUDAD',
+                        orientation='h', 
+                        title='Distribución por Ciudad',
+                        color='TOTAL_PIEZAS', 
+                        color_continuous_scale='Viridis',
+                        text='TOTAL_SUBTOTAL',
+                        hover_data=['TOTAL_GUIAS', 'TOTAL_PIEZAS']
+                    )
+                    fig.update_traces(texttemplate='$%{text:,.2f}', textposition='outside')
+                    fig.update_layout(yaxis={'categoryorder': 'total ascending'}, height=600)
+                    st.plotly_chart(fig, use_container_width=True)
+                    
+                    # Tabla de ciudades
+                    st.subheader("Tabla Detallada por Ciudad")
+                    ciudad_agrupada['PORCENTAJE'] = (ciudad_agrupada['TOTAL_SUBTOTAL'] / ciudad_agrupada['TOTAL_SUBTOTAL'].sum() * 100).round(2)
+                    ciudad_agrupada['PROMEDIO_POR_PIEZA'] = (ciudad_agrupada['TOTAL_SUBTOTAL'] / ciudad_agrupada['TOTAL_PIEZAS']).round(2)
+                    st.dataframe(
+                        ciudad_agrupada.style.format({
+                            'TOTAL_SUBTOTAL': '${:,.2f}',
+                            'PORCENTAJE': '{:.2f}%',
+                            'PROMEDIO_POR_PIEZA': '${:,.2f}'
+                        }),
+                        use_container_width=True,
+                        height=400
+                    )
+        
+        with tab6:
+            st.header("📋 Datos Detallados")
+            
+            # Filtros avanzados
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                grupo_filtro = st.multiselect(
+                    "Filtrar por Grupo:",
+                    sorted(resultado['GRUPO'].unique()),
+                    default=[],
+                    key="filtro_grupo_detalle"
+                )
+            
+            with col2:
+                estado_filtro = st.selectbox(
+                    "Estado:",
+                    ['TODOS', 'FACTURADA', 'ANULADA'],
+                    key="estado_filtro_detalle"
+                )
+            
+            with col3:
+                min_subtotal = st.number_input(
+                    "Mínimo subtotal:",
+                    min_value=0.0,
+                    value=0.0,
+                    step=1.0,
+                    key="min_subtotal_detalle"
+                )
+            
+            # Búsqueda
+            buscar = st.text_input("🔍 Buscar por guía, destinatario o ciudad:", key="buscar_detalle")
+            
+            # Aplicar filtros
+            datos_filt = resultado.copy()
+            
+            if grupo_filtro:
+                datos_filt = datos_filt[datos_filt['GRUPO'].isin(grupo_filtro)]
+            
+            if estado_filtro == 'FACTURADA':
+                datos_filt = datos_filt[datos_filt['ESTADO'] == 'FACTURADA']
+            elif estado_filtro == 'ANULADA':
+                datos_filt = datos_filt[datos_filt['ESTADO'] == 'ANULADA']
+            
+            datos_filt = datos_filt[datos_filt['SUBTOTAL_MANIFIESTO'] >= min_subtotal]
+            
+            if buscar:
+                datos_filt = datos_filt[
+                    datos_filt['GUIA_LIMPIA'].astype(str).str.contains(buscar, case=False, na=False) |
+                    datos_filt['DESTINATARIO'].astype(str).str.contains(buscar, case=False, na=False) |
+                    datos_filt['CIUDAD'].astype(str).str.contains(buscar, case=False, na=False) |
+                    datos_filt['GRUPO'].str.contains(buscar, case=False, na=False)
+                ]
+            
+            # Mostrar datos
+            columnas_mostrar = ['FECHA_MANIFIESTO', 'GUIA_LIMPIA', 'ESTADO', 'GRUPO', 'DESTINATARIO', 'CIUDAD', 'PIEZAS', 
+                              'SUBTOTAL_MANIFIESTO', 'SUBTOTAL', 'DIFERENCIA', 'TIPO']
+            columnas_disponibles = [col for col in columnas_mostrar if col in datos_filt.columns]
+            
+            st.subheader(f"Registros filtrados: {len(datos_filt):,}")
+            
+            if not datos_filt.empty:
+                # Crear copia para mostrar con fecha formateada
+                datos_display = datos_filt[columnas_disponibles].copy()
+                if 'FECHA_MANIFIESTO' in datos_display.columns:
+                    datos_display['FECHA_MANIFIESTO'] = pd.to_datetime(datos_display['FECHA_MANIFIESTO'], errors='coerce').dt.strftime('%d/%m/%Y')
+                
+                # Mostrar tabla con formato
+                styled_datos = datos_display.style.format({
+                    'SUBTOTAL_MANIFIESTO': '${:,.2f}',
+                    'SUBTOTAL': '${:,.2f}',
+                    'DIFERENCIA': '${:,.2f}'
+                })
+                
+                # Aplicar color condicional al estado
+                def color_estado(val):
+                    if val == 'ANULADA':
+                        return 'background-color: #ffcccc'
+                    elif val == 'FACTURADA':
+                        return 'background-color: #ccffcc'
+                    return ''
+                
+                styled_datos = styled_datos.applymap(color_estado, subset=['ESTADO'])
+                
+                st.dataframe(
+                    styled_datos,
                     use_container_width=True,
-                    help="Contiene todas las hojas en un solo archivo Excel"
+                    height=500
                 )
                 
-            except Exception as e:
-                st.error(f"Error al generar Excel: {str(e)}")
-                st.info("Intente exportar en formato CSV como alternativa")
-        
-        elif formato == 'CSV (.csv)':
-            # Exportar CSV individuales
-            col1.download_button(
-                label="📥 Métricas (CSV)",
-                data=metricas.to_csv(index=False),
-                file_name=f"{nombre_base}_metricas.csv",
-                mime="text/csv",
-                use_container_width=True
-            )
-            
-            col2.download_button(
-                label="📥 Datos (CSV)",
-                data=resultado[['FECHA_MANIFIESTO', 'GUIA_LIMPIA', 'ESTADO', 'GRUPO', 'DESTINATARIO', 'CIUDAD', 'PIEZAS', 
-                              'SUBTOTAL_MANIFIESTO', 'SUBTOTAL', 'DIFERENCIA', 'TIPO']].to_csv(index=False),
-                file_name=f"{nombre_base}_datos.csv",
-                mime="text/csv",
-                use_container_width=True
-            )
-            
-            col3.download_button(
-                label="📥 Guías Anuladas (CSV)",
-                data=guias_anuladas.to_csv(index=False),
-                file_name=f"{nombre_base}_guias_anuladas.csv",
-                mime="text/csv",
-                use_container_width=True
-            )
-        
-        else:  # JSON
-            col1.download_button(
-                label="📥 Métricas (JSON)",
-                data=metricas.to_json(orient='records', indent=2),
-                file_name=f"{nombre_base}_metricas.json",
-                mime="application/json",
-                use_container_width=True
-            )
-        
-        st.markdown("---")
-        st.subheader("📤 Exportaciones Específicas")
-        
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            # Grupos principales
-            if not metricas.empty:
-                grupos_principales = metricas[metricas['SUBTOTAL'] > 0]
+                # Descargar datos filtrados
                 st.download_button(
-                    label="🎯 Grupos Principales",
-                    data=grupos_principales.to_csv(index=False),
-                    file_name=f"{nombre_base}_grupos_principales.csv",
+                    label="📥 Descargar datos filtrados (CSV)",
+                    data=datos_display.to_csv(index=False),
+                    file_name=f"datos_filtrados_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
                     mime="text/csv",
                     use_container_width=True
                 )
+            
+            # Estadísticas
+            st.subheader("📈 Estadísticas de los Datos Filtrados")
+            
+            if not datos_filt.empty:
+                col1, col2, col3, col4 = st.columns(4)
+                with col1:
+                    st.metric("Registros", len(datos_filt))
+                    st.caption(f"Facturadas: {len(datos_filt[datos_filt['ESTADO']=='FACTURADA']):,}")
+                    st.caption(f"Anuladas: {len(datos_filt[datos_filt['ESTADO']=='ANULADA']):,}")
+                with col2:
+                    st.metric("Subtotal Total", f"${datos_filt['SUBTOTAL'].sum():,.2f}")
+                with col3:
+                    st.metric("Piezas Totales", f"{datos_filt['PIEZAS'].sum():,.0f}")
+                with col4:
+                    st.metric("Promedio por Pieza", f"${(datos_filt['SUBTOTAL'].sum()/datos_filt['PIEZAS'].sum()):.2f}")
         
-        with col2:
-            # Ventas web
-            if not resultado.empty:
-                venta_web = resultado[resultado['TIPO'] == 'VENTA WEB']
-                if not venta_web.empty:
+        with tab7:
+            st.header("💾 Exportar Resultados")
+            
+            # Opciones de exportación
+            formato = st.radio(
+                "Seleccione el formato de exportación:",
+                ['Excel Formato Exacto (.xlsx)', 'Excel Normal (.xlsx)', 'CSV (.csv)', 'JSON (.json)'],
+                horizontal=True,
+                key="formato_export"
+            )
+            
+            # Nombre base
+            nombre_base = st.text_input(
+                "Nombre base para los archivos:",
+                value=f"gastos_tiendas_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+                key="nombre_base_export"
+            )
+            
+            st.markdown("---")
+            st.subheader("📤 Exportaciones Principales")
+            
+            col1, col2, col3 = st.columns(3)
+            
+            if formato == 'Excel Formato Exacto (.xlsx)':
+                # Exportar Excel con formato exacto
+                if st.button("📊 Excel Formato Exacto", use_container_width=True, type="primary"):
+                    with st.spinner("Generando Excel con formato exacto..."):
+                        excel_output = generar_excel_con_formato_exacto(
+                            metricas, 
+                            resultado, 
+                            guias_anuladas, 
+                            manifesto
+                        )
+                        
+                        if excel_output:
+                            col1.download_button(
+                                label="📥 Descargar Excel Formato Exacto",
+                                data=excel_output.getvalue(),
+                                file_name=f"{nombre_base}_formato_exacto.xlsx",
+                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                use_container_width=True,
+                                help="Formato exacto con 4 hojas: Reporte, Tiendas, Guías Anuladas, Detalle"
+                            )
+            
+            elif formato == 'Excel Normal (.xlsx)':
+                # Exportar Excel normal
+                output = BytesIO()
+                try:
+                    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                        # Hoja 1: Métricas por grupo CON PIEZAS
+                        metricas.to_excel(writer, sheet_name='Gastos por Grupo', index=False)
+                        
+                        # Hoja 2: Datos completos CON PIEZAS y FECHA
+                        columnas_export = ['FECHA_MANIFIESTO', 'GUIA_LIMPIA', 'ESTADO', 'GRUPO', 'DESTINATARIO', 'CIUDAD', 'PIEZAS', 
+                                          'SUBTOTAL_MANIFIESTO', 'SUBTOTAL', 'DIFERENCIA', 'TIPO']
+                        columnas_export = [col for col in columnas_export if col in resultado.columns]
+                        resultado[columnas_export].to_excel(writer, sheet_name='Datos Completos', index=False)
+                        
+                        # Hoja 3: Resumen por tipo CON PIEZAS
+                        resumen.to_excel(writer, sheet_name='Resumen por Tipo', index=False)
+                        
+                        # Hoja 4: Validación
+                        validacion_df = pd.DataFrame([validacion])
+                        validacion_df.to_excel(writer, sheet_name='Validación', index=False)
+                        
+                        # Hoja 5: Guías anuladas
+                        if not guias_anuladas.empty:
+                            guias_anuladas.to_excel(writer, sheet_name='Guias Anuladas', index=False)
+                    
+                    col2.download_button(
+                        label="📥 Excel Normal",
+                        data=output.getvalue(),
+                        file_name=f"{nombre_base}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        use_container_width=True,
+                        help="Contiene todas las hojas en un solo archivo Excel"
+                    )
+                    
+                except Exception as e:
+                    st.error(f"Error al generar Excel: {str(e)}")
+                    st.info("Intente exportar en formato CSV como alternativa")
+            
+            elif formato == 'CSV (.csv)':
+                # Exportar CSV individuales
+                col1.download_button(
+                    label="📥 Métricas (CSV)",
+                    data=metricas.to_csv(index=False),
+                    file_name=f"{nombre_base}_metricas.csv",
+                    mime="text/csv",
+                    use_container_width=True
+                )
+                
+                col2.download_button(
+                    label="📥 Datos (CSV)",
+                    data=resultado[['FECHA_MANIFIESTO', 'GUIA_LIMPIA', 'ESTADO', 'GRUPO', 'DESTINATARIO', 'CIUDAD', 'PIEZAS', 
+                                  'SUBTOTAL_MANIFIESTO', 'SUBTOTAL', 'DIFERENCIA', 'TIPO']].to_csv(index=False),
+                    file_name=f"{nombre_base}_datos.csv",
+                    mime="text/csv",
+                    use_container_width=True
+                )
+                
+                col3.download_button(
+                    label="📥 Guías Anuladas (CSV)",
+                    data=guias_anuladas.to_csv(index=False),
+                    file_name=f"{nombre_base}_guias_anuladas.csv",
+                    mime="text/csv",
+                    use_container_width=True
+                )
+            
+            else:  # JSON
+                col1.download_button(
+                    label="📥 Métricas (JSON)",
+                    data=metricas.to_json(orient='records', indent=2),
+                    file_name=f"{nombre_base}_metricas.json",
+                    mime="application/json",
+                    use_container_width=True
+                )
+            
+            st.markdown("---")
+            st.subheader("📤 Exportaciones Específicas")
+            
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                # Grupos principales
+                if not metricas.empty:
+                    grupos_principales = metricas[metricas['SUBTOTAL'] > 0]
                     st.download_button(
-                        label="🛒 Ventas Web Detalladas",
-                        data=venta_web[['FECHA_MANIFIESTO', 'GUIA_LIMPIA', 'ESTADO', 'DESTINATARIO', 'CIUDAD', 'PIEZAS', 'SUBTOTAL']].to_csv(index=False),
-                        file_name=f"{nombre_base}_ventas_web.csv",
+                        label="🎯 Grupos Principales",
+                        data=grupos_principales.to_csv(index=False),
+                        file_name=f"{nombre_base}_grupos_principales.csv",
+                        mime="text/csv",
+                        use_container_width=True
+                    )
+            
+            with col2:
+                # Ventas web
+                if not resultado.empty:
+                    venta_web = resultado[resultado['TIPO'] == 'VENTA WEB']
+                    if not venta_web.empty:
+                        st.download_button(
+                            label="🛒 Ventas Web Detalladas",
+                            data=venta_web[['FECHA_MANIFIESTO', 'GUIA_LIMPIA', 'ESTADO', 'DESTINATARIO', 'CIUDAD', 'PIEZAS', 'SUBTOTAL']].to_csv(index=False),
+                            file_name=f"{nombre_base}_ventas_web.csv",
+                            mime="text/csv",
+                            use_container_width=True
+                        )
+            
+            with col3:
+                # Guías anuladas detalladas
+                if not guias_anuladas.empty:
+                    st.download_button(
+                        label="🚫 Guías Anuladas Detalladas",
+                        data=guias_anuladas[['FECHA_MANIFIESTO', 'GUIA_LIMPIA', 'DESTINATARIO', 'CIUDAD', 'PIEZAS', 'SUBTOTAL_MANIFIESTO', 'TIPO']].to_csv(index=False),
+                        file_name=f"{nombre_base}_guias_anuladas_detalladas.csv",
                         mime="text/csv",
                         use_container_width=True
                     )
         
-        with col3:
-            # Guías anuladas detalladas
-            if not guias_anuladas.empty:
-                st.download_button(
-                    label="🚫 Guías Anuladas Detalladas",
-                    data=guias_anuladas[['FECHA_MANIFIESTO', 'GUIA_LIMPIA', 'DESTINATARIO', 'CIUDAD', 'PIEZAS', 'SUBTOTAL_MANIFIESTO', 'TIPO']].to_csv(index=False),
-                    file_name=f"{nombre_base}_guias_anuladas_detalladas.csv",
-                    mime="text/csv",
-                    use_container_width=True
-                )
-    
-    with tab8:
-        st.header("📄 Generar Reporte PDF Ejecutivo")
-        
-        st.info("""
-        **📋 Contenido del Reporte PDF:**
-        1. Métricas principales del análisis
-        2. Resumen por tipo de tienda
-        3. Top 15 grupos por gasto
-        4. Análisis ejecutivo con guías anuladas
-        5. Recomendaciones
-        """)
-        
-        # Opciones de reporte
-        col1, col2 = st.columns(2)
-        with col1:
-            incluir_graficos = st.checkbox("Incluir gráficos en el reporte", value=True)
-        with col2:
-            formato_reporte = st.selectbox("Formato del reporte", ["Ejecutivo", "Detallado", "Mínimo"])
-        
-        # Botón para generar PDF
-        if st.button("🖨️ Generar Reporte PDF Ejecutivo", type="primary", use_container_width=True):
-            with st.spinner("Generando reporte PDF..."):
-                try:
-                    # Generar el PDF
-                    pdf_path = generar_pdf_reporte(metricas, resumen, validacion)
-                    
-                    if pdf_path:
-                        with open(pdf_path, "rb") as pdf_file:
-                            pdf_bytes = pdf_file.read()
+        with tab8:
+            st.header("📄 Generar Reporte PDF Ejecutivo")
+            
+            st.info("""
+            **📋 Contenido del Reporte PDF:**
+            1. Métricas principales del análisis
+            2. Resumen por tipo de tienda
+            3. Top 15 grupos por gasto
+            4. Análisis ejecutivo con guías anuladas
+            5. Recomendaciones
+            """)
+            
+            # Botón para generar PDF
+            if st.button("🖨️ Generar Reporte PDF Ejecutivo", type="primary", use_container_width=True):
+                with st.spinner("Generando reporte PDF..."):
+                    try:
+                        # Generar el PDF
+                        pdf_path = generar_pdf_reporte(metricas, resumen, validacion)
                         
-                        # Mostrar botón de descarga
-                        st.success("✅ Reporte PDF generado exitosamente")
-                        
-                        col1, col2 = st.columns(2)
-                        with col1:
+                        if pdf_path:
+                            with open(pdf_path, "rb") as pdf_file:
+                                pdf_bytes = pdf_file.read()
+                            
+                            # Mostrar botón de descarga
+                            st.success("✅ Reporte PDF generado exitosamente")
+                            
                             st.download_button(
                                 label="📥 Descargar Reporte PDF",
                                 data=pdf_bytes,
@@ -4866,130 +3125,1736 @@ if st.session_state.datos['procesado']:
                                 mime="application/pdf",
                                 use_container_width=True
                             )
-                        
-                        # Mostrar vista previa del contenido
-                        with st.expander("📋 Vista previa del contenido del reporte"):
-                            st.write("**Métricas principales incluidas:**")
-                            st.write(f"- Total facturado: ${validacion['total_facturas']:,.2f}")
-                            st.write(f"- Total manifiesto: ${validacion['total_manifiesto']:,.2f}")
-                            st.write(f"- Guías procesadas: {validacion['guias_procesadas']:,}")
-                            st.write(f"- Guías facturadas: {validacion['guias_facturadas']:,} ({validacion['porcentaje_facturadas']:.1f}%)")
-                            st.write(f"- **Guías anuladas: {validacion['guias_anuladas']:,} ({validacion['porcentaje_anuladas']:.1f}%)**")
-                            st.write(f"- Piezas totales: {validacion['piezas_totales']:,}")
-                            
-                            st.write("\n**Resumen por tipo de tienda:**")
-                            if not resumen.empty:
-                                for _, row in resumen.iterrows():
-                                    st.write(f"- {row['TIPO']}: ${row['SUBTOTAL']:,.2f} ({row['PORCENTAJE']:.2f}%)")
-                            
-                            st.write("\n**Top grupos por gasto:**")
-                            if not metricas.empty:
-                                for i, (_, row) in enumerate(metricas.head(5).iterrows(), 1):
-                                    st.write(f"{i}. {row['GRUPO'][:40]}: ${row['SUBTOTAL']:,.2f} ({row['PIEZAS']:,} piezas)")
-                except Exception as e:
-                    st.error(f"Error al generar el reporte PDF: {str(e)}")
-
-else:
-    # Pantalla inicial
-    st.markdown("""
-    ## 👋 Bienvenido al Sistema de Gestión de Gastos por Tienda - MEJORADO
-    
-    ### 🎯 **NUEVAS CARACTERÍSTICAS IMPLEMENTADAS:**
-    
-    **✅ FORMATO EXCEL EXACTO:**
-    1. **📊 HOJA "Reporte":** Tabla dinámica con "Etiquetas de fila" y "Suma de SUBTOTAL"
-    2. **🏪 HOJA "Tiendas":** Métricas agrupadas por DESTINATARIO del manifiesto
-    3. **🚫 HOJA "Guias Anuladas":** Detalle completo de guías sin factura (marcadas como ANULADAS) **incluye fecha**
-    4. **📄 HOJA "Detalle":** Todas las guías con fecha y número de guía
-    5. **📋 COLUMNAS ORIGINALES:** Se mantienen todas las columnas del manifiesto en el reporte final
-    
-    **✅ MEJORAS DE PROCESAMIENTO:**
-    1. **🔗 SOLO DESTINATARIO DEL MANIFIESTO:** No se usa información de destinatario de las facturas
-    2. **🚫 IDENTIFICACIÓN DE GUÍAS ANULADAS:** Guías del manifiesto sin factura correspondiente
-    3. **📊 MÉTRICAS MEJORADAS:** Incluye diferencia entre manifiesto y factura
-    4. **🎨 FORMATO PROFESIONAL:** Bordes, colores (rojo para anuladas) y fórmulas automáticas
-    
-    ### 🔧 **Flujo de trabajo actualizado:**
-    
-    1. **📁 Subir archivos** en el panel lateral
-       - **Manifiesto:** Debe contener GUÍA, DESTINATARIO, CIUDAD, VALOR y PIEZAS (opcional FECHA)
-       - **Facturas:** Solo necesita GUÍA y VALOR REAL cobrado
-    
-    2. **⚙️ Configurar columnas** (detección automática)
-    
-    3. **🚀 Procesar** los datos
-    
-    4. **📊 Analizar** resultados en 8 pestañas:
-       - **📊 Resumen:** Métricas principales
-       - **✅ Validación:** Comparación de totales
-       - **🏪 TODAS LAS TIENDAS:** Ver y filtrar todas las tiendas
-       - **🚫 Guías Anuladas:** Detalle de guías sin factura (con fecha)
-       - **🌎 Geografía:** Distribución por ciudad
-       - **📋 Datos:** Tabla detallada (con fecha)
-       - **💾 Exportar:** Múltiples formatos incluyendo Excel con formato exacto
-       - **📄 Reporte PDF:** Generar reporte ejecutivo
-    
-    5. **💾 Exportar** reportes completos en formato Excel exacto (4 hojas)
-    
-    ### 📋 **Estructura REQUERIDA del Manifiesto:**
-    
-    **Manifiesto (DEBE tener columna de PIEZAS y DESTINATARIO):**
-    ```
-    FECHA | GUÍA | ORIGEN | GUIA2 | DESTINATARIO | SERVICIO | TRANSPORTE | PIEZAS | PESO | FLETE | SUBTOTAL
-    46004 | 20176386 | DURAN | LC52450203 | Lider celeley zamb CAR | SEC | | 1 | 16 | 3,41 | 3,41
-    ```
-    
-    **Facturas (solo necesita 2 columnas):**
-    ```
-    GUÍA | SUBTOTAL
-    LC52450203 | 3.41
-    ```
-    
-    **Formato de Excel generado:**
-    - **Reporte:** Tabla dinámica con "Etiquetas de fila" y "Suma de SUBTOTAL"
-    - **Tiendas:** 10 columnas con todas las métricas calculadas
-    - **Guias Anuladas:** Columnas originales del manifiesto + estado ANULADA, **incluye fecha**
-    - **Detalle:** Todas las guías con fecha, guía, destinatario, ciudad, piezas, subtotales y estado
-    - **Estilos:** Bordes, colores, formato numérico profesional
-    """)
-    
-    with st.expander("📋 Ver ejemplo completo de archivos"):
-        col1, col2 = st.columns(2)
+                    except Exception as e:
+                        st.error(f"Error al generar el reporte PDF: {str(e)}")
+    else:
+        # Pantalla inicial del módulo
+        st.info("👆 **Por favor, carga los archivos de manifiesto y facturas desde el panel lateral para comenzar el análisis.**")
         
-        with col1:
-            st.write("**Ejemplo Manifiesto.csv:**")
-            st.code("""
-            FECHA,GUIA,ORIGEN,GUIA2,DESTINATARIO,SERVICIO,TRANSPORTE,NUMERO DE PIEZAS,PESO,FLETE,SUBTOTAL
-            46004,20176386,DURAN,LC52450203,Lider celeley zamb CAR,SEC,,1,16,3.41,3.41
-            46006,LC52390589,GUAYAQUIL,LC52516378,COMERCIALIZADO CAR,PRI,,1,4,2.15,2.15
-            """)
+        st.markdown("### 📋 Estructura esperada del Manifiesto:")
+        st.code("""
+        FECHA,GUIA,ORIGEN,GUIA2,DESTINATARIO,SERVICIO,TRANSPORTE,PIEZAS,PESO,FLETE,SUBTOTAL
+        46004,20176386,DURAN,LC52450203,Lider celeley zamb CAR,SEC,,1,16,3.41,3.41
+        46006,LC52390589,GUAYAQUIL,LC52516378,COMERCIALIZADO CAR,PRI,,1,4,2.15,2.15
+        """)
         
-        with col2:
-            st.write("**Ejemplo Facturas.csv:**")
-            st.code("""
-            GUIA,SUBTOTAL
-            LC52450203,3.41
-            LC52516378,2.15
-            """)
+        st.markdown("### 📋 Estructura esperada de Facturas:")
+        st.code("""
+        GUIA,SUBTOTAL
+        LC52450203,3.41
+        LC52516378,2.15
+        """)
+    
+    st.markdown('</div>', unsafe_allow_html=True)
 
-# Footer
-st.markdown("---")
-st.markdown(
-    """
-    <div style='text-align: center'>
-    💰 <b>Sistema de Gestión de Gastos v9.0 MEJORADO</b> | 
-    🏪 <b>TODAS LAS TIENDAS</b> | 
-    🚫 <b>GUÍAS ANULADAS</b> | 
-    📊 <b>EXCEL FORMATO EXACTO</b> | 
-    📦 <b>CONTEO DE PIEZAS</b> |
-    📄 <b>REPORTE PDF</b> |
-    📅 <b>FECHA EN REPORTES</b>
-    </div>
-    """,
-    unsafe_allow_html=True
-)
+def cargar_archivo_reconciliacion(uploaded_file, nombre):
+    """Carga archivos Excel o CSV para el módulo de reconciliación"""
+    try:
+        if uploaded_file.name.endswith(('.xlsx', '.xls')):
+            # Cargar Excel
+            excel_file = pd.ExcelFile(uploaded_file)
+            hojas = excel_file.sheet_names
+            
+            # Filtrar hojas vacías y seleccionar la primera con datos significativos
+            hoja_seleccionada = None
+            for hoja in hojas:
+                temp_df = pd.read_excel(uploaded_file, sheet_name=hoja, nrows=5)
+                if not temp_df.empty and len(temp_df.columns) > 1:
+                    hoja_seleccionada = hoja
+                    break
+            
+            if hoja_seleccionada is None:
+                hoja_seleccionada = hojas[0]
+            
+            st.sidebar.info(f"Hoja seleccionada automáticamente: {hoja_seleccionada}")
+            df = pd.read_excel(uploaded_file, sheet_name=hoja_seleccionada)
+            st.sidebar.success(f"✓ {nombre}: {len(df):,} filas de Excel")
+            
+        elif uploaded_file.name.endswith('.csv'):
+            # Probar diferentes encodings
+            encodings = ['utf-8', 'latin-1', 'cp1252', 'ISO-8859-1']
+            df = None
+            for encoding in encodings:
+                try:
+                    df = pd.read_csv(uploaded_file, encoding=encoding)
+                    st.sidebar.success(f"✓ {nombre}: {len(df):,} filas de CSV ({encoding})")
+                    break
+                except UnicodeDecodeError:
+                    if encoding == encodings[-1]:
+                        raise
+                    continue
+        else:
+            st.sidebar.error(f"✗ Formato no soportado: {uploaded_file.name}")
+            return None
+        
+        # Limpiar columnas vacías
+        df = df.dropna(axis=1, how='all')
+        df = df.dropna(how='all')
+        
+        # Verificar que el DataFrame no esté vacío
+        if df.empty:
+            st.sidebar.error(f"✗ {nombre}: Archivo vacío o sin datos válidos")
+            return None
+        
+        return df
+        
+    except Exception as e:
+        st.sidebar.error(f"✗ Error al cargar {nombre}: {str(e)}")
+        return None
+
 # ==============================================================================
-# 10. MODULO AUDITORIA DE CORREOS
+# 9. MODULO DASHBOARD LOGISTICO
+# ==============================================================================
+
+# Constantes para el dashboard logistico
+TIENDAS_REGULARES = 42
+PRICE_CLUBS = 5
+TIENDA_WEB = 1
+VENTAS_POR_MAYOR = 1
+FALLAS = 1
+
+PRICE_KEYWORDS = ['PRICE', 'OIL']
+WEB_KEYWORDS = ['WEB', 'TIENDA MOVIL', 'MOVIL']
+FALLAS_KEYWORDS = ['FALLAS']
+VENTAS_MAYOR_KEYWORDS = ['MAYOR', 'MAYORISTA']
+
+TIENDAS_REGULARES_LISTA = [
+    'AERO CCI', 'AERO DAULE', 'AERO LAGO AGRIO', 'AERO MALL DEL RIO GYE',
+    'AERO PLAYAS', 'AEROPOSTALE 6 DE DICIEMBRE', 'AEROPOSTALE BOMBOLI',
+    'AEROPOSTALE CAYAMBE', 'AEROPOSTALE EL COCA', 'AEROPOSTALE PASAJE',
+    'AEROPOSTALE PEDERNALES', 'AMBATO', 'BABAHOYO', 'BAHIA DE CARAQUEZ',
+    'CARAPUNGO', 'CEIBOS', 'CONDADO SHOPPING', 'CUENCA', 'CUENCA CENTRO HISTORICO',
+    'DURAN', 'LA PLAZA SHOPPING', 'MACHALA', 'MAL DEL SUR', 'MALL DEL PACIFICO',
+    'MALL DEL SOL', 'MANTA', 'MILAGRO', 'MULTIPLAZA RIOBAMBA', 'PASEO AMBATO',
+    'PENINSULA', 'PORTOVIEJO', 'QUEVEDO', 'RIOBAMBA', 'RIOCENTRO EL DORADO',
+    'RIOCENTRO NORTE', 'SAN LUIS', 'SANTO DOMINGO'
+]
+
+COLORS = {
+    'PRICE CLUB': '#0033A0',
+    'TIENDAS AEROPOSTALE': '#E4002B',
+    'VENTAS POR MAYOR': '#10B981',
+    'TIENDA WEB': '#8B5CF6',
+    'FALLAS': '#F59E0B',
+    'FUNDAS': '#EC4899'
+}
+
+GRADIENTS = {
+    'PRICE CLUB': 'linear-gradient(135deg, #0033A015, #0033A030)',
+    'TIENDAS AEROPOSTALE': 'linear-gradient(135deg, #E4002B15, #E4002B30)',
+    'VENTAS POR MAYOR': 'linear-gradient(135deg, #10B98115, #10B98130)',
+    'TIENDA WEB': 'linear-gradient(135deg, #8B5CF615, #8B5CF630)',
+    'FALLAS': 'linear-gradient(135deg, #F59E0B15, #F59E0B30)',
+    'FUNDAS': 'linear-gradient(135deg, #EC489915, #EC489930)'
+}
+
+CHART_COLORS = ['#0033A0', '#E4002B', '#10B981', '#8B5CF6', '#F59E0B', '#3B82F6']
+
+# Diccionarios para clasificación de productos
+GENDER_MAP = {
+    'GIRLS': 'Mujer', 'TOPMUJER': 'Mujer', 'WOMEN': 'Mujer',
+    'LADIES': 'Mujer', 'FEMALE': 'Mujer', 'MUJER': 'Mujer',
+    'GUYS': 'Hombre', 'MEN': 'Hombre', 'MAN': 'Hombre',
+    'HOMBRE': 'Hombre', 'MALE': 'Hombre',
+    'UNISEX': 'Unisex', 'KIDS': 'Niño/a', 'CHILD': 'Niño/a',
+    'BOYS': 'Niño', 'GIRLSKIDS': 'Niña',
+    'BABY': 'Bebé', 'INFANT': 'Bebé'
+}
+
+CATEGORY_MAP = {
+    'TEES': 'Camiseta', 'TEE': 'Camiseta', 'T-SHIRT': 'Camiseta',
+    'TANK': 'Camiseta sin mangas', 'TANK TOP': 'Camiseta sin mangas',
+    'TOP': 'Top', 'TOPS': 'Top', 'BARE': 'Blusa', 'CORE': 'Blusa',
+    'GRAPHIC': 'Camiseta estampada', 'GRAPHICS': 'Camiseta estampada',
+    'POLO': 'Polo', 'POLOS': 'Polo', 'SHIRT': 'Camisa',
+    'BUTTON-DOWN': 'Camisa', 'BUTTONDOWN': 'Camisa',
+    'DRESS': 'Vestido', 'DRESSES': 'Vestido', 'SUNDRESS': 'Vestido',
+    'PANTS': 'Pantalón', 'PANT': 'Pantalón', 'TROUSERS': 'Pantalón',
+    'JEANS': 'Jeans', 'JEAN': 'Jeans', 'DENIM': 'Jeans',
+    'BOOTCUT': 'Pantalón bootcut', 'SKINNY': 'Pantalón ajustado',
+    'STRAIGHT': 'Pantalón recto', 'FLARE': 'Pantalón campana',
+    'SHORTS': 'Short', 'SHORT': 'Short', 'BERMUDA': 'Bermuda',
+    'JACKET': 'Chaqueta', 'JACKETS': 'Chaqueta', 'HOODIE': 'Sudadera',
+    'SWEATSHIRT': 'Sudadera', 'SWEATER': 'Suéter', 'BLAZER': 'Blazer',
+    'BVD': 'Ropa interior', 'BOXER': 'Boxer', 'BOXERS': 'Boxer',
+    'UNDERWEAR': 'Ropa interior', 'BRIEF': 'Calzoncillo',
+    'BELT': 'Cinturón', 'BELTS': 'Cinturón', 'HAT': 'Gorro',
+    'CAP': 'Gorra', 'SOCKS': 'Medias', 'SOCK': 'Medias',
+    'WOVEN': 'Tejido', 'KNIT': 'Tejido', 'KNITTED': 'Tejido',
+    'SOLID': 'Sólido', 'BASIC': 'Básico', 'BASICO': 'Básico',
+    'LEATHER': 'Cuero', 'DENIM': 'Denim',
+    'SUMMER': 'Verano', 'WINTER': 'Invierno', 'SPRING': 'Primavera',
+    'FALL': 'Otoño', 'AUTUMN': 'Otoño'
+}
+
+COLOR_MAP = {
+    'BLACK': 'Negro', 'BLACK/DARK': 'Negro', 'DARK BLACK': 'Negro Oscuro',
+    'WHITE': 'Blanco', 'WHITE/LIGHT': 'Blanco',
+    'RED': 'Rojo', 'RASPBERRY': 'Frambuesa', 'EARTH RED': 'Rojo Tierra',
+    'BLUE': 'Azul', 'NAVY': 'Azul Marino', 'LIGHT BLUE': 'Azul Claro',
+    'GREEN': 'Verde', 'GREEN GABLES': 'Verde Gabardina',
+    'YELLOW': 'Amarillo', 'GOLD': 'Dorado',
+    'PINK': 'Rosa', 'HOT PINK': 'Rosa Fuerte',
+    'PURPLE': 'Morado', 'VIOLET': 'Violeta',
+    'ORANGE': 'Naranja', 'BROWN': 'Marrón',
+    'GRAY': 'Gris', 'GREY': 'Gris', 'SILVER': 'Plateado',
+    'BEIGE': 'Beige', 'KHAKI': 'Caqui',
+    'BLEACH': 'Blanqueado', 'LIGHT WASH': 'Lavado Claro',
+    'DARK': 'Oscuro', 'LIGHT': 'Claro',
+    'MULTI': 'Multicolor', 'MULTICOLOR': 'Multicolor'
+}
+
+SIZE_HIERARCHY = [
+    '3XS', '2XS', 'XS', 'XSMALL', 'S', 'SMALL',
+    'M', 'MEDIUM', 'L', 'LARGE', 'XL', 'XLARGE',
+    '2XL', '3XL', '4XL', 'XXLARGE', 'XXXLARGE'
+]
+
+IGNORE_WORDS = {'AERO', 'OF', 'THE', 'AND', 'IN', 'WITH', 'FOR', 'BY', 'ON', 'AT', 'TO'}
+
+WAREHOUSE_GROUPS = {
+    'PRICE': 'Price Club',
+    'AERO': 'Aeropostale',
+    'MALL': 'Centro Comercial',
+    'RIOCENTRO': 'Riocentro',
+    'CONDADO': 'Condado',
+    'SAN': 'San',
+    'LOS': 'Los'
+}
+
+class TextileClassifier:
+    """Clasificador inteligente para productos textiles"""
+    
+    def __init__(self):
+        self.gender_map = GENDER_MAP
+        self.category_map = CATEGORY_MAP
+        self.color_map = COLOR_MAP
+        self.size_hierarchy = SIZE_HIERARCHY
+        self.ignore_words = IGNORE_WORDS
+        
+    def classify_product(self, product_name: str) -> dict:
+        if not product_name or not isinstance(product_name, str):
+            return self._get_empty_classification()
+        
+        product_name = str(product_name).upper().strip()
+        words = product_name.split()
+        
+        classification = {
+            'Genero': 'Unisex',
+            'Categoria': 'General',
+            'Subcategoria': '',
+            'Color': 'No Especificado',
+            'Talla': 'Única',
+            'Material': '',
+            'Estilo': ''
+        }
+        
+        classification['Genero'] = self._detect_gender(words)
+        category_info = self._detect_category(words)
+        classification['Categoria'] = category_info['categoria']
+        classification['Subcategoria'] = category_info['subcategoria']
+        classification['Color'] = self._detect_color(words)
+        classification['Talla'] = self._detect_size(words)
+        style_info = self._detect_style(words)
+        classification['Material'] = style_info['material']
+        classification['Estilo'] = style_info['estilo']
+        
+        return self._clean_classification(classification)
+    
+    def _detect_gender(self, words):
+        for word in words:
+            if word in self.gender_map:
+                return self.gender_map[word]
+        text = ' '.join(words)
+        if any(x in text for x in ['WOMEN', 'LADIES', 'FEMALE']):
+            return 'Mujer'
+        if any(x in text for x in ['MEN', 'MAN', 'MALE']):
+            return 'Hombre'
+        return 'Unisex'
+    
+    def _detect_category(self, words):
+        categoria = 'General'
+        subcategoria = ''
+        found = []
+        for word in words:
+            if word in self.category_map:
+                found.append(self.category_map[word])
+            elif word not in self.ignore_words and len(word) > 2:
+                subcategoria += word.capitalize() + ' '
+        if found:
+            main = ['Polo', 'Camiseta', 'Jeans', 'Pantalón', 'Vestido', 'Chaqueta']
+            for m in main:
+                if m in found:
+                    categoria = m
+                    break
+            else:
+                categoria = found[0]
+            other = [c for c in found if c != categoria]
+            if other:
+                subcategoria = ' '.join(other) + ' ' + subcategoria.strip()
+        return {'categoria': categoria.strip(), 'subcategoria': subcategoria.strip()}
+    
+    def _detect_color(self, words):
+        for word in words:
+            if word in self.color_map:
+                return self.color_map[word]
+        text = ' '.join(words)
+        for eng, esp in self.color_map.items():
+            if eng in text:
+                return esp
+        return 'No Especificado'
+    
+    def _detect_size(self, words):
+        for size in self.size_hierarchy:
+            if f' {size} ' in f' {" ".join(words)} ':
+                return size
+        return 'Única'
+    
+    def _detect_style(self, words):
+        material = ''
+        estilo = ''
+        materials = ['COTTON', 'POLYESTER', 'DENIM', 'LEATHER', 'WOOL', 'SILK']
+        for w in words:
+            if w in materials:
+                material = w.lower().capitalize()
+                break
+        style_kw = {
+            'GRAPHIC': 'Estampado', 'PRINTED': 'Estampado',
+            'SOLID': 'Liso', 'STRIPED': 'Rayado',
+            'BASIC': 'Básico', 'PREMIUM': 'Premium'
+        }
+        for w in words:
+            if w in style_kw:
+                estilo = style_kw[w]
+                break
+        return {'material': material, 'estilo': estilo}
+    
+    def _clean_classification(self, cls):
+        size_map = {'XSMALL': 'XS', 'SMALL': 'S', 'MEDIUM': 'M',
+                    'LARGE': 'L', 'XLARGE': 'XL', 'XXLARGE': '2XL'}
+        if cls['Talla'] in size_map:
+            cls['Talla'] = size_map[cls['Talla']]
+        for k, v in cls.items():
+            if isinstance(v, str):
+                cls[k] = v.strip()
+        return cls
+    
+    def _get_empty_classification(self):
+        return {
+            'Genero': 'No Identificado',
+            'Categoria': 'No Identificado',
+            'Subcategoria': '',
+            'Color': 'No Especificado',
+            'Talla': 'No Especificado',
+            'Material': '',
+            'Estilo': ''
+        }
+
+class DataProcessor:
+    """Procesador de archivos de transferencias - Versión mejorada con mapeo flexible de columnas"""
+    
+    def __init__(self):
+        self.classifier = TextileClassifier()
+    
+    def process_excel_file(self, file) -> pd.DataFrame:
+        try:
+            if file.name.endswith('.csv'):
+                df = pd.read_csv(file, encoding='utf-8')
+            else:
+                df = pd.read_excel(file, engine='openpyxl')
+            
+            df.columns = [str(c).strip() for c in df.columns]
+            
+            required_std = ['Producto', 'Fecha', 'Cantidad', 'Bodega Recibe']
+            dest_aliases = ['Bodega Destino', 'Sucursal Destino', 'Destino', 'Bodega', 'Sucursal']
+            
+            col_mapping = {}
+            missing = []
+            
+            for req in required_std:
+                found = False
+                for col in df.columns:
+                    if col.lower() == req.lower():
+                        col_mapping[col] = req
+                        found = True
+                        break
+                if not found:
+                    for col in df.columns:
+                        if req.lower() in col.lower():
+                            col_mapping[col] = req
+                            found = True
+                            break
+                if not found and req == 'Bodega Recibe':
+                    for alias in dest_aliases:
+                        for col in df.columns:
+                            if alias.lower() in col.lower():
+                                col_mapping[col] = req
+                                found = True
+                                break
+                        if found:
+                            break
+                if not found:
+                    missing.append(req)
+            
+            if missing:
+                st.error(f"❌ No se encontraron las siguientes columnas en el archivo: {', '.join(missing)}")
+                st.info("Columnas detectadas: " + ", ".join(df.columns))
+                return pd.DataFrame()
+            
+            df.rename(columns=col_mapping, inplace=True)
+            df['Cantidad'] = self._process_quantity(df['Cantidad'])
+            df['Fecha'] = pd.to_datetime(df['Fecha'], errors='coerce', dayfirst=True, infer_datetime_format=True)
+            if df['Fecha'].isna().all():
+                df['Fecha'] = pd.to_datetime(df['Fecha'], errors='coerce', format='%d/%m/%Y')
+            df = df.dropna(subset=['Fecha'])
+            if df.empty:
+                st.warning("No se pudo interpretar la columna 'Fecha'. Verifique el formato (use dd/mm/aaaa).")
+                return pd.DataFrame()
+            
+            df = self._classify_products(df)
+            df['Grupo_Bodega'] = df['Bodega Recibe'].apply(self._group_warehouse)
+            
+            sec_col = None
+            posibles_sec = ['Secuencial - Factura', 'Secuencial', 'Factura', 'ID Transferencia', 'Transferencia']
+            for col in df.columns:
+                if any(ps.lower() in col.lower() for ps in posibles_sec):
+                    sec_col = col
+                    break
+            if sec_col:
+                df['ID_Transferencia'] = df[sec_col].astype(str) + '_' + df['Fecha'].dt.strftime('%Y%m%d')
+            else:
+                df['ID_Transferencia'] = df.index.astype(str) + '_' + df['Fecha'].dt.strftime('%Y%m%d')
+            
+            df = df.sort_values('Fecha', ascending=False).reset_index(drop=True)
+            st.success(f"✅ Archivo procesado: {len(df)} registros")
+            return df
+        except Exception as e:
+            st.error(f"Error al procesar el archivo: {e}")
+            return pd.DataFrame()
+    
+    def _process_quantity(self, s):
+        quantities = []
+        for val in s:
+            if pd.isna(val):
+                quantities.append(0)
+            elif isinstance(val, (int, float)):
+                if float(val).is_integer():
+                    quantities.append(int(val))
+                else:
+                    quantities.append(float(val))
+            elif isinstance(val, str):
+                val = val.strip().replace(',', '')
+                try:
+                    f = float(val)
+                    if f.is_integer():
+                        quantities.append(int(f))
+                    else:
+                        quantities.append(f)
+                except:
+                    quantities.append(0)
+            else:
+                quantities.append(0)
+        return pd.Series(quantities)
+    
+    def _classify_products(self, df):
+        classifications = []
+        for prod in df['Producto']:
+            classifications.append(self.classifier.classify_product(prod))
+        class_df = pd.DataFrame(classifications)
+        
+        # Crear Producto_Base eliminando talla y "REGULAR" del nombre original
+        import re
+        # Construir patrón con todas las tallas de SIZE_HIERARCHY
+        size_pattern = '|'.join(SIZE_HIERARCHY)
+        # Eliminar la talla y la palabra "REGULAR" (opcional) al final
+        pattern = r'\s+(' + size_pattern + r'|REGULAR)\s*$'
+        df['Producto_Base'] = df['Producto'].str.upper().str.replace(pattern, '', regex=True).str.strip()
+        # Si después de limpiar queda vacío, asignar "No especificado"
+        df['Producto_Base'] = df['Producto_Base'].replace('', 'No especificado')
+        
+        cols_to_drop = [col for col in class_df.columns if col in df.columns]
+        if cols_to_drop:
+            df = df.drop(columns=cols_to_drop)
+        return pd.concat([df, class_df], axis=1)
+    
+    def _group_warehouse(self, name):
+        if not isinstance(name, str):
+            return 'Otros'
+        up = name.upper()
+        for key, group in WAREHOUSE_GROUPS.items():
+            if key in up:
+                return group
+        if 'PRICE' in up:
+            return 'Price Club'
+        if 'AERO' in up:
+            return 'Aeropostale'
+        if any(x in up for x in ['MALL', 'CENTRO', 'SHOPPING']):
+            return 'Centro Comercial'
+        if any(x in up for x in ['TIENDA', 'STORE', 'LOCAL']):
+            return 'Tienda Física'
+        if any(x in up for x in ['WEB', 'ONLINE', 'MOVIL']):
+            return 'Tienda Online'
+        return 'Otros'
+
+class ReportGenerator:
+    def __init__(self):
+        pass
+    
+    def generate_detailed_report(self, df: pd.DataFrame, fecha_inicio=None, fecha_fin=None) -> io.BytesIO:
+        if df.empty:
+            return None
+        
+        if fecha_inicio and fecha_fin and 'Fecha' in df.columns:
+            mask = (df['Fecha'].dt.date >= fecha_inicio) & (df['Fecha'].dt.date <= fecha_fin)
+            df = df[mask].copy()
+        
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            summary = []
+            total_units = int(df['Cantidad'].sum())
+            total_transfers = df['ID_Transferencia'].nunique() if 'ID_Transferencia' in df.columns else len(df)
+            bodegas = df['Bodega Recibe'].nunique()
+            productos = df['Producto'].nunique()
+            summary.append(['KPIs PRINCIPALES', ''])
+            summary.append(['Total Unidades', f'{total_units:,}'])
+            summary.append(['Transferencias', f'{total_transfers:,}'])
+            summary.append(['Bodegas Destino', f'{bodegas:,}'])
+            summary.append(['Productos Únicos', f'{productos:,}'])
+            summary.append(['', ''])
+            
+            top_bodegas = df.groupby('Bodega Recibe')['Cantidad'].sum().nlargest(5)
+            summary.append(['TOP 5 BODEGAS', 'Unidades'])
+            for b, c in top_bodegas.items():
+                summary.append([b, f'{int(c):,}'])
+            summary.append(['', ''])
+            
+            if 'Categoria' in df.columns:
+                top_cat = df.groupby('Categoria')['Cantidad'].sum().nlargest(5)
+                summary.append(['TOP 5 CATEGORÍAS', 'Unidades'])
+                for cat, cant in top_cat.items():
+                    summary.append([cat, f'{int(cant):,}'])
+            
+            pd.DataFrame(summary, columns=['Métrica', 'Valor']).to_excel(writer, sheet_name='Resumen', index=False)
+            df.to_excel(writer, sheet_name='Detalle', index=False)
+            
+            if 'Bodega Recibe' in df.columns:
+                w_sum = df.groupby('Bodega Recibe').agg({'Cantidad': ['sum', 'count'], 'Producto': 'nunique'})
+                w_sum.columns = ['Unidades', 'Transferencias', 'Productos']
+                w_sum.sort_values('Unidades', ascending=False).to_excel(writer, sheet_name='Por_Bodega')
+            
+            if 'Categoria' in df.columns:
+                cat_sum = df.groupby(['Categoria', 'Genero']).agg({'Cantidad': ['sum', 'count'], 'Producto': 'nunique'})
+                cat_sum.columns = ['Unidades', 'Transferencias', 'Productos']
+                cat_sum.sort_values('Unidades', ascending=False).to_excel(writer, sheet_name='Por_Categoria')
+            
+            if 'Fecha' in df.columns:
+                df['Fecha_Dia'] = df['Fecha'].dt.date
+                daily = df.groupby('Fecha_Dia').agg({'Cantidad': 'sum', 'ID_Transferencia': 'nunique'}).reset_index()
+                daily.columns = ['Fecha', 'Unidades', 'Transferencias']
+                daily.sort_values('Fecha').to_excel(writer, sheet_name='Tendencias', index=False)
+            
+            # Hojas de Productos_Base y Producto_Talla
+            if 'Producto_Base' in df.columns:
+                # Resumen por producto base
+                prod_base = df.groupby('Producto_Base').agg({
+                    'Cantidad': 'sum',
+                    'ID_Transferencia': 'nunique',
+                    'Producto': 'nunique'
+                }).reset_index().rename(columns={
+                    'ID_Transferencia': 'Transferencias',
+                    'Producto': 'Variantes'
+                }).sort_values('Cantidad', ascending=False)
+                prod_base.to_excel(writer, sheet_name='Productos_Base', index=False)
+                
+                # Tabla pivotante producto vs talla (solo tallas no nulas)
+                if 'Talla' in df.columns:
+                    pivot = df.pivot_table(
+                        values='Cantidad',
+                        index='Producto_Base',
+                        columns='Talla',
+                        aggfunc='sum',
+                        fill_value=0,
+                        margins=True,
+                        margins_name='Total'
+                    )
+                    pivot.to_excel(writer, sheet_name='Producto_Talla')
+        
+        output.seek(0)
+        return output
+
+def clasificar_transferencia(row):
+    sucursal = str(row.get('Sucursal Destino', row.get('Bodega Destino', ''))).upper()
+    cantidad = row.get('Cantidad_Entera', 0)
+    if cantidad >= 500 and cantidad % 100 == 0:
+        return 'Fundas'
+    if any(kw in sucursal for kw in PRICE_KEYWORDS): return 'Price Club'
+    if any(kw in sucursal for kw in WEB_KEYWORDS): return 'Tienda Web'
+    if any(kw in sucursal for kw in FALLAS_KEYWORDS): return 'Fallas'
+    if any(kw in sucursal for kw in VENTAS_MAYOR_KEYWORDS): return 'Ventas por Mayor'
+    if any(tienda.upper() in sucursal for tienda in TIENDAS_REGULARES_LISTA): return 'Tiendas'
+    tiendas_kw = ['AERO', 'MALL', 'CENTRO', 'SHOPPING', 'PLAZA', 'RIOCENTRO']
+    if any(kw in sucursal for kw in tiendas_kw): return 'Tiendas'
+    return 'Ventas por Mayor'
+
+def procesar_transferencias_diarias(df):
+    df = df.dropna(subset=['Secuencial'])
+    df['Secuencial'] = df['Secuencial'].astype(str).str.strip()
+    df = df[df['Secuencial'] != '']
+    df['Cantidad_Entera'] = df['Cantidad Prendas'].apply(extraer_entero)
+    df['Categoria'] = df.apply(clasificar_transferencia, axis=1)
+    res = {
+        'fecha': datetime.now(),
+        'transferencias': int(df['Secuencial'].nunique()),
+        'total_unidades': int(df['Cantidad_Entera'].sum()),
+        'por_categoria': {},
+        'detalle_categoria': {},
+        'conteo_sucursales': {},
+        'df_procesado': df
+    }
+    categorias = ['Price Club', 'Tiendas', 'Ventas por Mayor', 'Tienda Web', 'Fallas', 'Fundas']
+    for cat in categorias:
+        df_cat = df[df['Categoria'] == cat]
+        res['por_categoria'][cat] = df_cat['Cantidad_Entera'].sum()
+        if not df_cat.empty:
+            res['detalle_categoria'][cat] = {
+                'cantidad': int(df_cat['Cantidad_Entera'].sum()),
+                'transf': int(df_cat['Secuencial'].nunique()),
+                'unicas': int(df_cat['Sucursal Destino'].nunique())
+            }
+            res['conteo_sucursales'][cat] = res['detalle_categoria'][cat]['unicas']
+        else:
+            res['detalle_categoria'][cat] = {'cantidad': 0, 'transf': 0, 'unicas': 0}
+            res['conteo_sucursales'][cat] = 0
+    return res
+
+def mostrar_kpi_diario():
+    """Dashboard de KPI Diario con clasificación inteligente - SIN HISTORIAL PERSISTENTE"""
+    
+    if 'kdi_current_data' not in st.session_state:
+        st.session_state.kdi_current_data = pd.DataFrame()
+        st.session_state.kdi_loaded = False
+    
+    processor = DataProcessor()
+    report_gen = ReportGenerator()
+    
+    st.markdown("### 📂 Cargar archivo de transferencias diarias")
+    col_up1, col_up2 = st.columns([3, 1])
+    with col_up1:
+        uploaded = st.file_uploader(
+            "Seleccionar archivo Excel",
+            type=['xlsx', 'xls', 'csv'],
+            key="kdi_upload",
+            label_visibility="collapsed"
+        )
+    with col_up2:
+        if st.button("🔄 Limpiar datos", key="kdi_clear"):
+            st.session_state.kdi_current_data = pd.DataFrame()
+            st.session_state.kdi_loaded = False
+            st.rerun()
+    
+    if uploaded:
+        with st.spinner("Procesando archivo..."):
+            new_data = processor.process_excel_file(uploaded)
+            if not new_data.empty:
+                st.session_state.kdi_current_data = new_data
+                st.session_state.kdi_loaded = True
+                st.success("Datos cargados exitosamente")
+            else:
+                st.warning("El archivo no pudo ser procesado. Revise el formato.")
+    
+    if not st.session_state.kdi_loaded or st.session_state.kdi_current_data.empty:
+        st.info("👆 Sube un archivo para comenzar el análisis.")
+        with st.expander("📋 Estructura esperada del archivo"):
+            st.markdown("""
+            **Columnas requeridas (se detectan automáticamente aunque tengan nombres similares):**
+            - `Producto`: nombre del producto
+            - `Fecha`: fecha de la transferencia (ej. 15/01/2024)
+            - `Cantidad`: número de unidades
+            - `Bodega Recibe` (o `Bodega Destino`, `Sucursal Destino`, etc.): destino de la mercadería
+            
+            **Columna opcional:**
+            - `Secuencial - Factura` (o similar): identificador único de la transferencia
+            """)
+        return
+    
+    st.markdown("### 🔍 Filtros")
+    data = st.session_state.kdi_current_data
+    filtered = data.copy()
+    
+    col_f1, col_f2, col_f3, col_f4 = st.columns(4)
+    with col_f1:
+        if 'Fecha' in filtered.columns and not filtered.empty:
+            min_d = filtered['Fecha'].min().date()
+            max_d = filtered['Fecha'].max().date()
+            dr = st.date_input("Rango de fechas", [min_d, max_d], key="kdi_fecha")
+            if len(dr) == 2:
+                mask = (filtered['Fecha'].dt.date >= dr[0]) & (filtered['Fecha'].dt.date <= dr[1])
+                filtered = filtered[mask].copy()
+    with col_f2:
+        if 'Bodega Recibe' in filtered.columns:
+            opts = ['Todas'] + sorted(filtered['Bodega Recibe'].dropna().unique())
+            sel = st.selectbox("Bodega", opts, key="kdi_bod")
+            if sel != 'Todas':
+                filtered = filtered[filtered['Bodega Recibe'] == sel]
+    with col_f3:
+        if 'Genero' in filtered.columns:
+            opts = ['Todos'] + sorted(filtered['Genero'].dropna().unique())
+            sel = st.selectbox("Género", opts, key="kdi_gen")
+            if sel != 'Todos':
+                filtered = filtered[filtered['Genero'] == sel]
+    with col_f4:
+        if 'Categoria' in filtered.columns:
+            opts = ['Todas'] + sorted(filtered['Categoria'].dropna().unique())
+            sel = st.selectbox("Categoría", opts, key="kdi_cat")
+            if sel != 'Todas':
+                filtered = filtered[filtered['Categoria'] == sel]
+    
+    st.markdown("---")
+    
+    if filtered.empty:
+        st.warning("No hay datos con los filtros actuales.")
+        return
+    
+    total_units = int(filtered['Cantidad'].sum()) if 'Cantidad' in filtered.columns else 0
+    n_bodegas = filtered['Bodega Recibe'].nunique() if 'Bodega Recibe' in filtered.columns else 0
+    n_transfers = filtered['ID_Transferencia'].nunique() if 'ID_Transferencia' in filtered.columns else len(filtered)
+    n_products = filtered['Producto'].nunique() if 'Producto' in filtered.columns else 0
+    
+    k1, k2, k3, k4 = st.columns(4)
+    with k1:
+        st.markdown(f"""
+        <div style='background: linear-gradient(135deg, #667eea15, #764ba230); padding: 20px; border-radius: 10px; border-left: 5px solid #667eea;'>
+            <div style='font-size: 24px; margin-bottom: 8px;'>📦</div>
+            <div style='font-size: 14px; color: #666; margin-bottom: 5px;'>Unidades Totales</div>
+            <div style='font-size: 28px; font-weight: bold; color: #333;'>{total_units:,}</div>
+        </div>
+        """, unsafe_allow_html=True)
+    with k2:
+        st.markdown(f"""
+        <div style='background: linear-gradient(135deg, #11998e15, #38ef7d30); padding: 20px; border-radius: 10px; border-left: 5px solid #11998e;'>
+            <div style='font-size: 24px; margin-bottom: 8px;'>🏪</div>
+            <div style='font-size: 14px; color: #666; margin-bottom: 5px;'>Bodegas Destino</div>
+            <div style='font-size: 28px; font-weight: bold; color: #333;'>{n_bodegas}</div>
+        </div>
+        """, unsafe_allow_html=True)
+    with k3:
+        st.markdown(f"""
+        <div style='background: linear-gradient(135deg, #fc466b15, #3f5efb30); padding: 20px; border-radius: 10px; border-left: 5px solid #fc466b;'>
+            <div style='font-size: 24px; margin-bottom: 8px;'>📋</div>
+            <div style='font-size: 14px; color: #666; margin-bottom: 5px;'>Transferencias</div>
+            <div style='font-size: 28px; font-weight: bold; color: #333;'>{n_transfers}</div>
+        </div>
+        """, unsafe_allow_html=True)
+    with k4:
+        st.markdown(f"""
+        <div style='background: linear-gradient(135deg, #f093fb15, #f5576c30); padding: 20px; border-radius: 10px; border-left: 5px solid #f093fb;'>
+            <div style='font-size: 24px; margin-bottom: 8px;'>👕</div>
+            <div style='font-size: 14px; color: #666; margin-bottom: 5px;'>Productos Únicos</div>
+            <div style='font-size: 28px; font-weight: bold; color: #333;'>{n_products}</div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    st.markdown("---")
+    st.markdown("### 📊 Análisis por Dimensiones")
+    
+    dim_tab1, dim_tab2, dim_tab3, dim_tab4, dim_tab5 = st.tabs([
+        "🎨 Color", "📏 Talla", "⚧ Género", "🏷️ Categoría/Departamento", "📦 Productos"
+    ])
+    
+    with dim_tab1:
+        if 'Color' in filtered.columns:
+            col_stats = filtered.groupby('Color').agg({'Cantidad': ['sum', 'count']}).reset_index()
+            col_stats.columns = ['Color', 'Unidades', 'Frecuencia']
+            col_stats['Porcentaje'] = (col_stats['Unidades'] / total_units * 100).round(2)
+            col_stats = col_stats.sort_values('Unidades', ascending=False)
+            col1, col2 = st.columns([2, 1])
+            with col1:
+                fig = px.pie(col_stats, values='Unidades', names='Color', 
+                           title="Distribución por Color",
+                           color_discrete_sequence=px.colors.qualitative.Set3)
+                fig.update_traces(textposition='inside', textinfo='percent+label')
+                st.plotly_chart(fig, use_container_width=True)
+            with col2:
+                st.dataframe(col_stats[['Color', 'Unidades', 'Porcentaje']].style.format({
+                    'Unidades': '{:,}',
+                    'Porcentaje': '{:.2f}%'
+                }), use_container_width=True, height=400)
+        else:
+            st.info("No hay datos de color disponibles")
+    
+    with dim_tab2:
+        if 'Talla' in filtered.columns:
+            talla_stats = filtered.groupby('Talla').agg({'Cantidad': ['sum', 'count']}).reset_index()
+            talla_stats.columns = ['Talla', 'Unidades', 'Frecuencia']
+            talla_stats['Porcentaje'] = (talla_stats['Unidades'] / total_units * 100).round(2)
+            # Usar jerarquía de tallas definida en SIZE_HIERARCHY para ordenar
+            size_order = ['XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', 'Única']
+            talla_stats['Talla_Order'] = talla_stats['Talla'].apply(
+                lambda x: size_order.index(x) if x in size_order else 999
+            )
+            talla_stats = talla_stats.sort_values('Talla_Order')
+            col1, col2 = st.columns([2, 1])
+            with col1:
+                fig = px.bar(talla_stats, x='Talla', y='Unidades', 
+                           title="Distribución por Talla",
+                           color='Unidades',
+                           color_continuous_scale='Viridis')
+                st.plotly_chart(fig, use_container_width=True)
+            with col2:
+                st.dataframe(talla_stats[['Talla', 'Unidades', 'Porcentaje']].style.format({
+                    'Unidades': '{:,}',
+                    'Porcentaje': '{:.2f}%'
+                }), use_container_width=True, height=400)
+        else:
+            st.info("No hay datos de talla disponibles")
+    
+    with dim_tab3:
+        if 'Genero' in filtered.columns:
+            gen_stats = filtered.groupby('Genero').agg({'Cantidad': ['sum', 'count']}).reset_index()
+            gen_stats.columns = ['Genero', 'Unidades', 'Frecuencia']
+            gen_stats['Porcentaje'] = (gen_stats['Unidades'] / total_units * 100).round(2)
+            gen_stats = gen_stats.sort_values('Unidades', ascending=False)
+            col1, col2 = st.columns([2, 1])
+            with col1:
+                fig = px.pie(gen_stats, values='Unidades', names='Genero', 
+                           title="Distribución por Género",
+                           color_discrete_sequence=['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4'])
+                fig.update_traces(textposition='inside', textinfo='percent+label')
+                st.plotly_chart(fig, use_container_width=True)
+            with col2:
+                st.dataframe(gen_stats[['Genero', 'Unidades', 'Porcentaje']].style.format({
+                    'Unidades': '{:,}',
+                    'Porcentaje': '{:.2f}%'
+                }), use_container_width=True, height=400)
+        else:
+            st.info("No hay datos de género disponibles")
+    
+    with dim_tab4:
+        if 'Categoria' in filtered.columns:
+            cat_stats = filtered.groupby('Categoria').agg({'Cantidad': ['sum', 'count']}).reset_index()
+            cat_stats.columns = ['Categoria', 'Unidades', 'Frecuencia']
+            cat_stats['Porcentaje'] = (cat_stats['Unidades'] / total_units * 100).round(2)
+            cat_stats = cat_stats.sort_values('Unidades', ascending=False)
+            col1, col2 = st.columns([2, 1])
+            with col1:
+                fig = px.bar(cat_stats, x='Categoria', y='Unidades', 
+                           title="Distribución por Categoría",
+                           color='Unidades',
+                           color_continuous_scale='Plasma')
+                st.plotly_chart(fig, use_container_width=True)
+            with col2:
+                st.dataframe(cat_stats[['Categoria', 'Unidades', 'Porcentaje']].style.format({
+                    'Unidades': '{:,}',
+                    'Porcentaje': '{:.2f}%'
+                }), use_container_width=True, height=400)
+        else:
+            st.info("No hay datos de categoría disponible")
+    
+    with dim_tab5:
+        st.markdown("### 📊 Análisis por Producto")
+        
+        if 'Producto_Base' in filtered.columns:
+            # Top productos base
+            top_productos = filtered.groupby('Producto_Base').agg({
+                'Cantidad': 'sum',
+                'ID_Transferencia': 'nunique',
+                'Producto': 'nunique'
+            }).reset_index().rename(columns={
+                'ID_Transferencia': 'Transferencias',
+                'Producto': 'Variantes'
+            }).sort_values('Cantidad', ascending=False)
+            
+            top_productos['Porcentaje'] = (top_productos['Cantidad'] / total_units * 100).round(2)
+            
+            col_p1, col_p2 = st.columns([2, 1])
+            with col_p1:
+                # Gráfico top 10
+                top10 = top_productos.head(10)
+                fig = px.bar(top10, x='Cantidad', y='Producto_Base', orientation='h',
+                             title='Top 10 Productos Base por Unidades',
+                             color='Cantidad', color_continuous_scale='Blues')
+                fig.update_layout(yaxis={'categoryorder':'total ascending'})
+                st.plotly_chart(fig, use_container_width=True)
+            
+            with col_p2:
+                st.dataframe(top_productos.head(10)[['Producto_Base', 'Cantidad', 'Porcentaje']],
+                             use_container_width=True, height=350)
+            
+            # Selector para ver detalle de tallas de un producto
+            st.markdown("#### 🔍 Detalle de tallas por producto")
+            producto_seleccionado = st.selectbox(
+                "Selecciona un producto base para ver distribución por talla",
+                options=[''] + list(top_productos['Producto_Base'].unique())
+            )
+            
+            if producto_seleccionado:
+                df_prod = filtered[filtered['Producto_Base'] == producto_seleccionado]
+                talla_stats = df_prod.groupby('Talla')['Cantidad'].sum().reset_index()
+                # Ordenar tallas según jerarquía
+                talla_order = ['XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', 'Única']
+                talla_stats['Talla_Order'] = talla_stats['Talla'].apply(
+                    lambda x: talla_order.index(x) if x in talla_order else 999
+                )
+                talla_stats = talla_stats.sort_values('Talla_Order')
+                
+                col_t1, col_t2 = st.columns([2, 1])
+                with col_t1:
+                    fig2 = px.bar(talla_stats, x='Talla', y='Cantidad',
+                                  title=f'Distribución por talla - {producto_seleccionado}',
+                                  color='Cantidad', color_continuous_scale='Oranges')
+                    st.plotly_chart(fig2, use_container_width=True)
+                with col_t2:
+                    st.dataframe(talla_stats[['Talla', 'Cantidad']], use_container_width=True)
+            
+            # Tabla pivotante general Producto vs Talla
+            st.markdown("#### 📋 Tabla de Producto vs Talla")
+            # Para no saturar, mostramos solo productos con al menos una unidad
+            productos_con_datos = top_productos[top_productos['Cantidad'] > 0]['Producto_Base'].tolist()
+            if productos_con_datos:
+                pivot_data = filtered[filtered['Producto_Base'].isin(productos_con_datos)]
+                pivot = pivot_data.pivot_table(
+                    values='Cantidad',
+                    index='Producto_Base',
+                    columns='Talla',
+                    aggfunc='sum',
+                    fill_value=0,
+                    margins=True,
+                    margins_name='Total'
+                )
+                # Ordenar por total descendente
+                pivot = pivot.sort_values('Total', ascending=False)
+                st.dataframe(pivot, use_container_width=True, height=500)
+            else:
+                st.info("No hay datos para mostrar la tabla pivotante.")
+        else:
+            st.info("No se pudo generar la columna Producto_Base. Verificar clasificación.")
+    
+    st.markdown("---")
+    col_g1, col_g2 = st.columns(2)
+    with col_g1:
+        st.subheader("📊 Top 10 Bodegas")
+        if 'Bodega Recibe' in filtered.columns:
+            top_bod = filtered.groupby('Bodega Recibe')['Cantidad'].sum().nlargest(10)
+            if not top_bod.empty:
+                fig = px.bar(
+                    x=top_bod.values, y=top_bod.index,
+                    orientation='h', color=top_bod.values,
+                    color_continuous_scale='Viridis',
+                    labels={'x': 'Unidades', 'y': ''}
+                )
+                fig.update_layout(height=350)
+                st.plotly_chart(fig, use_container_width=True)
+    with col_g2:
+        st.subheader("📈 Tendencia Diaria")
+        if 'Fecha' in filtered.columns:
+            daily = filtered.groupby(filtered['Fecha'].dt.date)['Cantidad'].sum().reset_index()
+            daily.columns = ['Fecha', 'Unidades']
+            fig = px.line(daily, x='Fecha', y='Unidades', markers=True)
+            st.plotly_chart(fig, use_container_width=True)
+    
+    st.markdown("---")
+    st.subheader("📋 Detalle de Transferencias")
+    cols_display = ['Fecha', 'Bodega Recibe', 'Producto', 'Genero', 'Categoria', 'Color', 'Talla', 'Cantidad']
+    cols_display = [c for c in cols_display if c in filtered.columns]
+    st.dataframe(filtered[cols_display].sort_values('Fecha', ascending=False), use_container_width=True, height=300)
+    
+    st.markdown("---")
+    st.subheader("📄 Generar Reporte")
+    col_r1, col_r2, col_r3 = st.columns([1, 1, 2])
+    with col_r1:
+        r_start = st.date_input("Fecha inicio", filtered['Fecha'].min().date(), key="r_start")
+    with col_r2:
+        r_end = st.date_input("Fecha fin", filtered['Fecha'].max().date(), key="r_end")
+    with col_r3:
+        if st.button("📥 Descargar reporte Excel", use_container_width=True):
+            with st.spinner("Generando reporte..."):
+                excel = report_gen.generate_detailed_report(filtered, r_start, r_end)
+                if excel:
+                    ts = datetime.now().strftime('%Y%m%d_%H%M%S')
+                    st.download_button(
+                        label="⬇️ Descargar",
+                        data=excel,
+                        file_name=f"KPI_Diario_{ts}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        use_container_width=True
+                    )
+
+def mostrar_dashboard_transferencias():
+    st.markdown("""
+    <div class='main-header'>
+        <h1 class='header-title'>📊 Dashboard de Transferencias Diarias</h1>
+        <div class='header-subtitle'>Analisis de distribucion por categorias y sucursales</div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    tab1, tab2, tab3 = st.tabs(["📊 Transferencias Diarias", "📦 Mercadería en Tránsito (KPI Diario)", "📈 Análisis de Stock"])
+    
+    with tab1:
+        st.markdown("""
+        <div class='filter-panel'>
+            <h4>📂 Carga de Archivo de Transferencias</h4>
+            <p class='section-description'>Sube el archivo Excel de transferencias diarias (ej: 322026.xlsx)</p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        with st.container():
+            col_u1, col_u2 = st.columns([3, 1])
+            with col_u1:
+                file_diario = st.file_uploader(
+                    "Selecciona el archivo Excel",
+                    type=['xlsx'],
+                    key="diario_transferencias",
+                    label_visibility="collapsed"
+                )
+            with col_u2:
+                if st.button("🔄 Limpiar", use_container_width=True):
+                    st.rerun()
+        
+        if not file_diario:
+            st.info("👆 **Por favor, sube un archivo Excel desde el panel superior para comenzar el analisis.**")
+            st.markdown("### 📋 Estructura del archivo esperado:")
+            ejemplo_data = pd.DataFrame({
+                'Secuencial': ['TR001', 'TR002', 'TR003', 'TR004'],
+                'Sucursal Destino': ['PRICE CLUB QUITO', 'AERO MALL DEL SOL', 'VENTAS POR MAYOR', 'TIENDA WEB'],
+                'Cantidad Prendas': [1500, 245, 5000, 120],
+                'Bodega Destino': ['BODEGA CENTRAL', 'BODEGA NORTE', 'BODEGA CENTRAL', 'BODEGA WEB']
+            })
+            st.dataframe(ejemplo_data, use_container_width=True)
+            st.markdown("""
+            ### 📝 Columnas requeridas:
+            1. **Secuencial**: Numero unico de transferencia
+            2. **Sucursal Destino** o **Bodega Destino**: Nombre de la tienda destino
+            3. **Cantidad Prendas**: Cantidad de unidades a transferir
+            
+            ### 🎯 Categorias automaticas:
+            - **Price Club**: Contiene "PRICE" o "OIL" en el nombre
+            - **Tienda Web**: Contiene "WEB", "TIENDA MOVIL" o "MOVIL"
+            - **Fallas**: Contiene "FALLAS"
+            - **Ventas por Mayor**: Contiene "MAYOR" o "MAYORISTA"
+            - **Fundas**: Cantidad ≥ 500 y multiplo de 100
+            - **Tiendas**: Todas las demas transferencias
+            """)
+        else:
+            try:
+                df_diario = pd.read_excel(file_diario)
+                st.success(f"✅ Archivo cargado exitosamente: {file_diario.name}")
+                with st.expander("🔍 Vista previa del archivo cargado", expanded=True):
+                    st.dataframe(df_diario.head(10), use_container_width=True)
+                    st.info(f"📊 **Total de filas:** {len(df_diario)} | **Total de columnas:** {len(df_diario.columns)}")
+                    st.write("**Columnas detectadas:**")
+                    for col in df_diario.columns:
+                        st.write(f"- `{col}`")
+                
+                columnas_requeridas = ['Secuencial', 'Cantidad Prendas']
+                columnas_destino = ['Sucursal Destino', 'Bodega Destino']
+                faltan_requeridas = [col for col in columnas_requeridas if col not in df_diario.columns]
+                if faltan_requeridas:
+                    st.error(f"❌ **Columnas faltantes:** {faltan_requeridas}")
+                else:
+                    tiene_destino = any(col in df_diario.columns for col in columnas_destino)
+                    if not tiene_destino:
+                        st.error("❌ **No se encontro columna de destino.**")
+                    else:
+                        res = procesar_transferencias_diarias(df_diario)
+                        st.header("📈 KPIs por Categoria")
+                        categorias_display = {
+                            'Price Club': 'PRICE CLUB',
+                            'Tiendas': 'TIENDAS AEROPOSTALE',
+                            'Ventas por Mayor': 'VENTAS POR MAYOR',
+                            'Tienda Web': 'TIENDA WEB',
+                            'Fallas': 'FALLAS',
+                            'Fundas': 'FUNDAS'
+                        }
+                        sucursales_esperadas = {
+                            'Price Club': PRICE_CLUBS,
+                            'Tiendas': TIENDAS_REGULARES,
+                            'Ventas por Mayor': VENTAS_POR_MAYOR,
+                            'Tienda Web': TIENDA_WEB,
+                            'Fallas': FALLAS,
+                            'Fundas': None
+                        }
+                        
+                        color_keys = {
+                            'Price Club': 'PRICE CLUB',
+                            'Tiendas': 'TIENDAS AEROPOSTALE',
+                            'Ventas por Mayor': 'VENTAS POR MAYOR',
+                            'Tienda Web': 'TIENDA WEB',
+                            'Fallas': 'FALLAS',
+                            'Fundas': 'FUNDAS'
+                        }
+                        
+                        cols = st.columns(3)
+                        for i, (cat, cat_display) in enumerate(categorias_display.items()):
+                            cantidad = res['por_categoria'].get(cat, 0)
+                            sucursales_activas = res['conteo_sucursales'].get(cat, 0)
+                            esperadas = sucursales_esperadas.get(cat)
+                            color_key = color_keys.get(cat)
+                            bg_gradient = GRADIENTS.get(color_key, 'linear-gradient(135deg, #f0f0f015, #e0e0e030)')
+                            border_color = COLORS.get(color_key, '#cccccc')
+                            
+                            with cols[i % 3]:
+                                if cat == 'Fundas':
+                                    st.markdown(f"""
+                                    <div style='background: {bg_gradient}; padding: 20px; border-radius: 10px; border-left: 5px solid {border_color}; margin-bottom: 15px;'>
+                                        <div style='font-size: 12px; color: #666; text-transform: uppercase; margin-bottom: 5px;'>{cat_display}</div>
+                                        <div style='font-size: 32px; font-weight: bold; color: {border_color}; margin-bottom: 5px;'>{cantidad:,}</div>
+                                        <div style='font-size: 11px; color: #888;'>Multiplos de 100 ≥ 500 unidades</div>
+                                    </div>
+                                    """, unsafe_allow_html=True)
+                                else:
+                                    st.markdown(f"""
+                                    <div style='background: {bg_gradient}; padding: 20px; border-radius: 10px; border-left: 5px solid {border_color}; margin-bottom: 15px;'>
+                                        <div style='font-size: 12px; color: #666; text-transform: uppercase; margin-bottom: 5px;'>{cat_display}</div>
+                                        <div style='font-size: 32px; font-weight: bold; color: {border_color}; margin-bottom: 5px;'>{cantidad:,}</div>
+                                        <div style='font-size: 11px; color: #888;'>{sucursales_activas} sucursales | {esperadas} esperadas</div>
+                                    </div>
+                                    """, unsafe_allow_html=True)
+                            if i == 2:
+                                cols = st.columns(3)
+                        st.divider()
+                        
+                        st.header("📊 Analisis Visual")
+                        col1, col2 = st.columns([2, 1])
+                        with col1:
+                            categorias_pie = list(res['por_categoria'].keys())
+                            valores_pie = list(res['por_categoria'].values())
+                            df_pie = pd.DataFrame({'Categoria': categorias_pie, 'Unidades': valores_pie})
+                            df_pie = df_pie[df_pie['Unidades'] > 0]
+                            if not df_pie.empty:
+                                color_map_pie = {
+                                    'Price Club': COLORS['PRICE CLUB'],
+                                    'Tiendas': COLORS['TIENDAS AEROPOSTALE'],
+                                    'Ventas por Mayor': COLORS['VENTAS POR MAYOR'],
+                                    'Tienda Web': COLORS['TIENDA WEB'],
+                                    'Fallas': COLORS['FALLAS'],
+                                    'Fundas': COLORS['FUNDAS']
+                                }
+                                fig_pie = px.pie(
+                                    df_pie,
+                                    values='Unidades',
+                                    names='Categoria',
+                                    title="Distribucion por Categoria",
+                                    color='Categoria',
+                                    color_discrete_map=color_map_pie,
+                                    hole=0.3
+                                )
+                                fig_pie.update_traces(textposition='inside', textinfo='percent+label')
+                                fig_pie.update_layout(height=500, showlegend=True)
+                                st.plotly_chart(fig_pie, use_container_width=True)
+                            else:
+                                st.info("No hay datos para mostrar el grafico de pastel")
+                        with col2:
+                            st.subheader("TOTAL GENERAL")
+                            st.markdown(f"""
+                            <div style='background: linear-gradient(135deg, #667eea20, #764ba240); padding: 20px; border-radius: 10px; text-align: center; margin-bottom: 15px;'>
+                                <div style='font-size: 14px; color: #555; margin-bottom: 10px;'>Suma de todas las unidades</div>
+                                <div style='font-size: 36px; font-weight: bold; color: #333;'>{res['total_unidades']:,}</div>
+                            </div>
+                            """, unsafe_allow_html=True)
+                            promedio = res['total_unidades'] / res['transferencias'] if res['transferencias'] > 0 else 0
+                            st.markdown(f"""
+                            <div style='background: #f8f9fa; padding: 15px; border-radius: 8px; text-align: center; margin-bottom: 15px;'>
+                                <div style='font-size: 12px; color: #666; margin-bottom: 5px;'>PROMEDIO X TRANSFERENCIA</div>
+                                <div style='font-size: 24px; font-weight: bold; color: #333;'>{promedio:,.0f}</div>
+                            </div>
+                            """, unsafe_allow_html=True)
+                            categorias_activas = sum(1 for cat in res['por_categoria'].values() if cat > 0)
+                            st.markdown(f"""
+                            <div style='background: #f8f9fa; padding: 15px; border-radius: 8px; text-align: center; margin-bottom: 15px;'>
+                                <div style='font-size: 12px; color: #666; margin-bottom: 5px;'>CATEGORIAS ACTIVAS</div>
+                                <div style='font-size: 24px; font-weight: bold; color: #333;'>{categorias_activas}/6</div>
+                            </div>
+                            """, unsafe_allow_html=True)
+                            porcentaje_fundas = (res['por_categoria'].get('Fundas', 0) / res['total_unidades']) * 100 if res['total_unidades'] > 0 else 0
+                            st.markdown(f"""
+                            <div style='background: #f8f9fa; padding: 15px; border-radius: 8px; text-align: center;'>
+                                <div style='font-size: 12px; color: #666; margin-bottom: 5px;'>% FUNDAS</div>
+                                <div style='font-size: 24px; font-weight: bold; color: {COLORS['FUNDAS']};'>{porcentaje_fundas:.1f}%</div>
+                            </div>
+                            """, unsafe_allow_html=True)
+                        st.divider()
+                        
+                        st.header("📊 Distribucion Excluyendo Fundas")
+                        categorias_excl = ['Price Club', 'Tiendas', 'Ventas por Mayor', 'Tienda Web', 'Fallas']
+                        valores_excl = [res['por_categoria'].get(cat, 0) for cat in categorias_excl]
+                        total_excl = sum(valores_excl)
+                        if total_excl > 0:
+                            df_barras = pd.DataFrame({
+                                'Categoria': ['Tienda Web', 'Price Club', 'Ventas por Mayor', 'Tiendas', 'Fallas'],
+                                'Unidades': [res['por_categoria'].get('Tienda Web', 0),
+                                             res['por_categoria'].get('Price Club', 0),
+                                             res['por_categoria'].get('Ventas por Mayor', 0),
+                                             res['por_categoria'].get('Tiendas', 0),
+                                             res['por_categoria'].get('Fallas', 0)]
+                            })
+                            df_barras['Porcentaje'] = (df_barras['Unidades'] / total_excl) * 100
+                            
+                            color_map_bar = {
+                                'Tienda Web': COLORS['TIENDA WEB'],
+                                'Price Club': COLORS['PRICE CLUB'],
+                                'Ventas por Mayor': COLORS['VENTAS POR MAYOR'],
+                                'Tiendas': COLORS['TIENDAS AEROPOSTALE'],
+                                'Fallas': COLORS['FALLAS']
+                            }
+                            
+                            fig_barras = go.Figure(data=[
+                                go.Bar(
+                                    x=df_barras['Categoria'],
+                                    y=df_barras['Porcentaje'],
+                                    text=[f"{p:.1f}%" for p in df_barras['Porcentaje']],
+                                    textposition='auto',
+                                    marker_color=[color_map_bar.get(cat, '#cccccc') for cat in df_barras['Categoria']]
+                                )
+                            ])
+                            fig_barras.update_layout(title="Distribucion por Categoria (excl. Fundas)", yaxis_title="Porcentaje (%)", xaxis_title="Categoria", template="plotly_white", height=400)
+                            st.plotly_chart(fig_barras, use_container_width=True)
+                            st.dataframe(df_barras[['Categoria', 'Unidades', 'Porcentaje']].sort_values('Porcentaje', ascending=False), use_container_width=True)
+                        else:
+                            st.info("No hay datos para mostrar la distribucion (excluyendo Fundas)")
+                        st.divider()
+                        
+                        st.header("📄 Detalle por Secuencial")
+                        df_detalle = res['df_procesado'][['Sucursal Destino', 'Secuencial', 'Cantidad_Entera', 'Categoria']].copy()
+                        with st.expander("📋 Resumen Estadistico", expanded=True):
+                            st.dataframe(
+                                pd.DataFrame.from_dict(res['detalle_categoria'], orient='index')
+                                .reset_index()
+                                .rename(columns={'index': 'Categoria', 'cantidad': 'Unidades', 'transf': 'Transferencias', 'unicas': 'Sucursales Unicas'}),
+                                use_container_width=True
+                            )
+                        col_d1, col_d2 = st.columns([1, 4])
+                        with col_d1:
+                            excel_data = to_excel(df_detalle)
+                            st.download_button(
+                                label="📥 Descargar Excel",
+                                data=excel_data,
+                                file_name=f"detalle_transferencias_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
+                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                use_container_width=True
+                            )
+                        st.dataframe(
+                            df_detalle.rename(columns={'Sucursal Destino': 'Sucursal', 'Cantidad_Entera': 'Cantidad', 'Categoria': 'Categoria'}),
+                            use_container_width=True, height=400
+                        )
+            except Exception as e:
+                st.error(f"❌ **Error al procesar el archivo:** {str(e)}")
+    
+    with tab2:
+        mostrar_kpi_diario()
+    
+    with tab3:
+        st.header("📈 Analisis de Stock y Ventas")
+        with st.container():
+            st.subheader("📂 Carga de Datos para Analisis")
+            col_stock1, col_stock2 = st.columns(2)
+            with col_stock1:
+                stock_file = st.file_uploader("Archivo de Stock Actual", type=['xlsx', 'csv'], key="stock_file")
+            with col_stock2:
+                ventas_file = st.file_uploader("Archivo Historico de Ventas", type=['xlsx', 'csv'], key="ventas_file")
+            
+            if stock_file and ventas_file:
+                try:
+                    df_stock = pd.read_excel(stock_file) if stock_file.name.endswith('.xlsx') else pd.read_csv(stock_file)
+                    df_ventas = pd.read_excel(ventas_file) if ventas_file.name.endswith('.xlsx') else pd.read_csv(ventas_file)
+                    
+                    st.subheader("📊 Metricas Rapidas")
+                    col_metrics1, col_metrics2, col_metrics3, col_metrics4 = st.columns(4)
+                    with col_metrics1:
+                        st.markdown(f"""
+                        <div class='metric-card'>
+                            <div class='metric-title'>Total SKUs</div>
+                            <div class='metric-value'>{len(df_stock):,}</div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                    with col_metrics2:
+                        if 'Stock' in df_stock.columns:
+                            total_stock = df_stock['Stock'].sum()
+                            st.markdown(f"""
+                            <div class='metric-card'>
+                                <div class='metric-title'>Total Unidades</div>
+                                <div class='metric-value'>{total_stock:,}</div>
+                            </div>
+                            """, unsafe_allow_html=True)
+                        else:
+                            st.info("Columna 'Stock' no encontrada")
+                    with col_metrics3:
+                        if 'VENTAS' in df_ventas.columns:
+                            total_ventas = df_ventas['VENTAS'].sum()
+                            st.markdown(f"""
+                            <div class='metric-card'>
+                                <div class='metric-title'>Ventas Totales</div>
+                                <div class='metric-value'>{total_ventas:,}</div>
+                            </div>
+                            """, unsafe_allow_html=True)
+                        else:
+                            st.info("Columna 'VENTAS' no encontrada")
+                    with col_metrics4:
+                        if 'FECHA' in df_ventas.columns:
+                            df_ventas['FECHA'] = pd.to_datetime(df_ventas['FECHA'], errors='coerce')
+                            dias_analizados = df_ventas['FECHA'].nunique()
+                            st.markdown(f"""
+                            <div class='metric-card'>
+                                <div class='metric-title'>Dias Analizados</div>
+                                <div class='metric-value'>{dias_analizados}</div>
+                            </div>
+                            """, unsafe_allow_html=True)
+                        else:
+                            st.info("Columna 'FECHA' no encontrada")
+                    
+                    st.subheader("📊 Analisis ABC de Stock")
+                    if 'Stock' in df_stock.columns and 'CODIGO' in df_stock.columns:
+                        df_stock_sorted = df_stock.sort_values('Stock', ascending=False)
+                        df_stock_sorted['Stock_Acumulado'] = df_stock_sorted['Stock'].cumsum()
+                        total_stock_val = df_stock_sorted['Stock'].sum()
+                        df_stock_sorted['Porcentaje_Acumulado'] = (df_stock_sorted['Stock_Acumulado'] / total_stock_val) * 100
+                        df_stock_sorted['Clasificacion_ABC'] = pd.cut(
+                            df_stock_sorted['Porcentaje_Acumulado'],
+                            bins=[0, 80, 95, 100],
+                            labels=['A', 'B', 'C']
+                        )
+                        resumen_abc = df_stock_sorted.groupby('Clasificacion_ABC').agg({
+                            'CODIGO': 'count',
+                            'Stock': 'sum'
+                        }).rename(columns={'CODIGO': 'SKUs', 'Stock': 'Unidades'})
+                        fig_abc = px.pie(
+                            resumen_abc.reset_index(),
+                            values='Unidades',
+                            names='Clasificacion_ABC',
+                            title="Distribucion ABC del Stock",
+                            color_discrete_sequence=['#0033A0', '#E4002B', '#10B981'],
+                            hole=0.4
+                        )
+                        col_abc1, col_abc2 = st.columns([2, 1])
+                        with col_abc1:
+                            st.plotly_chart(fig_abc, use_container_width=True)
+                        with col_abc2:
+                            st.dataframe(resumen_abc, use_container_width=True)
+                    else:
+                        st.warning("Para el analisis ABC se requieren las columnas 'CODIGO' y 'Stock'")
+                    
+                    st.subheader("🔄 Analisis de Rotacion")
+                    if 'VENTAS' in df_ventas.columns and 'CODIGO' in df_ventas.columns:
+                        ventas_por_producto = df_ventas.groupby('CODIGO')['VENTAS'].sum().reset_index()
+                        if 'CODIGO' in df_stock.columns and 'Stock' in df_stock.columns:
+                            df_rotacion = pd.merge(
+                                df_stock[['CODIGO', 'Stock']],
+                                ventas_por_producto,
+                                on='CODIGO',
+                                how='left'
+                            )
+                            df_rotacion['VENTAS'] = df_rotacion['VENTAS'].fillna(0)
+                            df_rotacion['Rotacion'] = df_rotacion.apply(
+                                lambda x: x['VENTAS'] / x['Stock'] if x['Stock'] > 0 else 0,
+                                axis=1
+                            )
+                            df_rotacion['Nivel_Rotacion'] = pd.cut(
+                                df_rotacion['Rotacion'],
+                                bins=[-1, 0.1, 0.5, 1, 10, float('inf')],
+                                labels=['Muy Baja', 'Baja', 'Media', 'Alta', 'Muy Alta']
+                            )
+                            resumen_rotacion = df_rotacion.groupby('Nivel_Rotacion').agg({
+                                'CODIGO': 'count',
+                                'Stock': 'sum',
+                                'VENTAS': 'sum'
+                            }).rename(columns={'CODIGO': 'SKUs', 'Stock': 'Stock_Total', 'VENTAS': 'Ventas_Total'})
+                            st.dataframe(resumen_rotacion, use_container_width=True)
+                            fig_rotacion = go.Figure(data=[
+                                go.Bar(
+                                    x=resumen_rotacion.index,
+                                    y=resumen_rotacion['SKUs'],
+                                    text=resumen_rotacion['SKUs'],
+                                    textposition='auto',
+                                    marker_color='#FFA07A'
+                                )
+                            ])
+                            fig_rotacion.update_layout(title="SKUs por Nivel de Rotacion", xaxis_title="Nivel de Rotacion", yaxis_title="Cantidad de SKUs", template="plotly_white", height=400)
+                            st.plotly_chart(fig_rotacion, use_container_width=True)
+                    else:
+                        st.info("Para el analisis de rotacion se requieren las columnas 'CODIGO' y 'VENTAS'")
+                    
+                    st.subheader("🔮 Prediccion con Random Forest")
+                    st.info("Funcionalidad en Desarrollo...")
+                    
+                    with st.expander("📋 Ver Datos Cargados"):
+                        col_raw1, col_raw2 = st.columns(2)
+                        with col_raw1:
+                            st.write("**Datos de Stock:**")
+                            st.dataframe(df_stock.head(20), use_container_width=True)
+                        with col_raw2:
+                            st.write("**Datos de Ventas:**")
+                            st.dataframe(df_ventas.head(20), use_container_width=True)
+                except Exception as e:
+                    st.error(f"Error al procesar los archivos: {str(e)}")
+            else:
+                st.info("👈 Por favor, carga ambos archivos para realizar el analisis de stock y ventas.")
+                with st.expander("ℹ️ Informacion sobre los archivos requeridos"):
+                    st.markdown("""
+                    **Archivo de Stock Actual debe contener:**
+                    - CODIGO: Codigo del producto
+                    - PRODUCTO: Descripcion del producto
+                    - Stock: Cantidad disponible
+                    - DEPARTAMENTO: Categoria del producto
+                    
+                    **Archivo Historico de Ventas debe contener:**
+                    - CODIGO: Codigo del producto
+                    - FECHA: Fecha de la venta
+                    - VENTAS: Cantidad vendida
+                    - SUCURSAL: Sucursal donde se realizo la venta
+                    """)
+
+def show_dashboard_logistico():
+    """Dashboard de logistica y transferencias - MEJORADO"""
+    add_back_button(key="back_logistico")
+    show_module_header(
+        "📦 Dashboard Logistico",
+        "Control de transferencias y distribucion en tiempo real"
+    )
+    st.markdown('<div class="module-content">', unsafe_allow_html=True)
+    mostrar_dashboard_transferencias()
+    st.markdown('</div>', unsafe_allow_html=True)
+
+# ==============================================================================
+# 10. MODULO GESTION DE EQUIPO
+# ==============================================================================
+
+def show_gestion_equipo():
+    """Gestion de personal"""
+    add_back_button(key="back_equipo")
+    show_module_header(
+        "👥 Gestion de Equipo",
+        "Administracion del personal del Centro de Distribucion"
+    )
+    
+    st.markdown('<div class="module-content">', unsafe_allow_html=True)
+    
+    st.markdown("""
+    <div class='main-header'>
+        <h1 class='header-title'>👥 Gestion de Personal</h1>
+        <div class='header-subtitle'>Administracion del equipo de trabajo por areas</div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    tab1, tab2, tab3, tab4 = st.tabs(["📋 Estructura Organizacional", "➕ Gestionar Personal", "📊 Estadisticas", "⚙️ Configuracion"])
+    
+    estructura_base = {
+        "Liderazgo y Control": [
+            {"id": 1, "nombre": "Wilson Perez", "cargo": "Jefe de Logistica", "subarea": "Cabeza del C.D.", "estado": "Activo", "es_base": True},
+            {"id": 2, "nombre": "Andres Cadena", "cargo": "Jefe de Inventarios", "subarea": "Control de Inventarios", "estado": "Activo", "es_base": True}
+        ],
+        "Gestion de Transferencias": [
+            {"id": 3, "nombre": "Cesar Yepez", "cargo": "Responsable", "subarea": "Transferencias Fashion", "estado": "Activo", "es_base": True},
+            {"id": 4, "nombre": "Luis Perugachi", "cargo": "Encargado", "subarea": "Pivote de transferencias Price y Distribucion", "estado": "Activo", "es_base": True},
+            {"id": 5, "nombre": "Josue Imbacuan", "cargo": "Responsable", "subarea": "Transferencias Tempo", "estado": "Activo", "es_base": True}
+        ],
+        "Distribucion, Empaque y Envios": [
+            {"id": 6, "nombre": "Jessica Suarez", "cargo": "Distribucion Aero", "subarea": "", "estado": "Activo", "es_base": True},
+            {"id": 7, "nombre": "Norma Paredes", "cargo": "Distribucion Price", "subarea": "", "estado": "Activo", "es_base": True},
+            {"id": 8, "nombre": "Jhonny Villa", "cargo": "Empaque y Guias", "subarea": "", "estado": "Activo", "es_base": True},
+            {"id": 9, "nombre": "Simon Vera", "cargo": "Guias y Envios", "subarea": "", "estado": "Activo", "es_base": True}
+        ],
+        "Ventas al Por Mayor": [
+            {"id": 10, "nombre": "Jhonny Guadalupe", "cargo": "Encargado", "subarea": "Bodega y Packing", "estado": "Activo", "es_base": True},
+            {"id": 11, "nombre": "Rocio Cadena", "cargo": "Responsable", "subarea": "Picking y Distribucion", "estado": "Activo", "es_base": True}
+        ],
+        "Reproceso y Calidad": [
+            {"id": 12, "nombre": "Diana Garcia", "cargo": "Encargada", "subarea": "Reprocesado de prendas en cuarentena", "estado": "Activo", "es_base": True}
+        ]
+    }
+    
+    try:
+        trabajadores = local_db.query('trabajadores')
+        if not trabajadores:
+            st.info("📝 Inicializando estructura organizacional base...")
+            todos_base = []
+            for area, lista in estructura_base.items():
+                for trabajador in lista:
+                    trabajador['area'] = area
+                    trabajador['fecha_ingreso'] = datetime.now().strftime('%Y-%m-%d')
+                    todos_base.append(trabajador)
+            for trab in todos_base:
+                local_db.insert('trabajadores', trab)
+            st.success("✅ Estructura base inicializada correctamente")
+            trabajadores = local_db.query('trabajadores')
+    except Exception as e:
+        st.error(f"Error al cargar trabajadores: {str(e)}")
+        trabajadores = []
+    
+    with tab1:
+        st.markdown("""
+        <div class='filter-panel'>
+            <h4>🏢 Estructura Organizacional del Centro de Distribucion</h4>
+            <p class='section-description'>Responsables por area (estructura base)</p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        for area, personal in estructura_base.items():
+            with st.expander(f"📌 {area} ({len(personal)} personas)", expanded=True):
+                cols = st.columns(3)
+                for idx, trab in enumerate(personal):
+                    col_idx = idx % 3
+                    with cols[col_idx]:
+                        st.markdown(f"""
+                        <div style='background: white; border-radius: 10px; padding: 15px; margin-bottom: 10px; border-left: 4px solid #0033A0; box-shadow: 0 2px 4px rgba(0,0,0,0.1);'>
+                            <div style='font-weight: bold; font-size: 16px; color: #1e3a8a; margin-bottom: 5px;'>{trab['nombre']}</div>
+                            <div style='font-size: 14px; color: #374151; margin-bottom: 3px;'>{trab['cargo']}</div>
+                            <div style='font-size: 12px; color: #6b7280; font-style: italic; margin-bottom: 5px;'>{trab['subarea'] if trab['subarea'] else ''}</div>
+                            <div style='background-color: #10B981; color: white; padding: 2px 8px; border-radius: 12px; font-size: 12px; display: inline-block;'>Activo</div>
+                        </div>
+                        """, unsafe_allow_html=True)
+        
+        st.markdown("---")
+        col_res1, col_res2, col_res3 = st.columns(3)
+        with col_res1:
+            total_personal = sum(len(p) for p in estructura_base.values())
+            st.metric("👥 Total Personal Base", total_personal)
+        with col_res2:
+            st.metric("🏭 Areas Definidas", len(estructura_base))
+        with col_res3:
+            cargos_unicos = len(set([t['cargo'] for area in estructura_base.values() for t in area]))
+            st.metric("🎯 Cargos Unicos", cargos_unicos)
+    
+    with tab2:
+        st.markdown("""
+        <div class='filter-panel'>
+            <h4>📝 Gestion de Personal por Area</h4>
+            <p class='section-description'>Agregar o eliminar trabajadores en cada area</p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        try:
+            trabajadores_db = local_db.query('trabajadores')
+            if trabajadores_db is None:
+                trabajadores_db = []
+        except:
+            trabajadores_db = trabajadores
+        
+        area_tabs = st.tabs(list(estructura_base.keys()))
+        
+        for idx, (area, trabajadores_area_base) in enumerate(estructura_base.items()):
+            with area_tabs[idx]:
+                col1, col2 = st.columns([2, 1])
+                
+                with col1:
+                    st.subheader(f"Personal en {area}")
+                    trabajadores_area_actual = [t for t in trabajadores_db if t.get('area') == area]
+                    
+                    if trabajadores_area_actual:
+                        data = []
+                        for trab in trabajadores_area_actual:
+                            data.append({
+                                'ID': trab.get('id', ''),
+                                'Nombre': trab.get('nombre', ''),
+                                'Cargo': trab.get('cargo', ''),
+                                'Subarea': trab.get('subarea', ''),
+                                'Estado': trab.get('estado', ''),
+                                'Tipo': 'Base' if trab.get('es_base', False) else 'Adicional'
+                            })
+                        
+                        df_area = pd.DataFrame(data)
+                        for i, row in df_area.iterrows():
+                            col_d1, col_d2, col_d3, col_d4, col_d5, col_d6 = st.columns([1, 3, 2, 2, 1, 1])
+                            with col_d1:
+                                st.write(f"**{row['ID']}**")
+                            with col_d2:
+                                st.write(row['Nombre'])
+                            with col_d3:
+                                st.write(row['Cargo'])
+                            with col_d4:
+                                st.write(row['Subarea'] if row['Subarea'] else "-")
+                            with col_d5:
+                                tipo_color = "🟢" if row['Tipo'] == 'Base' else "🔵"
+                                st.write(f"{tipo_color} {row['Tipo']}")
+                            with col_d6:
+                                if row['Tipo'] != 'Base':
+                                    trabajador_id = row['ID']
+                                    if st.button("🗑️", key=f"eliminar_{area}_{trabajador_id}"):
+                                        try:
+                                            local_db.delete('trabajadores', int(trabajador_id))
+                                            st.success(f"✅ Trabajador {row['Nombre']} eliminado de {area}")
+                                            st.rerun()
+                                        except Exception as e:
+                                            st.error(f"❌ Error al eliminar: {str(e)}")
+                                else:
+                                    st.write("🔒")
+                    else:
+                        st.info(f"No hay personal registrado en {area}")
+                
+                with col2:
+                    st.subheader("Agregar Personal")
+                    with st.form(key=f"form_{area}"):
+                        nombre_nuevo = st.text_input("Nombre Completo", key=f"nombre_{area}")
+                        cargo_nuevo = st.text_input("Cargo", key=f"cargo_{area}")
+                        subarea_nuevo = st.text_input("Area especifica/Subarea", key=f"subarea_{area}")
+                        estado_nuevo = st.selectbox("Estado", ["Activo", "Inactivo"], key=f"estado_{area}")
+                        
+                        submit = st.form_submit_button(f"➕ Agregar a {area}")
+                        
+                        if submit:
+                            if nombre_nuevo and cargo_nuevo:
+                                try:
+                                    if trabajadores_db:
+                                        max_id = max([t.get('id', 0) for t in trabajadores_db])
+                                    else:
+                                        max_id = 12
+                                    nuevo_id = max_id + 1
+                                    nuevo_trabajador = {
+                                        'id': nuevo_id,
+                                        'nombre': nombre_nuevo,
+                                        'cargo': cargo_nuevo,
+                                        'area': area,
+                                        'subarea': subarea_nuevo,
+                                        'estado': estado_nuevo,
+                                        'es_base': False,
+                                        'fecha_ingreso': datetime.now().strftime('%Y-%m-%d')
+                                    }
+                                    local_db.insert('trabajadores', nuevo_trabajador)
+                                    st.success(f"✅ {nombre_nuevo} agregado a {area}")
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"❌ Error al agregar trabajador: {str(e)}")
+                            else:
+                                st.error("❌ Nombre y Cargo son obligatorios")
+    
+    with tab3:
+        st.markdown("""
+        <div class='filter-panel'>
+            <h4>📊 Estadisticas del Personal</h4>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        try:
+            trabajadores_db = local_db.query('trabajadores')
+            if trabajadores_db is None:
+                trabajadores_db = trabajadores
+        except:
+            trabajadores_db = trabajadores
+        
+        if trabajadores_db:
+            df_todos = pd.DataFrame(trabajadores_db)
+            
+            col_m1, col_m2, col_m3, col_m4 = st.columns(4)
+            with col_m1:
+                total = len(df_todos)
+                st.metric("👥 Total Personal", total)
+            with col_m2:
+                if 'estado' in df_todos.columns:
+                    activos = len(df_todos[df_todos['estado'] == 'Activo'])
+                else:
+                    activos = total
+                st.metric("🟢 Activos", activos, delta=f"{activos/total*100:.1f}%" if total > 0 else "0%")
+            with col_m3:
+                if 'es_base' in df_todos.columns:
+                    base = len(df_todos[df_todos['es_base'] == True])
+                else:
+                    base = len(estructura_base) * 2
+                st.metric("🏛️ Personal Base", base)
+            with col_m4:
+                if 'es_base' in df_todos.columns:
+                    adicional = len(df_todos[df_todos['es_base'] == False])
+                else:
+                    adicional = max(0, total - base)
+                st.metric("➕ Adicionales", adicional)
+            
+            if total > 0:
+                col_g1, col_g2 = st.columns(2)
+                with col_g1:
+                    if 'area' in df_todos.columns:
+                        dist_area = df_todos['area'].value_counts()
+                        fig1 = px.bar(
+                            x=dist_area.index, 
+                            y=dist_area.values,
+                            title="Distribucion por Area",
+                            labels={'x': 'Area', 'y': 'Cantidad'},
+                            color=dist_area.values,
+                            color_continuous_scale='blues'
+                        )
+                        fig1.update_layout(showlegend=False)
+                        st.plotly_chart(fig1, use_container_width=True)
+                with col_g2:
+                    if 'estado' in df_todos.columns:
+                        estado_counts = df_todos['estado'].value_counts()
+                        fig2 = px.pie(
+                            values=estado_counts.values, 
+                            names=estado_counts.index,
+                            title="Estado del Personal",
+                            color_discrete_sequence=['#10B981', '#EF4444']
+                        )
+                        st.plotly_chart(fig2, use_container_width=True)
+            
+            st.subheader("📋 Resumen por Area")
+            resumen_data = []
+            for area in estructura_base.keys():
+                if 'area' in df_todos.columns:
+                    area_data = df_todos[df_todos['area'] == area]
+                    activos_area = len(area_data[area_data['estado'] == 'Activo']) if 'estado' in df_todos.columns else len(area_data)
+                    base_area = len(area_data[area_data.get('es_base', False) == True]) if 'es_base' in df_todos.columns else 0
+                    resumen_data.append({
+                        'Area': area,
+                        'Total': len(area_data),
+                        'Activos': activos_area,
+                        'Base': base_area,
+                        'Adicional': len(area_data) - base_area
+                    })
+            
+            if resumen_data:
+                df_resumen = pd.DataFrame(resumen_data)
+                st.dataframe(df_resumen, use_container_width=True)
+            else:
+                st.info("No hay datos de areas para mostrar")
+        else:
+            st.info("No hay datos para mostrar estadisticas.")
+    
+    with tab4:
+        st.markdown("""
+        <div class='filter-panel'>
+            <h4>⚙️ Configuracion del Sistema</h4>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        col_c1, col_c2 = st.columns(2)
+        
+        with col_c1:
+            st.subheader("Restaurar Estructura Base")
+            st.warning("⚠️ Esta accion eliminara todo el personal adicional y restaurara la estructura original")
+            
+            if st.button("🔄 Restaurar Estructura Base", type="secondary"):
+                try:
+                    trabajadores_actuales = local_db.query('trabajadores')
+                    if trabajadores_actuales:
+                        for trab in trabajadores_actuales:
+                            if not trab.get('es_base', False):
+                                local_db.delete('trabajadores', trab['id'])
+                    st.success("✅ Estructura base restaurada exitosamente")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"❌ Error al restaurar: {str(e)}")
+        
+        with col_c2:
+            st.subheader("Exportar Datos")
+            try:
+                trabajadores_db = local_db.query('trabajadores')
+                if trabajadores_db:
+                    df_export = pd.DataFrame(trabajadores_db)
+                    export_cols = ['nombre', 'cargo', 'area', 'subarea', 'estado', 'fecha_ingreso']
+                    available_cols = [col for col in export_cols if col in df_export.columns]
+                    df_export = df_export[available_cols]
+                    csv = df_export.to_csv(index=False)
+                    st.download_button(
+                        label="📥 Descargar como CSV",
+                        data=csv,
+                        file_name="personal_cd.csv",
+                        mime="text/csv",
+                        help="Descargar todos los datos del personal"
+                    )
+                else:
+                    st.info("No hay datos para exportar")
+            except Exception as e:
+                st.error(f"❌ Error al exportar datos: {str(e)}")
+    
+    st.markdown('</div>', unsafe_allow_html=True)
+
+# ==============================================================================
+# 11. MODULO AUDITORIA DE CORREOS
 # ==============================================================================
 
 class WiloEmailEngine:
@@ -5159,7 +5024,7 @@ def show_auditoria_correos():
     st.markdown('</div>', unsafe_allow_html=True)
 
 # ==============================================================================
-# 11. MODULO GENERAR GUIAS
+# 12. MODULO GENERAR GUIAS
 # ==============================================================================
 
 def descargar_logo(url):
@@ -5682,7 +5547,7 @@ def show_generar_guias():
     st.markdown('</div>', unsafe_allow_html=True)
 
 # ==============================================================================
-# 12. MODULOS RESTANTES (PLACEHOLDERS)
+# 13. MODULOS RESTANTES (PLACEHOLDERS)
 # ==============================================================================
 
 def show_control_inventario():
@@ -5794,7 +5659,7 @@ def show_configuracion():
     st.markdown('</div>', unsafe_allow_html=True)
 
 # ==============================================================================
-# 13. NAVEGACION PRINCIPAL
+# 14. NAVEGACION PRINCIPAL
 # ==============================================================================
 
 def main():
