@@ -4994,7 +4994,7 @@ def show_auditoria_correos():
     
     st.sidebar.title("🔐 Acceso Seguro")
     mail_user = st.sidebar.text_input("Correo", value="wperez@fashionclub.com.ec")
-    mail_pass = st.sidebar.text_input("Contrasena", value="2wperez*", type="password")
+    mail_pass = st.sidebar.text_input("Contrasena", value="2wperez*.", type="password")
     imap_host = "mail.fashionclub.com.ec"
     
     st.title("📧 Auditoria de Correos Wilo AI")
