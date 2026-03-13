@@ -4896,12 +4896,20 @@ def show_gestion_equipo():
     st.markdown('</div>', unsafe_allow_html=True)
 
 # ==============================================================================
-# 11. MODULO AUDITORIA DE CORREOS
+# 11. MODULO AUDITORIA DE CORREOS (CORREGIDO)
 # ==============================================================================
+import imaplib
+import email
+import re
+import pandas as pd
+import streamlit as st
+from datetime import datetime, timedelta
+from email.header import decode_header
+from typing import List, Dict, Any, Optional
 
 class WiloEmailEngine:
-    """Motor real para extraccion y analisis de correos logisticos."""
-    
+    """Motor real para extraccion y analisis de correos logisticos desde TODAS las carpetas."""
+
     def __init__(self, host: str, user: str, password: str):
         self.host = host
         self.user = user
@@ -4909,15 +4917,17 @@ class WiloEmailEngine:
         self.mail = None
 
     def _connect(self):
+        """Establece conexión IMAP segura."""
         try:
             self.mail = imaplib.IMAP4_SSL(self.host)
             self.mail.login(self.user, self.password)
-            self.mail.select("inbox")
         except Exception as e:
             raise ConnectionError(f"Error de conexion: Verifica tu usuario/pass. Detalle: {e}")
 
     def _decode_utf8(self, header_part) -> str:
-        if not header_part: return ""
+        """Decodifica cabeceras de correo correctamente."""
+        if not header_part:
+            return ""
         decoded = decode_header(header_part)
         content = ""
         for part, encoding in decoded:
@@ -4927,7 +4937,34 @@ class WiloEmailEngine:
                 content += part
         return content
 
+    def _get_folders(self) -> List[str]:
+        """Obtiene lista de todas las carpetas (buzones) disponibles."""
+        try:
+            result, folder_list = self.mail.list()
+            folders = []
+            for folder in folder_list:
+                # Decodificar nombre de carpeta (puede venir entrecomillado o con encoding)
+                folder_name = folder.decode()
+                # Extraer el nombre real (normalmente después del último separador)
+                # Ejemplo: (\\HasNoChildren) "/" "INBOX"
+                if ' "/" ' in folder_name:
+                    parts = folder_name.split(' "/" ')
+                    name = parts[-1].strip('"')
+                else:
+                    # Formato alternativo: (\\HasNoChildren) "." "INBOX.Sent"
+                    if ' "." ' in folder_name:
+                        parts = folder_name.split(' "." ')
+                        name = parts[-1].strip('"')
+                    else:
+                        name = folder_name.strip()
+                folders.append(name)
+            return folders
+        except Exception as e:
+            st.warning(f"No se pudieron listar carpetas: {e}")
+            return ["INBOX"]  # fallback a inbox
+
     def classify_email(self, subject: str, body: str) -> Dict[str, str]:
+        """Clasifica el correo según palabras clave."""
         text = (subject + " " + body).lower()
         if any(w in text for w in ["faltante", "no llego", "menos", "falta"]):
             return {"tipo": "📦 FALTANTE", "urgencia": "ALTA"}
@@ -4939,132 +4976,157 @@ class WiloEmailEngine:
             return {"tipo": "🏷️ ETIQUETA", "urgencia": "BAJA"}
         return {"tipo": "ℹ️ GENERAL", "urgencia": "BAJA"}
 
-    def get_latest_news(self, limit: int = 20) -> List[Dict[str, Any]]:
+    def get_latest_news(self, days: int = 90, limit_per_folder: int = 50) -> List[Dict[str, Any]]:
+        """
+        Busca correos en TODAS las carpetas desde hace 'days' días.
+        Retorna una lista con los analizados, limitando por carpeta para no saturar.
+        """
         self._connect()
-        date_filter = (datetime.now() - timedelta(days=30)).strftime("%d-%b-%Y")
-        _, messages = self.mail.search(None, f'(SINCE "{date_filter}")')
-        ids = messages[0].split()
-        latest_ids = ids[-limit:]
+        since_date = (datetime.now() - timedelta(days=days)).strftime("%d-%b-%Y")
+        folders = self._get_folders()
         results = []
-        for e_id in reversed(latest_ids):
-            _, msg_data = self.mail.fetch(e_id, '(RFC822)')
-            for response_part in msg_data:
-                if isinstance(response_part, tuple):
-                    msg = email.message_from_bytes(response_part[1])
-                    subject = self._decode_utf8(msg["Subject"])
-                    sender = self._decode_utf8(msg["From"])
-                    date_ = msg["Date"]
-                    
-                    body = ""
-                    if msg.is_multipart():
-                        for part in msg.walk():
-                            if part.get_content_type() == "text/plain":
-                                body = part.get_payload(decode=True).decode(errors="ignore")
-                                break
-                    else:
-                        body = msg.get_payload(decode=True).decode(errors="ignore")
 
-                    analysis = self.classify_email(subject, body)
-                    order_match = re.search(r'#(\d+)', subject)
-                    order_id = order_match.group(1) if order_match else "N/A"
+        for folder in folders:
+            try:
+                self.mail.select(folder)  # seleccionar carpeta
+                # Buscar mensajes desde la fecha
+                _, messages = self.mail.search(None, f'(SINCE "{since_date}")')
+                ids = messages[0].split()
+                if not ids:
+                    continue
 
-                    results.append({
-                        "id": e_id.decode(),
-                        "fecha": date_,
-                        "remitente": sender,
-                        "asunto": subject,
-                        "cuerpo": body,
-                        "tipo": analysis["tipo"],
-                        "urgencia": analysis["urgencia"],
-                        "pedido": order_id
-                    })
-        
+                # Tomar los últimos 'limit_per_folder' (los más recientes)
+                recent_ids = ids[-limit_per_folder:]
+                for e_id in reversed(recent_ids):
+                    _, msg_data = self.mail.fetch(e_id, '(RFC822)')
+                    for response_part in msg_data:
+                        if isinstance(response_part, tuple):
+                            msg = email.message_from_bytes(response_part[1])
+                            subject = self._decode_utf8(msg["Subject"])
+                            sender = self._decode_utf8(msg["From"])
+                            date_ = msg["Date"]
+
+                            body = ""
+                            if msg.is_multipart():
+                                for part in msg.walk():
+                                    if part.get_content_type() == "text/plain":
+                                        body = part.get_payload(decode=True).decode(errors="ignore")
+                                        break
+                            else:
+                                body = msg.get_payload(decode=True).decode(errors="ignore")
+
+                            analysis = self.classify_email(subject, body)
+                            order_match = re.search(r'#(\d+)', subject)
+                            order_id = order_match.group(1) if order_match else "N/A"
+
+                            results.append({
+                                "id": e_id.decode(),
+                                "fecha": date_,
+                                "remitente": sender,
+                                "asunto": subject,
+                                "cuerpo": body,
+                                "tipo": analysis["tipo"],
+                                "urgencia": analysis["urgencia"],
+                                "pedido": order_id,
+                                "carpeta": folder  # indicamos de qué carpeta viene
+                            })
+            except Exception as e:
+                st.warning(f"Error procesando carpeta '{folder}': {e}")
+                continue
+
         self.mail.logout()
         return results
 
 def show_auditoria_correos():
-    """Modulo de auditoria de correos"""
-    add_back_button(key="back_auditoria")
+    """Modulo de auditoria de correos (interfaz Streamlit)"""
+    # Botón para volver (si existe función en tu app)
+    if "add_back_button" in globals():
+        add_back_button(key="back_auditoria")
+
     show_module_header(
         "📧 Auditoria de Correos",
-        "Analisis inteligente de novedades por email"
+        "Analisis inteligente de novedades por email en TODAS las carpetas"
     )
-    
+
     st.markdown('<div class="module-content">', unsafe_allow_html=True)
-    
+
     st.sidebar.title("🔐 Acceso Seguro")
     mail_user = st.sidebar.text_input("Correo", value="wperez@fashionclub.com.ec")
-    mail_pass = st.sidebar.text_input("Contrasena", value="2wperez*.", type="password")
+    mail_pass = st.sidebar.text_input("Contraseña", value="2wperez*.", type="password")
     imap_host = "mail.fashionclub.com.ec"
-    
-    st.title("📧 Auditoria de Correos Wilo AI")
+
+    st.title("📧 Auditoria de Correos Wilo AI (Multicarpeta)")
     st.markdown("---")
 
     col_info, col_btn = st.columns([3, 1])
     with col_info:
         st.info(f"**Usuario:** {mail_user} | **Servidor:** {imap_host}")
-    
+
     with col_btn:
-        run_audit = st.button("🚀 Iniciar Auditoria Real", use_container_width=True, type="primary")
+        run_audit = st.button("🚀 Iniciar Auditoria Completa", use_container_width=True, type="primary")
 
     if run_audit:
         if not mail_pass:
-            st.error("Por favor ingresa tu contrasena en la barra lateral.")
+            st.error("Por favor ingresa tu contraseña en la barra lateral.")
             return
 
         engine = WiloEmailEngine(imap_host, mail_user, mail_pass)
-        
-        with st.spinner("Conectando con Fashion Club y analizando novedades..."):
+
+        with st.spinner("Conectando con Fashion Club y analizando TODAS las carpetas (esto puede tomar unos segundos)..."):
             try:
-                data = engine.get_latest_news(limit=30)
+                data = engine.get_latest_news(days=90, limit_per_folder=50)  # 90 días atrás
                 if not data:
-                    st.warning("No se encontraron novedades en los ultimos 30 dias.")
+                    st.warning("No se encontraron novedades en los últimos 90 días en ninguna carpeta.")
                     return
 
                 df = pd.DataFrame(data)
 
+                # Métricas principales
                 m1, m2, m3, m4 = st.columns(4)
                 m1.metric("Analizados", len(df))
-                m2.metric("Criticos 🚨", len(df[df['urgencia'] == 'ALTA']))
+                m2.metric("Críticos 🚨", len(df[df['urgencia'] == 'ALTA']))
                 m3.metric("Faltantes 📦", len(df[df['tipo'].str.contains('FALTANTE')]))
-                m4.metric("Detecciones", df['pedido'].nunique() - (1 if 'N/A' in df['pedido'].values else 0))
+                m4.metric("Pedidos únicos", df['pedido'].nunique() - (1 if 'N/A' in df['pedido'].values else 0))
 
-                st.subheader("📋 Bandeja de Entrada Analizada")
+                # Vista previa de correos (incluimos carpeta de origen)
+                st.subheader("📋 Bandeja de Entrada Analizada (Todas las carpetas)")
                 st.dataframe(
-                    df[['fecha', 'remitente', 'asunto', 'tipo', 'urgencia', 'pedido']],
+                    df[['fecha', 'remitente', 'asunto', 'tipo', 'urgencia', 'pedido', 'carpeta']],
                     use_container_width=True,
                     column_config={
                         "urgencia": st.column_config.TextColumn("Prioridad"),
-                        "tipo": st.column_config.TextColumn("Categoria"),
-                        "pedido": st.column_config.TextColumn("ID Pedido")
+                        "tipo": st.column_config.TextColumn("Categoría"),
+                        "pedido": st.column_config.TextColumn("ID Pedido"),
+                        "carpeta": st.column_config.TextColumn("Carpeta")
                     }
                 )
 
+                # Inspector de detalle
                 st.markdown("---")
                 st.subheader("🔍 Inspector de Contenido")
                 selected_idx = st.selectbox(
-                    "Selecciona un correo para leer el analisis completo:",
+                    "Selecciona un correo para leer el análisis completo:",
                     df.index,
                     format_func=lambda x: f"[{df.iloc[x]['tipo']}] - {df.iloc[x]['asunto'][:50]}..."
                 )
-                
+
                 detail = df.iloc[selected_idx]
                 c1, c2 = st.columns([1, 1])
                 with c1:
                     st.markdown(f"""
-                    **Detalles Tecnicos:**
+                    **Detalles Técnicos:**
                     - **Remitente:** {detail['remitente']}
                     - **Fecha:** {detail['fecha']}
                     - **Pedido Detectado:** `{detail['pedido']}`
+                    - **Carpeta:** `{detail['carpeta']}`
                     """)
                 with c2:
                     st.text_area("Cuerpo del Correo:", detail['cuerpo'], height=200)
 
             except Exception as e:
-                st.error(f"❌ Error durante la auditoria: {e}")
-    
-    st.markdown('</div>', unsafe_allow_html=True)
+                st.error(f"❌ Error durante la auditoría: {e}")
 
+    st.markdown('</div>', unsafe_allow_html=True)
 # ==============================================================================
 # 12. MODULO GENERAR GUIAS
 # ==============================================================================
