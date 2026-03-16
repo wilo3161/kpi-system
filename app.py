@@ -14,6 +14,7 @@ import qrcode
 import requests
 import imaplib
 import email
+from io import BytesIO
 from email.header import decode_header
 from typing import Dict, List, Optional, Any, Union
 from reportlab.lib.pagesizes import letter
@@ -3119,59 +3120,110 @@ def show_reconciliacion_v8():
                     st.metric("Promedio por Pieza", f"${(datos_filt['SUBTOTAL'].sum()/datos_filt['PIEZAS'].sum()):.2f}")
         
         with tab7:
-            st.header("💾 Exportar Resultados")
-            formato = st.radio(
-                "Seleccione el formato de exportación:",
-                ['Excel Formato Exacto (.xlsx)', 'Excel Normal (.xlsx)', 'CSV (.csv)', 'JSON (.json)'],
-                horizontal=True,
-                key="formato_export"
-            )
-            nombre_base = st.text_input(
-                "Nombre base para los archivos:",
-                value=f"gastos_tiendas_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
-                key="nombre_base_export"
-            )
-            
-            st.markdown("---")
-            st.subheader("📤 Exportaciones Principales")
-            col1, col2, col3 = st.columns(3)
-            
-            if formato == 'Excel Formato Exacto (.xlsx)':
-                if st.button("📊 Excel Formato Exacto", use_container_width=True, type="primary"):
-                    with st.spinner("Generando Excel con formato exacto..."):
-                        excel_output = generar_excel_con_formato_exacto(
-                            metricas, resultado, guias_anuladas, manifesto
-                        )
-                        if excel_output:
-                            col1.download_button(
-                                label="📥 Descargar Excel Formato Exacto",
-                                data=excel_output.getvalue(),
-                                file_name=f"{nombre_base}_formato_exacto.xlsx",
-                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                                use_container_width=True,
-                                help="Formato exacto con 4 hojas: Reporte, Tiendas, Guías Anuladas, Detalle"
-                            )
-            elif formato == 'Excel Normal (.xlsx)':
+    st.header("💾 Exportar Resultados")
+    
+    formato = st.radio(
+        "Seleccione el formato de exportación:",
+        ['Excel Formato Exacto (.xlsx)', 'Excel Normal (.xlsx)', 'CSV (.csv)', 'JSON (.json)'],
+        horizontal=True,
+        key="formato_export"
+    )
+    
+    nombre_base = st.text_input(
+        "Nombre base para los archivos:",
+        value=f"gastos_tiendas_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+        key="nombre_base_export"
+    )
+    
+    st.markdown("---")
+    st.subheader("📤 Exportaciones Principales")
+    col1, col2, col3 = st.columns(3)
+    
+    if formato == 'Excel Formato Exacto (.xlsx)':
+        if st.button("📊 Generar Excel Formato Exacto", use_container_width=True, type="primary"):
+            with st.spinner("Generando Excel con formato exacto..."):
+                # Asegúrate que esta función retorne BytesIO
+                excel_output = generar_excel_con_formato_exacto(
+                    metricas, resultado, guias_anuladas, manifesto
+                )
+                if excel_output and isinstance(excel_output, BytesIO):
+                    col1.download_button(
+                        label="📥 Descargar Excel Formato Exacto",
+                        data=excel_output.getvalue(),
+                        file_name=f"{nombre_base}_formato_exacto.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        use_container_width=True,
+                        help="Formato exacto con varias hojas y estilos"
+                    )
+                else:
+                    st.error("No se pudo generar el archivo Excel con formato exacto")
+    
+    elif formato == 'Excel Normal (.xlsx)':
+        if st.button("📊 Generar Excel Normal", use_container_width=True, type="primary"):
+            with st.spinner("Generando Excel estándar..."):
                 output = BytesIO()
                 try:
                     with pd.ExcelWriter(output, engine='openpyxl') as writer:
                         metricas.to_excel(writer, sheet_name='Gastos por Grupo', index=False)
-                        columnas_export = ['FECHA_MANIFIESTO', 'GUIA_LIMPIA', 'ESTADO', 'GRUPO', 'DESTINATARIO', 'CIUDAD', 'PIEZAS', 
-                                          'SUBTOTAL_MANIFIESTO', 'SUBTOTAL', 'DIFERENCIA', 'TIPO']
+                        
+                        columnas_export = [
+                            'FECHA_MANIFIESTO', 'GUIA_LIMPIA', 'ESTADO', 'GRUPO',
+                            'DESTINATARIO', 'CIUDAD', 'PIEZAS', 'SUBTOTAL_MANIFIESTO',
+                            'SUBTOTAL', 'DIFERENCIA', 'TIPO'
+                        ]
                         columnas_export = [col for col in columnas_export if col in resultado.columns]
                         resultado[columnas_export].to_excel(writer, sheet_name='Datos Completos', index=False)
+                        
                         resumen.to_excel(writer, sheet_name='Resumen por Tipo', index=False)
-                        validacion_df = pd.DataFrame([validacion])
-                        validacion_df.to_excel(writer, sheet_name='Validación', index=False)
+                        
+                        pd.DataFrame([validacion]).to_excel(writer, sheet_name='Validación', index=False)
+                        
                         if not guias_anuladas.empty:
                             guias_anuladas.to_excel(writer, sheet_name='Guias Anuladas', index=False)
+                    
+                    output.seek(0)
                     col2.download_button(
-                        label="📥 Excel Normal",
+                        label="📥 Descargar Excel Normal",
                         data=output.getvalue(),
-                        file_name=f"{nombre_base}.xlsx",
+                        file_name=f"{nombre_base}_normal.xlsx",
                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                         use_container_width=True
                     )
+                except Exception as e:
+                    st.error(f"Error al generar Excel normal: {str(e)}")
+    
+    elif formato == 'CSV (.csv)':
+        col1.download_button(
+            label="📥 Métricas (CSV)",
+            data=metricas.to_csv(index=False).encode('utf-8'),
+            file_name=f"{nombre_base}_metricas.csv",
+            mime="text/csv",
+            use_container_width=True
+        )
+        col2.download_button(
+            label="📥 Datos completos (CSV)",
+            data=resultado.to_csv(index=False).encode('utf-8'),
+            file_name=f"{nombre_base}_datos.csv",
+            mime="text/csv",
+            use_container_width=True
+        )
+        if not guias_anuladas.empty:
+            col3.download_button(
+                label="📥 Guías Anuladas (CSV)",
+                data=guias_anuladas.to_csv(index=False).encode('utf-8'),
+                file_name=f"{nombre_base}_anuladas.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
+    
+    elif formato == 'JSON (.json)':
+        col1.download_button(
+            label="📥 Métricas (JSON)",
+            data=metricas.to_json(orient='records', indent=2, force_ascii=False).encode('utf-8'),
+            file_name=f"{nombre_base}_metricas.json",
+            mime="application/json",
+            use_container_width=True
+        )
                 except Exception as e:
                     st.error(f"Error al generar Excel: {str(e)}")
                     st.info("Intente exportar en formato CSV como alternativa")
