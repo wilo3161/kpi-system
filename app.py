@@ -3224,7 +3224,7 @@ with tab7:
             mime="application/json",
             use_container_width=True
         )
-                except Exception as e:
+            except Exception as e:
                     st.error(f"Error al generar Excel: {str(e)}")
                     st.info("Intente exportar en formato CSV como alternativa")
             elif formato == 'CSV (.csv)':
