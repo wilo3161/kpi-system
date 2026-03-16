@@ -3119,7 +3119,7 @@ def show_reconciliacion_v8():
                 with col4:
                     st.metric("Promedio por Pieza", f"${(datos_filt['SUBTOTAL'].sum()/datos_filt['PIEZAS'].sum()):.2f}")
         
-        with tab7:
+with tab7:
     st.header("💾 Exportar Resultados")
     
     formato = st.radio(
