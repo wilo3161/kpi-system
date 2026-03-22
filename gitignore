@@ -1,0 +1,9 @@
+# .gitignore
+.env
+.streamlit/secrets.toml
+__pycache__/
+*.pyc
+.DS_Store
+*.log
+*.db
+*.sqlit
