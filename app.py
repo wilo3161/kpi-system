@@ -1111,7 +1111,7 @@ def show_main_page():
     st.markdown("""
     <div class="gallery-container fade-in">
         <div class="brand-title">AEROPOSTALE</div>
-        <div class="brand-subtitle">Centro de Distribucion Ecuador | ERP v4.0</div>
+        <div class="brand-subtitle">Centro de Distribucion Ecuador | ERP </div>
     </div>
     """, unsafe_allow_html=True)
     
