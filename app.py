@@ -19,7 +19,7 @@ import email
 from io import BytesIO
 from email.header import decode_header
 from typing import Dict, List, Optional, Any, Union
-from reportlab.lib.pagesizes import letter
+from reportlab.lib.pagesizes import letter, landscape   # ← AGREGADO landscape
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
@@ -28,6 +28,7 @@ from reportlab.lib.colors import HexColor
 from openpyxl import Workbook
 from openpyxl.styles import Border, Side, PatternFill, Font, Alignment
 from openpyxl.utils import get_column_letter
+import tempfile   # ← AGREGADO
 
 # --- CONFIGURACION DE PAGINA ---
 st.set_page_config(
@@ -87,7 +88,7 @@ TIENDAS_DATA = [
 ]
 
 # ==============================================================================
-# SISTEMA DE AUTENTICACION
+# SISTEMA DE AUTENTICACION (CORREGIDO)
 # ==============================================================================
 USERS_DB = {
     "admin": {
@@ -119,14 +120,11 @@ USERS_DB = {
         "avatar": "📦"
     }
 }
+
+# ---------- FUNCIÓN DE LOGIN CORREGIDA ----------
 def check_password():
     """Devuelve True si el usuario está autenticado, False en caso contrario."""
-    if 'authenticated' not in st.session_state:
-        st.session_state.authenticated = False
-        st.session_state.username = None
-        st.session_state.role = None
-    
-    if st.session_state.authenticated:
+    if 'authenticated' in st.session_state and st.session_state.authenticated:
         return True
     
     # Mostrar formulario de login
@@ -178,7 +176,8 @@ def check_password():
                     st.error("❌ Contraseña incorrecta")
             else:
                 st.error("❌ Usuario no existe")
-        return False
+    # IMPORTANTE: solo se retorna False si no se ha hecho rerun (es decir, si no se ha autenticado)
+    return False
 
 def logout():
     """Cierra la sesión actual."""
@@ -186,6 +185,8 @@ def logout():
         if key in st.session_state:
             del st.session_state[key]
     st.rerun()
+
+ 
 # ==============================================================================
 # 1. ESTILOS CSS - MODERNIZADO Y MEJORADO
 # ==============================================================================
@@ -2410,7 +2411,6 @@ def show_reconciliacion_v8():
     
     st.markdown('<div class="module-content">', unsafe_allow_html=True)
     
-    # --- CORRECCIÓN: Usar el estado de sesión correcto ---
     if 'gastos_datos' not in st.session_state:
         st.session_state.gastos_datos = {
             'manifesto': None,
@@ -5984,18 +5984,24 @@ def main():
     if not check_password():
         return  # No mostrar nada más hasta que inicie sesión
     
-    # Opcional: mostrar barra lateral con info del usuario y botón logout
+    # Barra lateral con info del usuario y botón logout
     with st.sidebar:
         st.markdown(f"**👤 {st.session_state.user_name}** ({st.session_state.role})")
         if st.button("🚪 Cerrar sesión", use_container_width=True):
             logout()
     
-    # Resto de tu navegación igual...
+    # Mapeo de todos los módulos (completo)
     page_mapping = {
         "Inicio": show_main_page,
         "dashboard_kpis": show_dashboard_kpis,
         "reconciliacion_v8": show_reconciliacion_v8,
-        # ... todos los demás módulos
+        "auditoria_correos": show_auditoria_correos,
+        "dashboard_logistico": show_dashboard_logistico,
+        "gestion_equipo": show_gestion_equipo,
+        "generar_guias": show_generar_guias,
+        "control_inventario": show_control_inventario,
+        "reportes_avanzados": show_reportes_avanzados,
+        "configuracion": show_configuracion
     }
     
     current_page = st.session_state.current_page
@@ -6004,3 +6010,6 @@ def main():
     else:
         st.session_state.current_page = "Inicio"
         st.rerun()
+
+if __name__ == "__main__":
+    main()
