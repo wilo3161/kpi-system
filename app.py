@@ -127,32 +127,59 @@ def check_password():
     if 'authenticated' in st.session_state and st.session_state.authenticated:
         return True
     
-    # Mostrar formulario de login
+    # Mostrar formulario de login con el nuevo diseño
     st.markdown("""
     <style>
     .login-container {
-        max-width: 400px;
+        max-width: 450px;
         margin: 100px auto;
-        padding: 30px;
+        padding: 40px 30px;
         background: rgba(30, 41, 59, 0.9);
         backdrop-filter: blur(10px);
-        border-radius: 20px;
+        border-radius: 24px;
         border: 1px solid rgba(255,255,255,0.1);
         box-shadow: 0 20px 40px rgba(0,0,0,0.3);
-    }
-    .login-title {
         text-align: center;
-        color: white;
-        font-size: 1.8rem;
-        font-weight: 700;
+    }
+    .login-brand {
         margin-bottom: 30px;
+    }
+    .login-brand .main {
+        font-size: 2.8rem;
+        font-weight: 900;
+        letter-spacing: 12px;
+        background: linear-gradient(45deg, #60A5FA, #8B5CF6, #F472B6);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        margin-bottom: 10px;
+    }
+    .login-brand .sub {
+        color: #94A3B8;
+        font-size: 0.9rem;
+        letter-spacing: 4px;
+        text-transform: uppercase;
+        margin-bottom: 8px;
+    }
+    .login-brand .erp {
+        color: #60A5FA;
+        font-weight: bold;
+        font-size: 1.2rem;
+        letter-spacing: 2px;
     }
     </style>
     """, unsafe_allow_html=True)
     
     with st.container():
         st.markdown('<div class="login-container">', unsafe_allow_html=True)
-        st.markdown('<div class="login-title">🔐 AEROPOSTALE ERP</div>', unsafe_allow_html=True)
+        
+        # Nuevo encabezado con el formato solicitado
+        st.markdown("""
+        <div class="login-brand">
+            <div class="main">AEROPOSTALE</div>
+            <div class="sub">CENTRO DE DISTRIBUCION ECUADOR</div>
+            <div class="erp">ERP</div>
+        </div>
+        """, unsafe_allow_html=True)
         
         username = st.text_input("Usuario", key="login_user")
         password = st.text_input("Contraseña", type="password", key="login_pass")
@@ -176,15 +203,7 @@ def check_password():
                     st.error("❌ Contraseña incorrecta")
             else:
                 st.error("❌ Usuario no existe")
-    # IMPORTANTE: solo se retorna False si no se ha hecho rerun (es decir, si no se ha autenticado)
     return False
-
-def logout():
-    """Cierra la sesión actual."""
-    for key in ['authenticated', 'username', 'role', 'user_name']:
-        if key in st.session_state:
-            del st.session_state[key]
-    st.rerun()
 
  
 # ==============================================================================
