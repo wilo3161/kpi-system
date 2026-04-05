@@ -119,6 +119,73 @@ USERS_DB = {
         "avatar": "📦"
     }
 }
+ef check_password():
+    """Devuelve True si el usuario está autenticado, False en caso contrario."""
+    if 'authenticated' not in st.session_state:
+        st.session_state.authenticated = False
+        st.session_state.username = None
+        st.session_state.role = None
+    
+    if st.session_state.authenticated:
+        return True
+    
+    # Mostrar formulario de login
+    st.markdown("""
+    <style>
+    .login-container {
+        max-width: 400px;
+        margin: 100px auto;
+        padding: 30px;
+        background: rgba(30, 41, 59, 0.9);
+        backdrop-filter: blur(10px);
+        border-radius: 20px;
+        border: 1px solid rgba(255,255,255,0.1);
+        box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+    }
+    .login-title {
+        text-align: center;
+        color: white;
+        font-size: 1.8rem;
+        font-weight: 700;
+        margin-bottom: 30px;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+    
+    with st.container():
+        st.markdown('<div class="login-container">', unsafe_allow_html=True)
+        st.markdown('<div class="login-title">🔐 AEROPOSTALE ERP</div>', unsafe_allow_html=True)
+        
+        username = st.text_input("Usuario", key="login_user")
+        password = st.text_input("Contraseña", type="password", key="login_pass")
+        col1, col2, col3 = st.columns([1,2,1])
+        with col2:
+            login_btn = st.button("Ingresar", use_container_width=True, type="primary")
+        
+        st.markdown('</div>', unsafe_allow_html=True)
+        
+        if login_btn:
+            if username in USERS_DB:
+                stored_hash = USERS_DB[username]["password"]
+                input_hash = hashlib.sha256(password.encode()).hexdigest()
+                if stored_hash == input_hash:
+                    st.session_state.authenticated = True
+                    st.session_state.username = username
+                    st.session_state.role = USERS_DB[username]["role"]
+                    st.session_state.user_name = USERS_DB[username]["name"]
+                    st.rerun()
+                else:
+                    st.error("❌ Contraseña incorrecta")
+            else:
+                st.error("❌ Usuario no existe")
+        return False
+
+def logout():
+    """Cierra la sesión actual."""
+    for key in ['authenticated', 'username', 'role', 'user_name']:
+        if key in st.session_state:
+            del st.session_state[key]
+    st.rerun()
 # ==============================================================================
 # 1. ESTILOS CSS - MODERNIZADO Y MEJORADO
 # ==============================================================================
@@ -5911,29 +5978,29 @@ def show_configuracion():
 # ==============================================================================
 
 def main():
-    """Funcion principal de la aplicacion"""
     initialize_session_state()
     
+    # Verificar autenticación
+    if not check_password():
+        return  # No mostrar nada más hasta que inicie sesión
+    
+    # Opcional: mostrar barra lateral con info del usuario y botón logout
+    with st.sidebar:
+        st.markdown(f"**👤 {st.session_state.user_name}** ({st.session_state.role})")
+        if st.button("🚪 Cerrar sesión", use_container_width=True):
+            logout()
+    
+    # Resto de tu navegación igual...
     page_mapping = {
         "Inicio": show_main_page,
         "dashboard_kpis": show_dashboard_kpis,
         "reconciliacion_v8": show_reconciliacion_v8,
-        "auditoria_correos": show_auditoria_correos,
-        "dashboard_logistico": show_dashboard_logistico,
-        "gestion_equipo": show_gestion_equipo,
-        "generar_guias": show_generar_guias,
-        "control_inventario": show_control_inventario,
-        "reportes_avanzados": show_reportes_avanzados,
-        "configuracion": show_configuracion
+        # ... todos los demás módulos
     }
     
     current_page = st.session_state.current_page
-    
     if current_page in page_mapping:
         page_mapping[current_page]()
     else:
         st.session_state.current_page = "Inicio"
         st.rerun()
-
-if __name__ == "__main__":
-    main()
