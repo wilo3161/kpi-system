@@ -119,7 +119,7 @@ USERS_DB = {
         "avatar": "📦"
     }
 }
-ef check_password():
+def check_password():
     """Devuelve True si el usuario está autenticado, False en caso contrario."""
     if 'authenticated' not in st.session_state:
         st.session_state.authenticated = False
