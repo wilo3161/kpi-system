@@ -131,8 +131,8 @@ def check_password():
     st.markdown("""
     <style>
     .login-container {
-        max-width: 450px;
-        margin: 100px auto;
+        max-width: 420px;
+        margin: 80px auto;
         padding: 40px 30px;
         background: rgba(30, 41, 59, 0.9);
         backdrop-filter: blur(10px);
@@ -145,48 +145,62 @@ def check_password():
         margin-bottom: 30px;
     }
     .login-brand .main {
-        font-size: 2.8rem;
+        font-size: 2.5rem;
         font-weight: 900;
-        letter-spacing: 12px;
+        letter-spacing: 4px;
         background: linear-gradient(45deg, #60A5FA, #8B5CF6, #F472B6);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
-        margin-bottom: 10px;
+        margin-bottom: 5px;
     }
     .login-brand .sub {
-        color: #94A3B8;
-        font-size: 0.9rem;
-        letter-spacing: 4px;
-        text-transform: uppercase;
-        margin-bottom: 8px;
-    }
-    .login-brand .erp {
-        color: #60A5FA;
-        font-weight: bold;
-        font-size: 1.2rem;
+        font-size: 1rem;
+        color: #CBD5E1;
         letter-spacing: 2px;
+        margin-bottom: 15px;
+    }
+    .login-title {
+        font-size: 1.5rem;
+        font-weight: 600;
+        color: white;
+        margin-bottom: 25px;
+        border-bottom: 2px solid #60A5FA;
+        display: inline-block;
+        padding-bottom: 5px;
+    }
+    .login-version {
+        margin-top: 20px;
+        font-size: 0.8rem;
+        color: #64748B;
     }
     </style>
     """, unsafe_allow_html=True)
     
     with st.container():
         st.markdown('<div class="login-container">', unsafe_allow_html=True)
-        
-        # Nuevo encabezado con el formato solicitado
         st.markdown("""
         <div class="login-brand">
-            <div class="main">AEROPOSTALE</div>
-            <div class="sub">CENTRO DE DISTRIBUCION ECUADOR</div>
-            <div class="erp">ERP</div>
+            <div class="main">AEROPOSTAL</div>
+            <div class="sub">ERP CONTROL TOTAL</div>
         </div>
+        <div class="login-title">INICIAR SESIÓN</div>
         """, unsafe_allow_html=True)
         
-        username = st.text_input("Usuario", key="login_user")
-        password = st.text_input("Contraseña", type="password", key="login_pass")
-        col1, col2, col3 = st.columns([1,2,1])
+        username = st.text_input("Usuario", placeholder="Ingresa tu usuario", key="login_user", label_visibility="collapsed")
+        password = st.text_input("Contraseña", placeholder="Ingresa tu contraseña", type="password", key="login_pass", label_visibility="collapsed")
+        
+        col1, col2 = st.columns([1, 2])
+        with col1:
+            remember = st.checkbox("Recordarme", key="remember_me")
         with col2:
+            # Espacio para alinear
+            pass
+        
+        col_btn1, col_btn2, col_btn3 = st.columns([1, 2, 1])
+        with col_btn2:
             login_btn = st.button("Ingresar", use_container_width=True, type="primary")
         
+        st.markdown('<div class="login-version">v2.0.0</div>', unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
         
         if login_btn:
@@ -198,6 +212,8 @@ def check_password():
                     st.session_state.username = username
                     st.session_state.role = USERS_DB[username]["role"]
                     st.session_state.user_name = USERS_DB[username]["name"]
+                    if remember:
+                        st.session_state.remember_username = username
                     st.rerun()
                 else:
                     st.error("❌ Contraseña incorrecta")
@@ -1322,7 +1338,7 @@ def show_main_page():
 
 def show_dashboard_kpis():
     """Dashboard de KPIs - MEJORADO"""
-    add_back_button(key="back_kpis")
+    add_nav_buttons()
     show_module_header(
         "📊 Dashboard de KPIs",
         "Metricas en tiempo real del Centro de Distribucion"
@@ -6007,6 +6023,16 @@ def main():
     with st.sidebar:
         st.markdown(f"**👤 {st.session_state.user_name}** ({st.session_state.role})")
         if st.button("🚪 Cerrar sesión", use_container_width=True):
+            logout()
+    def add_nav_buttons():
+    """Agrega dos botones: Volver al inicio y Cerrar sesión"""
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("🏠 Inicio", use_container_width=True, help="Volver al menú principal"):
+            st.session_state.current_page = "Inicio"
+            st.rerun()
+    with col2:
+        if st.button("🚪 Salir", use_container_width=True, help="Cerrar sesión"):
             logout()
     
     # Mapeo de todos los módulos (completo)
