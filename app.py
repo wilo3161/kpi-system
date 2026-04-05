@@ -222,7 +222,7 @@ def logout():
     for key in ['authenticated', 'username', 'role', 'user_name', 'remember_username']:
         if key in st.session_state:
             del st.session_state[key]
- 
+    st.rerun()
 # ==============================================================================
 # 1. ESTILOS CSS - MODERNIZADO Y MEJORADO
 # ==============================================================================
@@ -6058,7 +6058,7 @@ def main():
         return
     
     # Mostrar barra superior (Inicio, info usuario, Salir)
-    def show_header():
+    show_header():
     """Muestra la barra superior con Inicio, info usuario y Salir"""
     col1, col2, col3 = st.columns([1, 3, 1])
     with col1:
@@ -6075,6 +6075,24 @@ def main():
     with col3:
         if st.button("🚪 Salir", use_container_width=True):
             logout()
+            def show_header():
+    """Muestra la barra superior con Inicio, info usuario y Salir"""
+    col1, col2, col3 = st.columns([1, 3, 1])
+    with col1:
+        if st.button("🏠 Inicio", use_container_width=True):
+            st.session_state.current_page = "Inicio"
+            st.rerun()
+    with col2:
+        st.markdown(
+            f"<div style='text-align: center; color: #CBD5E1; font-size: 0.9rem;'>"
+            f"<strong>{st.session_state.user_name}</strong> | {st.session_state.role} | "
+            f"{datetime.now().strftime('%d/%m/%Y %H:%M')}</div>",
+            unsafe_allow_html=True
+        )
+    with col3:
+        if st.button("🚪 Salir", use_container_width=True):
+            logout()
+    st.markdown("---")
     st.markdown("---")
     
     # Control de acceso a módulos según rol (además del filtro en el menú)
