@@ -29,6 +29,7 @@ from openpyxl import Workbook
 from openpyxl.styles import Border, Side, PatternFill, Font, Alignment
 from openpyxl.utils import get_column_letter
 import tempfile   # ← AGREGADO
+from reportlab.lib import colors
 
 # --- CONFIGURACION DE PAGINA ---
 st.set_page_config(
@@ -241,6 +242,7 @@ def show_header():
         if st.button("🚪 Salir", use_container_width=True):
             logout()
     st.markdown("---")
+    st.write("App cargando...")
 # ==============================================================================
 # 1. ESTILOS CSS - MODERNIZADO Y MEJORADO
 # ==============================================================================
@@ -6069,6 +6071,15 @@ def show_configuracion():
 # ==============================================================================
 
 def main():
+    try:
+        initialize_session_state()
+        if not check_password():
+            return
+        show_header()
+        # ... resto del código
+    except Exception as e:
+        st.error(f"Error crítico: {e}")
+        st.exception(e)
     initialize_session_state()
     
     if not check_password():
