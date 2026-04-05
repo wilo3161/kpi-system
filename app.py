@@ -127,7 +127,6 @@ def check_password():
     if 'authenticated' in st.session_state and st.session_state.authenticated:
         return True
     
-    # Mostrar formulario de login con el nuevo diseño
     st.markdown("""
     <style>
     .login-container {
@@ -193,7 +192,6 @@ def check_password():
         with col1:
             remember = st.checkbox("Recordarme", key="remember_me")
         with col2:
-            # Espacio para alinear
             pass
         
         col_btn1, col_btn2, col_btn3 = st.columns([1, 2, 1])
@@ -220,7 +218,11 @@ def check_password():
             else:
                 st.error("❌ Usuario no existe")
     return False
-
+def logout():
+    for key in ['authenticated', 'username', 'role', 'user_name', 'remember_username']:
+        if key in st.session_state:
+            del st.session_state[key]
+    st.rerun()
  
 # ==============================================================================
 # 1. ESTILOS CSS - MODERNIZADO Y MEJORADO
@@ -1294,7 +1296,7 @@ local_db = LocalDatabase()
 # ==============================================================================
 
 def show_main_page():
-    """Muestra la pagina principal con las tarjetas de modulos"""
+    """Muestra la pagina principal con las tarjetas de modulos (filtradas por rol)"""
     st.markdown("""
     <div class="gallery-container fade-in">
         <div class="brand-title">AEROPOSTALE</div>
@@ -1304,7 +1306,8 @@ def show_main_page():
     
     st.markdown('<div class="modules-grid fade-in">', unsafe_allow_html=True)
     
-    modules = [
+    # Todos los módulos disponibles
+    all_modules = [
         {"icon": "📊", "title": "Dashboard KPIs", "description": "Dashboard en tiempo real con metricas operativas", "key": "dashboard_kpis"},
         {"icon": "💰", "title": "Reconciliacion", "description": "Conciliacion financiera y analisis de facturas", "key": "reconciliacion_v8"},
         {"icon": "📧", "title": "Auditoria de Correos", "description": "Analisis inteligente de novedades por email", "key": "auditoria_correos"},
@@ -1315,6 +1318,15 @@ def show_main_page():
         {"icon": "📈", "title": "Reportes Avanzados", "description": "Analisis y estadisticas ejecutivas", "key": "reportes_avanzados"},
         {"icon": "⚙️", "title": "Configuracion", "description": "Personalizacion del sistema ERP", "key": "configuracion"}
     ]
+    
+    # Filtrar según rol
+    role = st.session_state.role
+    if role == "Bodega":
+        # Solo mostrar el módulo de Generar Guias
+        modules = [m for m in all_modules if m["key"] == "generar_guias"]
+    else:
+        # Administrador y otros roles ven todos
+        modules = all_modules
     
     cols = st.columns(3)
     for idx, module in enumerate(modules):
@@ -5606,8 +5618,8 @@ def mostrar_vista_previa_guia(guia_data):
     st.info("Esta es una vista previa. Haz clic en '🚀 Generar Guia PDF' para crear el documento oficial.")
 
 def show_generar_guias():
-    """Generador de guias de envio"""
-    add_back_button(key="back_guias")
+    """Generador de guias de envio con autocompletado desde TIENDAS_DATA"""
+    # No necesita botones de navegación porque la barra superior ya los tiene
     show_module_header(
         "🚚 Generador de Guias",
         "Sistema de envios con seguimiento QR"
@@ -5615,21 +5627,14 @@ def show_generar_guias():
     
     st.markdown('<div class="module-content">', unsafe_allow_html=True)
     
+    # URLs de logos (igual que antes)
     url_fashion_logo = "https://raw.githubusercontent.com/wilo3161/kpi-system/main/images/Fashion.jpg"
     url_tempo_logo = "https://raw.githubusercontent.com/wilo3161/kpi-system/main/images/Tempo.jpg"
     
-    tiendas = [
-        "Matriz","Aero Oil Uno", "Aero La Plaza", "Aero Milagro", "Aero Condado Shopping",
-        "Aero Multiplaza Riobamba", "Aero Santo Domingo", "Aero Quevedo", "Aero Manta", "Aero Portoviejo", 
-        "Price Club Portoviejo", "Aero Rio Centro Norte", "Aero Duran", "Price Club City Mall", "Aero Mall Del Sur",
-        "Aero Los Ceibos", "Aero Ambato", "Aero Carapungo", "Aero Peninsula", "Aero Paseo Ambato", "Aero Mall Del Sol", 
-        "Aero Babahoyo", "Aero Riobamba", "Aero Mall Del Pacifico", "Aero San Luis", "Aero Machala",
-        "Aero Cuenca Centro Historico", "Aero Cuenca", "Aero Tienda Movil - Web",
-        "Aero Playas", "Aero Bomboli", "Aero Mall Del Rio Gye","Aero Riocentro El Dorado", "Aero Pasaje", "Aero El Coca",
-        "Aero 6 De Diciembre", "Aero Lago Agrio","Aero Pedernales", "Price Club Machala", "Price Club Guayaquil",
-        "Aero CCi", "Aero Cayambe", "Aero Bahia De Caraquez", "Aero Daule", "Aero Jagi El Dorado"
-    ]
+    # Lista de tiendas desde TIENDAS_DATA (global)
+    tiendas_options = [""] + [t["Nombre de Tienda"] for t in TIENDAS_DATA]
     
+    # Remitentes (igual que antes)
     remitentes = [
         {"nombre": "Josue Imbacuan", "direccion": "San Roque, Calle Santo Thomas y antigua via a Cotacachi"},
         {"nombre": "Luis Perugachi", "direccion": "San Roque, Calle Santo Thomas y antigua via a Cotacachi"},
@@ -5642,6 +5647,19 @@ def show_generar_guias():
         {"nombre": "Jhony Villa", "direccion": "San Roque, Calle Santo Thomas y antigua via a Cotacachi"}
     ]
     
+    # ---- Autocompletado: obtener datos de la tienda seleccionada ----
+    # Usamos session_state para almacenar la selección temporal
+    if 'selected_tienda' not in st.session_state:
+        st.session_state.selected_tienda = ""
+    
+    # Función para obtener datos de una tienda por nombre
+    def get_tienda_data(nombre_tienda):
+        for t in TIENDAS_DATA:
+            if t["Nombre de Tienda"] == nombre_tienda:
+                return t
+        return None
+    
+    # --- Formulario principal ---
     with st.form("guias_form", border=False):
         st.markdown("""
         <div class='filter-panel'>
@@ -5689,15 +5707,35 @@ def show_generar_guias():
         st.subheader("🏪 Informacion del Destinatario")
         col5, col6 = st.columns(2)
         
+        # Selección de tienda (autocompletado)
+        tienda_seleccionada = st.selectbox("**Tienda Destino (seleccione para autocompletar):**", tiendas_options, index=0)
+        
+        # Obtener datos si se seleccionó una tienda válida
+        datos_tienda = get_tienda_data(tienda_seleccionada) if tienda_seleccionada else None
+        
         with col5:
-            nombre_destinatario = st.text_input("**Nombre del Destinatario:**", placeholder="Ej: Pepito Paez")
-            telefono_destinatario = st.text_input("**Telefono del Destinatario:**", placeholder="Ej: +593 99 999 9999")
+            if datos_tienda:
+                nombre_destinatario_default = datos_tienda["Contacto"]
+                telefono_destinatario_default = datos_tienda["Teléfono"]
+            else:
+                nombre_destinatario_default = ""
+                telefono_destinatario_default = ""
+            
+            nombre_destinatario = st.text_input("**Nombre del Destinatario:**", value=nombre_destinatario_default, placeholder="Ej: Pepito Paez")
+            telefono_destinatario = st.text_input("**Telefono del Destinatario:**", value=telefono_destinatario_default, placeholder="Ej: +593 99 999 9999")
         
         with col6:
+            if datos_tienda:
+                direccion_destinatario_default = datos_tienda["Dirección"]
+            else:
+                direccion_destinatario_default = ""
+            
             direccion_destinatario = st.text_area("**Direccion del Destinatario:**", 
+                                                value=direccion_destinatario_default,
                                                 placeholder="Ej: Av. Principal #123, Ciudad, Provincia",
                                                 height=100)
-            tienda_destino = st.selectbox("**Tienda Destino (Opcional):**", [""] + tiendas)
+            # No repetir el selectbox de tienda, ya lo tenemos arriba
+            st.caption("💡 Seleccione una tienda arriba para autocompletar los datos del destinatario.")
         
         st.divider()
         
@@ -5741,6 +5779,7 @@ def show_generar_guias():
         
         st.markdown("</div>", unsafe_allow_html=True)
     
+    # --- Lógica de preview y generación (igual que antes) ---
     if preview:
         if not nombre_destinatario or not direccion_destinatario:
             st.warning("Complete al menos nombre y direccion del destinatario para ver la vista previa")
@@ -5757,7 +5796,7 @@ def show_generar_guias():
                 "destinatario": nombre_destinatario,
                 "telefono_destinatario": telefono_destinatario or "No especificado",
                 "direccion_destinatario": direccion_destinatario,
-                "tienda_destino": tienda_destino if tienda_destino else "No especificada",
+                "tienda_destino": tienda_seleccionada if tienda_seleccionada else "No especificada",
                 "url_pedido": url_pedido if url_pedido else "No especificada",
                 "estado": "Vista Previa",
                 "fecha_emision": datetime.now().strftime("%Y-%m-%d"),
@@ -5802,7 +5841,7 @@ def show_generar_guias():
                 "destinatario": nombre_destinatario,
                 "telefono_destinatario": telefono_destinatario or "No especificado",
                 "direccion_destinatario": direccion_destinatario,
-                "tienda_destino": tienda_destino if tienda_destino else "No especificada",
+                "tienda_destino": tienda_seleccionada if tienda_seleccionada else "No especificada",
                 "url_pedido": url_pedido,
                 "estado": "Generada",
                 "fecha_emision": datetime.now().strftime("%Y-%m-%d"),
@@ -6017,25 +6056,41 @@ def main():
     
     # Verificar autenticación
     if not check_password():
-        return  # No mostrar nada más hasta que inicie sesión
+        return
     
-    # Barra lateral con info del usuario y botón logout
-    with st.sidebar:
-        st.markdown(f"**👤 {st.session_state.user_name}** ({st.session_state.role})")
-        if st.button("🚪 Cerrar sesión", use_container_width=True):
-            logout()
-    def add_nav_buttons():
-    """Agrega dos botones: Volver al inicio y Cerrar sesión"""
-    col1, col2 = st.columns(2)
-    with col1:
-        if st.button("🏠 Inicio", use_container_width=True, help="Volver al menú principal"):
-            st.session_state.current_page = "Inicio"
-            st.rerun()
-    with col2:
-        if st.button("🚪 Salir", use_container_width=True, help="Cerrar sesión"):
-            logout()
+    # Mostrar barra superior (Inicio, info usuario, Salir)
+    show_header()
     
-    # Mapeo de todos los módulos (completo)
+    # Control de acceso a módulos según rol (además del filtro en el menú)
+    # Definimos qué roles pueden acceder a cada módulo
+    role = st.session_state.role
+    allowed_modules = {
+        "dashboard_kpis": ["Administrador"],
+        "reconciliacion_v8": ["Administrador"],
+        "auditoria_correos": ["Administrador"],
+        "dashboard_logistico": ["Administrador"],
+        "gestion_equipo": ["Administrador"],
+        "generar_guias": ["Administrador", "Bodega"],
+        "control_inventario": ["Administrador"],
+        "reportes_avanzados": ["Administrador"],
+        "configuracion": ["Administrador"]
+    }
+    
+    current_page = st.session_state.current_page
+    # Si la página actual no está permitida para el rol, redirigir a Inicio
+    if current_page != "Inicio":
+        if current_page in allowed_modules:
+            if role not in allowed_modules[current_page]:
+                st.error("⛔ Acceso denegado. No tienes permiso para ver este módulo.")
+                st.session_state.current_page = "Inicio"
+                st.rerun()
+        else:
+            # Si la página no está en el diccionario (por si acaso), solo administrador
+            if role != "Administrador":
+                st.error("⛔ Acceso denegado.")
+                st.session_state.current_page = "Inicio"
+                st.rerun()
+    
     page_mapping = {
         "Inicio": show_main_page,
         "dashboard_kpis": show_dashboard_kpis,
@@ -6049,12 +6104,8 @@ def main():
         "configuracion": show_configuracion
     }
     
-    current_page = st.session_state.current_page
     if current_page in page_mapping:
         page_mapping[current_page]()
     else:
         st.session_state.current_page = "Inicio"
         st.rerun()
-
-if __name__ == "__main__":
-    main()
