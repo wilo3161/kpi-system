@@ -223,6 +223,24 @@ def logout():
         if key in st.session_state:
             del st.session_state[key]
     st.rerun()
+def show_header():
+    """Muestra la barra superior con Inicio, info usuario y Salir"""
+    col1, col2, col3 = st.columns([1, 3, 1])
+    with col1:
+        if st.button("🏠 Inicio", use_container_width=True):
+            st.session_state.current_page = "Inicio"
+            st.rerun()
+    with col2:
+        st.markdown(
+            f"<div style='text-align: center; color: #CBD5E1; font-size: 0.9rem;'>"
+            f"<strong>{st.session_state.user_name}</strong> | {st.session_state.role} | "
+            f"{datetime.now().strftime('%d/%m/%Y %H:%M')}</div>",
+            unsafe_allow_html=True
+        )
+    with col3:
+        if st.button("🚪 Salir", use_container_width=True):
+            logout()
+    st.markdown("---")
 # ==============================================================================
 # 1. ESTILOS CSS - MODERNIZADO Y MEJORADO
 # ==============================================================================
@@ -6053,50 +6071,11 @@ def show_configuracion():
 def main():
     initialize_session_state()
     
-    # Verificar autenticación
     if not check_password():
         return
     
-    # Mostrar barra superior (Inicio, info usuario, Salir)
-    show_header():
-    """Muestra la barra superior con Inicio, info usuario y Salir"""
-    col1, col2, col3 = st.columns([1, 3, 1])
-    with col1:
-        if st.button("🏠 Inicio", use_container_width=True):
-            st.session_state.current_page = "Inicio"
-            st.rerun()
-    with col2:
-        st.markdown(
-            f"<div style='text-align: center; color: #CBD5E1; font-size: 0.9rem;'>"
-            f"<strong>{st.session_state.user_name}</strong> | {st.session_state.role} | "
-            f"{datetime.now().strftime('%d/%m/%Y %H:%M')}</div>",
-            unsafe_allow_html=True
-        )
-    with col3:
-        if st.button("🚪 Salir", use_container_width=True):
-            logout()
-            def show_header():
-    """Muestra la barra superior con Inicio, info usuario y Salir"""
-    col1, col2, col3 = st.columns([1, 3, 1])
-    with col1:
-        if st.button("🏠 Inicio", use_container_width=True):
-            st.session_state.current_page = "Inicio"
-            st.rerun()
-    with col2:
-        st.markdown(
-            f"<div style='text-align: center; color: #CBD5E1; font-size: 0.9rem;'>"
-            f"<strong>{st.session_state.user_name}</strong> | {st.session_state.role} | "
-            f"{datetime.now().strftime('%d/%m/%Y %H:%M')}</div>",
-            unsafe_allow_html=True
-        )
-    with col3:
-        if st.button("🚪 Salir", use_container_width=True):
-            logout()
-    st.markdown("---")
-    st.markdown("---")
+    show_header()   # ← llamada correcta (sin dos puntos)
     
-    # Control de acceso a módulos según rol (además del filtro en el menú)
-    # Definimos qué roles pueden acceder a cada módulo
     role = st.session_state.role
     allowed_modules = {
         "dashboard_kpis": ["Administrador"],
@@ -6111,15 +6090,13 @@ def main():
     }
     
     current_page = st.session_state.current_page
-    # Si la página actual no está permitida para el rol, redirigir a Inicio
     if current_page != "Inicio":
         if current_page in allowed_modules:
             if role not in allowed_modules[current_page]:
-                st.error("⛔ Acceso denegado. No tienes permiso para ver este módulo.")
+                st.error("⛔ Acceso denegado.")
                 st.session_state.current_page = "Inicio"
                 st.rerun()
         else:
-            # Si la página no está en el diccionario (por si acaso), solo administrador
             if role != "Administrador":
                 st.error("⛔ Acceso denegado.")
                 st.session_state.current_page = "Inicio"
