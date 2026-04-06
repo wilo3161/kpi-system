@@ -248,44 +248,54 @@ def show_header():
 # ==============================================================================
 
 def show_main_page():
+    """Muestra la pagina principal con las tarjetas de modulos (filtradas por rol)"""
     st.markdown("""
-    <div class="gallery-container">
+    <div class="gallery-container fade-in">
         <div class="brand-title">AEROPOSTALE</div>
-        <div class="brand-subtitle">Centro de Distribucion Ecuador | ERP</div>
+        <div class="brand-subtitle">Centro de Distribucion Ecuador | ERP </div>
     </div>
     """, unsafe_allow_html=True)
     
-    modules = [
-        {"icon": "📊", "title": "Dashboard KPIs", "description": "Métricas operativas", "key": "dashboard_kpis"},
-        {"icon": "💰", "title": "Reconciliacion", "description": "Análisis de facturas", "key": "reconciliacion_v8"},
-        {"icon": "📧", "title": "Auditoria de Correos", "description": "Novedades por email", "key": "auditoria_correos"},
-        {"icon": "📦", "title": "Dashboard Logistico", "description": "Transferencias y distribución", "key": "dashboard_logistico"},
-        {"icon": "👥", "title": "Gestion de Equipo", "description": "Personal del centro", "key": "gestion_equipo"},
-        {"icon": "🚚", "title": "Generar Guias", "description": "Envíos con seguimiento QR", "key": "generar_guias"},
-        {"icon": "📋", "title": "Control de Inventario", "description": "Stock en tiempo real", "key": "control_inventario"},
-        {"icon": "📈", "title": "Reportes Avanzados", "description": "Estadísticas ejecutivas", "key": "reportes_avanzados"},
-        {"icon": "⚙️", "title": "Configuracion", "description": "Personalización", "key": "configuracion"}
+    st.markdown('<div class="modules-grid fade-in">', unsafe_allow_html=True)
+    
+    # Todos los módulos disponibles
+    all_modules = [
+        {"icon": "📊", "title": "Dashboard KPIs", "description": "Dashboard en tiempo real con metricas operativas", "key": "dashboard_kpis"},
+        {"icon": "💰", "title": "Reconciliacion", "description": "Conciliacion financiera y analisis de facturas", "key": "reconciliacion_v8"},
+        {"icon": "📧", "title": "Auditoria de Correos", "description": "Analisis inteligente de novedades por email", "key": "auditoria_correos"},
+        {"icon": "📦", "title": "Dashboard Logistico", "description": "Control de transferencias y distribucion", "key": "dashboard_logistico"},
+        {"icon": "👥", "title": "Gestion de Equipo", "description": "Administracion del personal del centro", "key": "gestion_equipo"},
+        {"icon": "🚚", "title": "Generar Guias", "description": "Sistema de envios con seguimiento QR", "key": "generar_guias"},
+        {"icon": "📋", "title": "Control de Inventario", "description": "Gestion de stock en tiempo real", "key": "control_inventario"},
+        {"icon": "📈", "title": "Reportes Avanzados", "description": "Analisis y estadisticas ejecutivas", "key": "reportes_avanzados"},
+        {"icon": "⚙️", "title": "Configuracion", "description": "Personalizacion del sistema ERP", "key": "configuracion"}
     ]
     
-    # Filtrar por rol
+    # Filtrar según rol
     role = st.session_state.role
     if role == "Bodega":
-        modules = [m for m in modules if m["key"] == "generar_guias"]
+        # Solo mostrar el módulo de Generar Guias
+        modules = [m for m in all_modules if m["key"] == "generar_guias"]
+    else:
+        # Administrador y otros roles ven todos
+        modules = all_modules
     
     cols = st.columns(3)
-    for idx, mod in enumerate(modules):
+    for idx, module in enumerate(modules):
         with cols[idx % 3]:
-            create_module_card(mod["icon"], mod["title"], mod["description"], mod["key"])
+            create_module_card(module["icon"], module["title"], module["description"], module["key"])
+    
+    st.markdown('</div>', unsafe_allow_html=True)
     
     st.markdown("""
     <div class="app-footer">
-        <p><strong>Sistema ERP v4.0</strong> • Desarrollado por Wilson Perez</p>
-        <p>© 2024 AEROPOSTALE Ecuador</p>
+        <p><strong>Sistema ERP v4.0</strong> • Desarrollado por Wilson Perez • Logistica & Sistemas</p>
+        <p style="font-size: 0.85rem; color: #94A3B8; margin-top: 15px;">
+            © 2024 AEROPOSTALE Ecuador • Todos los derechos reservados
+        </p>
     </div>
     """, unsafe_allow_html=True)
 
-
-  
 # ==============================================================================
 # 1. ESTILOS CSS - MODERNIZADO Y MEJORADO
 # ==============================================================================
@@ -1241,54 +1251,6 @@ local_db = LocalDatabase()
 # 5. PAGINA PRINCIPAL - COMPLETAMENTE REDISENADA
 # ==============================================================================
 
-def show_main_page():
-    """Muestra la pagina principal con las tarjetas de modulos (filtradas por rol)"""
-    st.markdown("""
-    <div class="gallery-container fade-in">
-        <div class="brand-title">AEROPOSTALE</div>
-        <div class="brand-subtitle">Centro de Distribucion Ecuador | ERP </div>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    st.markdown('<div class="modules-grid fade-in">', unsafe_allow_html=True)
-    
-    # Todos los módulos disponibles
-    all_modules = [
-        {"icon": "📊", "title": "Dashboard KPIs", "description": "Dashboard en tiempo real con metricas operativas", "key": "dashboard_kpis"},
-        {"icon": "💰", "title": "Reconciliacion", "description": "Conciliacion financiera y analisis de facturas", "key": "reconciliacion_v8"},
-        {"icon": "📧", "title": "Auditoria de Correos", "description": "Analisis inteligente de novedades por email", "key": "auditoria_correos"},
-        {"icon": "📦", "title": "Dashboard Logistico", "description": "Control de transferencias y distribucion", "key": "dashboard_logistico"},
-        {"icon": "👥", "title": "Gestion de Equipo", "description": "Administracion del personal del centro", "key": "gestion_equipo"},
-        {"icon": "🚚", "title": "Generar Guias", "description": "Sistema de envios con seguimiento QR", "key": "generar_guias"},
-        {"icon": "📋", "title": "Control de Inventario", "description": "Gestion de stock en tiempo real", "key": "control_inventario"},
-        {"icon": "📈", "title": "Reportes Avanzados", "description": "Analisis y estadisticas ejecutivas", "key": "reportes_avanzados"},
-        {"icon": "⚙️", "title": "Configuracion", "description": "Personalizacion del sistema ERP", "key": "configuracion"}
-    ]
-    
-    # Filtrar según rol
-    role = st.session_state.role
-    if role == "Bodega":
-        # Solo mostrar el módulo de Generar Guias
-        modules = [m for m in all_modules if m["key"] == "generar_guias"]
-    else:
-        # Administrador y otros roles ven todos
-        modules = all_modules
-    
-    cols = st.columns(3)
-    for idx, module in enumerate(modules):
-        with cols[idx % 3]:
-            create_module_card(module["icon"], module["title"], module["description"], module["key"])
-    
-    st.markdown('</div>', unsafe_allow_html=True)
-    
-    st.markdown("""
-    <div class="app-footer">
-        <p><strong>Sistema ERP v4.0</strong> • Desarrollado por Wilson Perez • Logistica & Sistemas</p>
-        <p style="font-size: 0.85rem; color: #94A3B8; margin-top: 15px;">
-            © 2024 AEROPOSTALE Ecuador • Todos los derechos reservados
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
 
 # ==============================================================================
 # 6. MODULO DASHBOARD KPIs
