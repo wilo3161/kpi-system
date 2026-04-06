@@ -242,7 +242,7 @@ def show_header():
         if st.button("🚪 Salir", use_container_width=True):
             logout()
     st.markdown("---")
-    st.write("App cargando...")
+  
 # ==============================================================================
 # 1. ESTILOS CSS - MODERNIZADO Y MEJORADO
 # ==============================================================================
@@ -2469,7 +2469,7 @@ def generar_pdf_reporte(metricas, resumen, validacion, filtros_aplicados=None):
 
 def show_reconciliacion_v8():
     """Modulo de reconciliacion financiera y gestion de gastos por tienda"""
-    add_back_button(key="back_reconciliacion")
+
     show_module_header(
         "💰 Gestión de Gastos por Tienda",
         "Conciliación financiera y análisis de facturas"
@@ -4823,7 +4823,7 @@ def mostrar_dashboard_transferencias():
 
 def show_dashboard_logistico():
     """Dashboard de logistica y transferencias - MEJORADO"""
-    add_back_button(key="back_logistico")
+   
     show_module_header(
         "📦 Dashboard Logistico",
         "Control de transferencias y distribucion en tiempo real"
@@ -4838,7 +4838,7 @@ def show_dashboard_logistico():
 
 def show_gestion_equipo():
     """Gestion de personal"""
-    add_back_button(key="back_equipo")
+   
     show_module_header(
         "👥 Gestion de Equipo",
         "Administracion del personal del Centro de Distribucion"
@@ -5960,7 +5960,7 @@ def show_generar_guias():
 
 def show_control_inventario():
     """Control de inventario"""
-    add_back_button(key="back_inventario")
+    
     show_module_header(
         "📋 Control de Inventario",
         "Gestion de stock en tiempo real"
@@ -5979,7 +5979,7 @@ def show_control_inventario():
 
 def show_reportes_avanzados():
     """Generador de reportes"""
-    add_back_button(key="back_reportes")
+    
     show_module_header(
         "📈 Reportes Avanzados",
         "Analisis y estadisticas ejecutivas"
@@ -5998,7 +5998,7 @@ def show_reportes_avanzados():
 
 def show_configuracion():
     """Configuracion del sistema"""
-    add_back_button(key="back_config")
+   
     show_module_header(
         "⚙️ Configuracion",
         "Personalizacion del sistema ERP"
@@ -6069,24 +6069,17 @@ def show_configuracion():
 # ==============================================================================
 # 14. NAVEGACION PRINCIPAL
 # ==============================================================================
-
 def main():
-    try:
-        initialize_session_state()
-        if not check_password():
-            return
-        show_header()
-        # ... resto del código
-    except Exception as e:
-        st.error(f"Error crítico: {e}")
-        st.exception(e)
     initialize_session_state()
     
+    # Verificar autenticación (muestra el login si no está autenticado)
     if not check_password():
         return
     
-    show_header()   # ← llamada correcta (sin dos puntos)
+    # Si llegamos aquí, el usuario está autenticado → mostramos la barra superior
+    show_header()
     
+    # Control de acceso según rol
     role = st.session_state.role
     allowed_modules = {
         "dashboard_kpis": ["Administrador"],
@@ -6104,7 +6097,7 @@ def main():
     if current_page != "Inicio":
         if current_page in allowed_modules:
             if role not in allowed_modules[current_page]:
-                st.error("⛔ Acceso denegado.")
+                st.error("⛔ Acceso denegado. No tienes permiso para ver este módulo.")
                 st.session_state.current_page = "Inicio"
                 st.rerun()
         else:
