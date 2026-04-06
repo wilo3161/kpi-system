@@ -1244,12 +1244,6 @@ class LocalDatabase:
             return user
         return None
 
-# Instancia global de base de datos local
-local_db = LocalDatabase()
-
-# ==============================================================================
-# 5. PAGINA PRINCIPAL - COMPLETAMENTE REDISENADA
-# ==============================================================================
 
 
 # ==============================================================================
