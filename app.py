@@ -122,7 +122,6 @@ USERS_DB = {
     }
 }
 
-# ---------- FUNCIÓN DE LOGIN CORREGIDA ----------
 def check_password():
     """Devuelve True si el usuario está autenticado, False en caso contrario."""
     if 'authenticated' in st.session_state and st.session_state.authenticated:
@@ -219,11 +218,13 @@ def check_password():
             else:
                 st.error("❌ Usuario no existe")
     return False
+
 def logout():
     for key in ['authenticated', 'username', 'role', 'user_name', 'remember_username']:
         if key in st.session_state:
             del st.session_state[key]
     st.rerun()
+
 def show_header():
     """Muestra la barra superior con Inicio, info usuario y Salir"""
     col1, col2, col3 = st.columns([1, 3, 1])
@@ -242,6 +243,7 @@ def show_header():
         if st.button("🚪 Salir", use_container_width=True):
             logout()
     st.markdown("---")
+
   
 # ==============================================================================
 # 1. ESTILOS CSS - MODERNIZADO Y MEJORADO
@@ -1060,15 +1062,10 @@ div[data-testid="stVerticalBlock"] > div[data-testid="stHorizontalBlock"] div[da
 # ==============================================================================
 
 def initialize_session_state():
-    """Inicializa el estado de sesion"""
     if 'current_page' not in st.session_state:
         st.session_state.current_page = "Inicio"
-    
-    # Estado para cada modulo
     if 'module_data' not in st.session_state:
         st.session_state.module_data = {}
-    
-    # Para el generador de guias
     if 'guias_registradas' not in st.session_state:
         st.session_state.guias_registradas = []
     if 'contador_guias' not in st.session_state:
@@ -1077,93 +1074,36 @@ def initialize_session_state():
         st.session_state.qr_images = {}
     if 'logos' not in st.session_state:
         st.session_state.logos = {}
-    
-    # Para gestion de gastos
     if 'gastos_datos' not in st.session_state:
         st.session_state.gastos_datos = {
-            'manifesto': None,
-            'facturas': None,
-            'resultado': None,
-            'metricas': None,
-            'resumen': None,
-            'validacion': None,
-            'guias_anuladas': None,
-            'procesado': False
+            'manifesto': None, 'facturas': None, 'resultado': None,
+            'metricas': None, 'resumen': None, 'validacion': None,
+            'guias_anuladas': None, 'procesado': False
         }
 
 def navigate_to_module(module_key):
-    """Navega al modulo seleccionado"""
     st.session_state.current_page = module_key
     st.rerun()
 
 def create_module_card(icon, title, description, module_key):
-    """Crea una tarjeta de modulo completamente clickeable usando st.button nativo"""
-    card_container = st.container()
-    
-    with card_container:
-        col1, col2, col3 = st.columns([1, 10, 1])
-        with col2:
-            card_html = f"""
-            <div class="module-card-container">
-                <div class="module-card">
-                    <div class="card-icon">{icon}</div>
-                    <div class="card-title">{title}</div>
-                    <div class="card-description">{description}</div>
-                    <div class="card-hover-indicator">→</div>
-                </div>
-            </div>
-            """
-            st.markdown(card_html, unsafe_allow_html=True)
-            
-            st.markdown("""
-            <style>
-            div[data-testid="stVerticalBlock"]:has(> div.element-container:nth-child(2) button) {
-                position: relative;
-            }
-            div[data-testid="stVerticalBlock"]:has(> div.element-container:nth-child(2) button) button {
-                position: absolute;
-                top: 0;
-                left: 0;
-                width: 100%;
-                height: 200px;
-                opacity: 0;
-                cursor: pointer;
-                z-index: 1000;
-            }
-            </style>
-            """, unsafe_allow_html=True)
-            
-            if st.button(
-                " ", 
-                key=f"card_btn_{module_key}", 
-                help=f"Acceder a {title}",
-                use_container_width=True,
-                type="secondary"
-            ):
-                navigate_to_module(module_key)
-
-def add_back_button(key: str = "back_button"):
-    """Agrega el boton de volver al inicio con clave única"""
-    if st.button("← Menu Principal", key=key, help="Volver al menu principal", type="primary"):
-        st.session_state.current_page = "Inicio"
-        st.rerun()
+    card_html = f"""
+    <div class="module-card" onclick="window.location.href='?page={module_key}'">
+        <div class="card-icon">{icon}</div>
+        <div class="card-title">{title}</div>
+        <div class="card-description">{description}</div>
+    </div>
+    """
+    st.markdown(card_html, unsafe_allow_html=True)
+    if st.button(f"Acceder a {title}", key=f"btn_{module_key}", use_container_width=True):
+        navigate_to_module(module_key)
 
 def show_module_header(title_with_icon, subtitle):
-    """Muestra la cabecera de un modulo con icono visible"""
-    if title_with_icon and len(title_with_icon) > 0:
-        icon = title_with_icon[0]
-        title_text = title_with_icon[1:].strip()
-    else:
-        icon = ""
-        title_text = title_with_icon
-    
+    icon = title_with_icon[0] if title_with_icon else ""
+    title_text = title_with_icon[1:].strip() if title_with_icon else ""
     st.markdown(f"""
-    <div class="module-header fade-in">
-        <h1 class="header-title">
-            <span class="header-icon">{icon}</span>
-            <span class="header-text">{title_text}</span>
-        </h1>
-        <p class="header-subtitle">{subtitle}</p>
+    <div class="module-header" style="background: linear-gradient(135deg, #1e293b, #334155); padding: 2rem; border-radius: 24px; margin: 20px 0;">
+        <h1 style="color: white; font-size: 2rem;"><span>{icon}</span> {title_text}</h1>
+        <p style="color: #CBD5E1;">{subtitle}</p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -1171,56 +1111,42 @@ def show_module_header(title_with_icon, subtitle):
 # 3. FUNCIONES AUXILIARES
 # ==============================================================================
 
-def hash_password(password):
-    """Hashea una contrasena"""
-    return hashlib.sha256(password.encode()).hexdigest()
-
-def normalizar_texto_wilo(texto):
-    """Normaliza texto para comparaciones"""
-    if pd.isna(texto):
-        return ""
-    texto = str(texto).upper()
-    texto = unicodedata.normalize('NFD', texto).encode('ascii', 'ignore').decode('ascii')
-    return texto
-
-def procesar_subtotal_wilo(valor):
-    """Procesa valores numericos"""
-    try:
-        if pd.isna(valor):
-            return 0.0
-        if isinstance(valor, str):
-            valor = valor.replace('$', '').replace(',', '')
-        return float(valor)
-    except:
-        return 0.0
-
-def to_excel(df):
-    """Convierte DataFrame a Excel"""
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        df.to_excel(writer, index=False, sheet_name='Data')
-    return output.getvalue()
-
-def normalizar_codigo(df, columnas_posibles):
-    """Normaliza la columna de codigo a string y elimina espacios"""
-    for col in columnas_posibles:
-        if col in df.columns:
-            df[col] = df[col].astype(str).str.strip()
-            return df, col
-    return df, None
-
-def extraer_entero(valor):
-    """Extrae valor entero de diferentes formatos"""
-    try:
-        if pd.isna(valor): return 0
-        if isinstance(valor, str):
-            valor = valor.replace('.', '')
-            if ',' in valor: valor = valor.split(',')[0]
-        val = float(valor)
-        if val >= 1000000: return int(val // 1000000)
-        return int(val)
-    except:
-        return 0
+def show_main_page():
+    st.markdown("""
+    <div class="gallery-container">
+        <div class="brand-title">AEROPOSTALE</div>
+        <div class="brand-subtitle">Centro de Distribucion Ecuador | ERP</div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    modules = [
+        {"icon": "📊", "title": "Dashboard KPIs", "description": "Métricas operativas", "key": "dashboard_kpis"},
+        {"icon": "💰", "title": "Reconciliacion", "description": "Análisis de facturas", "key": "reconciliacion_v8"},
+        {"icon": "📧", "title": "Auditoria de Correos", "description": "Novedades por email", "key": "auditoria_correos"},
+        {"icon": "📦", "title": "Dashboard Logistico", "description": "Transferencias y distribución", "key": "dashboard_logistico"},
+        {"icon": "👥", "title": "Gestion de Equipo", "description": "Personal del centro", "key": "gestion_equipo"},
+        {"icon": "🚚", "title": "Generar Guias", "description": "Envíos con seguimiento QR", "key": "generar_guias"},
+        {"icon": "📋", "title": "Control de Inventario", "description": "Stock en tiempo real", "key": "control_inventario"},
+        {"icon": "📈", "title": "Reportes Avanzados", "description": "Estadísticas ejecutivas", "key": "reportes_avanzados"},
+        {"icon": "⚙️", "title": "Configuracion", "description": "Personalización", "key": "configuracion"}
+    ]
+    
+    # Filtrar por rol
+    role = st.session_state.role
+    if role == "Bodega":
+        modules = [m for m in modules if m["key"] == "generar_guias"]
+    
+    cols = st.columns(3)
+    for idx, mod in enumerate(modules):
+        with cols[idx % 3]:
+            create_module_card(mod["icon"], mod["title"], mod["description"], mod["key"])
+    
+    st.markdown("""
+    <div class="app-footer">
+        <p><strong>Sistema ERP v4.0</strong> • Desarrollado por Wilson Perez</p>
+        <p>© 2024 AEROPOSTALE Ecuador</p>
+    </div>
+    """, unsafe_allow_html=True)
 
 # ==============================================================================
 # 4. SIMULACION DE BASE DE DATOS LOCAL
