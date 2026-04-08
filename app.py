@@ -7,6 +7,8 @@ from datetime import datetime, timedelta
 import time
 import hashlib
 import re
+import threading
+import asyncio
 import unicodedata
 import io
 import json
@@ -14,9 +16,10 @@ import qrcode
 import requests
 import imaplib
 import email
+from io import BytesIO
 from email.header import decode_header
 from typing import Dict, List, Optional, Any, Union
-from reportlab.lib.pagesizes import letter
+from reportlab.lib.pagesizes import letter, landscape   # ← AGREGADO landscape
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
@@ -25,6 +28,8 @@ from reportlab.lib.colors import HexColor
 from openpyxl import Workbook
 from openpyxl.styles import Border, Side, PatternFill, Font, Alignment
 from openpyxl.utils import get_column_letter
+import tempfile   # ← AGREGADO
+from reportlab.lib import colors
 
 # --- CONFIGURACION DE PAGINA ---
 st.set_page_config(
@@ -33,6 +38,263 @@ st.set_page_config(
     page_icon="👔",
     initial_sidebar_state="collapsed"
 )
+
+# ==============================================================================
+# DATOS DE TIENDAS
+# ==============================================================================
+TIENDAS_DATA = [
+    {"Nombre de Tienda": "Aeropostale - (Cuenca) Mall del Rio", "Empresa": "Aeropostale", "Origen": "MATRIZ", "Destino": "CUENCA", "Contacto": "Marco Eras", "Dirección": "Av. Felipe II y Autopista Sur - CC Mall del Rio", "Teléfono": "994570933"},
+    {"Nombre de Tienda": "Aeropostale - 6 de Diciembre", "Empresa": "Aeropostale", "Origen": "MATRIZ", "Destino": "QUITO", "Contacto": "Micaela Yépez", "Dirección": "Av. 6 de Diciembre y Thomas de Berlanga CC Riocentro UIO", "Teléfono": "987883889"},
+    {"Nombre de Tienda": "Aeropostale - Paseo Ambato", "Empresa": "Aeropostale", "Origen": "MATRIZ", "Destino": "AMBATO", "Contacto": "Franco Torres", "Dirección": "Manuelita Saenz y Pio Baroja, cerca al parque de las Flores CC Paseo Shopping", "Teléfono": "984951515"},
+    {"Nombre de Tienda": "Aeropostale - Ambato", "Empresa": "Aeropostale", "Origen": "MATRIZ", "Destino": "AMBATO", "Contacto": "Gabriela Urrutia", "Dirección": "Av. Atahualpa y Victor Hugo CC Mall de Los Andes", "Teléfono": "967239488"},
+    {"Nombre de Tienda": "Aeropostale - Babahoyo", "Empresa": "Aeropostale", "Origen": "MATRIZ", "Destino": "BABAHOYO", "Contacto": "Yomaira Sellan", "Dirección": "Av.Enrique Ponce Luque CC Paseo Shopping Babahoyo", "Teléfono": "981641355"},
+    {"Nombre de Tienda": "Aeropostale - bomboli", "Empresa": "Aeropostale", "Origen": "MATRIZ", "Destino": "SANTO DOMINGO", "Contacto": "Josselyn Navarrete", "Dirección": "Via Chone Diagonal a la Universidad Catolica CC Bpmbolí Shopping", "Teléfono": "933906346"},
+    {"Nombre de Tienda": "Aeropostale - Bahía de Caráquez", "Empresa": "Aeropostale", "Origen": "MATRIZ", "Destino": "BAHIA DE CARAQUEZ", "Contacto": "Nayely Orejuela", "Dirección": "Av. 3 de Noviembre - CC Paseo Shoping Bahía de caraquez", "Teléfono": "981131760"},
+    {"Nombre de Tienda": "Aeropostale - Carapungo", "Empresa": "Aeropostale", "Origen": "MATRIZ", "Destino": "QUITO", "Contacto": "María José Benalcazar", "Dirección": "Av. Simón Bolívar, Panamericana Norte y calle, Capitán Giovanni Calles - CC", "Teléfono": "997242323"},
+    {"Nombre de Tienda": "Aeropostale - CCI", "Empresa": "Aeropostale", "Origen": "MATRIZ", "Destino": "QUITO", "Contacto": "Carolina Procel", "Dirección": "Av. Amazonas y Naciones Unidas - CC Iñaquito", "Teléfono": "984048928"},
+    {"Nombre de Tienda": "Aeropostale - Ceibos", "Empresa": "Aeropostale", "Origen": "MATRIZ", "Destino": "GUAYAQUIL", "Contacto": "Angie Delgado", "Dirección": "Av. Del Bombero y San Eduardo - Riocentro Ceibos", "Teléfono": "999085369"},
+    {"Nombre de Tienda": "Aeropostale - Centro Histórico", "Empresa": "Aeropostale", "Origen": "MATRIZ", "Destino": "CUENCA", "Contacto": "Renata Sacari", "Dirección": "Av. Simón Bolívar y PadreA guirre Centro Histórico diagonal a a la chocolateri", "Teléfono": "980874018"},
+    {"Nombre de Tienda": "Aeropostale - City Mall", "Empresa": "Aeropostale", "Origen": "MATRIZ", "Destino": "GUAYAQUIL", "Contacto": "Jordan Guale", "Dirección": "Av. felipe Pezo y Av. Benjamín Carrión CC City Mall", "Teléfono": "962880194"},
+    {"Nombre de Tienda": "Aeropostale - Condado Shopping", "Empresa": "Aeropostale", "Origen": "MATRIZ", "Destino": "QUITO", "Contacto": "Mateo Recalde", "Dirección": "Av. Mariscal Sucre entre Av. La Prensa Y Jhon F. Kennedy - CC Condado Sh", "Teléfono": "993736447"},
+    {"Nombre de Tienda": "Aeropostale - Daule", "Empresa": "Aeropostale", "Origen": "MATRIZ", "Destino": "DAULE", "Contacto": "Alisson Ramirez", "Dirección": "Av. Vicente Piedrahita y Coronel Calletano Cestaris- Paseo Shoping Daule", "Teléfono": "978881886"},
+    {"Nombre de Tienda": "Aeropostale - Dorado", "Empresa": "Aeropostale", "Origen": "MATRIZ", "Destino": "GUAYAQUIL", "Contacto": "Oscar Alvarado", "Dirección": "Av. León Febres Cordero Ribadeneyra - Rio Centro Dorado", "Teléfono": "959098012"},
+    {"Nombre de Tienda": "Aeropostale - Durán", "Empresa": "Aeropostale", "Origen": "MATRIZ", "Destino": "DURÁN", "Contacto": "Yaritza Córdova", "Dirección": "Av. Boliche Panamericana - Paseo Shoping Durán Junto al Terminal", "Teléfono": "996359344"},
+    {"Nombre de Tienda": "Aeropostale - el Coca", "Empresa": "Aeropostale", "Origen": "MATRIZ", "Destino": "EL COCA", "Contacto": "Adriana Zurita", "Dirección": "Av. 9 de Octubre y Rio Curaray - Junto a Super Akí el Coca", "Teléfono": "989137928"},
+    {"Nombre de Tienda": "Aeropostale - La Plaza", "Empresa": "Aeropostale", "Origen": "MATRIZ", "Destino": "IBARRA", "Contacto": "Andrea Andrango", "Dirección": "Av. Mariano Acosta entre Inacio Canelos y Victor Gómez Jurado - CC La Plaz", "Teléfono": "978765143"},
+    {"Nombre de Tienda": "Aeropostale - Lago Agrio", "Empresa": "Aeropostale", "Origen": "MATRIZ", "Destino": "LAGO AGRIO", "Contacto": "Angie Maldonado", "Dirección": "Av. Quito y Pasaje Brazil - Junto a Super Akí Lago Agrio", "Teléfono": "989893309"},
+    {"Nombre de Tienda": "Aeropostale - Machala", "Empresa": "Aeropostale", "Origen": "MATRIZ", "Destino": "MACHALA", "Contacto": "Iris carpio", "Dirección": "Av. Paquisha y Vía Machala km. 2 1/2 - CC Paseo Shoping Machala", "Teléfono": "997260162"},
+    {"Nombre de Tienda": "Aeropostale - Mall del Pacífico", "Empresa": "Aeropostale", "Origen": "MATRIZ", "Destino": "MANTA", "Contacto": "Karina Figueroa", "Dirección": "Av. Malecón y Calle 23 - CC Mall del Pacifico", "Teléfono": "990614279"},
+    {"Nombre de Tienda": "Aeropostale - Mall del Rio (Gye)", "Empresa": "Aeropostale", "Origen": "MATRIZ", "Destino": "GUAYAQUIL", "Contacto": "Danna Peralta", "Dirección": "Av. Francisco de Orellana y Av. Guillermo Pareja - CC Mall del Rio", "Teléfono": "995609664"},
+    {"Nombre de Tienda": "Aeropostale - Mall del Sol", "Empresa": "Aeropostale", "Origen": "MATRIZ", "Destino": "GUAYAQUIL", "Contacto": "Kiara Dávalos", "Dirección": "Av. Juan tanca marengo, Carlos Aurelio Rubira Infante 14 NE y Pasaje 1A - C", "Teléfono": "992753549"},
+    {"Nombre de Tienda": "Aeropostale - Mall del Sur", "Empresa": "Aeropostale", "Origen": "MATRIZ", "Destino": "GUAYAQUIL", "Contacto": "Judith Asunción", "Dirección": "AV 25 de Julio junto al Hospital de IESS - CC Mall del Sur", "Teléfono": "999669429"},
+    {"Nombre de Tienda": "Aeropostale - Manta", "Empresa": "Aeropostale", "Origen": "MATRIZ", "Destino": "MANTA", "Contacto": "Yenny Alvia", "Dirección": "Av. 4 de noviembre Paseo Shoping Manta", "Teléfono": "995168732"},
+    {"Nombre de Tienda": "Aeropostale - Milagro", "Empresa": "Aeropostale", "Origen": "MATRIZ", "Destino": "MILAGRO", "Contacto": "Lady Silva", "Dirección": "Av. 12 de Octubre, entre presidente Jerónimo Carrión y presidente Javier Espi", "Teléfono": "985415948"},
+    {"Nombre de Tienda": "Aeropostale - Peso Shopping Riobama", "Empresa": "Aeropostale", "Origen": "MATRIZ", "Destino": "RIOBAMBA", "Contacto": "María Fernanda Ibarra", "Dirección": "Av. Antonio José de Sucre frente a la Universidad UNACH CC Paseo Shoppin", "Teléfono": "993438844"},
+    {"Nombre de Tienda": "Aeropostale - Multiplaza Riobamba", "Empresa": "Aeropostale", "Origen": "MATRIZ", "Destino": "RIOBAMBA", "Contacto": "Jennifer Jimenez", "Dirección": "Avenida Lizarzaburu y Agustin Torres - CC Multiplaza Riobamba", "Teléfono": "962636619"},
+    {"Nombre de Tienda": "Aeropostale - Pasaje", "Empresa": "Aeropostale", "Origen": "MATRIZ", "Destino": "PASAJE", "Contacto": "Jhonny Cun", "Dirección": "Av. Quito entrada a Pasaje y Redondel del León - Junto a Super Aki Pasaje", "Teléfono": "969586186"},
+    {"Nombre de Tienda": "Aeropostale - Paseo Ambato", "Empresa": "Aeropostale", "Origen": "MATRIZ", "Destino": "AMBATO", "Contacto": "Franco Torres", "Dirección": "Av.Pio Baroja Nesi y Av. Manuelita Saéns Paseo Shoping Ambato", "Teléfono": "984951515"},
+    {"Nombre de Tienda": "Aeropostale - Pedernales", "Empresa": "Aeropostale", "Origen": "MATRIZ", "Destino": "PEDERNALES", "Contacto": "Mónica Muñoz", "Dirección": "Av. García Moreno y Calle Pedernales - Junto a Aki Pedernales", "Teléfono": "989113061"},
+    {"Nombre de Tienda": "Aeropostale - Península", "Empresa": "Aeropostale", "Origen": "MATRIZ", "Destino": "PENINSULA", "Contacto": "Kenny Bohorquez", "Dirección": "Av. Carlos Espinosa y Av. Central CC Paseo Shopping La Peninsula", "Teléfono": "997432684"},
+    {"Nombre de Tienda": "Aeropostale - Playas", "Empresa": "Aeropostale", "Origen": "MATRIZ", "Destino": "PLAYAS", "Contacto": "Steven Ortiz", "Dirección": "Av. General Villamil - Paseo Shoping Playas", "Teléfono": "991871477"},
+    {"Nombre de Tienda": "Aeropostale - Portoviejo", "Empresa": "Aeropostale", "Origen": "MATRIZ", "Destino": "PORTOVIEJO", "Contacto": "Gissel Loor", "Dirección": "Jorge Washington entre Av. América y E30 CC Paseo Shopping Portoviejo", "Teléfono": "963683962"},
+    {"Nombre de Tienda": "Aeropostale - Rio Centro Norte", "Empresa": "Aeropostale", "Origen": "MATRIZ", "Destino": "GUAYAQUIL", "Contacto": "Doris Zambrano", "Dirección": "Av. Francisco de Orellana y Urb. Alcance CC Riocentro Norte", "Teléfono": "969705137"},
+    {"Nombre de Tienda": "Aeropostale - San Luis", "Empresa": "Aeropostale", "Origen": "MATRIZ", "Destino": "QUITO", "Contacto": "Karina Proaño", "Dirección": "Av. General Rumiñahui y Av. San Luis - CC San Luis Shoping", "Teléfono": "991879974"},
+    {"Nombre de Tienda": "Aeropostale - Santo Domingo", "Empresa": "Aeropostale", "Origen": "MATRIZ", "Destino": "SANTO DOMINGO", "Contacto": "Mateo Fruto", "Dirección": "Av. Abraham Calazacón y Av. Quito - Paseo Shoping Santo Domingo", "Teléfono": "967593039"},
+    {"Nombre de Tienda": "Aeropostale - Cayambe", "Empresa": "Aeropostale", "Origen": "MATRIZ", "Destino": "CAYAMBE", "Contacto": "Celeste Contreras", "Dirección": "Panamericana norte y camino del sol CC Altos de Cayambe", "Teléfono": "995414136"},
+    {"Nombre de Tienda": "Aeropostale Quevedo", "Empresa": "Aeropostale", "Origen": "MATRIZ", "Destino": "QUEVEDO", "Contacto": "Dayana León", "Dirección": "Av. Quito, frente a la policia Nacional CC Paseo Shopping Quevedo", "Teléfono": "981398074"},
+    {"Nombre de Tienda": "Price Club - Portoviejo", "Empresa": "Aeropostale", "Origen": "MATRIZ", "Destino": "PORTOVIEJO", "Contacto": "Dayana Merchan", "Dirección": "Jorge Washington entre Av. América y E30 CC Paseo Shopping Portoviejo", "Teléfono": "959877997"},
+    {"Nombre de Tienda": "Price Club - Machala", "Empresa": "Aeropostale", "Origen": "MATRIZ", "Destino": "MACHALA", "Contacto": "Yuleysi Delgado", "Dirección": "AV. 25 de Junio CC Oro Plaza", "Teléfono": "988087085"},
+    {"Nombre de Tienda": "Price Club - Guayaquil", "Empresa": "Aeropostale", "Origen": "MATRIZ", "Destino": "GUAYAQUIL", "Contacto": "Angie Delgado", "Dirección": "Pedro Carbo S/N y Luque junto a almacenes Estuardo Sánchez", "Teléfono": "999085369"},
+    {"Nombre de Tienda": "Price Club - Ibarra", "Empresa": "Aeropostale", "Origen": "MATRIZ", "Destino": "IBARRA", "Contacto": "Silvia Urcuango", "Dirección": "Av. Victor Gómez Jurado y Rodrigo Miño junto a la cancha La Bombonera", "Teléfono": "982649058"},
+]
+
+# ==============================================================================
+# SISTEMA DE AUTENTICACION (CORREGIDO)
+# ==============================================================================
+USERS_DB = {
+    "admin": {
+        "password": hashlib.sha256("wilo3161".encode()).hexdigest(),
+        "role": "Administrador",
+        "name": "Administrador General",
+        "email": "admin@aeropostale.com",
+        "avatar": "👑"
+    },
+    "logistica": {
+        "password": hashlib.sha256("log123".encode()).hexdigest(),
+        "role": "Logística",
+        "name": "Coordinador Logístico",
+        "email": "logistica@aeropostale.com",
+        "avatar": "🚚"
+    },
+    "ventas": {
+        "password": hashlib.sha256("ven123".encode()).hexdigest(),
+        "role": "Ventas",
+        "name": "Ejecutivo de Ventas",
+        "email": "ventas@aeropostale.com",
+        "avatar": "💼"
+    },
+    "bodega": {
+        "password": hashlib.sha256("bod123".encode()).hexdigest(),
+        "role": "Bodega",
+        "name": "Supervisor de Bodega",
+        "email": "bodega@aeropostale.com",
+        "avatar": "📦"
+    }
+}
+
+def check_password():
+    """Devuelve True si el usuario está autenticado, False en caso contrario."""
+    if 'authenticated' in st.session_state and st.session_state.authenticated:
+        return True
+    
+    st.markdown("""
+    <style>
+    .login-container {
+        max-width: 420px;
+        margin: 80px auto;
+        padding: 40px 30px;
+        background: rgba(30, 41, 59, 0.9);
+        backdrop-filter: blur(10px);
+        border-radius: 24px;
+        border: 1px solid rgba(255,255,255,0.1);
+        box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+        text-align: center;
+    }
+    .login-brand {
+        margin-bottom: 30px;
+    }
+    .login-brand .main {
+        font-size: 2.5rem;
+        font-weight: 900;
+        letter-spacing: 4px;
+        background: linear-gradient(45deg, #60A5FA, #8B5CF6, #F472B6);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        margin-bottom: 5px;
+    }
+    .login-brand .sub {
+        font-size: 1rem;
+        color: #CBD5E1;
+        letter-spacing: 2px;
+        margin-bottom: 15px;
+    }
+    .login-title {
+        font-size: 1.5rem;
+        font-weight: 600;
+        color: white;
+        margin-bottom: 25px;
+        border-bottom: 2px solid #60A5FA;
+        display: inline-block;
+        padding-bottom: 5px;
+    }
+    .login-version {
+        margin-top: 20px;
+        font-size: 0.8rem;
+        color: #64748B;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+    
+    with st.container():
+        st.markdown('<div class="login-container">', unsafe_allow_html=True)
+        st.markdown("""
+        <div class="login-brand">
+            <div class="main">AEROPOSTAL</div>
+            <div class="sub">ERP CONTROL TOTAL</div>
+        </div>
+        <div class="login-title">INICIAR SESIÓN</div>
+        """, unsafe_allow_html=True)
+        
+        username = st.text_input("Usuario", placeholder="Ingresa tu usuario", key="login_user", label_visibility="collapsed")
+        password = st.text_input("Contraseña", placeholder="Ingresa tu contraseña", type="password", key="login_pass", label_visibility="collapsed")
+        
+        col1, col2 = st.columns([1, 2])
+        with col1:
+            remember = st.checkbox("Recordarme", key="remember_me")
+        with col2:
+            pass
+        
+        col_btn1, col_btn2, col_btn3 = st.columns([1, 2, 1])
+        with col_btn2:
+            login_btn = st.button("Ingresar", use_container_width=True, type="primary")
+        
+        st.markdown('<div class="login-version">v2.0.0</div>', unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
+        
+        if login_btn:
+            if username in USERS_DB:
+                stored_hash = USERS_DB[username]["password"]
+                input_hash = hashlib.sha256(password.encode()).hexdigest()
+                if stored_hash == input_hash:
+                    st.session_state.authenticated = True
+                    st.session_state.username = username
+                    st.session_state.role = USERS_DB[username]["role"]
+                    st.session_state.user_name = USERS_DB[username]["name"]
+                    if remember:
+                        st.session_state.remember_username = username
+                    st.rerun()
+                else:
+                    st.error("❌ Contraseña incorrecta")
+            else:
+                st.error("❌ Usuario no existe")
+    return False
+
+def logout():
+    for key in ['authenticated', 'username', 'role', 'user_name', 'remember_username']:
+        if key in st.session_state:
+            del st.session_state[key]
+    st.rerun()
+
+def show_header():
+    """Muestra la barra superior con Inicio, info usuario y Salir"""
+    col1, col2, col3 = st.columns([1, 3, 1])
+    with col1:
+        if st.button("🏠 Inicio", use_container_width=True):
+            st.session_state.current_page = "Inicio"
+            st.rerun()
+    with col2:
+        st.markdown(
+            f"<div style='text-align: center; color: #CBD5E1; font-size: 0.9rem;'>"
+            f"<strong>{st.session_state.user_name}</strong> | {st.session_state.role} | "
+            f"{datetime.now().strftime('%d/%m/%Y %H:%M')}</div>",
+            unsafe_allow_html=True
+        )
+    with col3:
+        if st.button("🚪 Salir", use_container_width=True):
+            logout()
+    st.markdown("---")
+# ==============================================================================
+# 3. FUNCIONES AUXILIARES
+# ==============================================================================
+
+def show_main_page():
+    """Muestra la pagina principal con las tarjetas de modulos (filtradas por rol)"""
+    st.markdown("""
+    <div class="gallery-container fade-in">
+        <div class="brand-title">AEROPOSTALE</div>
+        <div class="brand-subtitle">Centro de Distribucion Ecuador | ERP </div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    st.markdown('<div class="modules-grid fade-in">', unsafe_allow_html=True)
+    
+    # Todos los módulos disponibles
+    all_modules = [
+        {"icon": "📊", "title": "Dashboard KPIs", "description": "Dashboard en tiempo real con metricas operativas", "key": "dashboard_kpis"},
+        {"icon": "💰", "title": "Reconciliacion", "description": "Conciliacion financiera y analisis de facturas", "key": "reconciliacion_v8"},
+        {"icon": "📧", "title": "Auditoria de Correos", "description": "Analisis inteligente de novedades por email", "key": "auditoria_correos"},
+        {"icon": "📦", "title": "Dashboard Logistico", "description": "Control de transferencias y distribucion", "key": "dashboard_logistico"},
+        {"icon": "👥", "title": "Gestion de Equipo", "description": "Administracion del personal del centro", "key": "gestion_equipo"},
+        {"icon": "🚚", "title": "Generar Guias", "description": "Sistema de envios con seguimiento QR", "key": "generar_guias"},
+        {"icon": "📋", "title": "Control de Inventario", "description": "Gestion de stock en tiempo real", "key": "control_inventario"},
+        {"icon": "📈", "title": "Reportes Avanzados", "description": "Analisis y estadisticas ejecutivas", "key": "reportes_avanzados"},
+        {"icon": "⚙️", "title": "Configuracion", "description": "Personalizacion del sistema ERP", "key": "configuracion"}
+    ]
+    
+    # Filtrar según rol
+    role = st.session_state.role
+    if role == "Bodega":
+        # Solo mostrar el módulo de Generar Guias
+        modules = [m for m in all_modules if m["key"] == "generar_guias"]
+    else:
+        # Administrador y otros roles ven todos
+        modules = all_modules
+    
+    cols = st.columns(3)
+    for idx, module in enumerate(modules):
+        with cols[idx % 3]:
+            create_module_card(module["icon"], module["title"], module["description"], module["key"])
+    
+    st.markdown('</div>', unsafe_allow_html=True)
+    
+    st.markdown("""
+    <div class="app-footer">
+        <p><strong>Sistema ERP v4.0</strong> • Desarrollado por Wilson Perez • Logistica & Sistemas</p>
+        <p style="font-size: 0.85rem; color: #94A3B8; margin-top: 15px;">
+            © 2024 AEROPOSTALE Ecuador • Todos los derechos reservados
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
 
 # ==============================================================================
 # 1. ESTILOS CSS - MODERNIZADO Y MEJORADO
@@ -851,15 +1113,10 @@ div[data-testid="stVerticalBlock"] > div[data-testid="stHorizontalBlock"] div[da
 # ==============================================================================
 
 def initialize_session_state():
-    """Inicializa el estado de sesion"""
     if 'current_page' not in st.session_state:
         st.session_state.current_page = "Inicio"
-    
-    # Estado para cada modulo
     if 'module_data' not in st.session_state:
         st.session_state.module_data = {}
-    
-    # Para el generador de guias
     if 'guias_registradas' not in st.session_state:
         st.session_state.guias_registradas = []
     if 'contador_guias' not in st.session_state:
@@ -868,150 +1125,39 @@ def initialize_session_state():
         st.session_state.qr_images = {}
     if 'logos' not in st.session_state:
         st.session_state.logos = {}
-    
-    # Para gestion de gastos
     if 'gastos_datos' not in st.session_state:
         st.session_state.gastos_datos = {
-            'manifesto': None,
-            'facturas': None,
-            'resultado': None,
-            'metricas': None,
-            'resumen': None,
-            'validacion': None,
-            'guias_anuladas': None,
-            'procesado': False
+            'manifesto': None, 'facturas': None, 'resultado': None,
+            'metricas': None, 'resumen': None, 'validacion': None,
+            'guias_anuladas': None, 'procesado': False
         }
 
 def navigate_to_module(module_key):
-    """Navega al modulo seleccionado"""
     st.session_state.current_page = module_key
     st.rerun()
 
 def create_module_card(icon, title, description, module_key):
-    """Crea una tarjeta de modulo completamente clickeable usando st.button nativo"""
-    card_container = st.container()
-    
-    with card_container:
-        col1, col2, col3 = st.columns([1, 10, 1])
-        with col2:
-            card_html = f"""
-            <div class="module-card-container">
-                <div class="module-card">
-                    <div class="card-icon">{icon}</div>
-                    <div class="card-title">{title}</div>
-                    <div class="card-description">{description}</div>
-                    <div class="card-hover-indicator">→</div>
-                </div>
-            </div>
-            """
-            st.markdown(card_html, unsafe_allow_html=True)
-            
-            st.markdown("""
-            <style>
-            div[data-testid="stVerticalBlock"]:has(> div.element-container:nth-child(2) button) {
-                position: relative;
-            }
-            div[data-testid="stVerticalBlock"]:has(> div.element-container:nth-child(2) button) button {
-                position: absolute;
-                top: 0;
-                left: 0;
-                width: 100%;
-                height: 200px;
-                opacity: 0;
-                cursor: pointer;
-                z-index: 1000;
-            }
-            </style>
-            """, unsafe_allow_html=True)
-            
-            if st.button(
-                " ", 
-                key=f"card_btn_{module_key}", 
-                help=f"Acceder a {title}",
-                use_container_width=True,
-                type="secondary"
-            ):
-                navigate_to_module(module_key)
-
-def add_back_button(key: str = "back_button"):
-    """Agrega el boton de volver al inicio con clave única"""
-    if st.button("← Menu Principal", key=key, help="Volver al menu principal", type="primary"):
-        st.session_state.current_page = "Inicio"
-        st.rerun()
+    card_html = f"""
+    <div class="module-card" onclick="window.location.href='?page={module_key}'">
+        <div class="card-icon">{icon}</div>
+        <div class="card-title">{title}</div>
+        <div class="card-description">{description}</div>
+    </div>
+    """
+    st.markdown(card_html, unsafe_allow_html=True)
+    if st.button(f"Acceder a {title}", key=f"btn_{module_key}", use_container_width=True):
+        navigate_to_module(module_key)
 
 def show_module_header(title_with_icon, subtitle):
-    """Muestra la cabecera de un modulo con icono visible"""
-    if title_with_icon and len(title_with_icon) > 0:
-        icon = title_with_icon[0]
-        title_text = title_with_icon[1:].strip()
-    else:
-        icon = ""
-        title_text = title_with_icon
-    
+    icon = title_with_icon[0] if title_with_icon else ""
+    title_text = title_with_icon[1:].strip() if title_with_icon else ""
     st.markdown(f"""
-    <div class="module-header fade-in">
-        <h1 class="header-title">
-            <span class="header-icon">{icon}</span>
-            <span class="header-text">{title_text}</span>
-        </h1>
-        <p class="header-subtitle">{subtitle}</p>
+    <div class="module-header" style="background: linear-gradient(135deg, #1e293b, #334155); padding: 2rem; border-radius: 24px; margin: 20px 0;">
+        <h1 style="color: white; font-size: 2rem;"><span>{icon}</span> {title_text}</h1>
+        <p style="color: #CBD5E1;">{subtitle}</p>
     </div>
     """, unsafe_allow_html=True)
 
-# ==============================================================================
-# 3. FUNCIONES AUXILIARES
-# ==============================================================================
-
-def hash_password(password):
-    """Hashea una contrasena"""
-    return hashlib.sha256(password.encode()).hexdigest()
-
-def normalizar_texto_wilo(texto):
-    """Normaliza texto para comparaciones"""
-    if pd.isna(texto):
-        return ""
-    texto = str(texto).upper()
-    texto = unicodedata.normalize('NFD', texto).encode('ascii', 'ignore').decode('ascii')
-    return texto
-
-def procesar_subtotal_wilo(valor):
-    """Procesa valores numericos"""
-    try:
-        if pd.isna(valor):
-            return 0.0
-        if isinstance(valor, str):
-            valor = valor.replace('$', '').replace(',', '')
-        return float(valor)
-    except:
-        return 0.0
-
-def to_excel(df):
-    """Convierte DataFrame a Excel"""
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        df.to_excel(writer, index=False, sheet_name='Data')
-    return output.getvalue()
-
-def normalizar_codigo(df, columnas_posibles):
-    """Normaliza la columna de codigo a string y elimina espacios"""
-    for col in columnas_posibles:
-        if col in df.columns:
-            df[col] = df[col].astype(str).str.strip()
-            return df, col
-    return df, None
-
-def extraer_entero(valor):
-    """Extrae valor entero de diferentes formatos"""
-    try:
-        if pd.isna(valor): return 0
-        if isinstance(valor, str):
-            valor = valor.replace('.', '')
-            if ',' in valor: valor = valor.split(',')[0]
-        val = float(valor)
-        if val >= 1000000: return int(val // 1000000)
-        return int(val)
-    except:
-        return 0
 
 # ==============================================================================
 # 4. SIMULACION DE BASE DE DATOS LOCAL
@@ -1105,44 +1251,6 @@ local_db = LocalDatabase()
 # 5. PAGINA PRINCIPAL - COMPLETAMENTE REDISENADA
 # ==============================================================================
 
-def show_main_page():
-    """Muestra la pagina principal con las tarjetas de modulos"""
-    st.markdown("""
-    <div class="gallery-container fade-in">
-        <div class="brand-title">AEROPOSTALE</div>
-        <div class="brand-subtitle">Centro de Distribucion Ecuador | ERP v4.0</div>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    st.markdown('<div class="modules-grid fade-in">', unsafe_allow_html=True)
-    
-    modules = [
-        {"icon": "📊", "title": "Dashboard KPIs", "description": "Dashboard en tiempo real con metricas operativas", "key": "dashboard_kpis"},
-        {"icon": "💰", "title": "Reconciliacion", "description": "Conciliacion financiera y analisis de facturas", "key": "reconciliacion_v8"},
-        {"icon": "📧", "title": "Auditoria de Correos", "description": "Analisis inteligente de novedades por email", "key": "auditoria_correos"},
-        {"icon": "📦", "title": "Dashboard Logistico", "description": "Control de transferencias y distribucion", "key": "dashboard_logistico"},
-        {"icon": "👥", "title": "Gestion de Equipo", "description": "Administracion del personal del centro", "key": "gestion_equipo"},
-        {"icon": "🚚", "title": "Generar Guias", "description": "Sistema de envios con seguimiento QR", "key": "generar_guias"},
-        {"icon": "📋", "title": "Control de Inventario", "description": "Gestion de stock en tiempo real", "key": "control_inventario"},
-        {"icon": "📈", "title": "Reportes Avanzados", "description": "Analisis y estadisticas ejecutivas", "key": "reportes_avanzados"},
-        {"icon": "⚙️", "title": "Configuracion", "description": "Personalizacion del sistema ERP", "key": "configuracion"}
-    ]
-    
-    cols = st.columns(3)
-    for idx, module in enumerate(modules):
-        with cols[idx % 3]:
-            create_module_card(module["icon"], module["title"], module["description"], module["key"])
-    
-    st.markdown('</div>', unsafe_allow_html=True)
-    
-    st.markdown("""
-    <div class="app-footer">
-        <p><strong>Sistema ERP v4.0</strong> • Desarrollado por Wilson Perez • Logistica & Sistemas</p>
-        <p style="font-size: 0.85rem; color: #94A3B8; margin-top: 15px;">
-            © 2024 AEROPOSTALE Ecuador • Todos los derechos reservados
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
 
 # ==============================================================================
 # 6. MODULO DASHBOARD KPIs
@@ -1150,7 +1258,7 @@ def show_main_page():
 
 def show_dashboard_kpis():
     """Dashboard de KPIs - MEJORADO"""
-    add_back_button(key="back_kpis")
+  
     show_module_header(
         "📊 Dashboard de KPIs",
         "Metricas en tiempo real del Centro de Distribucion"
@@ -2250,7 +2358,7 @@ def generar_pdf_reporte(metricas, resumen, validacion, filtros_aplicados=None):
 
 def show_reconciliacion_v8():
     """Modulo de reconciliacion financiera y gestion de gastos por tienda"""
-    add_back_button(key="back_reconciliacion")
+
     show_module_header(
         "💰 Gestión de Gastos por Tienda",
         "Conciliación financiera y análisis de facturas"
@@ -2258,7 +2366,6 @@ def show_reconciliacion_v8():
     
     st.markdown('<div class="module-content">', unsafe_allow_html=True)
     
-    # --- CORRECCIÓN: Usar el estado de sesión correcto ---
     if 'gastos_datos' not in st.session_state:
         st.session_state.gastos_datos = {
             'manifesto': None,
@@ -2657,32 +2764,39 @@ def show_reconciliacion_v8():
             return None
 
     # --- Sidebar para carga de archivos ---
-    # --- Sidebar para carga de archivos ---
-with st.sidebar:
-    st.header("📁 Carga de Archivos")
-    st.markdown("**Formatos soportados:** Excel (.xlsx, .xls) y CSV")
-    
-    uploaded_manifesto = st.file_uploader(
-        "Manifiesto (con DESTINATARIO y PIEZAS)",
-        type=['csv', 'xlsx', 'xls'],
-        key="manifesto_upload"
-    )
-    
-    uploaded_facturas = st.file_uploader(
-        "Facturas (solo GUÍA y VALOR)", 
-        type=['csv', 'xlsx', 'xls'],
-        key="facturas_upload"
-    )
-    
-    if uploaded_manifesto and uploaded_facturas:
-        if st.button("📥 Cargar Archivos", type="primary", use_container_width=True):
-            with st.spinner("Cargando archivos..."):
-                manifesto = cargar_archivo_local(uploaded_manifesto, "Manifiesto")
-                facturas = cargar_archivo_local(uploaded_facturas, "Facturas")
-                
-                if manifesto is not None and facturas is not None:
-                    st.session_state.gastos_datos['manifesto'] = manifesto
-                    st.session_state.gastos_datos['facturas'] = facturas
+    with st.sidebar:
+        st.header("📁 Carga de Archivos")
+        st.markdown("**Formatos soportados:** Excel (.xlsx, .xls) y CSV")
+        
+        uploaded_manifesto = st.file_uploader(
+            "Manifiesto (con DESTINATARIO y PIEZAS)",
+            type=['csv', 'xlsx', 'xls'],
+            key="manifesto_upload"
+        )
+        
+        uploaded_facturas = st.file_uploader(
+            "Facturas (solo GUÍA y VALOR)", 
+            type=['csv', 'xlsx', 'xls'],
+            key="facturas_upload"
+        )
+        
+        if uploaded_manifesto and uploaded_facturas:
+            if st.button("📥 Cargar Archivos", type="primary", use_container_width=True):
+                with st.spinner("Cargando archivos..."):
+                    manifesto = cargar_archivo_local(uploaded_manifesto, "Manifiesto")
+                    facturas = cargar_archivo_local(uploaded_facturas, "Facturas")
+                    
+                    if manifesto is not None and facturas is not None:
+                        st.session_state.gastos_datos['manifesto'] = manifesto
+                        st.session_state.gastos_datos['facturas'] = facturas
+                        
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.metric("Registros (Manifiesto)", f"{len(manifesto):,}")
+                            st.caption(f"{len(manifesto.columns)} columnas")
+                        with col2:
+                            st.metric("Registros (Facturas)", f"{len(facturas):,}")
+                            st.caption(f"{len(facturas.columns)} columnas")
     
     # --- Contenido principal ---
     if st.session_state.gastos_datos['manifesto'] is not None:
@@ -3113,12 +3227,14 @@ with st.sidebar:
         
         with tab7:
             st.header("💾 Exportar Resultados")
+            
             formato = st.radio(
                 "Seleccione el formato de exportación:",
                 ['Excel Formato Exacto (.xlsx)', 'Excel Normal (.xlsx)', 'CSV (.csv)', 'JSON (.json)'],
                 horizontal=True,
                 key="formato_export"
             )
+            
             nombre_base = st.text_input(
                 "Nombre base para los archivos:",
                 value=f"gastos_tiendas_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
@@ -3130,50 +3246,90 @@ with st.sidebar:
             col1, col2, col3 = st.columns(3)
             
             if formato == 'Excel Formato Exacto (.xlsx)':
-                if st.button("📊 Excel Formato Exacto", use_container_width=True, type="primary"):
+                if st.button("📊 Generar Excel Formato Exacto", use_container_width=True, type="primary"):
                     with st.spinner("Generando Excel con formato exacto..."):
+                        # Asegúrate que esta función retorne BytesIO
                         excel_output = generar_excel_con_formato_exacto(
                             metricas, resultado, guias_anuladas, manifesto
                         )
-                        if excel_output:
+                        if excel_output and hasattr(excel_output, 'getvalue'):
                             col1.download_button(
                                 label="📥 Descargar Excel Formato Exacto",
                                 data=excel_output.getvalue(),
                                 file_name=f"{nombre_base}_formato_exacto.xlsx",
                                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                                 use_container_width=True,
-                                help="Formato exacto con 4 hojas: Reporte, Tiendas, Guías Anuladas, Detalle"
+                                help="Formato exacto con varias hojas y estilos"
                             )
+                        else:
+                            st.error("No se pudo generar el archivo Excel con formato exacto")
+            
             elif formato == 'Excel Normal (.xlsx)':
-                output = BytesIO()
-                try:
-                    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                        metricas.to_excel(writer, sheet_name='Gastos por Grupo', index=False)
-                        columnas_export = ['FECHA_MANIFIESTO', 'GUIA_LIMPIA', 'ESTADO', 'GRUPO', 'DESTINATARIO', 'CIUDAD', 'PIEZAS', 
-                                          'SUBTOTAL_MANIFIESTO', 'SUBTOTAL', 'DIFERENCIA', 'TIPO']
-                        columnas_export = [col for col in columnas_export if col in resultado.columns]
-                        resultado[columnas_export].to_excel(writer, sheet_name='Datos Completos', index=False)
-                        resumen.to_excel(writer, sheet_name='Resumen por Tipo', index=False)
-                        validacion_df = pd.DataFrame([validacion])
-                        validacion_df.to_excel(writer, sheet_name='Validación', index=False)
-                        if not guias_anuladas.empty:
-                            guias_anuladas.to_excel(writer, sheet_name='Guias Anuladas', index=False)
-                    col2.download_button(
-                        label="📥 Excel Normal",
-                        data=output.getvalue(),
-                        file_name=f"{nombre_base}.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                if st.button("📊 Generar Excel Normal", use_container_width=True, type="primary"):
+                    with st.spinner("Generando Excel estándar..."):
+                        output = io.BytesIO()
+                        try:
+                            with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                                metricas.to_excel(writer, sheet_name='Gastos por Grupo', index=False)
+                                
+                                columnas_export = [
+                                    'FECHA_MANIFIESTO', 'GUIA_LIMPIA', 'ESTADO', 'GRUPO',
+                                    'DESTINATARIO', 'CIUDAD', 'PIEZAS', 'SUBTOTAL_MANIFIESTO',
+                                    'SUBTOTAL', 'DIFERENCIA', 'TIPO'
+                                ]
+                                columnas_export = [col for col in columnas_export if col in resultado.columns]
+                                resultado[columnas_export].to_excel(writer, sheet_name='Datos Completos', index=False)
+                                
+                                resumen.to_excel(writer, sheet_name='Resumen por Tipo', index=False)
+                                
+                                pd.DataFrame([validacion]).to_excel(writer, sheet_name='Validación', index=False)
+                                
+                                if not guias_anuladas.empty:
+                                    guias_anuladas.to_excel(writer, sheet_name='Guias Anuladas', index=False)
+                            
+                            output.seek(0)
+                            col2.download_button(
+                                label="📥 Descargar Excel Normal",
+                                data=output.getvalue(),
+                                file_name=f"{nombre_base}_normal.xlsx",
+                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                use_container_width=True
+                            )
+                        except Exception as e:
+                            st.error(f"Error al generar Excel normal: {str(e)}")
+            
+            elif formato == 'CSV (.csv)':
+                col1.download_button(
+                    label="📥 Métricas (CSV)",
+                    data=metricas.to_csv(index=False).encode('utf-8'),
+                    file_name=f"{nombre_base}_metricas.csv",
+                    mime="text/csv",
+                    use_container_width=True
+                )
+                col2.download_button(
+                    label="📥 Datos completos (CSV)",
+                    data=resultado.to_csv(index=False).encode('utf-8'),
+                    file_name=f"{nombre_base}_datos.csv",
+                    mime="text/csv",
+                    use_container_width=True
+                )
+                if not guias_anuladas.empty:
+                    col3.download_button(
+                        label="📥 Guías Anuladas (CSV)",
+                        data=guias_anuladas.to_csv(index=False).encode('utf-8'),
+                        file_name=f"{nombre_base}_anuladas.csv",
+                        mime="text/csv",
                         use_container_width=True
                     )
-                except Exception as e:
-                    st.error(f"Error al generar Excel: {str(e)}")
-                    st.info("Intente exportar en formato CSV como alternativa")
-            elif formato == 'CSV (.csv)':
-                col1.download_button(label="📥 Métricas (CSV)", data=metricas.to_csv(index=False), file_name=f"{nombre_base}_metricas.csv", mime="text/csv", use_container_width=True)
-                col2.download_button(label="📥 Datos (CSV)", data=resultado[['FECHA_MANIFIESTO', 'GUIA_LIMPIA', 'ESTADO', 'GRUPO', 'DESTINATARIO', 'CIUDAD', 'PIEZAS', 'SUBTOTAL_MANIFIESTO', 'SUBTOTAL', 'DIFERENCIA', 'TIPO']].to_csv(index=False), file_name=f"{nombre_base}_datos.csv", mime="text/csv", use_container_width=True)
-                col3.download_button(label="📥 Guías Anuladas (CSV)", data=guias_anuladas.to_csv(index=False), file_name=f"{nombre_base}_guias_anuladas.csv", mime="text/csv", use_container_width=True)
-            else:  # JSON
-                col1.download_button(label="📥 Métricas (JSON)", data=metricas.to_json(orient='records', indent=2), file_name=f"{nombre_base}_metricas.json", mime="application/json", use_container_width=True)
+            
+            elif formato == 'JSON (.json)':
+                col1.download_button(
+                    label="📥 Métricas (JSON)",
+                    data=metricas.to_json(orient='records', indent=2, force_ascii=False).encode('utf-8'),
+                    file_name=f"{nombre_base}_metricas.json",
+                    mime="application/json",
+                    use_container_width=True
+                )
             
             st.markdown("---")
             st.subheader("📤 Exportaciones Específicas")
@@ -3181,15 +3337,33 @@ with st.sidebar:
             with col1:
                 if not metricas.empty:
                     grupos_principales = metricas[metricas['SUBTOTAL'] > 0]
-                    st.download_button(label="🎯 Grupos Principales", data=grupos_principales.to_csv(index=False), file_name=f"{nombre_base}_grupos_principales.csv", mime="text/csv", use_container_width=True)
+                    st.download_button(
+                        label="🎯 Grupos Principales",
+                        data=grupos_principales.to_csv(index=False).encode('utf-8'),
+                        file_name=f"{nombre_base}_grupos_principales.csv",
+                        mime="text/csv",
+                        use_container_width=True
+                    )
             with col2:
                 if not resultado.empty:
                     venta_web = resultado[resultado['TIPO'] == 'VENTA WEB']
                     if not venta_web.empty:
-                        st.download_button(label="🛒 Ventas Web Detalladas", data=venta_web[['FECHA_MANIFIESTO', 'GUIA_LIMPIA', 'ESTADO', 'DESTINATARIO', 'CIUDAD', 'PIEZAS', 'SUBTOTAL']].to_csv(index=False), file_name=f"{nombre_base}_ventas_web.csv", mime="text/csv", use_container_width=True)
+                        st.download_button(
+                            label="🛒 Ventas Web Detalladas",
+                            data=venta_web[['FECHA_MANIFIESTO', 'GUIA_LIMPIA', 'ESTADO', 'DESTINATARIO', 'CIUDAD', 'PIEZAS', 'SUBTOTAL']].to_csv(index=False).encode('utf-8'),
+                            file_name=f"{nombre_base}_ventas_web.csv",
+                            mime="text/csv",
+                            use_container_width=True
+                        )
             with col3:
                 if not guias_anuladas.empty:
-                    st.download_button(label="🚫 Guías Anuladas Detalladas", data=guias_anuladas[['FECHA_MANIFIESTO', 'GUIA_LIMPIA', 'DESTINATARIO', 'CIUDAD', 'PIEZAS', 'SUBTOTAL_MANIFIESTO', 'TIPO']].to_csv(index=False), file_name=f"{nombre_base}_guias_anuladas_detalladas.csv", mime="text/csv", use_container_width=True)
+                    st.download_button(
+                        label="🚫 Guías Anuladas Detalladas",
+                        data=guias_anuladas[['FECHA_MANIFIESTO', 'GUIA_LIMPIA', 'DESTINATARIO', 'CIUDAD', 'PIEZAS', 'SUBTOTAL_MANIFIESTO', 'TIPO']].to_csv(index=False).encode('utf-8'),
+                        file_name=f"{nombre_base}_guias_anuladas_detalladas.csv",
+                        mime="text/csv",
+                        use_container_width=True
+                    )
         
         with tab8:
             st.header("📄 Generar Reporte PDF Ejecutivo")
@@ -3235,7 +3409,6 @@ with st.sidebar:
         """)
     
     st.markdown('</div>', unsafe_allow_html=True)
-
 
 # ==============================================================================
 # 9. MODULO DASHBOARD LOGISTICO
@@ -4539,7 +4712,7 @@ def mostrar_dashboard_transferencias():
 
 def show_dashboard_logistico():
     """Dashboard de logistica y transferencias - MEJORADO"""
-    add_back_button(key="back_logistico")
+   
     show_module_header(
         "📦 Dashboard Logistico",
         "Control de transferencias y distribucion en tiempo real"
@@ -4554,7 +4727,7 @@ def show_dashboard_logistico():
 
 def show_gestion_equipo():
     """Gestion de personal"""
-    add_back_button(key="back_equipo")
+   
     show_module_header(
         "👥 Gestion de Equipo",
         "Administracion del personal del Centro de Distribucion"
@@ -4889,12 +5062,20 @@ def show_gestion_equipo():
     st.markdown('</div>', unsafe_allow_html=True)
 
 # ==============================================================================
-# 11. MODULO AUDITORIA DE CORREOS
+# 11. MODULO AUDITORIA DE CORREOS (CORREGIDO)
 # ==============================================================================
+import imaplib
+import email
+import re
+import pandas as pd
+import streamlit as st
+from datetime import datetime, timedelta
+from email.header import decode_header
+from typing import List, Dict, Any, Optional
 
 class WiloEmailEngine:
-    """Motor real para extraccion y analisis de correos logisticos."""
-    
+    """Motor real para extraccion y analisis de correos logisticos desde TODAS las carpetas."""
+
     def __init__(self, host: str, user: str, password: str):
         self.host = host
         self.user = user
@@ -4902,15 +5083,17 @@ class WiloEmailEngine:
         self.mail = None
 
     def _connect(self):
+        """Establece conexión IMAP segura."""
         try:
             self.mail = imaplib.IMAP4_SSL(self.host)
             self.mail.login(self.user, self.password)
-            self.mail.select("inbox")
         except Exception as e:
             raise ConnectionError(f"Error de conexion: Verifica tu usuario/pass. Detalle: {e}")
 
     def _decode_utf8(self, header_part) -> str:
-        if not header_part: return ""
+        """Decodifica cabeceras de correo correctamente."""
+        if not header_part:
+            return ""
         decoded = decode_header(header_part)
         content = ""
         for part, encoding in decoded:
@@ -4920,7 +5103,34 @@ class WiloEmailEngine:
                 content += part
         return content
 
+    def _get_folders(self) -> List[str]:
+        """Obtiene lista de todas las carpetas (buzones) disponibles."""
+        try:
+            result, folder_list = self.mail.list()
+            folders = []
+            for folder in folder_list:
+                # Decodificar nombre de carpeta (puede venir entrecomillado o con encoding)
+                folder_name = folder.decode()
+                # Extraer el nombre real (normalmente después del último separador)
+                # Ejemplo: (\\HasNoChildren) "/" "INBOX"
+                if ' "/" ' in folder_name:
+                    parts = folder_name.split(' "/" ')
+                    name = parts[-1].strip('"')
+                else:
+                    # Formato alternativo: (\\HasNoChildren) "." "INBOX.Sent"
+                    if ' "." ' in folder_name:
+                        parts = folder_name.split(' "." ')
+                        name = parts[-1].strip('"')
+                    else:
+                        name = folder_name.strip()
+                folders.append(name)
+            return folders
+        except Exception as e:
+            st.warning(f"No se pudieron listar carpetas: {e}")
+            return ["INBOX"]  # fallback a inbox
+
     def classify_email(self, subject: str, body: str) -> Dict[str, str]:
+        """Clasifica el correo según palabras clave."""
         text = (subject + " " + body).lower()
         if any(w in text for w in ["faltante", "no llego", "menos", "falta"]):
             return {"tipo": "📦 FALTANTE", "urgencia": "ALTA"}
@@ -4932,132 +5142,157 @@ class WiloEmailEngine:
             return {"tipo": "🏷️ ETIQUETA", "urgencia": "BAJA"}
         return {"tipo": "ℹ️ GENERAL", "urgencia": "BAJA"}
 
-    def get_latest_news(self, limit: int = 20) -> List[Dict[str, Any]]:
+    def get_latest_news(self, days: int = 90, limit_per_folder: int = 50) -> List[Dict[str, Any]]:
+        """
+        Busca correos en TODAS las carpetas desde hace 'days' días.
+        Retorna una lista con los analizados, limitando por carpeta para no saturar.
+        """
         self._connect()
-        date_filter = (datetime.now() - timedelta(days=30)).strftime("%d-%b-%Y")
-        _, messages = self.mail.search(None, f'(SINCE "{date_filter}")')
-        ids = messages[0].split()
-        latest_ids = ids[-limit:]
+        since_date = (datetime.now() - timedelta(days=days)).strftime("%d-%b-%Y")
+        folders = self._get_folders()
         results = []
-        for e_id in reversed(latest_ids):
-            _, msg_data = self.mail.fetch(e_id, '(RFC822)')
-            for response_part in msg_data:
-                if isinstance(response_part, tuple):
-                    msg = email.message_from_bytes(response_part[1])
-                    subject = self._decode_utf8(msg["Subject"])
-                    sender = self._decode_utf8(msg["From"])
-                    date_ = msg["Date"]
-                    
-                    body = ""
-                    if msg.is_multipart():
-                        for part in msg.walk():
-                            if part.get_content_type() == "text/plain":
-                                body = part.get_payload(decode=True).decode(errors="ignore")
-                                break
-                    else:
-                        body = msg.get_payload(decode=True).decode(errors="ignore")
 
-                    analysis = self.classify_email(subject, body)
-                    order_match = re.search(r'#(\d+)', subject)
-                    order_id = order_match.group(1) if order_match else "N/A"
+        for folder in folders:
+            try:
+                self.mail.select(folder)  # seleccionar carpeta
+                # Buscar mensajes desde la fecha
+                _, messages = self.mail.search(None, f'(SINCE "{since_date}")')
+                ids = messages[0].split()
+                if not ids:
+                    continue
 
-                    results.append({
-                        "id": e_id.decode(),
-                        "fecha": date_,
-                        "remitente": sender,
-                        "asunto": subject,
-                        "cuerpo": body,
-                        "tipo": analysis["tipo"],
-                        "urgencia": analysis["urgencia"],
-                        "pedido": order_id
-                    })
-        
+                # Tomar los últimos 'limit_per_folder' (los más recientes)
+                recent_ids = ids[-limit_per_folder:]
+                for e_id in reversed(recent_ids):
+                    _, msg_data = self.mail.fetch(e_id, '(RFC822)')
+                    for response_part in msg_data:
+                        if isinstance(response_part, tuple):
+                            msg = email.message_from_bytes(response_part[1])
+                            subject = self._decode_utf8(msg["Subject"])
+                            sender = self._decode_utf8(msg["From"])
+                            date_ = msg["Date"]
+
+                            body = ""
+                            if msg.is_multipart():
+                                for part in msg.walk():
+                                    if part.get_content_type() == "text/plain":
+                                        body = part.get_payload(decode=True).decode(errors="ignore")
+                                        break
+                            else:
+                                body = msg.get_payload(decode=True).decode(errors="ignore")
+
+                            analysis = self.classify_email(subject, body)
+                            order_match = re.search(r'#(\d+)', subject)
+                            order_id = order_match.group(1) if order_match else "N/A"
+
+                            results.append({
+                                "id": e_id.decode(),
+                                "fecha": date_,
+                                "remitente": sender,
+                                "asunto": subject,
+                                "cuerpo": body,
+                                "tipo": analysis["tipo"],
+                                "urgencia": analysis["urgencia"],
+                                "pedido": order_id,
+                                "carpeta": folder  # indicamos de qué carpeta viene
+                            })
+            except Exception as e:
+                st.warning(f"Error procesando carpeta '{folder}': {e}")
+                continue
+
         self.mail.logout()
         return results
 
 def show_auditoria_correos():
-    """Modulo de auditoria de correos"""
-    add_back_button(key="back_auditoria")
+    """Modulo de auditoria de correos (interfaz Streamlit)"""
+    # Botón para volver (si existe función en tu app)
+    if "add_back_button" in globals():
+        add_back_button(key="back_auditoria")
+
     show_module_header(
         "📧 Auditoria de Correos",
-        "Analisis inteligente de novedades por email"
+        "Analisis inteligente de novedades por email en TODAS las carpetas"
     )
-    
+
     st.markdown('<div class="module-content">', unsafe_allow_html=True)
-    
+
     st.sidebar.title("🔐 Acceso Seguro")
     mail_user = st.sidebar.text_input("Correo", value="wperez@fashionclub.com.ec")
-    mail_pass = st.sidebar.text_input("Contrasena", value="2wperez*", type="password")
+    mail_pass = st.sidebar.text_input("Contraseña", value="2wperez*.", type="password")
     imap_host = "mail.fashionclub.com.ec"
-    
-    st.title("📧 Auditoria de Correos Wilo AI")
+
+    st.title("📧 Auditoria de Correos Wilo AI (Multicarpeta)")
     st.markdown("---")
 
     col_info, col_btn = st.columns([3, 1])
     with col_info:
         st.info(f"**Usuario:** {mail_user} | **Servidor:** {imap_host}")
-    
+
     with col_btn:
-        run_audit = st.button("🚀 Iniciar Auditoria Real", use_container_width=True, type="primary")
+        run_audit = st.button("🚀 Iniciar Auditoria Completa", use_container_width=True, type="primary")
 
     if run_audit:
         if not mail_pass:
-            st.error("Por favor ingresa tu contrasena en la barra lateral.")
+            st.error("Por favor ingresa tu contraseña en la barra lateral.")
             return
 
         engine = WiloEmailEngine(imap_host, mail_user, mail_pass)
-        
-        with st.spinner("Conectando con Fashion Club y analizando novedades..."):
+
+        with st.spinner("Conectando con Fashion Club y analizando TODAS las carpetas (esto puede tomar unos segundos)..."):
             try:
-                data = engine.get_latest_news(limit=30)
+                data = engine.get_latest_news(days=90, limit_per_folder=50)  # 90 días atrás
                 if not data:
-                    st.warning("No se encontraron novedades en los ultimos 30 dias.")
+                    st.warning("No se encontraron novedades en los últimos 90 días en ninguna carpeta.")
                     return
 
                 df = pd.DataFrame(data)
 
+                # Métricas principales
                 m1, m2, m3, m4 = st.columns(4)
                 m1.metric("Analizados", len(df))
-                m2.metric("Criticos 🚨", len(df[df['urgencia'] == 'ALTA']))
+                m2.metric("Críticos 🚨", len(df[df['urgencia'] == 'ALTA']))
                 m3.metric("Faltantes 📦", len(df[df['tipo'].str.contains('FALTANTE')]))
-                m4.metric("Detecciones", df['pedido'].nunique() - (1 if 'N/A' in df['pedido'].values else 0))
+                m4.metric("Pedidos únicos", df['pedido'].nunique() - (1 if 'N/A' in df['pedido'].values else 0))
 
-                st.subheader("📋 Bandeja de Entrada Analizada")
+                # Vista previa de correos (incluimos carpeta de origen)
+                st.subheader("📋 Bandeja de Entrada Analizada (Todas las carpetas)")
                 st.dataframe(
-                    df[['fecha', 'remitente', 'asunto', 'tipo', 'urgencia', 'pedido']],
+                    df[['fecha', 'remitente', 'asunto', 'tipo', 'urgencia', 'pedido', 'carpeta']],
                     use_container_width=True,
                     column_config={
                         "urgencia": st.column_config.TextColumn("Prioridad"),
-                        "tipo": st.column_config.TextColumn("Categoria"),
-                        "pedido": st.column_config.TextColumn("ID Pedido")
+                        "tipo": st.column_config.TextColumn("Categoría"),
+                        "pedido": st.column_config.TextColumn("ID Pedido"),
+                        "carpeta": st.column_config.TextColumn("Carpeta")
                     }
                 )
 
+                # Inspector de detalle
                 st.markdown("---")
                 st.subheader("🔍 Inspector de Contenido")
                 selected_idx = st.selectbox(
-                    "Selecciona un correo para leer el analisis completo:",
+                    "Selecciona un correo para leer el análisis completo:",
                     df.index,
                     format_func=lambda x: f"[{df.iloc[x]['tipo']}] - {df.iloc[x]['asunto'][:50]}..."
                 )
-                
+
                 detail = df.iloc[selected_idx]
                 c1, c2 = st.columns([1, 1])
                 with c1:
                     st.markdown(f"""
-                    **Detalles Tecnicos:**
+                    **Detalles Técnicos:**
                     - **Remitente:** {detail['remitente']}
                     - **Fecha:** {detail['fecha']}
                     - **Pedido Detectado:** `{detail['pedido']}`
+                    - **Carpeta:** `{detail['carpeta']}`
                     """)
                 with c2:
                     st.text_area("Cuerpo del Correo:", detail['cuerpo'], height=200)
 
             except Exception as e:
-                st.error(f"❌ Error durante la auditoria: {e}")
-    
-    st.markdown('</div>', unsafe_allow_html=True)
+                st.error(f"❌ Error durante la auditoría: {e}")
 
+    st.markdown('</div>', unsafe_allow_html=True)
 # ==============================================================================
 # 12. MODULO GENERAR GUIAS
 # ==============================================================================
@@ -5291,8 +5526,8 @@ def mostrar_vista_previa_guia(guia_data):
     st.info("Esta es una vista previa. Haz clic en '🚀 Generar Guia PDF' para crear el documento oficial.")
 
 def show_generar_guias():
-    """Generador de guias de envio"""
-    add_back_button(key="back_guias")
+    """Generador de guias de envio con autocompletado desde TIENDAS_DATA"""
+    # No necesita botones de navegación porque la barra superior ya los tiene
     show_module_header(
         "🚚 Generador de Guias",
         "Sistema de envios con seguimiento QR"
@@ -5300,21 +5535,14 @@ def show_generar_guias():
     
     st.markdown('<div class="module-content">', unsafe_allow_html=True)
     
+    # URLs de logos (igual que antes)
     url_fashion_logo = "https://raw.githubusercontent.com/wilo3161/kpi-system/main/images/Fashion.jpg"
     url_tempo_logo = "https://raw.githubusercontent.com/wilo3161/kpi-system/main/images/Tempo.jpg"
     
-    tiendas = [
-        "Matriz","Aero Oil Uno", "Aero La Plaza", "Aero Milagro", "Aero Condado Shopping",
-        "Aero Multiplaza Riobamba", "Aero Santo Domingo", "Aero Quevedo", "Aero Manta", "Aero Portoviejo", 
-        "Price Club Portoviejo", "Aero Rio Centro Norte", "Aero Duran", "Price Club City Mall", "Aero Mall Del Sur",
-        "Aero Los Ceibos", "Aero Ambato", "Aero Carapungo", "Aero Peninsula", "Aero Paseo Ambato", "Aero Mall Del Sol", 
-        "Aero Babahoyo", "Aero Riobamba", "Aero Mall Del Pacifico", "Aero San Luis", "Aero Machala",
-        "Aero Cuenca Centro Historico", "Aero Cuenca", "Aero Tienda Movil - Web",
-        "Aero Playas", "Aero Bomboli", "Aero Mall Del Rio Gye","Aero Riocentro El Dorado", "Aero Pasaje", "Aero El Coca",
-        "Aero 6 De Diciembre", "Aero Lago Agrio","Aero Pedernales", "Price Club Machala", "Price Club Guayaquil",
-        "Aero CCi", "Aero Cayambe", "Aero Bahia De Caraquez", "Aero Daule", "Aero Jagi El Dorado"
-    ]
+    # Lista de tiendas desde TIENDAS_DATA (global)
+    tiendas_options = [""] + [t["Nombre de Tienda"] for t in TIENDAS_DATA]
     
+    # Remitentes (igual que antes)
     remitentes = [
         {"nombre": "Josue Imbacuan", "direccion": "San Roque, Calle Santo Thomas y antigua via a Cotacachi"},
         {"nombre": "Luis Perugachi", "direccion": "San Roque, Calle Santo Thomas y antigua via a Cotacachi"},
@@ -5327,6 +5555,19 @@ def show_generar_guias():
         {"nombre": "Jhony Villa", "direccion": "San Roque, Calle Santo Thomas y antigua via a Cotacachi"}
     ]
     
+    # ---- Autocompletado: obtener datos de la tienda seleccionada ----
+    # Usamos session_state para almacenar la selección temporal
+    if 'selected_tienda' not in st.session_state:
+        st.session_state.selected_tienda = ""
+    
+    # Función para obtener datos de una tienda por nombre
+    def get_tienda_data(nombre_tienda):
+        for t in TIENDAS_DATA:
+            if t["Nombre de Tienda"] == nombre_tienda:
+                return t
+        return None
+    
+    # --- Formulario principal ---
     with st.form("guias_form", border=False):
         st.markdown("""
         <div class='filter-panel'>
@@ -5374,15 +5615,35 @@ def show_generar_guias():
         st.subheader("🏪 Informacion del Destinatario")
         col5, col6 = st.columns(2)
         
+        # Selección de tienda (autocompletado)
+        tienda_seleccionada = st.selectbox("**Tienda Destino (seleccione para autocompletar):**", tiendas_options, index=0)
+        
+        # Obtener datos si se seleccionó una tienda válida
+        datos_tienda = get_tienda_data(tienda_seleccionada) if tienda_seleccionada else None
+        
         with col5:
-            nombre_destinatario = st.text_input("**Nombre del Destinatario:**", placeholder="Ej: Pepito Paez")
-            telefono_destinatario = st.text_input("**Telefono del Destinatario:**", placeholder="Ej: +593 99 999 9999")
+            if datos_tienda:
+                nombre_destinatario_default = datos_tienda["Contacto"]
+                telefono_destinatario_default = datos_tienda["Teléfono"]
+            else:
+                nombre_destinatario_default = ""
+                telefono_destinatario_default = ""
+            
+            nombre_destinatario = st.text_input("**Nombre del Destinatario:**", value=nombre_destinatario_default, placeholder="Ej: Pepito Paez")
+            telefono_destinatario = st.text_input("**Telefono del Destinatario:**", value=telefono_destinatario_default, placeholder="Ej: +593 99 999 9999")
         
         with col6:
+            if datos_tienda:
+                direccion_destinatario_default = datos_tienda["Dirección"]
+            else:
+                direccion_destinatario_default = ""
+            
             direccion_destinatario = st.text_area("**Direccion del Destinatario:**", 
+                                                value=direccion_destinatario_default,
                                                 placeholder="Ej: Av. Principal #123, Ciudad, Provincia",
                                                 height=100)
-            tienda_destino = st.selectbox("**Tienda Destino (Opcional):**", [""] + tiendas)
+            # No repetir el selectbox de tienda, ya lo tenemos arriba
+            st.caption("💡 Seleccione una tienda arriba para autocompletar los datos del destinatario.")
         
         st.divider()
         
@@ -5426,6 +5687,7 @@ def show_generar_guias():
         
         st.markdown("</div>", unsafe_allow_html=True)
     
+    # --- Lógica de preview y generación (igual que antes) ---
     if preview:
         if not nombre_destinatario or not direccion_destinatario:
             st.warning("Complete al menos nombre y direccion del destinatario para ver la vista previa")
@@ -5442,7 +5704,7 @@ def show_generar_guias():
                 "destinatario": nombre_destinatario,
                 "telefono_destinatario": telefono_destinatario or "No especificado",
                 "direccion_destinatario": direccion_destinatario,
-                "tienda_destino": tienda_destino if tienda_destino else "No especificada",
+                "tienda_destino": tienda_seleccionada if tienda_seleccionada else "No especificada",
                 "url_pedido": url_pedido if url_pedido else "No especificada",
                 "estado": "Vista Previa",
                 "fecha_emision": datetime.now().strftime("%Y-%m-%d"),
@@ -5487,7 +5749,7 @@ def show_generar_guias():
                 "destinatario": nombre_destinatario,
                 "telefono_destinatario": telefono_destinatario or "No especificado",
                 "direccion_destinatario": direccion_destinatario,
-                "tienda_destino": tienda_destino if tienda_destino else "No especificada",
+                "tienda_destino": tienda_seleccionada if tienda_seleccionada else "No especificada",
                 "url_pedido": url_pedido,
                 "estado": "Generada",
                 "fecha_emision": datetime.now().strftime("%Y-%m-%d"),
@@ -5587,7 +5849,7 @@ def show_generar_guias():
 
 def show_control_inventario():
     """Control de inventario"""
-    add_back_button(key="back_inventario")
+    
     show_module_header(
         "📋 Control de Inventario",
         "Gestion de stock en tiempo real"
@@ -5606,7 +5868,7 @@ def show_control_inventario():
 
 def show_reportes_avanzados():
     """Generador de reportes"""
-    add_back_button(key="back_reportes")
+    
     show_module_header(
         "📈 Reportes Avanzados",
         "Analisis y estadisticas ejecutivas"
@@ -5625,7 +5887,7 @@ def show_reportes_avanzados():
 
 def show_configuracion():
     """Configuracion del sistema"""
-    add_back_button(key="back_config")
+   
     show_module_header(
         "⚙️ Configuracion",
         "Personalizacion del sistema ERP"
@@ -5696,10 +5958,42 @@ def show_configuracion():
 # ==============================================================================
 # 14. NAVEGACION PRINCIPAL
 # ==============================================================================
-
 def main():
-    """Funcion principal de la aplicacion"""
     initialize_session_state()
+    
+    # Verificar autenticación (muestra el login si no está autenticado)
+    if not check_password():
+        return
+    
+    # Si llegamos aquí, el usuario está autenticado → mostramos la barra superior
+    show_header()
+    
+    # Control de acceso según rol
+    role = st.session_state.role
+    allowed_modules = {
+        "dashboard_kpis": ["Administrador"],
+        "reconciliacion_v8": ["Administrador"],
+        "auditoria_correos": ["Administrador"],
+        "dashboard_logistico": ["Administrador"],
+        "gestion_equipo": ["Administrador"],
+        "generar_guias": ["Administrador", "Bodega"],
+        "control_inventario": ["Administrador"],
+        "reportes_avanzados": ["Administrador"],
+        "configuracion": ["Administrador"]
+    }
+    
+    current_page = st.session_state.current_page
+    if current_page != "Inicio":
+        if current_page in allowed_modules:
+            if role not in allowed_modules[current_page]:
+                st.error("⛔ Acceso denegado. No tienes permiso para ver este módulo.")
+                st.session_state.current_page = "Inicio"
+                st.rerun()
+        else:
+            if role != "Administrador":
+                st.error("⛔ Acceso denegado.")
+                st.session_state.current_page = "Inicio"
+                st.rerun()
     
     page_mapping = {
         "Inicio": show_main_page,
@@ -5714,13 +6008,8 @@ def main():
         "configuracion": show_configuracion
     }
     
-    current_page = st.session_state.current_page
-    
     if current_page in page_mapping:
         page_mapping[current_page]()
     else:
         st.session_state.current_page = "Inicio"
         st.rerun()
-
-if __name__ == "__main__":
-    main()
