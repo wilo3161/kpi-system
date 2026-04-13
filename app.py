@@ -7748,7 +7748,7 @@ def main():
         "dashboard_kpis": show_dashboard_kpis,
         "reconciliacion_v8": show_reconciliacion_v8,
         "auditoria_correos": show_auditoria_correos,
-        "dashboard_logistico": show_dashboard_logistico,
+        "dashboard_logistico": show_logistica,
         "gestion_equipo": show_gestion_equipo,
         "generar_guias": show_generar_guias,
         "control_inventario": show_control_inventario,
