@@ -16,7 +16,7 @@ import email
 from io import BytesIO
 from email.header import decode_header
 from typing import Dict, List, Any
-from reportlab.lib.pagesizes import letter, landscape  # ← AGREGADO landscape
+from reportlab.lib.pagesizes import letter, landscape, A5  # ← AGREGADO landscape
 from reportlab.platypus import (
     SimpleDocTemplate,
     Paragraph,
@@ -26,7 +26,7 @@ from reportlab.platypus import (
     Image,
 )
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.units import inch
+from reportlab.lib.units import inch, cm
 from reportlab.lib.enums import TA_LEFT, TA_CENTER
 from reportlab.lib.colors import HexColor
 from openpyxl import Workbook
