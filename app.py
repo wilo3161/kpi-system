@@ -5756,22 +5756,24 @@ def mostrar_clasificacion_inteligente():
 # FUNCIÓN PRINCIPAL DEL MÓDULO 9: show_dashboard_logistico
 # ==============================================================================
 
-def show_dashboard_logistico():
+def show_logistica():
     """Dashboard logístico completo."""
-    
-    # Usamos las funciones existentes en lugar de BackButton y ModuleHeader
-    # CORRECCIÓN: Llamada a show_module_header con solo DOS argumentos
+    add_back_button(key="back_logistica")
+    # CORRECCIÓN: show_module_header solo acepta dos argumentos.
+    # El icono ya está incluido en el string del título.
     show_module_header(
         "📦 Dashboard Logístico",
         "Control de transferencias y distribución de mercadería"
     )
-    
+
+    st.markdown('<div class="module-content">', unsafe_allow_html=True)
+
     # Tabs para organizar contenido
     tab1, tab2 = st.tabs(["📊 Transferencias Diarias", "🧠 Clasificación Inteligente"])
-    
+
     with tab1:
         st.markdown("<br>", unsafe_allow_html=True)
-        
+
         # Carga de archivo
         col_u1, col_u2 = st.columns([3, 1])
         with col_u1:
@@ -5783,22 +5785,22 @@ def show_dashboard_logistico():
         with col_u2:
             if st.button("🔄 Limpiar", use_container_width=True):
                 st.rerun()
-        
+
         if uploaded:
             try:
                 df = pd.read_excel(uploaded)
                 st.success(f"✅ Archivo cargado: {len(df)} registros")
-                
+
                 with st.expander("🔍 Vista previa", expanded=False):
                     st.dataframe(df.head(10), use_container_width=True)
-                
+
                 # Verificar columnas requeridas
                 required = ['Secuencial']
                 has_destino = any(c in df.columns for c in ['Sucursal Destino', 'Bodega Destino'])
                 has_cantidad = any(c in df.columns for c in ['Cantidad Prendas', 'Cantidad'])
-                
+
                 missing_required = [c for c in required if c not in df.columns]
-                
+
                 if missing_required:
                     st.error(f"❌ Faltan columnas requeridas: {missing_required}")
                 elif not has_destino:
@@ -5808,25 +5810,25 @@ def show_dashboard_logistico():
                 else:
                     # Procesar
                     resultado = procesar_transferencias(df)
-                    
+
                     # KPIs principales
                     st.markdown("<br>", unsafe_allow_html=True)
                     col_k1, col_k2, col_k3 = st.columns(3)
-                    
+
                     with col_k1:
                         st.metric("📦 Total Unidades", f"{resultado['total_unidades']:,}")
                         st.caption(f"{resultado['total_transferencias']} transferencias")
-                    
+
                     with col_k2:
                         cat_principal = max(resultado['por_categoria'].items(), key=lambda x: x[1])
                         st.metric("🏆 Mayor Categoría", cat_principal[0])
                         st.caption(f"{cat_principal[1]:,} unidades")
-                    
+
                     with col_k3:
                         pct_fundas = (resultado['por_categoria'].get('Fundas', 0) / resultado['total_unidades'] * 100) if resultado['total_unidades'] > 0 else 0
                         st.metric("📎 % Fundas", f"{pct_fundas:.1f}%")
                         st.caption("del total")
-                    
+
                     # Gráfico de distribución
                     st.markdown("<br>", unsafe_allow_html=True)
                     col_g1, col_g2 = st.columns([2, 1])
@@ -5838,7 +5840,7 @@ def show_dashboard_logistico():
                         df_pie = df_pie[df_pie['Unidades'] > 0]
                         fig = px.pie(df_pie, values='Unidades', names='Categoria', hole=0.4, title="Distribución por Categoría")
                         st.plotly_chart(fig, use_container_width=True)
-                    
+
                     with col_g2:
                         st.subheader("Detalle por Categoría")
                         for cat, info in resultado['detalle_categoria'].items():
@@ -5852,7 +5854,7 @@ def show_dashboard_logistico():
                                     </div>
                                 </div>
                                 """, unsafe_allow_html=True)
-                    
+
                     # Tabla detalle
                     st.markdown("<br>", unsafe_allow_html=True)
                     st.subheader("📋 Detalle de Transferencias")
@@ -5860,28 +5862,30 @@ def show_dashboard_logistico():
                     df_detalle = resultado['df_procesado'][['Secuencial', destino_col, 'Cantidad_Entera', 'Categoria']].copy()
                     df_detalle.columns = ['Secuencial', 'Destino', 'Cantidad', 'Categoría']
                     st.dataframe(df_detalle, use_container_width=True, height=300)
-                    
+
                     # Exportar
                     buffer = io.BytesIO()
                     with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
                         df_detalle.to_excel(writer, sheet_name='Detalle', index=False)
                         pd.DataFrame(resultado['detalle_categoria']).T.to_excel(writer, sheet_name='Resumen')
-                    
+
                     st.download_button(
                         "📥 Descargar Excel",
                         buffer.getvalue(),
                         f"transferencias_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
                         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                     )
-            
+
             except Exception as e:
                 st.error(f"❌ Error procesando archivo: {str(e)}")
-        
+
         else:
             st.info("👆 **Sube un archivo Excel** con las columnas: `Secuencial`, `Sucursal Destino`/`Bodega Destino`, `Cantidad Prendas`/`Cantidad`. El sistema clasificará automáticamente en categorías (Price Club, Tiendas, Web, etc.).")
-    
+
     with tab2:
         mostrar_clasificacion_inteligente()
+
+    st.markdown('</div>', unsafe_allow_html=True)
 
 # ==============================================================================
 # 10. MODULO GESTION DE EQUIPO
