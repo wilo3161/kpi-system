@@ -6548,7 +6548,7 @@ def generar_pdf_profesional(guia_data):
         'TituloPrincipal',
         parent=styles['Title'],
         fontName='Helvetica-Bold',
-        fontSize=24,
+        fontSize=30,
         textColor=color_primario,
         alignment=TA_CENTER,
         spaceAfter=2,
@@ -6559,7 +6559,7 @@ def generar_pdf_profesional(guia_data):
         'Subtitulo',
         parent=styles['Normal'],
         fontName='Helvetica',
-        fontSize=12,
+        fontSize=24,
         textColor=color_texto_suave,
         alignment=TA_CENTER,
         spaceAfter=12,
@@ -6570,7 +6570,7 @@ def generar_pdf_profesional(guia_data):
         'Tienda',
         parent=styles['Normal'],
         fontName='Helvetica-Bold',
-        fontSize=16,
+        fontSize=20,
         textColor=color_primario,
         alignment=TA_CENTER,
         spaceAfter=12,
@@ -6722,7 +6722,7 @@ def generar_pdf_profesional(guia_data):
     # Bloque izquierdo: Logo y nombre de marca
     if logo_bytes:
         try:
-            logo_img = Image(io.BytesIO(logo_bytes), width=2.5*cm, height=2.5*cm)
+            logo_img = Image(io.BytesIO(logo_bytes), width=3.5*cm, height=3.5*cm)
             logo_cell = logo_img
         except:
             logo_cell = Paragraph(f"<b>{guia_data['marca']}</b>", marca_style)
