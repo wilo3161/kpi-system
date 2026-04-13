@@ -13,6 +13,7 @@ import qrcode
 import requests
 import imaplib
 import email
+from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_RIGHT
 from io import BytesIO
 from email.header import decode_header
 from typing import Dict, List, Any
