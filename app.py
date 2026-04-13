@@ -4849,7 +4849,11 @@ def show_reconciliacion_v8():
 # ==============================================================================
 # 9. MODULO DASHBOARD LOGISTICO
 # ==============================================================================
-# Actualización de constantes según cambios solicitados
+# ==============================================================================
+# 9. MODULO DASHBOARD LOGISTICO (CORREGIDO)
+# ==============================================================================
+
+# Constantes actualizadas
 TIENDAS_REGULARES = 41          # Se eliminó Cuenca Centro Histórico
 PRICE_CLUBS = 7                  # Se agregaron City Mall y Cuenca Centro Histórico
 TIENDA_WEB = 1
@@ -4862,7 +4866,7 @@ WEB_KEYWORDS = ['WEB', 'TIENDA MOVIL', 'MOVIL']
 FALLAS_KEYWORDS = ['FALLAS']
 VENTAS_MAYOR_KEYWORDS = ['MAYOR', 'MAYORISTA']
 
-# Se eliminó "CUENCA CENTRO HISTORICO" de la lista de tiendas regulares
+# Lista de tiendas regulares (sin Cuenca Centro Histórico)
 TIENDAS_REGULARES_LISTA = [
     'AERO CCI', 'AERO DAULE', 'AERO LAGO AGRIO', 'AERO MALL DEL RIO GYE',
     'AERO PLAYAS', 'AEROPOSTALE 6 DE DICIEMBRE', 'AEROPOSTALE BOMBOLI',
@@ -4885,18 +4889,109 @@ COLORS = {
     'FUNDAS': '#EC4899'
 }
 
-GRADIENTS = {
-    'PRICE CLUB': 'linear-gradient(135deg, #0033A015, #0033A030)',
-    'TIENDAS AEROPOSTALE': 'linear-gradient(135deg, #E4002B15, #E4002B30)',
-    'VENTAS POR MAYOR': 'linear-gradient(135deg, #10B98115, #10B98130)',
-    'TIENDA WEB': 'linear-gradient(135deg, #8B5CF615, #8B5CF630)',
-    'FALLAS': 'linear-gradient(135deg, #F59E0B15, #F59E0B30)',
-    'FUNDAS': 'linear-gradient(135deg, #EC489915, #EC489930)'
+# Categorías para transferencias (necesario para el procesamiento)
+CATEGORIAS_TRANSFERENCIA = {
+    'Price Club': {'icon': '🏬', 'color': '#0033A0'},
+    'Tiendas': {'icon': '🏪', 'color': '#E4002B'},
+    'Ventas por Mayor': {'icon': '🏭', 'color': '#10B981'},
+    'Tienda Web': {'icon': '💻', 'color': '#8B5CF6'},
+    'Fallas': {'icon': '⚠️', 'color': '#F59E0B'},
+    'Fundas': {'icon': '📦', 'color': '#EC4899'}
 }
+
+# ==============================================================================
+# FUNCIONES AUXILIARES PARA TRANSFERENCIAS
+# ==============================================================================
+
+def extraer_entero(valor):
+    """Extrae valor entero de diferentes formatos."""
+    try:
+        if pd.isna(valor):
+            return 0
+        if isinstance(valor, str):
+            valor = valor.replace('.', '').replace(',', '')
+        val = float(valor)
+        if val >= 1000000:
+            return int(val // 1000000)
+        return int(val)
+    except:
+        return 0
+
+
+def clasificar_transferencia(row: pd.Series) -> str:
+    """Clasifica una transferencia según destino y cantidad - VERSIÓN ACTUALIZADA."""
+    sucursal = str(row.get('Sucursal Destino', row.get('Bodega Destino', ''))).upper()
+    cantidad = row.get('Cantidad_Entera', 0)
+    
+    # Condiciones para Price Club (incluye City Mall y Cuenca Centro Histórico)
+    if any(kw in sucursal for kw in PRICE_KEYWORDS) or \
+       'CITY MALL' in sucursal or \
+       'CUENCA CENTRO HISTORICO' in sucursal:
+        return 'Price Club'
+    
+    # Fundas: cantidades grandes y redondas
+    if cantidad >= 500 and cantidad % 100 == 0:
+        return 'Fundas'
+    
+    # Categorías por keywords
+    if any(kw in sucursal for kw in WEB_KEYWORDS):
+        return 'Tienda Web'
+    if any(kw in sucursal for kw in FALLAS_KEYWORDS):
+        return 'Fallas'
+    if any(kw in sucursal for kw in VENTAS_MAYOR_KEYWORDS):
+        return 'Ventas por Mayor'
+    
+    # Verificar en lista de tiendas regulares
+    if any(tienda.upper() in sucursal for tienda in TIENDAS_REGULARES_LISTA):
+        return 'Tiendas'
+    
+    # Palabras clave generales de tiendas
+    tiendas_kw = ['AERO', 'MALL', 'CENTRO', 'SHOPPING', 'PLAZA', 'RIOCENTRO']
+    if any(kw in sucursal for kw in tiendas_kw):
+        return 'Tiendas'
+    
+    # Por defecto
+    return 'Ventas por Mayor'
+
+
+def procesar_transferencias(df: pd.DataFrame) -> Dict:
+    """Procesa DataFrame de transferencias y retorna resumen."""
+    # Limpiar y preparar
+    df = df.dropna(subset=['Secuencial'])
+    df['Secuencial'] = df['Secuencial'].astype(str).str.strip()
+    df = df[df['Secuencial'] != '']
+    
+    # Extraer cantidades enteras
+    cant_col = 'Cantidad Prendas' if 'Cantidad Prendas' in df.columns else 'Cantidad'
+    df['Cantidad_Entera'] = df[cant_col].apply(extraer_entero)
+    
+    # Clasificar
+    df['Categoria'] = df.apply(clasificar_transferencia, axis=1)
+    
+    # Resultados
+    resumen = {
+        'total_unidades': int(df['Cantidad_Entera'].sum()),
+        'total_transferencias': int(df['Secuencial'].nunique()),
+        'por_categoria': {},
+        'detalle_categoria': {},
+        'df_procesado': df
+    }
+    
+    # Calcular por categoría
+    for cat in CATEGORIAS_TRANSFERENCIA.keys():
+        df_cat = df[df['Categoria'] == cat]
+        resumen['por_categoria'][cat] = int(df_cat['Cantidad_Entera'].sum())
+        resumen['detalle_categoria'][cat] = {
+            'cantidad': int(df_cat['Cantidad_Entera'].sum()),
+            'transferencias': int(df_cat['Secuencial'].nunique()),
+            'sucursales_unicas': int(df_cat['Sucursal Destino'].nunique()) if 'Sucursal Destino' in df_cat.columns else 0
+        }
+    
+    return resumen
 
 
 # ==============================================================================
-# MAPAS DE CLASIFICACIÓN TEXTIL - CORREGIDOS
+# CLASIFICACIÓN INTELIGENTE DE PRODUCTOS (TAB2)
 # ==============================================================================
 
 GENDER_MAP = {
@@ -4974,10 +5069,6 @@ SIZE_NORMALIZATION = {
 IGNORE_WORDS = {'AERO', 'OF', 'THE', 'AND', 'IN', 'WITH', 'FOR', 'BY', 'ON', 'AT', 'TO', 'FROM'}
 
 
-# ==============================================================================
-# CLASE TEXTILE CLASSIFIER - CORREGIDA CON EXTRACCIÓN MEJORADA
-# ==============================================================================
-
 class TextileClassifier:
     """Clasificador inteligente para productos textiles - Versión corregida"""
     
@@ -5031,61 +5122,48 @@ class TextileClassifier:
         return self._clean_classification(classification)
     
     def _extract_gender_phrase(self, words):
-        """Extrae la frase de género completa (ej: 'AERO GIRLS') y género normalizado."""
         if not words:
             return '', 'Unisex'
         
-        # Caso especial: "AERO GIRLS", "AERO WOMEN", etc.
         if len(words) >= 2 and words[0] == 'AERO' and words[1] in self.gender_map:
             phrase = f"{words[0]} {words[1]}"
             norm = self.gender_map[words[1]]
             return phrase, norm
         
-        # Caso: Primera palabra es género
         if words[0] in self.gender_map:
             return words[0], self.gender_map[words[0]]
         
-        # Buscar primera palabra que sea género
         for i, w in enumerate(words):
             if w in self.gender_map:
-                # La frase de género incluye desde el inicio hasta esta palabra
                 phrase = ' '.join(words[:i+1])
                 return phrase, self.gender_map[w]
         
-        # Si no hay género, usar primera palabra como raw y Unisex
         return words[0], 'Unisex'
     
     def _detect_color_index(self, words):
-        """Retorna (índice, color_normalizado) o (None, 'No Especificado')."""
         for i, w in enumerate(words):
             if w in self.color_map:
                 return i, self.color_map[w]
-            # Búsqueda parcial para colores compuestos
             for color_key, color_val in self.color_map.items():
                 if color_key in w and len(w) < len(color_key) + 3:
                     return i, color_val
         return None, 'No Especificado'
     
     def _detect_size_index(self, words):
-        """Retorna (índice, talla_normalizada) o (None, 'Única')."""
         for i, w in enumerate(words):
-            # Buscar talla exacta
             if w in self.size_hierarchy:
                 return i, self._normalize_size(w)
-            # Buscar talla con normalización
             if w in self.size_norm:
                 return i, self.size_norm[w]
         return None, 'Única'
     
     def _extract_description(self, words, gender_phrase, color_idx, size_idx):
-        """Extrae descripción entre género y color/talla."""
         if not gender_phrase:
             return []
         
         gender_words = gender_phrase.split()
         start_idx = len(gender_words)
         
-        # Determinar fin: el menor índice entre color y talla
         end_candidates = []
         if color_idx is not None:
             end_candidates.append(color_idx)
@@ -5101,17 +5179,14 @@ class TextileClassifier:
             return []
         
         desc_words = words[start_idx:end_idx]
-        # Filtrar palabras irrelevantes
         desc_words = [w for w in desc_words if w not in self.ignore_words and len(w) > 1]
         
         return desc_words
     
     def _normalize_size(self, size):
-        """Normaliza tallas a formato estándar."""
         return self.size_norm.get(size, size)
     
     def _detect_category(self, words):
-        """Detecta categoría y subcategoría del producto."""
         categoria = 'General'
         subcategoria = ''
         found_categories = []
@@ -5121,14 +5196,13 @@ class TextileClassifier:
                 found_categories.append(self.category_map[word])
         
         if found_categories:
-            # Priorizar categorías principales
             priority = ['Camiseta', 'Pantalón', 'Jeans', 'Vestido', 'Chaqueta', 
                        'Sudadera', 'Top', 'Short', 'Polo']
             for p in priority:
                 if p in found_categories:
                     categoria = p
                     others = [c for c in found_categories if c != p]
-                    subcategoria = ' / '.join(others[:2])  # Máximo 2 subcategorías
+                    subcategoria = ' / '.join(others[:2])
                     break
             else:
                 categoria = found_categories[0]
@@ -5138,7 +5212,6 @@ class TextileClassifier:
         return {'categoria': categoria, 'subcategoria': subcategoria}
     
     def _detect_style(self, words):
-        """Detecta material y estilo del producto."""
         material = ''
         estilo = ''
         
@@ -5165,8 +5238,6 @@ class TextileClassifier:
         return {'material': material, 'estilo': estilo}
     
     def _clean_classification(self, classification):
-        """Limpia y normaliza la clasificación final."""
-        # Asegurar valores por defecto
         if not classification['Genero']:
             classification['Genero'] = 'Unisex'
         if not classification['Categoria']:
@@ -5174,7 +5245,6 @@ class TextileClassifier:
         if not classification['Descripcion']:
             classification['Descripcion'] = '-'
         
-        # Limpiar strings
         for key in classification:
             if isinstance(classification[key], str):
                 classification[key] = classification[key].strip()
@@ -5182,7 +5252,6 @@ class TextileClassifier:
         return classification
     
     def _get_empty_classification(self):
-        """Retorna clasificación vacía por defecto."""
         return {
             'Genero_Raw': '',
             'Genero': 'Unisex',
@@ -5203,9 +5272,7 @@ class DataProcessor:
         self.classifier = TextileClassifier()
     
     def process_excel_file(self, file) -> pd.DataFrame:
-        """Procesa archivo Excel de transferencias y clasifica productos."""
         try:
-            # Detectar extensión y leer
             if hasattr(file, 'name'):
                 filename = file.name.lower()
                 if filename.endswith('.csv'):
@@ -5215,11 +5282,8 @@ class DataProcessor:
             else:
                 df = pd.read_excel(file)
             
-            # CORRECCIÓN: Mantener columns como Index de pandas, no convertir a lista
-            # Normalizar nombres de columnas a mayúsculas y limpiar espacios
             df.columns = df.columns.str.strip().str.upper()
             
-            # Buscar columna de producto (columna I típicamente)
             product_col = None
             product_aliases = ['PRODUCTO', 'ITEM', 'DESCRIPCION', 'DESCRIPTION', 
                              'ARTICULO', 'PRODUCT', 'NOMBRE', 'NAME', 'ITEM DESCRIPTION']
@@ -5231,7 +5295,6 @@ class DataProcessor:
                     break
             
             if product_col is None:
-                # Si no se encuentra, usar columna que tenga texto descriptivo
                 for col in df.columns:
                     if len(df) > 0:
                         sample = str(df[col].iloc[0])
@@ -5240,16 +5303,12 @@ class DataProcessor:
                             break
             
             if product_col is None:
-                product_col = df.columns[0]  # Fallback a primera columna
+                product_col = df.columns[0]
             
-            # Renombrar para estandarizar
             df = df.rename(columns={product_col: 'PRODUCTO'})
-            
-            # Limpiar datos
             df = df.dropna(subset=['PRODUCTO'])
             df['PRODUCTO'] = df['PRODUCTO'].astype(str).str.strip()
             
-            # Detectar columnas de bodega/tienda
             bodega_col = None
             bodega_aliases = ['BODEGA RECIBE', 'BODEGA DESTINO', 'SUCURSAL DESTINO', 
                             'DESTINO', 'BODEGA', 'SUCURSAL', 'TIENDA', 'STORE']
@@ -5262,7 +5321,6 @@ class DataProcessor:
             if bodega_col:
                 df = df.rename(columns={bodega_col: 'BODEGA_RECIBE'})
             
-            # Detectar columna de cantidad
             cant_col = None
             cant_aliases = ['CANTIDAD', 'QUANTITY', 'UNIDADES', 'QTY', 'CANT']
             for alias in cant_aliases:
@@ -5273,13 +5331,11 @@ class DataProcessor:
             
             if cant_col:
                 df = df.rename(columns={cant_col: 'CANTIDAD'})
-                # Limpiar cantidad
                 df['CANTIDAD'] = pd.to_numeric(
                     df['CANTIDAD'].astype(str).str.replace(',', '').str.replace(' ', ''), 
                     errors='coerce'
                 ).fillna(0)
             
-            # Detectar fecha
             fecha_col = None
             fecha_aliases = ['FECHA', 'DATE', 'DIA', 'DAY']
             for alias in fecha_aliases:
@@ -5292,14 +5348,11 @@ class DataProcessor:
                 df = df.rename(columns={fecha_col: 'FECHA'})
                 df['FECHA'] = pd.to_datetime(df['FECHA'], errors='coerce', dayfirst=True)
             
-            # Verificar que tenemos datos para clasificar
             if df.empty or 'PRODUCTO' not in df.columns:
                 st.error("No se encontraron datos válidos para clasificar.")
                 return pd.DataFrame()
             
-            # Clasificar productos
             df = self._classify_products(df)
-            
             return df
             
         except Exception as e:
@@ -5309,118 +5362,19 @@ class DataProcessor:
             return pd.DataFrame()
     
     def _classify_products(self, df):
-        """Clasifica todos los productos del DataFrame."""
         classifications = []
-        
         for prod in df['PRODUCTO']:
             classifications.append(self.classifier.classify_product(prod))
         
         class_df = pd.DataFrame(classifications)
         
-        # Eliminar columnas duplicadas si existen
         cols_to_drop = [col for col in class_df.columns if col in df.columns and col != 'PRODUCTO']
         if cols_to_drop:
             df = df.drop(columns=cols_to_drop)
         
-        # Concatenar resultados
         result = pd.concat([df.reset_index(drop=True), class_df.reset_index(drop=True)], axis=1)
         return result
 
-
-# ==============================================================================
-# FUNCIONES AUXILIARES ORIGINALES
-# ==============================================================================
-
-def extraer_entero(valor):
-    """Extrae valor entero de diferentes formatos."""
-    try:
-        if pd.isna(valor):
-            return 0
-        if isinstance(valor, str):
-            valor = valor.replace('.', '').replace(',', '')
-        val = float(valor)
-        if val >= 1000000:
-            return int(val // 1000000)
-        return int(val)
-    except:
-        return 0
-
-
-def clasificar_transferencia(row: pd.Series) -> str:
-    """Clasifica una transferencia según destino y cantidad - VERSIÓN ACTUALIZADA."""
-    sucursal = str(row.get('Sucursal Destino', row.get('Bodega Destino', ''))).upper()
-    cantidad = row.get('Cantidad_Entera', 0)
-    
-    # Nuevas condiciones para Price Club (incluye City Mall y Cuenca Centro Histórico)
-    if any(kw in sucursal for kw in PRICE_KEYWORDS) or \
-       'CITY MALL' in sucursal or \
-       'CUENCA CENTRO HISTORICO' in sucursal:
-        return 'Price Club'
-    
-    # Fundas: cantidades grandes y redondas
-    if cantidad >= 500 and cantidad % 100 == 0:
-        return 'Fundas'
-    
-    # Categorías por keywords
-    if any(kw in sucursal for kw in WEB_KEYWORDS):
-        return 'Tienda Web'
-    if any(kw in sucursal for kw in FALLAS_KEYWORDS):
-        return 'Fallas'
-    if any(kw in sucursal for kw in VENTAS_MAYOR_KEYWORDS):
-        return 'Ventas por Mayor'
-    
-    # Verificar en lista de tiendas regulares (sin Cuenca Centro Historico)
-    if any(tienda.upper() in sucursal for tienda in TIENDAS_REGULARES_LISTA):
-        return 'Tiendas'
-    
-    # Palabras clave generales de tiendas
-    tiendas_kw = ['AERO', 'MALL', 'CENTRO', 'SHOPPING', 'PLAZA', 'RIOCENTRO']
-    if any(kw in sucursal for kw in tiendas_kw):
-        return 'Tiendas'
-    
-    # Por defecto
-    return 'Ventas por Mayor'
-
-
-def procesar_transferencias(df: pd.DataFrame) -> Dict:
-    """Procesa DataFrame de transferencias y retorna resumen."""
-    # Limpiar y preparar
-    df = df.dropna(subset=['Secuencial'])
-    df['Secuencial'] = df['Secuencial'].astype(str).str.strip()
-    df = df[df['Secuencial'] != '']
-    
-    # Extraer cantidades enteras
-    cant_col = 'Cantidad Prendas' if 'Cantidad Prendas' in df.columns else 'Cantidad'
-    df['Cantidad_Entera'] = df[cant_col].apply(extraer_entero)
-    
-    # Clasificar
-    df['Categoria'] = df.apply(clasificar_transferencia, axis=1)
-    
-    # Resultados
-    resumen = {
-        'total_unidades': int(df['Cantidad_Entera'].sum()),
-        'total_transferencias': int(df['Secuencial'].nunique()),
-        'por_categoria': {},
-        'detalle_categoria': {},
-        'df_procesado': df
-    }
-    
-    # Calcular por categoría
-    for cat in CATEGORIAS_TRANSFERENCIA.keys():
-        df_cat = df[df['Categoria'] == cat]
-        resumen['por_categoria'][cat] = int(df_cat['Cantidad_Entera'].sum())
-        resumen['detalle_categoria'][cat] = {
-            'cantidad': int(df_cat['Cantidad_Entera'].sum()),
-            'transferencias': int(df_cat['Secuencial'].nunique()),
-            'sucursales_unicas': int(df_cat['Sucursal Destino'].nunique()) if 'Sucursal Destino' in df_cat.columns else 0
-        }
-    
-    return resumen
-
-
-# ==============================================================================
-# DASHBOARD DE CLASIFICACIÓN INTELIGENTE (TAB2) - CORREGIDO CON TABLAS DINÁMICAS
-# ==============================================================================
 
 def mostrar_clasificacion_inteligente():
     """Dashboard de Clasificación Inteligente con tablas dinámicas por talla, color y tienda."""
@@ -5428,7 +5382,6 @@ def mostrar_clasificacion_inteligente():
     st.markdown("### 📂 Cargar archivo de productos para clasificación inteligente")
     st.markdown("Soporta archivos: **Excel (.xlsx, .xls)** y **CSV (.csv)**")
     
-    # Inicializar estado
     if 'clasificacion_data' not in st.session_state:
         st.session_state.clasificacion_data = pd.DataFrame()
     if 'clasificacion_loaded' not in st.session_state:
@@ -5436,28 +5389,23 @@ def mostrar_clasificacion_inteligente():
     
     processor = DataProcessor()
     
-    # --- SECCIÓN DE CARGA ---
     col_up1, col_up2 = st.columns([3, 1])
-    
     with col_up1:
         uploaded_file = st.file_uploader(
             "Selecciona tu archivo",
             type=['xlsx', 'xls', 'csv'],
             key="clasificador_file_uploader"
         )
-    
     with col_up2:
         if st.button("🔄 Limpiar datos", key="btn_limpiar_clasificacion", use_container_width=True):
             st.session_state.clasificacion_data = pd.DataFrame()
             st.session_state.clasificacion_loaded = False
             st.rerun()
     
-    # --- PROCESAMIENTO ---
     if uploaded_file is not None:
         with st.spinner("🔍 Procesando y clasificando productos..."):
             try:
                 df_procesado = processor.process_excel_file(uploaded_file)
-                
                 if not df_procesado.empty:
                     st.session_state.clasificacion_data = df_procesado
                     st.session_state.clasificacion_loaded = True
@@ -5465,17 +5413,13 @@ def mostrar_clasificacion_inteligente():
                 else:
                     st.error("❌ El archivo no contiene datos válidos para clasificar.")
                     st.session_state.clasificacion_loaded = False
-            
             except Exception as e:
                 st.error(f"❌ Error al procesar: {str(e)}")
                 st.session_state.clasificacion_loaded = False
     
-    # --- ESTADO VACÍO ---
     if not st.session_state.clasificacion_loaded:
         st.info("👆 **Sube un archivo** para comenzar el análisis.")
-        
         with st.expander("📋 Ver formato esperado"):
-            st.write("El archivo debe contener una columna con nombres de productos como:")
             ejemplo_df = pd.DataFrame({
                 'PRODUCTO': [
                     'AERO GIRLS SS FASHION GRAPHICS TENDER YELLOW XLARGE BABY TEE',
@@ -5493,20 +5437,16 @@ def mostrar_clasificacion_inteligente():
             - **Talla**: "XLARGE" → XL
             """)
         
-        # Demo
         st.markdown("---")
         st.subheader("🧠 Demo: Probar Clasificador")
-        
         producto_demo = st.text_input(
             "Ingresa nombre de producto",
             "AERO GIRLS SS FASHION GRAPHICS TENDER YELLOW XLARGE BABY TEE",
             key="input_demo_clasificador"
         )
-        
         if st.button("🔍 Clasificar", key="btn_demo_clasificar"):
             classifier = TextileClassifier()
             resultado = classifier.classify_product(producto_demo)
-            
             st.markdown("#### 🏷️ Resultado:")
             cols = st.columns(4)
             campos = [
@@ -5519,28 +5459,19 @@ def mostrar_clasificacion_inteligente():
                 ("Material", resultado['Material'], "🧵"),
                 ("Estilo", resultado['Estilo'], "✨")
             ]
-            
             for i, (label, value, icon) in enumerate(campos):
                 with cols[i % 4]:
                     st.metric(f"{icon} {label}", value if value else "N/A")
-        
         return
     
-    # --- DASHBOARD CON DATOS ---
     data = st.session_state.clasificacion_data
-    
     if data.empty:
         st.error("No hay datos para mostrar.")
         return
     
-    # KPIs principales
-    st.markdown("---")
-    st.subheader("📊 Resumen Ejecutivo")
-    
     total_unidades = int(data['CANTIDAD'].sum()) if 'CANTIDAD' in data.columns else len(data)
     
     col_k1, col_k2, col_k3, col_k4, col_k5 = st.columns(5)
-    
     with col_k1:
         st.metric("📦 Total Productos", f"{len(data):,}")
     with col_k2:
@@ -5558,27 +5489,16 @@ def mostrar_clasificacion_inteligente():
             talla_dist = data['Talla'].value_counts()
             st.metric("📏 Talla Top", talla_dist.index[0] if len(talla_dist) > 0 else "N/A")
     
-    # --- TABLAS DINÁMICAS POR DIMENSIONES ---
     st.markdown("---")
     st.subheader("📈 Análisis por Dimensiones")
     
-    # Crear tabs para cada dimensión
     tab_dims = st.tabs(["🏪 Por Tienda/Bodega", "🎨 Por Color", "📏 Por Talla", "👤 Por Género", "📋 Tabla Dinámica"])
     
-    # Preparar datos base para análisis
-    analysis_cols = []
-    if 'BODEGA_RECIBE' in data.columns:
-        analysis_cols.append('BODEGA_RECIBE')
+    cantidad_col = 'CANTIDAD' if 'CANTIDAD' in data.columns else None
     
-    if 'CANTIDAD' in data.columns:
-        cantidad_col = 'CANTIDAD'
-    else:
-        cantidad_col = None
-    
-    # TAB 1: Por Tienda/Bodega
+    # Tab 1: Por Tienda/Bodega
     with tab_dims[0]:
         st.markdown("### 🏪 Análisis por Tienda/Bodega")
-        
         bodega_col = None
         for col in ['BODEGA_RECIBE', 'Bodega Recibe', 'Bodega Destino', 'Sucursal Destino']:
             if col in data.columns:
@@ -5586,23 +5506,17 @@ def mostrar_clasificacion_inteligente():
                 break
         
         if bodega_col:
-            # Agrupación por tienda
-            tienda_stats = data.groupby(bodega_col).agg({
-                cantidad_col: ['sum', 'count'] if cantidad_col else 'count'
-            }).reset_index()
-            
             if cantidad_col:
+                tienda_stats = data.groupby(bodega_col).agg({cantidad_col: 'sum', 'PRODUCTO': 'count'}).reset_index()
                 tienda_stats.columns = ['Tienda', 'Unidades', 'Productos']
                 tienda_stats = tienda_stats.sort_values('Unidades', ascending=False)
             else:
+                tienda_stats = data.groupby(bodega_col).size().reset_index(name='Productos')
                 tienda_stats.columns = ['Tienda', 'Productos']
                 tienda_stats = tienda_stats.sort_values('Productos', ascending=False)
             
-            # Mostrar top tiendas
             col_t1, col_t2 = st.columns([2, 1])
-            
             with col_t1:
-                st.markdown("#### Top 15 Tiendas por Volumen")
                 fig = px.bar(
                     tienda_stats.head(15),
                     x='Tienda',
@@ -5613,280 +5527,117 @@ def mostrar_clasificacion_inteligente():
                 )
                 fig.update_layout(xaxis_tickangle=-45)
                 st.plotly_chart(fig, use_container_width=True)
-            
             with col_t2:
-                st.markdown("#### Detalle por Tienda")
-                st.dataframe(
-                    tienda_stats.head(20).style.format({
-                        'Unidades': '{:,}',
-                        'Productos': '{:,}'
-                    }),
-                    use_container_width=True,
-                    height=500
-                )
+                st.dataframe(tienda_stats.head(20), use_container_width=True, height=500)
             
-            # Tabla cruzada: Tienda vs Género
-            if 'Genero' in data.columns:
-                st.markdown("#### 📊 Tabla Cruzada: Tienda vs Género")
+            if 'Genero' in data.columns and cantidad_col:
                 pivot_tienda_genero = pd.pivot_table(
-                    data,
-                    values=cantidad_col if cantidad_col else 'PRODUCTO',
-                    index=bodega_col,
-                    columns='Genero',
-                    aggfunc='sum' if cantidad_col else 'count',
-                    fill_value=0,
-                    margins=True,
-                    margins_name='TOTAL'
+                    data, values=cantidad_col, index=bodega_col, columns='Genero',
+                    aggfunc='sum', fill_value=0, margins=True, margins_name='TOTAL'
                 )
                 st.dataframe(pivot_tienda_genero.style.format('{:,.0f}'), use_container_width=True)
         else:
             st.warning("No se encontró columna de tienda/bodega en los datos.")
     
-    # TAB 2: Por Color
+    # Tab 2: Por Color
     with tab_dims[1]:
         st.markdown("### 🎨 Análisis por Color")
-        
         if 'Color' in data.columns:
-            color_stats = data.groupby('Color').agg({
-                cantidad_col: ['sum', 'count'] if cantidad_col else 'count',
-                'PRODUCTO': 'nunique'
-            }).reset_index()
-            
             if cantidad_col:
+                color_stats = data.groupby('Color').agg({cantidad_col: ['sum', 'count'], 'PRODUCTO': 'nunique'}).reset_index()
                 color_stats.columns = ['Color', 'Unidades', 'Productos', 'SKUs Únicos']
+                color_stats = color_stats.sort_values('Unidades', ascending=False)
             else:
+                color_stats = data.groupby('Color').agg({'PRODUCTO': ['count', 'nunique']}).reset_index()
                 color_stats.columns = ['Color', 'Productos', 'SKUs Únicos']
-            
-            color_stats = color_stats.sort_values('Unidades' if cantidad_col else 'Productos', ascending=False)
+                color_stats = color_stats.sort_values('Productos', ascending=False)
             
             col_c1, col_c2 = st.columns([2, 1])
-            
             with col_c1:
-                st.markdown("#### Distribución por Color")
-                fig = px.pie(
-                    color_stats.head(15),
-                    values='Unidades' if cantidad_col else 'Productos',
-                    names='Color',
-                    title="Top 15 Colores",
-                    hole=0.4
-                )
+                fig = px.pie(color_stats.head(15), values='Unidades' if cantidad_col else 'Productos', names='Color', title="Top 15 Colores", hole=0.4)
                 st.plotly_chart(fig, use_container_width=True)
-            
             with col_c2:
-                st.markdown("#### Detalle por Color")
-                st.dataframe(
-                    color_stats.style.format({
-                        'Unidades': '{:,}',
-                        'Productos': '{:,}',
-                        'SKUs Únicos': '{:,}'
-                    }),
-                    use_container_width=True,
-                    height=400
-                )
+                st.dataframe(color_stats.style.format({'Unidades': '{:,}', 'Productos': '{:,}', 'SKUs Únicos': '{:,}'}), use_container_width=True, height=400)
             
-            # Tabla cruzada: Color vs Talla
-            if 'Talla' in data.columns:
-                st.markdown("#### 📊 Tabla Cruzada: Color vs Talla")
+            if 'Talla' in data.columns and cantidad_col:
                 pivot_color_talla = pd.pivot_table(
-                    data,
-                    values=cantidad_col if cantidad_col else 'PRODUCTO',
-                    index='Color',
-                    columns='Talla',
-                    aggfunc='sum' if cantidad_col else 'count',
-                    fill_value=0,
-                    margins=True,
-                    margins_name='TOTAL'
+                    data, values=cantidad_col, index='Color', columns='Talla',
+                    aggfunc='sum', fill_value=0, margins=True, margins_name='TOTAL'
                 )
                 st.dataframe(pivot_color_talla.style.format('{:,.0f}'), use_container_width=True)
-            
-            # Tabla cruzada: Color vs Género
-            if 'Genero' in data.columns:
-                st.markdown("#### 📊 Tabla Cruzada: Color vs Género")
-                pivot_color_genero = pd.pivot_table(
-                    data,
-                    values=cantidad_col if cantidad_col else 'PRODUCTO',
-                    index='Color',
-                    columns='Genero',
-                    aggfunc='sum' if cantidad_col else 'count',
-                    fill_value=0,
-                    margins=True,
-                    margins_name='TOTAL'
-                )
-                st.dataframe(pivot_color_genero.style.format('{:,.0f}'), use_container_width=True)
         else:
             st.warning("No hay datos de color disponibles.")
     
-    # TAB 3: Por Talla
+    # Tab 3: Por Talla
     with tab_dims[2]:
         st.markdown("### 📏 Análisis por Talla")
-        
         if 'Talla' in data.columns:
-            # Normalizar orden de tallas
             talla_order = ['2XS', 'XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', 'Única']
-            
-            talla_stats = data.groupby('Talla').agg({
-                cantidad_col: ['sum', 'count'] if cantidad_col else 'count',
-                'PRODUCTO': 'nunique'
-            }).reset_index()
-            
             if cantidad_col:
+                talla_stats = data.groupby('Talla').agg({cantidad_col: ['sum', 'count'], 'PRODUCTO': 'nunique'}).reset_index()
                 talla_stats.columns = ['Talla', 'Unidades', 'Productos', 'SKUs Únicos']
             else:
+                talla_stats = data.groupby('Talla').agg({'PRODUCTO': ['count', 'nunique']}).reset_index()
                 talla_stats.columns = ['Talla', 'Productos', 'SKUs Únicos']
             
-            # Ordenar por jerarquía de tallas
-            talla_stats['Talla_Order'] = talla_stats['Talla'].apply(
-                lambda x: talla_order.index(x) if x in talla_order else 999
-            )
+            talla_stats['Talla_Order'] = talla_stats['Talla'].apply(lambda x: talla_order.index(x) if x in talla_order else 999)
             talla_stats = talla_stats.sort_values('Talla_Order')
             
             col_ta1, col_ta2 = st.columns([2, 1])
-            
             with col_ta1:
-                st.markdown("#### Distribución por Talla")
-                fig = px.bar(
-                    talla_stats,
-                    x='Talla',
-                    y='Unidades' if cantidad_col else 'Productos',
-                    title="Distribución por Talla",
-                    color='Unidades' if cantidad_col else 'Productos',
-                    color_continuous_scale='Plasma'
-                )
+                fig = px.bar(talla_stats, x='Talla', y='Unidades' if cantidad_col else 'Productos', title="Distribución por Talla", color='Unidades' if cantidad_col else 'Productos', color_continuous_scale='Plasma')
                 st.plotly_chart(fig, use_container_width=True)
-            
             with col_ta2:
-                st.markdown("#### Detalle por Talla")
-                st.dataframe(
-                    talla_stats[['Talla', 'Unidades' if cantidad_col else 'Productos', 'SKUs Únicos']].style.format({
-                        'Unidades': '{:,}',
-                        'Productos': '{:,}',
-                        'SKUs Únicos': '{:,}'
-                    }),
-                    use_container_width=True,
-                    height=400
-                )
+                st.dataframe(talla_stats[['Talla', 'Unidades' if cantidad_col else 'Productos', 'SKUs Únicos']].style.format({'Unidades': '{:,}', 'Productos': '{:,}', 'SKUs Únicos': '{:,}'}), use_container_width=True, height=400)
             
-            # Tabla cruzada: Talla vs Género
-            if 'Genero' in data.columns:
-                st.markdown("#### 📊 Tabla Cruzada: Talla vs Género")
+            if 'Genero' in data.columns and cantidad_col:
                 pivot_talla_genero = pd.pivot_table(
-                    data,
-                    values=cantidad_col if cantidad_col else 'PRODUCTO',
-                    index='Talla',
-                    columns='Genero',
-                    aggfunc='sum' if cantidad_col else 'count',
-                    fill_value=0,
-                    margins=True,
-                    margins_name='TOTAL'
+                    data, values=cantidad_col, index='Talla', columns='Genero',
+                    aggfunc='sum', fill_value=0, margins=True, margins_name='TOTAL'
                 )
-                # Reordenar índice
-                pivot_talla_genero = pivot_talla_genero.reindex(
-                    [t for t in talla_order if t in pivot_talla_genero.index] + 
-                    [t for t in pivot_talla_genero.index if t not in talla_order]
-                )
+                pivot_talla_genero = pivot_talla_genero.reindex([t for t in talla_order if t in pivot_talla_genero.index] + [t for t in pivot_talla_genero.index if t not in talla_order])
                 st.dataframe(pivot_talla_genero.style.format('{:,.0f}'), use_container_width=True)
-            
-            # Tabla cruzada: Talla vs Categoría
-            if 'Categoria' in data.columns:
-                st.markdown("#### 📊 Tabla Cruzada: Talla vs Categoría")
-                pivot_talla_cat = pd.pivot_table(
-                    data,
-                    values=cantidad_col if cantidad_col else 'PRODUCTO',
-                    index='Talla',
-                    columns='Categoria',
-                    aggfunc='sum' if cantidad_col else 'count',
-                    fill_value=0,
-                    margins=True,
-                    margins_name='TOTAL'
-                )
-                st.dataframe(pivot_talla_cat.style.format('{:,.0f}'), use_container_width=True)
         else:
             st.warning("No hay datos de talla disponibles.")
     
-    # TAB 4: Por Género
+    # Tab 4: Por Género
     with tab_dims[3]:
         st.markdown("### 👤 Análisis por Género")
-        
         if 'Genero' in data.columns:
-            genero_stats = data.groupby('Genero').agg({
-                cantidad_col: ['sum', 'count'] if cantidad_col else 'count',
-                'PRODUCTO': 'nunique'
-            }).reset_index()
-            
             if cantidad_col:
+                genero_stats = data.groupby('Genero').agg({cantidad_col: ['sum', 'count'], 'PRODUCTO': 'nunique'}).reset_index()
                 genero_stats.columns = ['Género', 'Unidades', 'Productos', 'SKUs Únicos']
+                genero_stats = genero_stats.sort_values('Unidades', ascending=False)
             else:
+                genero_stats = data.groupby('Genero').agg({'PRODUCTO': ['count', 'nunique']}).reset_index()
                 genero_stats.columns = ['Género', 'Productos', 'SKUs Únicos']
-            
-            genero_stats = genero_stats.sort_values('Unidades' if cantidad_col else 'Productos', ascending=False)
+                genero_stats = genero_stats.sort_values('Productos', ascending=False)
             
             col_g1, col_g2 = st.columns([2, 1])
-            
             with col_g1:
-                st.markdown("#### Distribución por Género")
-                fig = px.pie(
-                    genero_stats,
-                    values='Unidades' if cantidad_col else 'Productos',
-                    names='Género',
-                    title="Distribución por Género",
-                    color_discrete_sequence=['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7']
-                )
+                fig = px.pie(genero_stats, values='Unidades' if cantidad_col else 'Productos', names='Género', title="Distribución por Género", color_discrete_sequence=['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7'])
                 fig.update_traces(textposition='inside', textinfo='percent+label')
                 st.plotly_chart(fig, use_container_width=True)
-            
             with col_g2:
-                st.markdown("#### Detalle por Género")
-                st.dataframe(
-                    genero_stats.style.format({
-                        'Unidades': '{:,}',
-                        'Productos': '{:,}',
-                        'SKUs Únicos': '{:,}'
-                    }),
-                    use_container_width=True,
-                    height=300
-                )
+                st.dataframe(genero_stats.style.format({'Unidades': '{:,}', 'Productos': '{:,}', 'SKUs Únicos': '{:,}'}), use_container_width=True, height=300)
             
-            # Análisis por género y categoría
-            if 'Categoria' in data.columns:
-                st.markdown("#### 📊 Distribución: Género vs Categoría")
+            if 'Categoria' in data.columns and cantidad_col:
                 pivot_gen_cat = pd.pivot_table(
-                    data,
-                    values=cantidad_col if cantidad_col else 'PRODUCTO',
-                    index='Genero',
-                    columns='Categoria',
-                    aggfunc='sum' if cantidad_col else 'count',
-                    fill_value=0,
-                    margins=True,
-                    margins_name='TOTAL'
+                    data, values=cantidad_col, index='Genero', columns='Categoria',
+                    aggfunc='sum', fill_value=0, margins=True, margins_name='TOTAL'
                 )
                 st.dataframe(pivot_gen_cat.style.format('{:,.0f}'), use_container_width=True)
                 
-                # Gráfico de barras apiladas
-                gen_cat_data = data.groupby(['Genero', 'Categoria']).agg({
-                    cantidad_col: 'sum' if cantidad_col else 'count'
-                }).reset_index()
+                gen_cat_data = data.groupby(['Genero', 'Categoria']).agg({cantidad_col: 'sum'}).reset_index()
                 gen_cat_data.columns = ['Género', 'Categoría', 'Cantidad']
-                
-                fig_stack = px.bar(
-                    gen_cat_data,
-                    x='Género',
-                    y='Cantidad',
-                    color='Categoría',
-                    title="Distribución por Género y Categoría",
-                    barmode='stack'
-                )
+                fig_stack = px.bar(gen_cat_data, x='Género', y='Cantidad', color='Categoría', title="Distribución por Género y Categoría", barmode='stack')
                 st.plotly_chart(fig_stack, use_container_width=True)
         else:
             st.warning("No hay datos de género disponibles.")
     
-    # TAB 5: Tabla Dinámica Personalizada
+    # Tab 5: Tabla Dinámica Personalizada
     with tab_dims[4]:
         st.markdown("### 📋 Tabla Dinámica Personalizada")
-        
-        st.markdown("#### Configura tu propia tabla cruzada:")
-        
-        col_cfg1, col_cfg2, col_cfg3 = st.columns(3)
-        
         available_dims = []
         if 'Genero' in data.columns:
             available_dims.append('Genero')
@@ -5899,107 +5650,73 @@ def mostrar_clasificacion_inteligente():
         if bodega_col:
             available_dims.append('Tienda/Bodega')
         
-        with col_cfg1:
-            filas = st.selectbox("Filas (índice)", available_dims, index=0 if available_dims else None)
-        with col_cfg2:
-            columnas = st.selectbox("Columnas", available_dims, index=min(1, len(available_dims)-1) if len(available_dims) > 1 else 0)
-        with col_cfg3:
-            valores = st.selectbox(
-                "Valores a agregar",
-                ['Cantidad (suma)' if cantidad_col else 'Conteo de productos', 'Conteo de productos', 'SKUs únicos'],
-                index=0
-            )
-        
-        if filas and columnas and filas != columnas:
-            # Mapear selecciones
-            fila_col = 'BODEGA_RECIBE' if filas == 'Tienda/Bodega' and 'BODEGA_RECIBE' in data.columns else \
-                       'Bodega Recibe' if filas == 'Tienda/Bodega' and 'Bodega Recibe' in data.columns else filas
+        if available_dims:
+            col_cfg1, col_cfg2, col_cfg3 = st.columns(3)
+            filas = col_cfg1.selectbox("Filas (índice)", available_dims, index=0)
+            columnas = col_cfg2.selectbox("Columnas", available_dims, index=min(1, len(available_dims)-1) if len(available_dims) > 1 else 0)
+            valores = col_cfg3.selectbox("Valores a agregar", ['Cantidad (suma)' if cantidad_col else 'Conteo de productos', 'Conteo de productos', 'SKUs únicos'], index=0)
             
-            col_col = 'BODEGA_RECIBE' if columnas == 'Tienda/Bodega' and 'BODEGA_RECIBE' in data.columns else \
-                      'Bodega Recibe' if columnas == 'Tienda/Bodega' and 'Bodega Recibe' in data.columns else columnas
-            
-            # Determinar función de agregación
-            if 'Cantidad' in valores and cantidad_col:
-                agg_val = cantidad_col
-                agg_func = 'sum'
-            elif 'SKUs' in valores:
-                agg_val = 'PRODUCTO'
-                agg_func = 'nunique'
+            if filas and columnas and filas != columnas:
+                fila_col = 'BODEGA_RECIBE' if filas == 'Tienda/Bodega' and 'BODEGA_RECIBE' in data.columns else filas
+                col_col = 'BODEGA_RECIBE' if columnas == 'Tienda/Bodega' and 'BODEGA_RECIBE' in data.columns else columnas
+                
+                if 'Cantidad' in valores and cantidad_col:
+                    agg_val = cantidad_col
+                    agg_func = 'sum'
+                elif 'SKUs' in valores:
+                    agg_val = 'PRODUCTO'
+                    agg_func = 'nunique'
+                else:
+                    agg_val = cantidad_col if cantidad_col else 'PRODUCTO'
+                    agg_func = 'sum' if cantidad_col else 'count'
+                
+                try:
+                    pivot_custom = pd.pivot_table(
+                        data, values=agg_val, index=fila_col, columns=col_col,
+                        aggfunc=agg_func, fill_value=0, margins=True, margins_name='TOTAL'
+                    )
+                    st.dataframe(pivot_custom.style.format('{:,.0f}'), use_container_width=True)
+                    csv = pivot_custom.to_csv()
+                    st.download_button("📥 Descargar CSV", data=csv, file_name=f"tabla_dinamica_{filas}_vs_{columnas}.csv", mime="text/csv")
+                except Exception as e:
+                    st.error(f"Error generando tabla: {str(e)}")
             else:
-                agg_val = cantidad_col if cantidad_col else 'PRODUCTO'
-                agg_func = 'sum' if cantidad_col else 'count'
-            
-            try:
-                pivot_custom = pd.pivot_table(
-                    data,
-                    values=agg_val,
-                    index=fila_col,
-                    columns=col_col,
-                    aggfunc=agg_func,
-                    fill_value=0,
-                    margins=True,
-                    margins_name='TOTAL'
-                )
-                
-                st.markdown(f"#### 📊 Resultado: {filas} vs {columnas}")
-                st.dataframe(pivot_custom.style.format('{:,.0f}'), use_container_width=True)
-                
-                # Opción de descarga
-                csv = pivot_custom.to_csv()
-                st.download_button(
-                    label="📥 Descargar CSV",
-                    data=csv,
-                    file_name=f"tabla_dinamica_{filas}_vs_{columnas}.csv",
-                    mime="text/csv"
-                )
-            except Exception as e:
-                st.error(f"Error generando tabla: {str(e)}")
+                st.info("Selecciona dimensiones diferentes para filas y columnas.")
         else:
-            st.info("Selecciona dimensiones diferentes para filas y columnas.")
+            st.warning("No hay dimensiones disponibles para crear tablas dinámicas.")
     
-    # --- FILTROS Y TABLA DETALLE ---
+    # Filtros y tabla detalle
     st.markdown("---")
     st.subheader("🔍 Filtros y Detalle")
-    
     col_f1, col_f2, col_f3, col_f4 = st.columns(4)
+    filtro_gen = 'Todos'
+    filtro_col = 'Todos'
+    filtro_talla = 'Todos'
+    filtro_bod = 'Todas'
     
     with col_f1:
         if 'Genero' in data.columns:
             gen_opts = ['Todos'] + sorted(data['Genero'].unique())
             filtro_gen = st.selectbox("👤 Género", gen_opts, key="filtro_gen")
-        else:
-            filtro_gen = 'Todos'
-    
     with col_f2:
         if 'Color' in data.columns:
             col_opts = ['Todos'] + sorted(data['Color'].unique())
             filtro_col = st.selectbox("🎨 Color", col_opts, key="filtro_col")
-        else:
-            filtro_col = 'Todos'
-    
     with col_f3:
         if 'Talla' in data.columns:
             talla_opts = ['Todos'] + sorted(data['Talla'].unique())
             filtro_talla = st.selectbox("📏 Talla", talla_opts, key="filtro_talla")
-        else:
-            filtro_talla = 'Todos'
-    
     with col_f4:
         bodega_filtro_col = None
         for col in ['BODEGA_RECIBE', 'Bodega Recibe']:
             if col in data.columns:
                 bodega_filtro_col = col
                 break
-        
         if bodega_filtro_col:
             bod_opts = ['Todas'] + sorted(data[bodega_filtro_col].unique())
             filtro_bod = st.selectbox("🏪 Tienda", bod_opts, key="filtro_bod")
-        else:
-            filtro_bod = 'Todas'
     
-    # Aplicar filtros
     filtered = data.copy()
-    
     if filtro_gen != 'Todos' and 'Genero' in filtered.columns:
         filtered = filtered[filtered['Genero'] == filtro_gen]
     if filtro_col != 'Todos' and 'Color' in filtered.columns:
@@ -6009,38 +5726,23 @@ def mostrar_clasificacion_inteligente():
     if filtro_bod != 'Todas' and bodega_filtro_col:
         filtered = filtered[filtered[bodega_filtro_col] == filtro_bod]
     
-    # Mostrar tabla detalle
     st.markdown(f"**📋 Mostrando {len(filtered)} registros filtrados de {len(data)} totales**")
-    
-    # Seleccionar columnas para mostrar
-    display_cols = []
-    for col in ['PRODUCTO', 'Genero_Raw', 'Genero', 'Descripcion', 'Categoria', 'Color', 'Talla', 'CANTIDAD', 'BODEGA_RECIBE', 'FECHA']:
-        if col in filtered.columns:
-            display_cols.append(col)
-    
+    display_cols = [c for c in ['PRODUCTO', 'Genero_Raw', 'Genero', 'Descripcion', 'Categoria', 'Color', 'Talla', 'CANTIDAD', 'BODEGA_RECIBE', 'FECHA'] if c in filtered.columns]
     if not display_cols:
-        display_cols = filtered.columns.tolist()[:10]  # Primeras 10 columnas
+        display_cols = filtered.columns.tolist()[:10]
     
     st.dataframe(
-        filtered[display_cols].sort_values(
-            by='CANTIDAD' if 'CANTIDAD' in filtered.columns else display_cols[0],
-            ascending=False
-        ),
-        use_container_width=True,
-        height=400
+        filtered[display_cols].sort_values(by='CANTIDAD' if 'CANTIDAD' in filtered.columns else display_cols[0], ascending=False),
+        use_container_width=True, height=400
     )
     
-    # Exportar
     if len(filtered) > 0:
         st.markdown("---")
         col_exp1, col_exp2 = st.columns([1, 3])
-        
         with col_exp1:
             buffer = io.BytesIO()
             with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
                 filtered.to_excel(writer, sheet_name='Datos Filtrados', index=False)
-                
-                # Resumen
                 resumen_export = []
                 if 'Genero' in filtered.columns:
                     resumen_export.append(['Géneros', filtered['Genero'].nunique()])
@@ -6051,9 +5753,7 @@ def mostrar_clasificacion_inteligente():
                 if 'CANTIDAD' in filtered.columns:
                     resumen_export.append(['Total Unidades', int(filtered['CANTIDAD'].sum())])
                 resumen_export.append(['Total Productos', len(filtered)])
-                
                 pd.DataFrame(resumen_export, columns=['Métrica', 'Valor']).to_excel(writer, sheet_name='Resumen', index=False)
-            
             st.download_button(
                 label="📥 Descargar Excel",
                 data=buffer.getvalue(),
@@ -6064,15 +5764,16 @@ def mostrar_clasificacion_inteligente():
 
 
 # ==============================================================================
-# FUNCIÓN PRINCIPAL - show_logistica (Tab1 intacto, Tab2 con clasificación)
+# FUNCIÓN PRINCIPAL DEL MÓDULO 9: show_logistica
 # ==============================================================================
 
 def show_logistica():
     """Dashboard logístico completo."""
     
-    BackButton.show()
-    ModuleHeader.show(
-        "Dashboard Logístico",
+    # Usamos las funciones existentes en lugar de BackButton y ModuleHeader
+    add_back_button(key="back_logistica")
+    show_module_header(
+        "📦 Dashboard Logístico",
         "Control de transferencias y distribución de mercadería",
         "📦"
     )
@@ -6125,69 +5826,38 @@ def show_logistica():
                     col_k1, col_k2, col_k3 = st.columns(3)
                     
                     with col_k1:
-                        card = StatCard(
-                            "Total Unidades",
-                            f"{resultado['total_unidades']:,}",
-                            "📦",
-                            f"{resultado['total_transferencias']} transferencias",
-                            "positive"
-                        )
-                        card.render()
+                        st.metric("📦 Total Unidades", f"{resultado['total_unidades']:,}")
+                        st.caption(f"{resultado['total_transferencias']} transferencias")
                     
                     with col_k2:
                         cat_principal = max(resultado['por_categoria'].items(), key=lambda x: x[1])
-                        card = StatCard(
-                            "Mayor Categoría",
-                            cat_principal[0],
-                            CATEGORIAS_TRANSFERENCIA.get(cat_principal[0], {}).get('icon', '📊'),
-                            f"{cat_principal[1]:,} unidades",
-                            "neutral"
-                        )
-                        card.render()
+                        st.metric("🏆 Mayor Categoría", cat_principal[0])
+                        st.caption(f"{cat_principal[1]:,} unidades")
                     
                     with col_k3:
                         pct_fundas = (resultado['por_categoria'].get('Fundas', 0) / resultado['total_unidades'] * 100) if resultado['total_unidades'] > 0 else 0
-                        card = StatCard(
-                            "% Fundas",
-                            f"{pct_fundas:.1f}%",
-                            "📎",
-                            "del total",
-                            "warning" if pct_fundas > 50 else "positive"
-                        )
-                        card.render()
+                        st.metric("📎 % Fundas", f"{pct_fundas:.1f}%")
+                        st.caption("del total")
                     
                     # Gráfico de distribución
                     st.markdown("<br>", unsafe_allow_html=True)
-                    
                     col_g1, col_g2 = st.columns([2, 1])
                     with col_g1:
-                        with ChartContainer("Distribución por Categoría", height=400):
-                            df_pie = pd.DataFrame({
-                                'Categoria': list(resultado['por_categoria'].keys()),
-                                'Unidades': list(resultado['por_categoria'].values())
-                            })
-                            df_pie = df_pie[df_pie['Unidades'] > 0]
-                            
-                            fig = PieChart(df_pie, 'Unidades', 'Categoria', hole=0.4).render()
-                            st.plotly_chart(fig, use_container_width=True, key="log_pie")
+                        df_pie = pd.DataFrame({
+                            'Categoria': list(resultado['por_categoria'].keys()),
+                            'Unidades': list(resultado['por_categoria'].values())
+                        })
+                        df_pie = df_pie[df_pie['Unidades'] > 0]
+                        fig = px.pie(df_pie, values='Unidades', names='Categoria', hole=0.4, title="Distribución por Categoría")
+                        st.plotly_chart(fig, use_container_width=True)
                     
                     with col_g2:
                         st.subheader("Detalle por Categoría")
-                        
-                        # Mostrar conteos actualizados
-                        st.caption(f"Tiendas regulares: {TIENDAS_REGULARES} | Price Clubs: {PRICE_CLUBS} (incluye City Mall y Cuenca Centro Histórico)")
-                        
                         for cat, info in resultado['detalle_categoria'].items():
                             if info['cantidad'] > 0:
                                 color = CATEGORIAS_TRANSFERENCIA.get(cat, {}).get('color', '#60A5FA')
                                 st.markdown(f"""
-                                <div style="
-                                    background: {color}15;
-                                    border-left: 4px solid {color};
-                                    padding: 0.75rem;
-                                    border-radius: 8px;
-                                    margin-bottom: 0.5rem;
-                                ">
+                                <div style="background: {color}15; border-left: 4px solid {color}; padding: 0.75rem; border-radius: 8px; margin-bottom: 0.5rem;">
                                     <div style="font-weight: 700; color: white;">{cat}</div>
                                     <div style="font-size: 0.85rem; color: #94A3B8;">
                                         {info['cantidad']:,} unidades • {info['transferencias']} transf. • {info['sucursales_unicas']} suc.
@@ -6198,13 +5868,9 @@ def show_logistica():
                     # Tabla detalle
                     st.markdown("<br>", unsafe_allow_html=True)
                     st.subheader("📋 Detalle de Transferencias")
-                    
                     destino_col = 'Sucursal Destino' if 'Sucursal Destino' in resultado['df_procesado'].columns else 'Bodega Destino'
-                    df_detalle = resultado['df_procesado'][[
-                        'Secuencial', destino_col, 'Cantidad_Entera', 'Categoria'
-                    ]].copy()
+                    df_detalle = resultado['df_procesado'][['Secuencial', destino_col, 'Cantidad_Entera', 'Categoria']].copy()
                     df_detalle.columns = ['Secuencial', 'Destino', 'Cantidad', 'Categoría']
-                    
                     st.dataframe(df_detalle, use_container_width=True, height=300)
                     
                     # Exportar
@@ -6224,13 +5890,7 @@ def show_logistica():
                 st.error(f"❌ Error procesando archivo: {str(e)}")
         
         else:
-            info = InfoCard(
-                "Dashboard de Transferencias",
-                "Sube un archivo Excel con las columnas: Secuencial, Sucursal Destino/Bodega Destino, Cantidad Prendas/Cantidad. El sistema clasificará automáticamente en categorías (Price Club, Tiendas, Web, etc.).",
-                "📊",
-                "info"
-            )
-            info.render()
+            st.info("👆 **Sube un archivo Excel** con las columnas: `Secuencial`, `Sucursal Destino`/`Bodega Destino`, `Cantidad Prendas`/`Cantidad`. El sistema clasificará automáticamente en categorías (Price Club, Tiendas, Web, etc.).")
     
     with tab2:
         mostrar_clasificacion_inteligente()
