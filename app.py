@@ -4847,9 +4847,6 @@ def show_reconciliacion_v8():
 
 
 # ==============================================================================
-# 9. MODULO DASHBOARD LOGISTICO
-# ==============================================================================
-# ==============================================================================
 # 9. MODULO DASHBOARD LOGISTICO (CORREGIDO)
 # ==============================================================================
 
@@ -5495,16 +5492,15 @@ def mostrar_clasificacion_inteligente():
     tab_dims = st.tabs(["🏪 Por Tienda/Bodega", "🎨 Por Color", "📏 Por Talla", "👤 Por Género", "📋 Tabla Dinámica"])
     
     cantidad_col = 'CANTIDAD' if 'CANTIDAD' in data.columns else None
+    bodega_col = None
+    for col in ['BODEGA_RECIBE', 'Bodega Recibe', 'Bodega Destino', 'Sucursal Destino']:
+        if col in data.columns:
+            bodega_col = col
+            break
     
     # Tab 1: Por Tienda/Bodega
     with tab_dims[0]:
         st.markdown("### 🏪 Análisis por Tienda/Bodega")
-        bodega_col = None
-        for col in ['BODEGA_RECIBE', 'Bodega Recibe', 'Bodega Destino', 'Sucursal Destino']:
-            if col in data.columns:
-                bodega_col = col
-                break
-        
         if bodega_col:
             if cantidad_col:
                 tienda_stats = data.groupby(bodega_col).agg({cantidad_col: 'sum', 'PRODUCTO': 'count'}).reset_index()
@@ -5707,13 +5703,8 @@ def mostrar_clasificacion_inteligente():
             talla_opts = ['Todos'] + sorted(data['Talla'].unique())
             filtro_talla = st.selectbox("📏 Talla", talla_opts, key="filtro_talla")
     with col_f4:
-        bodega_filtro_col = None
-        for col in ['BODEGA_RECIBE', 'Bodega Recibe']:
-            if col in data.columns:
-                bodega_filtro_col = col
-                break
-        if bodega_filtro_col:
-            bod_opts = ['Todas'] + sorted(data[bodega_filtro_col].unique())
+        if bodega_col:
+            bod_opts = ['Todas'] + sorted(data[bodega_col].unique())
             filtro_bod = st.selectbox("🏪 Tienda", bod_opts, key="filtro_bod")
     
     filtered = data.copy()
@@ -5723,8 +5714,8 @@ def mostrar_clasificacion_inteligente():
         filtered = filtered[filtered['Color'] == filtro_col]
     if filtro_talla != 'Todos' and 'Talla' in filtered.columns:
         filtered = filtered[filtered['Talla'] == filtro_talla]
-    if filtro_bod != 'Todas' and bodega_filtro_col:
-        filtered = filtered[filtered[bodega_filtro_col] == filtro_bod]
+    if filtro_bod != 'Todas' and bodega_col:
+        filtered = filtered[filtered[bodega_col] == filtro_bod]
     
     st.markdown(f"**📋 Mostrando {len(filtered)} registros filtrados de {len(data)} totales**")
     display_cols = [c for c in ['PRODUCTO', 'Genero_Raw', 'Genero', 'Descripcion', 'Categoria', 'Color', 'Talla', 'CANTIDAD', 'BODEGA_RECIBE', 'FECHA'] if c in filtered.columns]
@@ -5738,44 +5729,41 @@ def mostrar_clasificacion_inteligente():
     
     if len(filtered) > 0:
         st.markdown("---")
-        col_exp1, col_exp2 = st.columns([1, 3])
-        with col_exp1:
-            buffer = io.BytesIO()
-            with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
-                filtered.to_excel(writer, sheet_name='Datos Filtrados', index=False)
-                resumen_export = []
-                if 'Genero' in filtered.columns:
-                    resumen_export.append(['Géneros', filtered['Genero'].nunique()])
-                if 'Color' in filtered.columns:
-                    resumen_export.append(['Colores', filtered['Color'].nunique()])
-                if 'Talla' in filtered.columns:
-                    resumen_export.append(['Tallas', filtered['Talla'].nunique()])
-                if 'CANTIDAD' in filtered.columns:
-                    resumen_export.append(['Total Unidades', int(filtered['CANTIDAD'].sum())])
-                resumen_export.append(['Total Productos', len(filtered)])
-                pd.DataFrame(resumen_export, columns=['Métrica', 'Valor']).to_excel(writer, sheet_name='Resumen', index=False)
-            st.download_button(
-                label="📥 Descargar Excel",
-                data=buffer.getvalue(),
-                file_name=f"clasificacion_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True
-            )
+        buffer = io.BytesIO()
+        with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
+            filtered.to_excel(writer, sheet_name='Datos Filtrados', index=False)
+            resumen_export = []
+            if 'Genero' in filtered.columns:
+                resumen_export.append(['Géneros', filtered['Genero'].nunique()])
+            if 'Color' in filtered.columns:
+                resumen_export.append(['Colores', filtered['Color'].nunique()])
+            if 'Talla' in filtered.columns:
+                resumen_export.append(['Tallas', filtered['Talla'].nunique()])
+            if 'CANTIDAD' in filtered.columns:
+                resumen_export.append(['Total Unidades', int(filtered['CANTIDAD'].sum())])
+            resumen_export.append(['Total Productos', len(filtered)])
+            pd.DataFrame(resumen_export, columns=['Métrica', 'Valor']).to_excel(writer, sheet_name='Resumen', index=False)
+        st.download_button(
+            label="📥 Descargar Excel",
+            data=buffer.getvalue(),
+            file_name=f"clasificacion_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True
+        )
 
 
 # ==============================================================================
-# FUNCIÓN PRINCIPAL DEL MÓDULO 9: show_logistica
+# FUNCIÓN PRINCIPAL DEL MÓDULO 9: show_dashboard_logistico
 # ==============================================================================
 
-def show_logistica():
+def show_dashboard_logistico():
     """Dashboard logístico completo."""
     
     # Usamos las funciones existentes en lugar de BackButton y ModuleHeader
-    add_back_button(key="back_logistica")
+    # CORRECCIÓN: Llamada a show_module_header con solo DOS argumentos
     show_module_header(
-    "📦 Dashboard Logístico",
-    "Control de transferencias y distribución de mercadería",
-    "📦"   # ← este tercer argumento sobra
+        "📦 Dashboard Logístico",
+        "Control de transferencias y distribución de mercadería"
     )
     
     # Tabs para organizar contenido
@@ -5894,7 +5882,6 @@ def show_logistica():
     
     with tab2:
         mostrar_clasificacion_inteligente()
-
 
 # ==============================================================================
 # 10. MODULO GESTION DE EQUIPO
