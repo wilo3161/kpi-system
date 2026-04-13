@@ -6558,7 +6558,7 @@ def generar_pdf_profesional(guia_data):
     subtitulo_style = ParagraphStyle(
         'Subtitulo',
         parent=styles['Normal'],
-        fontName='Georgia',
+        fontName='Helvetica',
         fontSize=24,
         textColor=color_texto_suave,
         alignment=TA_CENTER,
@@ -6569,7 +6569,7 @@ def generar_pdf_profesional(guia_data):
     tienda_style = ParagraphStyle(
         'Tienda',
         parent=styles['Normal'],
-        fontName='Verdana-Bold',
+        fontName='Helvetica-Bold',
         fontSize=20,
         textColor=color_primario,
         alignment=TA_CENTER,
@@ -6580,7 +6580,7 @@ def generar_pdf_profesional(guia_data):
     seccion_title_style = ParagraphStyle(
         'SeccionTitle',
         parent=styles['Normal'],
-        fontName='Verdana-Bold',
+        fontName='Helvetica-Bold',
         fontSize=12,
         textColor=color_acento,
         alignment=TA_LEFT,
