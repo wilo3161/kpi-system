@@ -6524,7 +6524,7 @@ def generar_pdf_profesional(guia_data):
     page_width, page_height = landscape(A4)
     
     # Márgenes de 2 cm para respiro
-    margen = 2.0 * cm
+    margen = 3.0 * cm
     doc = SimpleDocTemplate(
         buffer,
         pagesize=(page_width, page_height),
@@ -6558,7 +6558,7 @@ def generar_pdf_profesional(guia_data):
     subtitulo_style = ParagraphStyle(
         'Subtitulo',
         parent=styles['Normal'],
-        fontName='Helvetica',
+        fontName='Georgia',
         fontSize=24,
         textColor=color_texto_suave,
         alignment=TA_CENTER,
@@ -6569,7 +6569,7 @@ def generar_pdf_profesional(guia_data):
     tienda_style = ParagraphStyle(
         'Tienda',
         parent=styles['Normal'],
-        fontName='Helvetica-Bold',
+        fontName='Verdana-Bold',
         fontSize=20,
         textColor=color_primario,
         alignment=TA_CENTER,
@@ -6580,7 +6580,7 @@ def generar_pdf_profesional(guia_data):
     seccion_title_style = ParagraphStyle(
         'SeccionTitle',
         parent=styles['Normal'],
-        fontName='Helvetica-Bold',
+        fontName='Verdana-Bold',
         fontSize=12,
         textColor=color_acento,
         alignment=TA_LEFT,
