@@ -5772,11 +5772,11 @@ def show_logistica():
     
     # Usamos las funciones existentes en lugar de BackButton y ModuleHeader
     add_back_button(key="back_logistica")
-   show_module_header(
+    show_module_header(
     "📦 Dashboard Logístico",
     "Control de transferencias y distribución de mercadería",
     "📦"   # ← este tercer argumento sobra
-)
+    )
     
     # Tabs para organizar contenido
     tab1, tab2 = st.tabs(["📊 Transferencias Diarias", "🧠 Clasificación Inteligente"])
