@@ -16,7 +16,7 @@ import email
 from io import BytesIO
 from email.header import decode_header
 from typing import Dict, List, Any
-from reportlab.lib.pagesizes import letter, landscape, A5  # ← AGREGADO landscape
+from reportlab.lib.pagesizes import letter, landscape, A5, A4  # ← AGREGADO landscape
 from reportlab.platypus import (
     SimpleDocTemplate,
     Paragraph,
@@ -6509,17 +6509,18 @@ def descargar_logo(url):
 
 def generar_pdf_profesional(guia_data):
     """
-    Genera un PDF profesional de una sola página (A4 horizontal)
-    con diseño moderno, compacto y QR destacado.
+    Genera una guía de remisión en una sola página A4 horizontal,
+    con diseño moderno, logo grande, QR destacado y sin marcos agresivos.
     """
     buffer = io.BytesIO()
     
-    # Tamaño A4 horizontal
     from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib.units import cm
+    
     page_width, page_height = landscape(A4)
     
-    # Márgenes reducidos para maximizar espacio (1.5 cm)
-    margen = 1.5 * cm
+    # Márgenes generosos para respiro visual (2 cm)
+    margen = 2.0 * cm
     doc = SimpleDocTemplate(
         buffer,
         pagesize=(page_width, page_height),
@@ -6532,69 +6533,108 @@ def generar_pdf_profesional(guia_data):
     styles = getSampleStyleSheet()
     
     # Colores corporativos
-    color_principal = HexColor("#0033A0")
-    color_secundario = HexColor("#E4002B")
-    color_fondo = HexColor("#F4F6F9")
-    color_texto_oscuro = HexColor("#1E293B")
-    color_texto_claro = HexColor("#64748B")
+    color_primario = HexColor("#0033A0")     # Azul institucional
+    color_acento = HexColor("#E4002B")       # Rojo para detalles
+    color_texto = HexColor("#1E293B")        # Casi negro
+    color_texto_suave = HexColor("#64748B")  # Gris medio
+    color_fondo_suave = HexColor("#F8FAFC")  # Gris muy claro
     
-    # Estilos optimizados para ajuste en una página
-    titulo_style = ParagraphStyle(
+    # ==================== ESTILOS PERSONALIZADOS ====================
+    # Título principal
+    titulo_principal = ParagraphStyle(
         'TituloPrincipal',
         parent=styles['Title'],
         fontName='Helvetica-Bold',
-        fontSize=16,
-        textColor=color_principal,
+        fontSize=20,
+        textColor=color_primario,
         alignment=TA_CENTER,
+        spaceAfter=4,
+        leading=24
+    )
+    
+    # Subtítulo (Centro de Distribución)
+    subtitulo_style = ParagraphStyle(
+        'Subtitulo',
+        parent=styles['Normal'],
+        fontName='Helvetica',
+        fontSize=11,
+        textColor=color_texto_suave,
+        alignment=TA_CENTER,
+        spaceAfter=6,
+        leading=14
+    )
+    
+    # Nombre de tienda en grande
+    tienda_style = ParagraphStyle(
+        'Tienda',
+        parent=styles['Normal'],
+        fontName='Helvetica-Bold',
+        fontSize=14,
+        textColor=color_primario,
+        alignment=TA_LEFT,
         spaceAfter=2,
         leading=18
     )
     
-    subtitulo_style = ParagraphStyle(
-        'Subtitulo',
-        parent=styles['Heading2'],
+    # Encabezados de sección (REMITENTE / DESTINATARIO)
+    seccion_title_style = ParagraphStyle(
+        'SeccionTitle',
+        parent=styles['Normal'],
         fontName='Helvetica-Bold',
         fontSize=12,
-        textColor=color_secundario,
+        textColor=color_acento,
         alignment=TA_LEFT,
-        spaceBefore=4,
-        spaceAfter=3,
+        spaceBefore=6,
+        spaceAfter=4,
         leading=14
     )
     
+    # Texto de contenido normal
     contenido_style = ParagraphStyle(
         'Contenido',
         parent=styles['Normal'],
         fontName='Helvetica',
         fontSize=10,
-        textColor=color_texto_oscuro,
+        textColor=color_texto,
         alignment=TA_LEFT,
         spaceAfter=2,
         leading=13
     )
     
-    valor_style = ParagraphStyle(
-        'Valor',
+    # Estilo para datos destacados (ej. número de guía)
+    valor_destacado_style = ParagraphStyle(
+        'ValorDestacado',
         parent=styles['Normal'],
         fontName='Helvetica-Bold',
         fontSize=11,
-        textColor=color_principal,
+        textColor=color_primario,
         alignment=TA_LEFT,
-        spaceAfter=1
+        spaceAfter=2
     )
     
-    etiqueta_qr_style = ParagraphStyle(
-        'EtiquetaQR',
+    # Estilo para fecha/hora en la esquina derecha
+    fecha_hora_style = ParagraphStyle(
+        'FechaHora',
+        parent=styles['Normal'],
+        fontName='Helvetica',
+        fontSize=9,
+        textColor=color_texto_suave,
+        alignment=TA_RIGHT,
+        spaceAfter=0,
+        leading=12
+    )
+    
+    # Leyenda del QR
+    leyenda_qr_style = ParagraphStyle(
+        'LeyendaQR',
         parent=styles['Normal'],
         fontName='Helvetica-Bold',
-        fontSize=12,
-        textColor=color_principal,
+        fontSize=10,
+        textColor=color_primario,
         alignment=TA_CENTER,
         spaceBefore=2,
         spaceAfter=0
     )
-    
-    contenido = []
     
     # ==================== OBTENER LOGO ====================
     logo_bytes = None
@@ -6612,175 +6652,160 @@ def generar_pdf_profesional(guia_data):
     else:
         logo_bytes = st.session_state.logos[guia_data["marca"]]
     
-    # ==================== CABECERA COMPACTA ====================
-    # Logo
+    # ==================== CONSTRUCCIÓN DEL CONTENIDO ====================
+    contenido = []
+    
+    # --- FILA SUPERIOR: Logo | Título | Fecha/Hora ---
+    # Celda Logo (3x3 cm)
     if logo_bytes:
         try:
-            logo_img = Image(io.BytesIO(logo_bytes), width=2.0*cm, height=1.4*cm)
+            logo_img = Image(io.BytesIO(logo_bytes), width=3.0*cm, height=3.0*cm)
             logo_cell = logo_img
         except:
-            logo_cell = Paragraph(f"<b>{guia_data['marca']}</b>", titulo_style)
+            logo_cell = Paragraph(f"<b>{guia_data['marca']}</b>", titulo_principal)
     else:
-        logo_cell = Paragraph(f"<b>{guia_data['marca']}</b>", titulo_style)
+        logo_cell = Paragraph(f"<b>{guia_data['marca']}</b>", titulo_principal)
     
-    # Título central
-    titulo_cell = Paragraph(
-        f"<b>GUÍA DE REMISIÓN</b><br/>"
-        f"<font size=9 color='#64748B'>Centro de Distribución {guia_data['marca']}</font>",
-        titulo_style
+    # Celda Título + Subtítulo
+    titulo_bloque = Table(
+        [[Paragraph("GUÍA DE REMISIÓN", titulo_principal)],
+         [Paragraph(f"Centro de Distribución {guia_data['marca']}", subtitulo_style)]],
+        colWidths=[10*cm]
     )
-    
-    # Número de guía y fecha en una celda compacta
-    info_cell = Table(
-        [[Paragraph(f"<b>N°:</b> {guia_data['numero']}", valor_style)],
-         [Paragraph(f"<b>Fecha:</b> {guia_data['fecha_emision']}", contenido_style)]],
-        colWidths=[4*cm]
-    )
-    info_cell.setStyle(TableStyle([
-        ('ALIGN', (0,0), (-1,-1), 'RIGHT'),
+    titulo_bloque.setStyle(TableStyle([
+        ('ALIGN', (0,0), (-1,-1), 'CENTER'),
         ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
         ('TOPPADDING', (0,0), (-1,-1), 0),
         ('BOTTOMPADDING', (0,0), (-1,-1), 0),
     ]))
     
-    cabecera_table = Table(
-        [[logo_cell, titulo_cell, info_cell]],
-        colWidths=[3.0*cm, 16.0*cm, 4.0*cm]
+    # Celda Fecha y Hora
+    fecha_hora_bloque = Table(
+        [[Paragraph(f"Fecha: {guia_data['fecha_emision']}", fecha_hora_style)],
+         [Paragraph(f"Hora: {datetime.now().strftime('%H:%M')}", fecha_hora_style)],
+         [Paragraph(f"N° Guía: {guia_data['numero']}", valor_destacado_style)]],
+        colWidths=[5*cm]
     )
-    cabecera_table.setStyle(TableStyle([
-        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-        ('ALIGN', (0,0), (0,0), 'LEFT'),
-        ('ALIGN', (1,0), (1,0), 'CENTER'),
-        ('ALIGN', (2,0), (2,0), 'RIGHT'),
-        ('TOPPADDING', (0,0), (-1,-1), 2),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 2),
-        ('BACKGROUND', (1,0), (1,0), color_fondo),
-        ('BOX', (1,0), (1,0), 0.5, color_principal),
-    ]))
-    contenido.append(cabecera_table)
-    contenido.append(Spacer(1, 0.2*cm))
-    
-    # ==================== SECCIÓN REMITENTE Y DESTINATARIO (DOS COLUMNAS) ====================
-    # Usamos una tabla de dos columnas para mostrar remitente y destinatario lado a lado
-    remitente_block = [
-        [Paragraph("<b>REMITENTE</b>", subtitulo_style)],
-        [Paragraph(f"{guia_data['remitente']}", contenido_style)],
-        [Paragraph(f"{guia_data['direccion_remitente']}", contenido_style)]
-    ]
-    tabla_remitente = Table(remitente_block, colWidths=[11*cm])
-    tabla_remitente.setStyle(TableStyle([
-        ('BACKGROUND', (0,0), (-1,-1), color_fondo),
-        ('BOX', (0,0), (-1,-1), 0.5, color_principal),
-        ('PADDING', (0,0), (-1,-1), 4),
+    fecha_hora_bloque.setStyle(TableStyle([
+        ('ALIGN', (0,0), (-1,-1), 'RIGHT'),
         ('VALIGN', (0,0), (-1,-1), 'TOP'),
+        ('TOPPADDING', (0,0), (-1,-1), 0),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 0),
     ]))
     
-    destinatario_block = [
-        [Paragraph("<b>DESTINATARIO</b>", subtitulo_style)],
-        [Paragraph(f"{guia_data['destinatario']}", contenido_style)],
-        [Paragraph(f"📞 {guia_data.get('telefono_destinatario', 'No especificado')}", contenido_style)],
-        [Paragraph(f"🏪 {guia_data['tienda_destino']}", contenido_style)],
-        [Paragraph(f"📍 {guia_data['direccion_destinatario']}", contenido_style)]
-    ]
-    tabla_destinatario = Table(destinatario_block, colWidths=[11*cm])
-    tabla_destinatario.setStyle(TableStyle([
-        ('BACKGROUND', (0,0), (-1,-1), color_fondo),
-        ('BOX', (0,0), (-1,-1), 0.5, color_principal),
-        ('PADDING', (0,0), (-1,-1), 4),
-        ('VALIGN', (0,0), (-1,-1), 'TOP'),
-    ]))
-    
-    # Tabla de dos columnas para Remitente | Destinatario
-    datos_contacto = Table(
-        [[tabla_remitente, tabla_destinatario]],
-        colWidths=[11*cm, 11*cm]
+    # Tabla de cabecera (3 columnas)
+    cabecera = Table(
+        [[logo_cell, titulo_bloque, fecha_hora_bloque]],
+        colWidths=[4.5*cm, 12*cm, 5.5*cm]
     )
-    datos_contacto.setStyle(TableStyle([
+    cabecera.setStyle(TableStyle([
         ('VALIGN', (0,0), (-1,-1), 'TOP'),
         ('LEFTPADDING', (0,0), (0,0), 0),
-        ('RIGHTPADDING', (0,0), (0,0), 4),
-        ('LEFTPADDING', (1,0), (1,0), 4),
-        ('RIGHTPADDING', (1,0), (1,0), 0),
+        ('RIGHTPADDING', (0,0), (0,0), 6),
+        ('LEFTPADDING', (1,0), (1,0), 6),
+        ('RIGHTPADDING', (1,0), (1,0), 6),
+        ('LEFTPADDING', (2,0), (2,0), 0),
+        ('RIGHTPADDING', (2,0), (2,0), 0),
     ]))
-    contenido.append(datos_contacto)
-    contenido.append(Spacer(1, 0.3*cm))
+    contenido.append(cabecera)
+    contenido.append(Spacer(1, 0.6*cm))
     
-    # ==================== QR Y LEYENDA (UBICACIÓN DESTACADA) ====================
+    # --- SEGUNDA FILA: Nombre de Tienda (Izquierda) y QR (Derecha) ---
+    tienda_nombre = guia_data.get('tienda_destino', 'Tienda no especificada')
+    tienda_cell = Paragraph(f"🏪 {tienda_nombre}", tienda_style)
+    
+    # QR y leyenda
     qr_bytes = guia_data.get("qr_bytes")
     if qr_bytes:
         try:
-            qr_img = Image(io.BytesIO(qr_bytes), width=4.5*cm, height=4.5*cm)
+            qr_img = Image(io.BytesIO(qr_bytes), width=4.0*cm, height=4.0*cm)
         except:
-            qr_img = Paragraph("[QR no disponible]", contenido_style)
-        
-        # Texto "Escanea aquí tu transferencia"
-        leyenda_qr = Paragraph("Escanea aquí tu transferencia", etiqueta_qr_style)
-        url_qr = Paragraph(
-            f"<font size=8 color='#3B82F6'><u>{guia_data['url_pedido']}</u></font>",
-            ParagraphStyle('URL', parent=contenido_style, alignment=TA_CENTER, fontSize=8)
-        )
-        
-        qr_block = Table(
+            qr_img = Paragraph("[QR]", contenido_style)
+        qr_leyenda = Paragraph("Escanea aquí tu transferencia", leyenda_qr_style)
+        qr_bloque = Table(
             [[qr_img],
-             [leyenda_qr],
-             [url_qr]],
-            colWidths=[6*cm]
+             [qr_leyenda]],
+            colWidths=[4.5*cm]
         )
-        qr_block.setStyle(TableStyle([
+        qr_bloque.setStyle(TableStyle([
             ('ALIGN', (0,0), (-1,-1), 'CENTER'),
             ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-            ('TOPPADDING', (0,0), (0,0), 0),
-            ('BOTTOMPADDING', (0,0), (0,0), 2),
-            ('TOPPADDING', (1,0), (1,0), 2),
-            ('BOTTOMPADDING', (1,0), (1,0), 0),
+            ('TOPPADDING', (0,0), (-1,-1), 0),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 0),
         ]))
-        
-        # Para mantener balance visual, colocamos el QR a la derecha y una nota de estado a la izquierda (opcional)
-        estado_block = Table(
-            [[Paragraph(f"<b>Estado:</b> {guia_data['estado']}", valor_style)],
-             [Paragraph("Documento válido para despacho", contenido_style)]],
-            colWidths=[10*cm]
-        )
-        estado_block.setStyle(TableStyle([
-            ('ALIGN', (0,0), (-1,-1), 'LEFT'),
-            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-            ('BACKGROUND', (0,0), (-1,-1), color_fondo),
-            ('BOX', (0,0), (-1,-1), 0.5, color_principal),
-            ('PADDING', (0,0), (-1,-1), 6),
-        ]))
-        
-        qr_y_estado = Table(
-            [[estado_block, qr_block]],
-            colWidths=[16*cm, 6*cm]
-        )
-        qr_y_estado.setStyle(TableStyle([
-            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-            ('ALIGN', (0,0), (0,0), 'LEFT'),
-            ('ALIGN', (1,0), (1,0), 'CENTER'),
-        ]))
-        contenido.append(qr_y_estado)
     else:
-        # Si no hay QR, solo mostramos estado
-        estado_block = Table(
-            [[Paragraph(f"<b>Estado:</b> {guia_data['estado']}", valor_style)],
-             [Paragraph("Documento válido para despacho", contenido_style)]],
-            colWidths=[22*cm]
-        )
-        estado_block.setStyle(TableStyle([
-            ('ALIGN', (0,0), (-1,-1), 'CENTER'),
-            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-            ('BACKGROUND', (0,0), (-1,-1), color_fondo),
-            ('BOX', (0,0), (-1,-1), 0.5, color_principal),
-            ('PADDING', (0,0), (-1,-1), 6),
-        ]))
-        contenido.append(estado_block)
+        qr_bloque = Paragraph("", contenido_style)
     
-    contenido.append(Spacer(1, 0.3*cm))
+    fila_tienda_qr = Table(
+        [[tienda_cell, qr_bloque]],
+        colWidths=[14*cm, 6*cm]
+    )
+    fila_tienda_qr.setStyle(TableStyle([
+        ('VALIGN', (0,0), (-1,-1), 'TOP'),
+        ('ALIGN', (0,0), (0,0), 'LEFT'),
+        ('ALIGN', (1,0), (1,0), 'CENTER'),
+        ('LEFTPADDING', (0,0), (0,0), 0),
+        ('RIGHTPADDING', (0,0), (0,0), 10),
+    ]))
+    contenido.append(fila_tienda_qr)
+    contenido.append(Spacer(1, 0.4*cm))
     
-    # ==================== PIE DE PÁGINA ====================
+    # --- TERCERA FILA: Destinatario (Izq) | Remitente (Der) ---
+    # Bloque Destinatario (con íconos)
+    destinatario_data = [
+        [Paragraph("<b>DESTINATARIO</b>", seccion_title_style)],
+        [Paragraph(f"👤 {guia_data['destinatario']}", contenido_style)],
+        [Paragraph(f"📞 {guia_data.get('telefono_destinatario', 'No especificado')}", contenido_style)],
+        [Paragraph(f"📍 {guia_data['direccion_destinatario']}", contenido_style)]
+    ]
+    tabla_dest = Table(destinatario_data, colWidths=[10*cm])
+    tabla_dest.setStyle(TableStyle([
+        ('VALIGN', (0,0), (-1,-1), 'TOP'),
+        ('TOPPADDING', (0,0), (-1,-1), 0),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 0),
+        ('BACKGROUND', (0,0), (-1,-1), color_fondo_suave),
+        ('LEFTPADDING', (0,0), (-1,-1), 6),
+        ('RIGHTPADDING', (0,0), (-1,-1), 6),
+        ('TOPPADDING', (0,0), (0,0), 4),
+        ('BOTTOMPADDING', (-1,0), (-1,0), 4),
+    ]))
+    
+    # Bloque Remitente
+    remitente_data = [
+        [Paragraph("<b>REMITENTE</b>", seccion_title_style)],
+        [Paragraph(f"👤 {guia_data['remitente']}", contenido_style)],
+        [Paragraph(f"📍 {guia_data['direccion_remitente']}", contenido_style)]
+    ]
+    tabla_rem = Table(remitente_data, colWidths=[10*cm])
+    tabla_rem.setStyle(TableStyle([
+        ('VALIGN', (0,0), (-1,-1), 'TOP'),
+        ('TOPPADDING', (0,0), (-1,-1), 0),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 0),
+        ('BACKGROUND', (0,0), (-1,-1), color_fondo_suave),
+        ('LEFTPADDING', (0,0), (-1,-1), 6),
+        ('RIGHTPADDING', (0,0), (-1,-1), 6),
+        ('TOPPADDING', (0,0), (0,0), 4),
+        ('BOTTOMPADDING', (-1,0), (-1,0), 4),
+    ]))
+    
+    contacto_fila = Table(
+        [[tabla_dest, tabla_rem]],
+        colWidths=[10.5*cm, 10.5*cm]
+    )
+    contacto_fila.setStyle(TableStyle([
+        ('VALIGN', (0,0), (-1,-1), 'TOP'),
+        ('LEFTPADDING', (0,0), (0,0), 0),
+        ('RIGHTPADDING', (0,0), (0,0), 8),
+        ('LEFTPADDING', (1,0), (1,0), 8),
+        ('RIGHTPADDING', (1,0), (1,0), 0),
+    ]))
+    contenido.append(contacto_fila)
+    
+    contenido.append(Spacer(1, 0.5*cm))
+    
+    # --- PIE DE PÁGINA ---
     pie = Paragraph(
-        "<font size=7 color='#94A3B8'>Documento generado electrónicamente - "
-        f"{datetime.now().strftime('%d/%m/%Y %H:%M')}  |  Válido sin firma</font>",
+        "<font size=7 color='#94A3B8'>Documento generado electrónicamente — Válido sin firma</font>",
         ParagraphStyle('Pie', alignment=TA_CENTER)
     )
     contenido.append(pie)
