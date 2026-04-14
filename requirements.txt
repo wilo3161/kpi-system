@@ -49,3 +49,6 @@ uvicorn
 fastapi
 python-multipart
 httpx
+pymongo[srv]
+python-dotenv
+dnspython
