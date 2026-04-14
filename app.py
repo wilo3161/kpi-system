@@ -561,10 +561,20 @@ def check_password():
         100% { opacity: 1; transform: translateY(0) scale(1); }
     }
 
-    /* Contenedor Glassmorphism Principal */
+    /* Contenedor Glassmorphism Principal - centrado con Flexbox */
+    .login-wrapper {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 100vh;
+        width: 100%;
+        padding: 1rem;
+        box-sizing: border-box;
+    }
+
     .login-container {
         max-width: 380px;
-        margin: 5vh auto;
+        width: 100%;
         padding: 40px 30px;
         background: rgba(15, 23, 42, 0.45);
         backdrop-filter: blur(16px) saturate(180%);
@@ -645,7 +655,6 @@ def check_password():
         transform: translateY(-5px);
     }
     
-    /* Input caret / texto normal */
     input { color: white !important; font-size: 0.95rem !important; }
 
     /* 4. Streamlit Button Animaciones Modernas */
@@ -684,7 +693,26 @@ def check_password():
     /* Ocultar barra de navegacion lateral si esta por defecto */
     [data-testid="collapsedControl"] { display: none; }
     
-    /* CORRECCIÓN: Ocultar elementos vacíos que causan espacio extra */
+    /* CORRECCIÓN: Eliminar espacios en blanco y hacer que el contenedor ocupe toda la pantalla */
+    .stApp > header {
+        display: none;
+    }
+    
+    .block-container {
+        padding-top: 0 !important;
+        padding-bottom: 0 !important;
+        margin-top: 0 !important;
+        margin-bottom: 0 !important;
+        max-width: 100% !important;
+    }
+    
+    div[data-testid="stVerticalBlock"] {
+        gap: 0 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+    
+    /* Eliminar márgenes y paddings de los elementos hijos */
     div[data-testid="stVerticalBlock"] > div:empty,
     div[data-testid="stVerticalBlock"] > div > div:empty {
         display: none !important;
@@ -692,91 +720,70 @@ def check_password():
         margin: 0 !important;
         padding: 0 !important;
     }
-    
-    /* CORRECCIÓN: Eliminar márgenes superiores de los contenedores de Streamlit */
-    .block-container {
-        padding-top: 0 !important;
-        margin-top: 0 !important;
-    }
-    
-    /* CORRECCIÓN: Centrar el contenedor principal del login */
-    div[data-testid="stVerticalBlock"]:has(.login-container) {
-        align-items: center !important;
-        justify-content: center !important;
-    }
-    
-    /* CORRECCIÓN: Eliminar espacios en blanco de columnas vacías */
-    div[data-testid="stHorizontalBlock"] {
-        gap: 0 !important;
-    }
     </style>
     """,
         unsafe_allow_html=True,
     )
 
-    # CORRECCIÓN PRINCIPAL: Usar un solo contenedor centrado sin columnas
-    # Eliminar el st.write("<br><br>") que causaba el espacio vacío arriba
-    # y usar columns más equilibradas
+    # Envolver el formulario en un contenedor flex que ocupa toda la pantalla
+    st.markdown('<div class="login-wrapper">', unsafe_allow_html=True)
+    st.markdown('<div class="login-container">', unsafe_allow_html=True)
     
-    col_left, col_center, col_right = st.columns([1, 2, 1])
+    st.markdown(
+        """
+    <div class="login-brand">
+        <div class="main">AEROPOSTALE</div>
+        <div class="sub">ERP CONTROL TOTAL</div>
+    </div>
+    <div class="login-title">INICIAR SESIÓN</div>
+    """,
+        unsafe_allow_html=True,
+    )
+
+    username = st.text_input(
+        "Usuario",
+        placeholder="Nombre de usuario...",
+        key="login_user",
+        label_visibility="collapsed",
+    )
     
-    with col_center:
-        st.markdown('<div class="login-container">', unsafe_allow_html=True)
-        st.markdown(
-            """
-        <div class="login-brand">
-            <div class="main">AEROPOSTALE</div>
-            <div class="sub">ERP CONTROL TOTAL</div>
-        </div>
-        <div class="login-title">INICIAR SESIÓN</div>
-        """,
-            unsafe_allow_html=True,
-        )
+    password = st.text_input(
+        "Contraseña",
+        placeholder="Contraseña segura...",
+        type="password",
+        key="login_pass",
+        label_visibility="collapsed",
+    )
 
-        username = st.text_input(
-            "Usuario",
-            placeholder="Nombre de usuario...",
-            key="login_user",
-            label_visibility="collapsed",
-        )
-        
-        st.write("") # Breve margen
-        
-        password = st.text_input(
-            "Contraseña",
-            placeholder="Contraseña segura...",
-            type="password",
-            key="login_pass",
-            label_visibility="collapsed",
-        )
+    # Checkbox y botón en el mismo flujo sin columnas innecesarias
+    col_cb1, col_cb2 = st.columns([0.6, 1])
+    with col_cb1:
+        remember = st.checkbox("Recordarme", key="remember_me")
+    # El espacio se genera automáticamente
 
-        st.write("")
-        col_cb1, col_cb2 = st.columns([0.6, 1])
-        with col_cb1:
-            remember = st.checkbox("Recordarme", key="remember_me")
+    login_btn = st.button("Ingresar Seguro →", use_container_width=True, type="primary")
 
-        st.write("")
-        login_btn = st.button("Ingresar Seguro →", use_container_width=True, type="primary")
+    st.markdown('<div class="login-version">v2.1.0 EXPERT CSS</div>', unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)  # cierre login-container
+    st.markdown('</div>', unsafe_allow_html=True)  # cierre login-wrapper
 
-        st.markdown('<div class="login-version">v2.1.0 EXPERT CSS</div>', unsafe_allow_html=True)
-        st.markdown("</div>", unsafe_allow_html=True)
-
-        if login_btn:
-            if username in USERS_DB:
-                stored_hash = USERS_DB[username]["password"]
-                input_hash = hashlib.sha256(password.encode()).hexdigest()
-                if stored_hash == input_hash:
-                    st.session_state.authenticated = True
-                    st.session_state.username = username
-                    st.session_state.role = USERS_DB[username]["role"]
-                    st.session_state.user_name = USERS_DB[username]["name"]
-                    if remember:
-                        st.session_state.remember_username = username
-                    st.rerun()
-                else:
-                    st.error("❌ Contraseña incorrecta")
+    if login_btn:
+        if username in USERS_DB:
+            stored_hash = USERS_DB[username]["password"]
+            input_hash = hashlib.sha256(password.encode()).hexdigest()
+            if stored_hash == input_hash:
+                st.session_state.authenticated = True
+                st.session_state.username = username
+                st.session_state.role = USERS_DB[username]["role"]
+                st.session_state.user_name = USERS_DB[username]["name"]
+                if remember:
+                    st.session_state.remember_username = username
+                st.rerun()
             else:
-                st.error("❌ Usuario no existe")
+                st.error("❌ Contraseña incorrecta")
+        else:
+            st.error("❌ Usuario no existe")
+    
     return False
 
 
