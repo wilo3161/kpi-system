@@ -101,10 +101,20 @@ class MockLocalDB:
                     return True
         return False
 
-local_db = MockLocalDB()
-# ==============================================================================
+# ============================================================
+# CONEXIÓN A BASE DE DATOS (MongoDB con fallback local)
+# ============================================================
 
-
+# Intentar importar MongoDB primero
+try:
+    from database import mongo_db as local_db, inicializar_datos_base, MockLocalDBFallback
+    # Inicializar datos base en MongoDB
+    inicializar_datos_base()
+    print("✅ Usando MongoDB Atlas")
+except ImportError as e:
+    # Si falla la importación, usar MockLocalDB local
+    print(f"⚠️ MongoDB no disponible, usando MockLocalDB local: {e}")
+    local_db = MockLocalDB()
 
 # ==============================================================================
 # DATOS DE TIENDAS
@@ -761,7 +771,23 @@ def check_password():
         st.markdown('<div class="login-version">v2.1.0 EXPERT CSS</div>', unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
 
-        if login_btn:
+ if login_btn:
+            # PRIORIDAD 1: Intentar autenticación con MongoDB
+            try:
+                user_data = local_db.authenticate(username, password)
+                if user_data:
+                    st.session_state.authenticated = True
+                    st.session_state.username = username
+                    st.session_state.role = user_data.get("role", "Usuario")
+                    st.session_state.user_name = user_data.get("name", username)
+                    if remember:
+                        st.session_state.remember_username = username
+                    st.rerun()
+            except Exception as e:
+                print(f"Error auth MongoDB: {e}")
+                pass
+            
+            # PRIORIDAD 2: Fallback a USERS_DB local
             if username in USERS_DB:
                 stored_hash = USERS_DB[username]["password"]
                 input_hash = hashlib.sha256(password.encode()).hexdigest()
@@ -777,7 +803,6 @@ def check_password():
                     st.error("❌ Contraseña incorrecta")
             else:
                 st.error("❌ Usuario no existe")
-    return False
 
 
 def show_header():
@@ -5958,9 +5983,9 @@ def show_gestion_equipo():
     
     try:
         trabajadores = local_db.query('trabajadores')
+        if trabajadores is None:
+            trabajadores = []
         if not trabajadores:
-            st.info("📝 Inicializando estructura organizacional base...")
-            todos_base = []
             for area, lista in estructura_base.items():
                 for trabajador in lista:
                     trabajador['area'] = area
