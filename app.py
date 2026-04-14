@@ -73,7 +73,14 @@ def add_back_button(key="back"):
 class MockLocalDB:
     def _get_db(self):
         if 'local_database' not in st.session_state:
-            st.session_state.local_database = {}
+            st.session_state.local_database = {
+                'users': [
+                    {'id':1, 'username':'admin', 'password': hash_password('wilo3161'), 'role':'Administrador', 'name':'Administrador General'},
+                    {'id':2, 'username':'logistica', 'password': hash_password('log123'), 'role':'Logística', 'name':'Coordinador Logístico'},
+                    {'id':3, 'username':'ventas', 'password': hash_password('ven123'), 'role':'Ventas', 'name':'Ejecutivo de Ventas'},
+                    {'id':4, 'username':'bodega', 'password': hash_password('bod123'), 'role':'Bodega', 'name':'Supervisor de Bodega'}
+                ]
+            }
         return st.session_state.local_database
 
     def query(self, table_name):
@@ -100,6 +107,15 @@ class MockLocalDB:
                     item.update(update_data)
                     return True
         return False
+
+    def authenticate(self, username, password):
+        """Autentica un usuario contra la tabla 'users' local."""
+        users = self.query('users')
+        input_hash = hash_password(password)
+        for user in users:
+            if user.get('username') == username and user.get('password') == input_hash:
+                return user
+        return None
 
 # ============================================================
 # CONEXIÓN A BASE DE DATOS (MongoDB con fallback local)
@@ -771,7 +787,7 @@ def check_password():
         st.markdown('<div class="login-version">v2.1.0 EXPERT CSS</div>', unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
 
- if login_btn:
+        if login_btn:
             # PRIORIDAD 1: Intentar autenticación con MongoDB
             try:
                 user_data = local_db.authenticate(username, password)
@@ -803,7 +819,6 @@ def check_password():
                     st.error("❌ Contraseña incorrecta")
             else:
                 st.error("❌ Usuario no existe")
-
 
 def show_header():
     """Muestra la barra superior con Inicio, info usuario y Salir"""
