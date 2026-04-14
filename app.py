@@ -563,7 +563,7 @@ def check_password():
 
     /* Contenedor Glassmorphism Principal */
     .login-container {
-        max-width: 380px;  /* Reducimos el ancho para que sea ms compacto */
+        max-width: 380px;
         margin: 5vh auto;
         padding: 40px 30px;
         background: rgba(15, 23, 42, 0.45);
@@ -684,15 +684,41 @@ def check_password():
     /* Ocultar barra de navegacion lateral si esta por defecto */
     [data-testid="collapsedControl"] { display: none; }
     
+    /* CORRECCIÓN: Ocultar elementos vacíos que causan espacio extra */
+    div[data-testid="stVerticalBlock"] > div:empty,
+    div[data-testid="stVerticalBlock"] > div > div:empty {
+        display: none !important;
+        height: 0 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+    
+    /* CORRECCIÓN: Eliminar márgenes superiores de los contenedores de Streamlit */
+    .block-container {
+        padding-top: 0 !important;
+        margin-top: 0 !important;
+    }
+    
+    /* CORRECCIÓN: Centrar el contenedor principal del login */
+    div[data-testid="stVerticalBlock"]:has(.login-container) {
+        align-items: center !important;
+        justify-content: center !important;
+    }
+    
+    /* CORRECCIÓN: Eliminar espacios en blanco de columnas vacías */
+    div[data-testid="stHorizontalBlock"] {
+        gap: 0 !important;
+    }
     </style>
     """,
         unsafe_allow_html=True,
     )
 
-    # El secreto: Envolver en columnas para forzar la reduccin desde el centro
-    # 1.5 - 1.2 - 1.5 asegura que creamos grandes vacos a los lados y un centro ajustado.
-    st.write("<br><br>", unsafe_allow_html=True)
-    col_left, col_center, col_right = st.columns([1.5, 1.2, 1.5])
+    # CORRECCIÓN PRINCIPAL: Usar un solo contenedor centrado sin columnas
+    # Eliminar el st.write("<br><br>") que causaba el espacio vacío arriba
+    # y usar columns más equilibradas
+    
+    col_left, col_center, col_right = st.columns([1, 2, 1])
     
     with col_center:
         st.markdown('<div class="login-container">', unsafe_allow_html=True)
@@ -752,12 +778,6 @@ def check_password():
             else:
                 st.error("❌ Usuario no existe")
     return False
-
-def logout():
-    for key in ["authenticated", "username", "role", "user_name", "remember_username"]:
-        if key in st.session_state:
-            del st.session_state[key]
-    st.rerun()
 
 
 def show_header():
