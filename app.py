@@ -862,7 +862,7 @@ def show_main_page():
 
     role = st.session_state.role
     if role == "Bodega":
-        modules = [m for m in all_modules if m["key"] == "generar_guias"]
+        modules = [m for m in all_modules if m["key"] in ["generar_guias", "control_inventario"]]
     else:
         modules = all_modules
 
@@ -5529,7 +5529,7 @@ def main():
         "dashboard_logistico": ["Administrador"],
         "gestion_equipo": ["Administrador"],
         "generar_guias": ["Administrador", "Bodega"],
-        "control_inventario": ["Administrador"],
+        "control_inventario": ["Administrador", "Bodega"],
         "reportes_avanzados": ["Administrador"],
         "configuracion": ["Administrador"],
     }
