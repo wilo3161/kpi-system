@@ -1420,7 +1420,7 @@ def show_reconciliacion_v8():
                     if val == 'ANULADA': return 'background-color: #ffcccc'
                     elif val == 'FACTURADA': return 'background-color: #ccffcc'
                     return ''
-                styled_datos = styled_datos.applymap(color_estado, subset=['ESTADO'])
+                styled_datos = styled_datos.map(color_estado, subset=['ESTADO'])
                 st.dataframe(styled_datos, use_container_width=True, height=500)
                 st.download_button(label="📥 Descargar datos filtrados (CSV)", data=datos_display.to_csv(index=False), file_name=f"datos_filtrados_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv", mime="text/csv", use_container_width=True)
             st.subheader("📈 Estadísticas de los Datos Filtrados")
