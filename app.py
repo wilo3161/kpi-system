@@ -2973,14 +2973,22 @@ def show_control_inventario():
             st.sidebar.warning(f"No se pudo cargar inventario global: {e}")
         return None, None
     def guardar_inventario_global(df, tiendas):
-        try:
-            data = {'data': df.to_dict(orient='records'), 'tiendas': tiendas, 'fecha_actualizacion': datetime.now().isoformat()}
-            with open(INVENTARIO_FILE, 'w', encoding='utf-8') as f:
-                json.dump(data, f, ensure_ascii=False, indent=2)
-            return True
-        except Exception as e:
-            st.sidebar.error(f"Error al guardar inventario: {e}")
-            return False
+    try:
+        # Convertir el DataFrame a una lista de dicts serializable
+        json_str = df.to_json(orient='records', date_format='iso', default_handler=str)
+        records = json.loads(json_str)   # ahora datetime -> string, NaN -> null
+        
+        data = {
+            'data': records,
+            'tiendas': tiendas,
+            'fecha_actualizacion': datetime.now().isoformat()
+        }
+        with open(INVENTARIO_FILE, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        return True
+    except Exception as e:
+        st.sidebar.error(f"Error al guardar inventario: {e}")
+        return False
     if 'inventario_df' not in st.session_state:
         st.session_state.inventario_df = None
         st.session_state.inventario_tiendas = []
