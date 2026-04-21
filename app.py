@@ -2973,7 +2973,8 @@ def show_control_inventario():
             st.sidebar.warning(f"No se pudo cargar inventario global: {e}")
         return None, None
     def guardar_inventario_global(df, tiendas):
-        try:
+        try:def guardar_inventario_global(df, tiendas):
+    try:
         # Convertir el DataFrame a una lista de dicts serializable
         json_str = df.to_json(orient='records', date_format='iso', default_handler=str)
         records = json.loads(json_str)   # ahora datetime -> string, NaN -> null
