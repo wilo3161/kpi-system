@@ -208,17 +208,16 @@ class MockLocalDB:
                     {'id':1, 'username':'admin', 'password': hash_password('wilo3161'), 'role':'Administrador', 'name':'Administrador General'},
                     {'id':2, 'username':'logistica', 'password': hash_password('log123'), 'role':'Logística', 'name':'Coordinador Logístico'},
                     {'id':3, 'username':'ventas', 'password': hash_password('ven123'), 'role':'Ventas', 'name':'Ejecutivo de Ventas'},
-                    {'id':4, 'username':'Andres', 'password': hash_password('bod123'), 'role':'Bodega', 'name':'Supervisor de Bodega'},
-                    {'id':5, 'username':'Luis', 'password': hash_password('bod123'), 'role':'Bodega', 'name':'Supervisor de Bodega'},
-                    {'id':6, 'username':'Jessica', 'password': hash_password('bod123'), 'role':'Bodega', 'name':'Supervisor de Bodega'},
-                    {'id':7, 'username':'Diana', 'password': hash_password('bod123'), 'role':'Bodega', 'name':'Supervisor de Bodega'},
-                    {'id':8, 'username':'Jhonny', 'password': hash_password('bod123'), 'role':'Bodega', 'name':'Supervisor de Bodega'},
-                    # Nuevos colaboradores:
-                    {'id':9, 'username':'Josue', 'password': hash_password('temp123'), 'role':'Bodega', 'name':'Josue Imbaucan'},
+                    {'id':4, 'username':'Andres', 'password': hash_password('Andres145'), 'role':'Bodega', 'name':'Andrés Yépez'},
+                    {'id':5, 'username':'Luis', 'password': hash_password('luis230499'), 'role':'Bodega', 'name':'Luis Perugachi'},
+                    {'id':6, 'username':'Jessica', 'password': hash_password('bod123'), 'role':'Bodega', 'name':'Jessica Suarez'},
+                    {'id':7, 'username':'Diana', 'password': hash_password('bod123'), 'role':'Bodega', 'name':'Diana García'},
+                    {'id':8, 'username':'Jhonny', 'password': hash_password('bod123'), 'role':'Bodega', 'name':'Jhonny Villa'},
+                    {'id':9, 'username':'Josue', 'password': hash_password('bod123'), 'role':'Bodega', 'name':'Josue Imbacuan'},
                     {'id':10, 'username':'Rocio', 'password': hash_password('temp123'), 'role':'Bodega', 'name':'Rocio Cadena'},
                     {'id':11, 'username':'JhonnyG', 'password': hash_password('temp123'), 'role':'Bodega', 'name':'Jhonny Guadalupe'},
                 ],
-                'kpis': self._generate_kpis_data()
+                'kpis': self._generate_kpis_data()  
             }
         return st.session_state.local_database
 
@@ -262,36 +261,8 @@ class MockLocalDB:
             if user.get('username') == username and user.get('password') == input_hash: 
                 return user
         return None
-    def _generate_kpis_data(self):
-        kpis = []
-        today = datetime.now()
-        for i in range(30):
-            date = today - timedelta(days=i)
-            kpis.append({"id": i, "fecha": date.strftime("%Y-%m-%d"), "produccion": np.random.randint(800, 1500), "eficiencia": np.random.uniform(85, 98), "alertas": np.random.randint(0, 5), "costos": np.random.uniform(5000, 15000)})
-        return kpis
-    def query(self, table_name): return self._get_db().get(table_name, [])
-    def insert(self, table_name, data):
-        db = self._get_db()
-        if table_name not in db: db[table_name] = []
-        if 'id' not in data: data['id'] = len(db[table_name]) + 1
-        db[table_name].append(data)
-    def delete(self, table_name, id):
-        db = self._get_db()
-        if table_name in db: db[table_name] = [item for item in db[table_name] if item.get('id') != id]
-    def update(self, table_name, id, update_data):
-        db = self._get_db()
-        if table_name in db:
-            for item in db[table_name]:
-                if item.get('id') == id:
-                    item.update(update_data)
-                    return True
-        return False
-    def authenticate(self, username, password):
-        users = self.query('users')
-        input_hash = hash_password(password)
-        for user in users:
-            if user.get('username') == username and user.get('password') == input_hash: return user
-        return None
+    
+ 
 
 try:
     from database import mongo_db as local_db, inicializar_datos_base, MockLocalDBFallback
@@ -2953,231 +2924,12 @@ def extraer_datos_transferencia(url: str) -> dict:
     
     return datos
 
-def generar_pdf_profesional(guia_data):
-    """
-    Genera una guía A4 vertical con diseño limpio, colores Aeropostale,
-    iconos, QR, y número de transferencia en la parte superior.
-    """
-    buffer = io.BytesIO()
-    
-    from reportlab.lib.pagesizes import A4
-    page_width, page_height = A4
-    margen = 1.5 * cm
-    
-    doc = SimpleDocTemplate(
-        buffer,
-        pagesize=(page_width, page_height),
-        leftMargin=margen,
-        rightMargin=margen,
-        topMargin=margen,
-        bottomMargin=margen
-    )
-    
-    styles = getSampleStyleSheet()
-    
-    color_primario = HexColor("#0033A0")
-    color_acento = HexColor("#E4002B")
-    color_texto = HexColor("#1E293B")
-    color_texto_suave = HexColor("#64748B")
-    color_fondo = HexColor("#F8FAFC")
-    
-    # Estilos
-    titulo_principal = ParagraphStyle('TituloPrincipal', parent=styles['Title'],
-        fontName='Helvetica-Bold', fontSize=26, textColor=color_primario,
-        alignment=TA_CENTER, spaceAfter=2, leading=24)
-    subtitulo_style = ParagraphStyle('Subtitulo', parent=styles['Normal'],
-        fontName='Helvetica-Bold', fontSize=18, textColor=color_texto_suave,
-        alignment=TA_CENTER, spaceAfter=10, leading=18)
-    tienda_style = ParagraphStyle('Tienda', parent=styles['Normal'],
-        fontName='Helvetica-Bold', fontSize=26, textColor=color_primario,
-        alignment=TA_CENTER, spaceAfter=10, leading=18)
-    seccion_title_style = ParagraphStyle('SeccionTitle', parent=styles['Normal'],
-        fontName='Helvetica-Bold', fontSize=12, textColor=color_acento,
-        alignment=TA_LEFT, spaceBefore=6, spaceAfter=2, leading=13)
-    contenido_style = ParagraphStyle('Contenido', parent=styles['Normal'],
-        fontName='Helvetica-Bold', fontSize=9, textColor=color_texto,
-        alignment=TA_LEFT, spaceAfter=2, leading=12)
-    valor_destacado_style = ParagraphStyle('ValorDestacado', parent=styles['Normal'],
-        fontName='Helvetica-Bold', fontSize=12, textColor=color_primario,
-        alignment=TA_RIGHT, spaceAfter=2)
-    fecha_hora_style = ParagraphStyle('FechaHora', parent=styles['Normal'],
-        fontName='Helvetica', fontSize=8, textColor=color_texto_suave,
-        alignment=TA_RIGHT, spaceAfter=0, leading=10)
-    leyenda_qr_style = ParagraphStyle('LeyendaQR', parent=styles['Normal'],
-        fontName='Helvetica-Bold', fontSize=9, textColor=color_primario,
-        alignment=TA_CENTER, spaceBefore=2, spaceAfter=0)
-    firma_label_style = ParagraphStyle('FirmaLabel', parent=styles['Normal'],
-        fontName='Helvetica-Bold', fontSize=9, textColor=color_primario,
-        alignment=TA_CENTER, spaceBefore=10)
-    firma_linea_style = ParagraphStyle('FirmaLinea', parent=styles['Normal'],
-        fontName='Helvetica', fontSize=8, textColor=color_texto_suave,
-        alignment=TA_CENTER)
-    transferencia_style = ParagraphStyle('Transferencia', parent=styles['Normal'],
-        fontName='Helvetica-Bold', fontSize=11, textColor=color_acento,
-        alignment=TA_LEFT)
-
-    contenido = []
-    
-    # Título y número de transferencia (si existe)
-    contenido.append(Paragraph("🚚 GUÍA DE REMISIÓN", titulo_principal))
-    if guia_data.get("numero_transferencia"):
-        contenido.append(Paragraph(f"Transferencia N° {guia_data['numero_transferencia']}", transferencia_style))
-    contenido.append(Paragraph(f"Centro de Distribución {guia_data['marca']}", subtitulo_style))
-    contenido.append(Spacer(1, 0.2*cm))
-    
-    # Nombre tienda
-    tienda_nombre = guia_data.get('tienda_destino', 'Tienda no especificada')
-    contenido.append(Paragraph(tienda_nombre, tienda_style))
-    contenido.append(Spacer(1, 0.3*cm))
-    
-    # Datos de la guía (derecha)
-    datos_tabla = Table(
-        [[Paragraph(f"N° Guía: {guia_data['numero']}", valor_destacado_style)],
-         [Paragraph(f"Fecha: {guia_data['fecha_emision']}", fecha_hora_style)],
-         [Paragraph(f"Hora: {datetime.now().strftime('%H:%M')}", fecha_hora_style)]],
-        colWidths=[6*cm]
-    )
-    datos_tabla.setStyle(TableStyle([
-        ('ALIGN', (0,0), (-1,-1), 'RIGHT'),
-        ('VALIGN', (0,0), (-1,-1), 'TOP'),
-    ]))
-    datos_fila = Table([[datos_tabla]], colWidths=[page_width - 2*margen])
-    datos_fila.setStyle(TableStyle([('ALIGN', (0,0), (-1,-1), 'RIGHT')]))
-    contenido.append(datos_fila)
-    contenido.append(Spacer(1, 0.3*cm))
-    
-    # Bloque LOGO + QR
-    logo_bytes = st.session_state.logos.get(guia_data['marca'])
-    if not logo_bytes:
-        logo_url = "https://raw.githubusercontent.com/wilo3161/kpi-system/main/images/Fashion.jpg" if guia_data['marca'] == "Fashion Club" else "https://raw.githubusercontent.com/wilo3161/kpi-system/main/images/Tempo.jpg"
-        logo_bytes = descargar_logo(logo_url)
-        if logo_bytes:
-            st.session_state.logos[guia_data['marca']] = logo_bytes
-    
-    if logo_bytes:
-        try:
-            logo_img = Image(io.BytesIO(logo_bytes), width=5.0*cm, height=5.0*cm)
-            logo_cell = logo_img
-        except:
-            logo_cell = Paragraph(f"<b>{guia_data['marca']}</b>", contenido_style)
-    else:
-        logo_cell = Paragraph(f"<b>{guia_data['marca']}</b>", contenido_style)
-    
-    marca_texto = Paragraph(f"<b>{guia_data['marca']}</b>", contenido_style)
-    
-    bloque_izq = Table([[logo_cell], [marca_texto]], colWidths=[5*cm])
-    bloque_izq.setStyle(TableStyle([
-        ('ALIGN', (0,0), (-1,-1), 'CENTER'),
-        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-    ]))
-    
-    qr_bytes = guia_data.get("qr_bytes")
-    if qr_bytes:
-        try:
-            qr_img = Image(io.BytesIO(qr_bytes), width=5.0*cm, height=5.0*cm)
-        except:
-            qr_img = Paragraph("[QR]", contenido_style)
-        qr_leyenda = Paragraph("📱 Escanea aquí tu transferencia", leyenda_qr_style)
-        bloque_qr = Table([[qr_img], [qr_leyenda]], colWidths=[4*cm])
-        bloque_qr.setStyle(TableStyle([
-            ('ALIGN', (0,0), (-1,-1), 'CENTER'),
-            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-        ]))
-    else:
-        bloque_qr = Paragraph("", contenido_style)
-    
-    col_derecha = Table([[bloque_qr]], colWidths=[4.5*cm])
-    col_derecha.setStyle(TableStyle([
-        ('ALIGN', (0,0), (-1,-1), 'CENTER'),
-        ('VALIGN', (0,0), (-1,-1), 'TOP'),
-    ]))
-    
-    fila_logo_qr = Table([[bloque_izq, "", col_derecha]], colWidths=[5*cm, 9*cm, 4.5*cm])
-    fila_logo_qr.setStyle(TableStyle([
-        ('VALIGN', (0,0), (-1,-1), 'TOP'),
-        ('ALIGN', (0,0), (0,0), 'LEFT'),
-        ('ALIGN', (2,0), (2,0), 'RIGHT'),
-    ]))
-    contenido.append(fila_logo_qr)
-    contenido.append(Spacer(1, 0.5*cm))
-    
-    # Sección Destinatario / Remitente
-    dest_data = [
-        [Paragraph("👤 DESTINATARIO", seccion_title_style)],
-        [Paragraph(f"{guia_data['destinatario']}", contenido_style)],
-        [Paragraph(f"📞 {guia_data.get('telefono_destinatario', 'No especificado')}", contenido_style)],
-        [Paragraph(f"📍 {guia_data['direccion_destinatario']}", contenido_style)]
-    ]
-    tabla_dest = Table(dest_data, colWidths=[8.5*cm])
-    tabla_dest.setStyle(TableStyle([
-        ('VALIGN', (0,0), (-1,-1), 'TOP'),
-        ('BACKGROUND', (0,0), (-1,-1), color_fondo),
-        ('LEFTPADDING', (0,0), (-1,-1), 6),
-        ('RIGHTPADDING', (0,0), (-1,-1), 6),
-        ('TOPPADDING', (0,0), (0,0), 4),
-        ('BOTTOMPADDING', (-1,0), (-1,0), 4),
-    ]))
-    
-    rem_data = [
-        [Paragraph("🏢 REMITENTE", seccion_title_style)],
-        [Paragraph(f"{guia_data['remitente']}", contenido_style)],
-        [Paragraph(f"📍 {guia_data['direccion_remitente']}", contenido_style)]
-    ]
-    tabla_rem = Table(rem_data, colWidths=[8.5*cm])
-    tabla_rem.setStyle(TableStyle([
-        ('VALIGN', (0,0), (-1,-1), 'TOP'),
-        ('BACKGROUND', (0,0), (-1,-1), color_fondo),
-        ('LEFTPADDING', (0,0), (-1,-1), 6),
-        ('RIGHTPADDING', (0,0), (-1,-1), 6),
-        ('TOPPADDING', (0,0), (0,0), 4),
-        ('BOTTOMPADDING', (-1,0), (-1,0), 4),
-    ]))
-    
-    contacto_fila = Table([[tabla_dest, tabla_rem]], colWidths=[9*cm, 9*cm])
-    contacto_fila.setStyle(TableStyle([
-        ('VALIGN', (0,0), (-1,-1), 'TOP'),
-        ('LEFTPADDING', (0,0), (0,0), 0),
-        ('RIGHTPADDING', (0,0), (0,0), 4),
-        ('LEFTPADDING', (1,0), (1,0), 4),
-        ('RIGHTPADDING', (1,0), (1,0), 0),
-    ]))
-    contenido.append(contacto_fila)
-    contenido.append(Spacer(1, 0.8*cm))
-    
-    # Firmas
-    contenido.append(Spacer(1, 0.3*cm))
-    firma_tabla = Table(
-        [[Paragraph("_________________________", firma_linea_style),
-          Paragraph("_________________________", firma_linea_style)],
-         [Paragraph("Revisado por:", firma_label_style),
-          Paragraph("Recontado por:", firma_label_style)]],
-        colWidths=[9*cm, 9*cm]
-    )
-    firma_tabla.setStyle(TableStyle([
-        ('ALIGN', (0,0), (-1,-1), 'CENTER'),
-        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-        ('TOPPADDING', (0,0), (-1,-1), 8),
-    ]))
-    contenido.append(firma_tabla)
-    
-    # Pie de página
-    contenido.append(Spacer(1, 0.3*cm))
-    pie = Paragraph(
-        "<font size=7 color='#94A3B8'>Documento generado electrónicamente — Válido sin firma</font>",
-        ParagraphStyle('Pie', alignment=TA_CENTER)
-    )
-    contenido.append(pie)
-    
-    doc.build(contenido)
-    buffer.seek(0)
-    return buffer.getvalue()
-
 # ==============================================================================
 # MÓDULO: GENERAR GUÍAS (MEJORADO)
 # ==============================================================================
 def generar_pdf_profesional(guia_data):
     """
-    Genera una guía A4 vertical con diseño limpio, colores Aeropostale (ahora en negro),
+    Genera una guía A4 vertical con diseño limpio, colores Aeropostale (negro),
     iconos, espacio para firmas y número de transferencia sobre el logo.
     """
     buffer = io.BytesIO()
@@ -3197,13 +2949,14 @@ def generar_pdf_profesional(guia_data):
     
     styles = getSampleStyleSheet()
     
-    # Cambio principal: color primario ahora es negro en lugar de azul
-    color_primario = black  # antes HexColor("#0033A0")
-    color_acento = HexColor("#E4002B")    # rojo (se mantiene para pequeños detalles)
+    # Colores (primario = negro)
+    color_primario = black
+    color_acento = HexColor("#E4002B")
     color_texto = HexColor("#1E293B")
     color_texto_suave = HexColor("#64748B")
     color_fondo = HexColor("#F8FAFC")
     
+    # Estilos de texto
     titulo_principal = ParagraphStyle(
         'TituloPrincipal',
         parent=styles['Title'],
@@ -3323,7 +3076,7 @@ def generar_pdf_profesional(guia_data):
     contenido.append(Paragraph(tienda_nombre, tienda_style))
     contenido.append(Spacer(1, 0.3*cm))
     
-    # --- NUEVO: Mostrar número de transferencia ENCIMA del logo ---
+    # Número de transferencia (encima del logo)
     num_transferencia = guia_data.get('numero_transferencia', '')
     if num_transferencia:
         trans_style = ParagraphStyle(
@@ -3338,7 +3091,7 @@ def generar_pdf_profesional(guia_data):
         contenido.append(Paragraph(f"TRANSFERENCIA N°: {num_transferencia}", trans_style))
         contenido.append(Spacer(1, 0.2*cm))
     
-    # Datos de la guía (derecha)
+    # Datos de la guía (lado derecho)
     datos_tabla = Table(
         [[Paragraph(f"N° Guía: {guia_data['numero']}", valor_destacado_style)],
          [Paragraph(f"Fecha: {guia_data['fecha_emision']}", fecha_hora_style)],
@@ -3359,7 +3112,13 @@ def generar_pdf_profesional(guia_data):
     # Bloque LOGO + QR
     logo_bytes = st.session_state.logos.get(guia_data['marca'])
     if not logo_bytes:
-        logo_url = "https://raw.githubusercontent.com/wilo3161/kpi-system/main/images/Fashion.jpg" if guia_data['marca'] == "Fashion Club" else "https://raw.githubusercontent.com/wilo3161/kpi-system/main/images/Tempo.jpg"
+        # URLs de respaldo según marca
+        if guia_data['marca'] == "Fashion Club":
+            logo_url = "https://raw.githubusercontent.com/wilo3161/kpi-system/main/images/Fashion.jpg"
+        elif guia_data['marca'] == "Tempo":
+            logo_url = "https://raw.githubusercontent.com/wilo3161/kpi-system/main/images/Tempo.jpg"
+        else:
+            logo_url = "https://raw.githubusercontent.com/wilo3161/kpi-system/main/images/Aeropostale.jpg"
         logo_bytes = descargar_logo(logo_url)
         if logo_bytes:
             st.session_state.logos[guia_data['marca']] = logo_bytes
@@ -3423,7 +3182,7 @@ def generar_pdf_profesional(guia_data):
     contenido.append(fila_logo_qr)
     contenido.append(Spacer(1, 0.5*cm))
     
-    # Sección Destinatario / Remitente
+    # Sección Destinatario
     dest_data = [
         [Paragraph("👤 DESTINATARIO", seccion_title_style)],
         [Paragraph(f"{guia_data['destinatario']}", contenido_style)],
@@ -3440,11 +3199,15 @@ def generar_pdf_profesional(guia_data):
         ('BOTTOMPADDING', (-1,0), (-1,0), 4),
     ]))
     
+    # Sección Remitente (con posible usuario generador)
     rem_data = [
         [Paragraph("🏢 REMITENTE", seccion_title_style)],
         [Paragraph(f"{guia_data['remitente']}", contenido_style)],
         [Paragraph(f"📍 {guia_data['direccion_remitente']}", contenido_style)]
     ]
+    if guia_data.get("usuario_genera"):
+        rem_data.append([Paragraph(f"👤 Generado por: {guia_data['usuario_genera']}", contenido_style)])
+    
     tabla_rem = Table(rem_data, colWidths=[8.5*cm])
     tabla_rem.setStyle(TableStyle([
         ('VALIGN', (0,0), (-1,-1), 'TOP'),
@@ -3475,7 +3238,7 @@ def generar_pdf_profesional(guia_data):
         [[Paragraph("_________________________", firma_linea_style),
           Paragraph("_________________________", firma_linea_style)],
          [Paragraph("Revisado por:", firma_label_style),
-          Paragraph("Recontado por:", firma_label_style)]],
+          Paragraph("Verificado por:", firma_label_style)]],
         colWidths=[9*cm, 9*cm]
     )
     firma_tabla.setStyle(TableStyle([
@@ -3496,9 +3259,6 @@ def generar_pdf_profesional(guia_data):
     doc.build(contenido)
     buffer.seek(0)
     return buffer.getvalue()
-# ==============================================================================
-# MÓDULO: GENERAR GUÍAS (con QR y extracción de datos de URL)
-# ==============================================================================
 def show_generar_guias():
     """Módulo para generar guías de remisión con código QR y número de transferencia"""
     add_back_button(key="back_guias")
@@ -3508,7 +3268,7 @@ def show_generar_guias():
     # --- Constantes de marcas (logos y datos de remitente) ---
     MARCAS = {
         "Aeropostale": {
-            "remitente": "TEMPO - Centro de Distribución",
+            "remitente": "AEROPOSTALE - Centro de Distribución",
             "direccion": "Av. Juan Tanca Marengo km 5.5, Guayaquil - Ecuador",
             "logo_url": "https://raw.githubusercontent.com/wilo3161/kpi-system/main/images/Aeropostale.jpg"
         },
@@ -3577,6 +3337,9 @@ def show_generar_guias():
         "URL de la transferencia (ej: https://fashion.sisconti.com/...codigo=1751139...)",
         placeholder="Pega aquí la URL completa de la transferencia"
     )
+    if url_transferencia and not url_transferencia.startswith(('http://', 'https://')):
+        url_transferencia = 'https://' + url_transferencia
+
     numero_transferencia = ""
     if url_transferencia:
         # Intentar extraer el número usando la función definida anteriormente
@@ -3600,7 +3363,7 @@ def show_generar_guias():
             fecha_emision = datetime.now().strftime("%d/%m/%Y")
             guia_data = {
                 "numero": nuevo_numero,
-                "marca": marca_seleccionada,          # <-- CORREGIDO: usar la marca seleccionada
+                "marca": marca_seleccionada,
                 "tienda_destino": tienda_seleccionada,
                 "destinatario": destinatario,
                 "telefono_destinatario": telefono,
@@ -3613,7 +3376,8 @@ def show_generar_guias():
                 "observaciones": observaciones,
                 "ciudad": ciudad,
                 "numero_transferencia": numero_transferencia,
-                "url_transferencia": url_transferencia
+                "url_transferencia": url_transferencia,
+                "usuario_genera": st.session_state.get("user_name", "Usuario")
             }
 
             # Generar QR con la URL proporcionada por el usuario
@@ -3676,6 +3440,7 @@ def show_generar_guias():
     st.markdown('</div>', unsafe_allow_html=True)
 # ==============================================================================
 # MÓDULO: CONTROL DE INVENTARIO (CON ARCHIVO JSON GLOBAL)
+
 # ==============================================================================
 def show_control_inventario():
     add_back_button(key="back_inventario")
