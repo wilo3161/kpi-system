@@ -3458,19 +3458,44 @@ def show_control_inventario():
                     data = json.load(f)
                 df = pd.DataFrame(data['data'])
                 tiendas = data['tiendas']
+                # Convertir columnas de fecha de vuelta a datetime si es necesario
+                if 'FECHA_COMPRA_DT' in df.columns:
+                    df['FECHA_COMPRA_DT'] = pd.to_datetime(df['FECHA_COMPRA_DT'])
+                if 'FECHA COMPRA' in df.columns:
+                    df['FECHA COMPRA'] = pd.to_datetime(df['FECHA COMPRA'])
                 return df, tiendas
         except Exception as e:
             st.sidebar.warning(f"No se pudo cargar inventario global: {e}")
         return None, None
+
     def guardar_inventario_global(df, tiendas):
         try:
-            data = {'data': df.to_dict(orient='records'), 'tiendas': tiendas, 'fecha_actualizacion': datetime.now().isoformat()}
+            # Crear una copia para no modificar el original
+            df_copy = df.copy()
+            # Convertir columnas de tipo datetime/Timestamp a string ISO
+            for col in df_copy.columns:
+                if pd.api.types.is_datetime64_any_dtype(df_copy[col]):
+                    df_copy[col] = df_copy[col].dt.strftime('%Y-%m-%d %H:%M:%S')
+                # También manejar columnas con tipo 'object' que contengan Timestamp
+                elif df_copy[col].dtype == 'object':
+                    # Intentar convertir a datetime, si funciona, formatear
+                    try:
+                        if pd.to_datetime(df_copy[col], errors='coerce').notna().all():
+                            df_copy[col] = pd.to_datetime(df_copy[col]).dt.strftime('%Y-%m-%d %H:%M:%S')
+                    except:
+                        pass
+            data = {
+                'data': df_copy.to_dict(orient='records'),
+                'tiendas': tiendas,
+                'fecha_actualizacion': datetime.now().isoformat()
+            }
             with open(INVENTARIO_FILE, 'w', encoding='utf-8') as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
             return True
         except Exception as e:
             st.sidebar.error(f"Error al guardar inventario: {e}")
             return False
+
     if 'inventario_df' not in st.session_state:
         st.session_state.inventario_df = None
         st.session_state.inventario_tiendas = []
