@@ -52,3 +52,5 @@ httpx
 pymongo[srv]
 python-dotenv
 dnspython
+bs4
+beautifulsoup
