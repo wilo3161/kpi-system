@@ -1,56 +1,48 @@
+# --- Framework Principal y Manejo de Datos ---
 streamlit
 pandas
 numpy
-matplotlib
-seaborn
-plotly
 scipy
 scikit-learn
-reportlab
-psycopg2-binary
-python-dotenv
-supabase
-xlsxwriter
-kaleido
-openpyxl
-python-dotenv
-qrcode[pil]
-Pillow
-fpdf
-pdfplumber
-streamlit
-pandas
-numpy
-plotly
-supabase
-qrcode
-Pillow
-fpdf
-reportlab
+
+# --- Visualización de Datos ---
 matplotlib
 seaborn
+plotly
+kaleido
+
+# --- Generación de Reportes y Documentos ---
+reportlab
+fpdf
+pdfplumber
+xlsxwriter
+openpyxl
+
+# --- Utilidades y Archivos ---
+python-dotenv
+Pillow
+qrcode[pil]
+requests
+httpx
+bs4
+beautifulsoup4
+
+# --- Base de Datos y Conectividad ---
+psycopg2-binary
+supabase
+pymongo[srv]
+dnspython
+certifi
+
+# --- Integración y APIs ---
 google-generativeai
+python-telegram-bot
+
+# --- Procesamiento de Texto / Fuzzy Matching ---
 fuzzywuzzy
 python-Levenshtein
-pandas
-numpy
-plotly
-pymongo
-dnspython
-python-dotenv
-certifi
-openpyxl
-reportlab
-qrcode
-pillow
-requests
-python-telegram-bot
-uvicorn
+
+# --- Web Backend (FastAPI) ---
 fastapi
+uvicorn
 python-multipart
-httpx
-pymongo[srv]
-python-dotenv
-dnspython
-bs4
-beautifulsoup
