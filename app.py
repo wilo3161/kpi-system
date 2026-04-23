@@ -2121,17 +2121,17 @@ class DataProcessor:
         self.classifier = TextileClassifier()
     
     def process_excel_file(self, file) -> pd.DataFrame:
-        try:
-            if hasattr(file, 'name'):
-                filename = file.name.lower()
-                if filename.endswith('.csv'):
-                    df = pd.read_csv(file, encoding='utf-8')
-                else:
-                    df = pd.read_excel(file, engine='openpyxl')
+    try:
+        if hasattr(file, 'name'):
+            filename = file.name.lower()
+            if filename.endswith('.csv'):
+                df = pd.read_csv(file, encoding='utf-8')
             else:
-                df = pd.read_excel(file)
+                df = pd.read_excel(file, engine='openpyxl')
+        else:
+            df = pd.read_excel(file)
 
-            df.columns = df.columns.str.strip().str.upper()
+        df.columns = df.columns.str.strip().str.upper()
 
             # --- Detección de columna de producto (PRIORIZA coincidencia exacta) ---
             product_col = None
