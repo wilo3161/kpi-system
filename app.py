@@ -2133,114 +2133,115 @@ def process_excel_file(self, file) -> pd.DataFrame:
 
         df.columns = df.columns.str.strip().str.upper()
 
-            # --- Detección de columna de producto (PRIORIZA coincidencia exacta) ---
+        # --- Detección de columna de producto (PRIORIZA coincidencia exacta) ---
         product_col = None
-            # Primero buscar columna exactamente "PRODUCTO"
-            if 'PRODUCTO' in df.columns:
-                product_col = 'PRODUCTO'
-            else:
-                # Si no existe exacta, buscar la primera que CONTENGA "PRODUCTO" pero NO "CODIGO"
-                product_aliases = ['PRODUCTO', 'ITEM', 'DESCRIPCION', 'DESCRIPTION', 'ARTICULO', 'NOMBRE', 'NAME', 'ITEM DESCRIPTION']
-                for alias in product_aliases:
-                    matching_cols = [c for c in df.columns if alias in c and 'CODIGO' not in c]
-                    if matching_cols:
-                        product_col = matching_cols[0]
+        # Primero buscar columna exactamente "PRODUCTO"
+        if 'PRODUCTO' in df.columns:
+            product_col = 'PRODUCTO'
+        else:
+            # Si no existe exacta, buscar la primera que CONTENGA "PRODUCTO" pero NO "CODIGO"
+            product_aliases = ['PRODUCTO', 'ITEM', 'DESCRIPCION', 'DESCRIPTION', 'ARTICULO', 'NOMBRE', 'NAME', 'ITEM DESCRIPTION']
+            for alias in product_aliases:
+                matching_cols = [c for c in df.columns if alias in c and 'CODIGO' not in c]
+                if matching_cols:
+                    product_col = matching_cols[0]
+                    break
+        # Si aún nada, intentar detectar por contenido típico de producto
+        if product_col is None:
+            for col in df.columns:
+                if len(df) > 0:
+                    sample = str(df[col].iloc[0])
+                    if len(sample) > 10 and any(x in sample.upper() for x in ['AERO', 'GIRLS', 'WOMEN', 'MEN', 'BANANA', 'PRICE CLUB']):
+                        product_col = col
                         break
-            # Si aún nada, intentar detectar por contenido típico de producto
-            if product_col is None:
-                for col in df.columns:
-                    if len(df) > 0:
-                        sample = str(df[col].iloc[0])
-                        if len(sample) > 10 and any(x in sample.upper() for x in ['AERO', 'GIRLS', 'WOMEN', 'MEN', 'BANANA', 'PRICE CLUB']):
-                            product_col = col
-                            break
-            if product_col is None:
-                product_col = df.columns[0]   # último recurso
+        if product_col is None:
+            product_col = df.columns[0]  # último recurso
 
-            # Si la columna seleccionada no se llama exactamente 'PRODUCTO', renombrar eliminando duplicados
-            if product_col != 'PRODUCTO':
-                if 'PRODUCTO' in df.columns:
-                    df = df.drop(columns=['PRODUCTO'])   # eliminar la columna 'PRODUCTO' preexistente
-                df = df.rename(columns={product_col: 'PRODUCTO'})
+        # Si la columna seleccionada no se llama exactamente 'PRODUCTO', renombrar eliminando duplicados
+        if product_col != 'PRODUCTO':
+            if 'PRODUCTO' in df.columns:
+                df = df.drop(columns=['PRODUCTO'])  # eliminar la columna 'PRODUCTO' preexistente
+            df = df.rename(columns={product_col: 'PRODUCTO'})
 
-            df = df.dropna(subset=['PRODUCTO'])
-            df['PRODUCTO'] = df['PRODUCTO'].astype(str).str.strip()
+        df = df.dropna(subset=['PRODUCTO'])
+        df['PRODUCTO'] = df['PRODUCTO'].astype(str).str.strip()
 
-            # --- Columna de bodega destino ---
-            bodega_col = None
-            bodega_aliases = ['BODEGA RECIBE', 'BODEGA DESTINO', 'SUCURSAL DESTINO', 'DESTINO', 'BODEGA', 'SUCURSAL', 'TIENDA', 'STORE']
-            for alias in bodega_aliases:
-                matching_cols = [c for c in df.columns if alias in c]
-                if matching_cols:
-                    bodega_col = matching_cols[0]
-                    break
-            if bodega_col:
-                if bodega_col != 'BODEGA_RECIBE':
-                    if 'BODEGA_RECIBE' in df.columns:
-                        df = df.drop(columns=['BODEGA_RECIBE'])
-                    df = df.rename(columns={bodega_col: 'BODEGA_RECIBE'})
+        # --- Columna de bodega destino ---
+        bodega_col = None
+        bodega_aliases = ['BODEGA RECIBE', 'BODEGA DESTINO', 'SUCURSAL DESTINO', 'DESTINO', 'BODEGA', 'SUCURSAL', 'TIENDA', 'STORE']
+        for alias in bodega_aliases:
+            matching_cols = [c for c in df.columns if alias in c]
+            if matching_cols:
+                bodega_col = matching_cols[0]
+                break
+        if bodega_col:
+            if bodega_col != 'BODEGA_RECIBE':
+                if 'BODEGA_RECIBE' in df.columns:
+                    df = df.drop(columns=['BODEGA_RECIBE'])
+                df = df.rename(columns={bodega_col: 'BODEGA_RECIBE'})
 
-            # --- Columna de cantidad ---
-            cant_col = None
-            cant_aliases = ['CANTIDAD', 'QUANTITY', 'UNIDADES', 'QTY', 'CANT']
-            for alias in cant_aliases:
-                matching_cols = [c for c in df.columns if alias in c]
-                if matching_cols:
-                    cant_col = matching_cols[0]
-                    break
-            if cant_col:
-                if cant_col != 'CANTIDAD':
-                    if 'CANTIDAD' in df.columns:
-                        df = df.drop(columns=['CANTIDAD'])
-                    df = df.rename(columns={cant_col: 'CANTIDAD'})
-                df['CANTIDAD'] = pd.to_numeric(df['CANTIDAD'].astype(str).str.replace(',', '').str.replace(' ', ''), errors='coerce').fillna(0)
+        # --- Columna de cantidad ---
+        cant_col = None
+        cant_aliases = ['CANTIDAD', 'QUANTITY', 'UNIDADES', 'QTY', 'CANT']
+        for alias in cant_aliases:
+            matching_cols = [c for c in df.columns if alias in c]
+            if matching_cols:
+                cant_col = matching_cols[0]
+                break
+        if cant_col:
+            if cant_col != 'CANTIDAD':
+                if 'CANTIDAD' in df.columns:
+                    df = df.drop(columns=['CANTIDAD'])
+                df = df.rename(columns={cant_col: 'CANTIDAD'})
+            df['CANTIDAD'] = pd.to_numeric(df['CANTIDAD'].astype(str).str.replace(',', '').str.replace(' ', ''), errors='coerce').fillna(0)
 
-            # --- Columna de costo ---
-            costo_col = None
-            costo_aliases = ['COSTO', 'COST', 'PRECIO', 'COSTO UNITARIO']
-            for alias in costo_aliases:
-                matching_cols = [c for c in df.columns if alias in c]
-                if matching_cols:
-                    costo_col = matching_cols[0]
-                    break
-            if costo_col:
-                if costo_col != 'COSTO':
-                    if 'COSTO' in df.columns:
-                        df = df.drop(columns=['COSTO'])
-                    df = df.rename(columns={costo_col: 'COSTO'})
-                df['COSTO'] = pd.to_numeric(df['COSTO'].astype(str).str.replace(',', '').str.replace(' ', ''), errors='coerce').fillna(0)
+        # --- Columna de costo ---
+        costo_col = None
+        costo_aliases = ['COSTO', 'COST', 'PRECIO', 'COSTO UNITARIO']
+        for alias in costo_aliases:
+            matching_cols = [c for c in df.columns if alias in c]
+            if matching_cols:
+                costo_col = matching_cols[0]
+                break
+        if costo_col:
+            if costo_col != 'COSTO':
+                if 'COSTO' in df.columns:
+                    df = df.drop(columns=['COSTO'])
+                df = df.rename(columns={costo_col: 'COSTO'})
+            df['COSTO'] = pd.to_numeric(df['COSTO'].astype(str).str.replace(',', '').str.replace(' ', ''), errors='coerce').fillna(0)
 
-            # --- Columna de total (opcional, calculamos si no existe) ---
-            if 'TOTAL' not in df.columns:
-                if 'CANTIDAD' in df.columns and 'COSTO' in df.columns:
-                    df['TOTAL'] = df['CANTIDAD'] * df['COSTO']
+        # --- Columna de total (opcional, calculamos si no existe) ---
+        if 'TOTAL' not in df.columns:
+            if 'CANTIDAD' in df.columns and 'COSTO' in df.columns:
+                df['TOTAL'] = df['CANTIDAD'] * df['COSTO']
 
-            # --- Columna de fecha ---
-            fecha_col = None
-            fecha_aliases = ['FECHA', 'DATE', 'DIA', 'DAY']
-            for alias in fecha_aliases:
-                matching_cols = [c for c in df.columns if alias in c]
-                if matching_cols:
-                    fecha_col = matching_cols[0]
-                    break
-            if fecha_col:
-                if fecha_col != 'FECHA':
-                    if 'FECHA' in df.columns:
-                        df = df.drop(columns=['FECHA'])
-                    df = df.rename(columns={fecha_col: 'FECHA'})
-                df['FECHA'] = pd.to_datetime(df['FECHA'], errors='coerce', dayfirst=True)
+        # --- Columna de fecha ---
+        fecha_col = None
+        fecha_aliases = ['FECHA', 'DATE', 'DIA', 'DAY']
+        for alias in fecha_aliases:
+            matching_cols = [c for c in df.columns if alias in c]
+            if matching_cols:
+                fecha_col = matching_cols[0]
+                break
+        if fecha_col:
+            if fecha_col != 'FECHA':
+                if 'FECHA' in df.columns:
+                    df = df.drop(columns=['FECHA'])
+                df = df.rename(columns={fecha_col: 'FECHA'})
+            df['FECHA'] = pd.to_datetime(df['FECHA'], errors='coerce', dayfirst=True)
 
-            if df.empty or 'PRODUCTO' not in df.columns:
-                st.error("No se encontraron datos válidos para clasificar.")
-                return pd.DataFrame()
-
-            df = self._classify_products(df)
-            return df
-        except Exception as e:
-            st.error(f"Error procesando archivo: {str(e)}")
-            import traceback
-            st.error(traceback.format_exc())
+        if df.empty or 'PRODUCTO' not in df.columns:
+            st.error("No se encontraron datos válidos para clasificar.")
             return pd.DataFrame()
+
+        df = self._classify_products(df)
+        return df
+
+    except Exception as e:
+        st.error(f"Error procesando archivo: {str(e)}")
+        import traceback
+        st.error(traceback.format_exc())
+        return pd.DataFrame()
 
 def mostrar_clasificacion_inteligente():
     st.markdown("### 📂 Cargar archivo de productos para clasificación inteligente")
