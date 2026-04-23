@@ -2120,8 +2120,7 @@ class DataProcessor:
     def __init__(self):
         self.classifier = TextileClassifier()
     
-    def process_excel_file(self, file) -> pd.DataFrame:
-        # ... (Código original de process_excel_file) ...
+        def process_excel_file(self, file) -> pd.DataFrame:
         try:
             if hasattr(file, 'name'):
                 filename = file.name.lower()
@@ -2131,26 +2130,43 @@ class DataProcessor:
                     df = pd.read_excel(file, engine='openpyxl')
             else:
                 df = pd.read_excel(file)
+
             df.columns = df.columns.str.strip().str.upper()
+
+            # --- Detección de columna de producto (PRIORIZA coincidencia exacta) ---
             product_col = None
-            product_aliases = ['PRODUCTO', 'ITEM', 'DESCRIPCION', 'DESCRIPTION', 'ARTICULO', 'PRODUCT', 'NOMBRE', 'NAME', 'ITEM DESCRIPTION']
-            for alias in product_aliases:
-                matching_cols = [c for c in df.columns if alias in c]
-                if matching_cols:
-                    product_col = matching_cols[0]
-                    break
+            # Primero buscar columna exactamente "PRODUCTO"
+            if 'PRODUCTO' in df.columns:
+                product_col = 'PRODUCTO'
+            else:
+                # Si no existe exacta, buscar la primera que CONTENGA "PRODUCTO" pero NO "CODIGO"
+                product_aliases = ['PRODUCTO', 'ITEM', 'DESCRIPCION', 'DESCRIPTION', 'ARTICULO', 'NOMBRE', 'NAME', 'ITEM DESCRIPTION']
+                for alias in product_aliases:
+                    matching_cols = [c for c in df.columns if alias in c and 'CODIGO' not in c]
+                    if matching_cols:
+                        product_col = matching_cols[0]
+                        break
+            # Si aún nada, intentar detectar por contenido típico de producto
             if product_col is None:
                 for col in df.columns:
                     if len(df) > 0:
                         sample = str(df[col].iloc[0])
-                        if len(sample) > 10 and any(x in sample.upper() for x in ['AERO', 'GIRLS', 'WOMEN', 'MEN']):
+                        if len(sample) > 10 and any(x in sample.upper() for x in ['AERO', 'GIRLS', 'WOMEN', 'MEN', 'BANANA', 'PRICE CLUB']):
                             product_col = col
                             break
             if product_col is None:
-                product_col = df.columns[0]
-            df = df.rename(columns={product_col: 'PRODUCTO'})
+                product_col = df.columns[0]   # último recurso
+
+            # Si la columna seleccionada no se llama exactamente 'PRODUCTO', renombrar eliminando duplicados
+            if product_col != 'PRODUCTO':
+                if 'PRODUCTO' in df.columns:
+                    df = df.drop(columns=['PRODUCTO'])   # eliminar la columna 'PRODUCTO' preexistente
+                df = df.rename(columns={product_col: 'PRODUCTO'})
+
             df = df.dropna(subset=['PRODUCTO'])
             df['PRODUCTO'] = df['PRODUCTO'].astype(str).str.strip()
+
+            # --- Columna de bodega destino ---
             bodega_col = None
             bodega_aliases = ['BODEGA RECIBE', 'BODEGA DESTINO', 'SUCURSAL DESTINO', 'DESTINO', 'BODEGA', 'SUCURSAL', 'TIENDA', 'STORE']
             for alias in bodega_aliases:
@@ -2159,7 +2175,12 @@ class DataProcessor:
                     bodega_col = matching_cols[0]
                     break
             if bodega_col:
-                df = df.rename(columns={bodega_col: 'BODEGA_RECIBE'})
+                if bodega_col != 'BODEGA_RECIBE':
+                    if 'BODEGA_RECIBE' in df.columns:
+                        df = df.drop(columns=['BODEGA_RECIBE'])
+                    df = df.rename(columns={bodega_col: 'BODEGA_RECIBE'})
+
+            # --- Columna de cantidad ---
             cant_col = None
             cant_aliases = ['CANTIDAD', 'QUANTITY', 'UNIDADES', 'QTY', 'CANT']
             for alias in cant_aliases:
@@ -2168,8 +2189,33 @@ class DataProcessor:
                     cant_col = matching_cols[0]
                     break
             if cant_col:
-                df = df.rename(columns={cant_col: 'CANTIDAD'})
+                if cant_col != 'CANTIDAD':
+                    if 'CANTIDAD' in df.columns:
+                        df = df.drop(columns=['CANTIDAD'])
+                    df = df.rename(columns={cant_col: 'CANTIDAD'})
                 df['CANTIDAD'] = pd.to_numeric(df['CANTIDAD'].astype(str).str.replace(',', '').str.replace(' ', ''), errors='coerce').fillna(0)
+
+            # --- Columna de costo ---
+            costo_col = None
+            costo_aliases = ['COSTO', 'COST', 'PRECIO', 'COSTO UNITARIO']
+            for alias in costo_aliases:
+                matching_cols = [c for c in df.columns if alias in c]
+                if matching_cols:
+                    costo_col = matching_cols[0]
+                    break
+            if costo_col:
+                if costo_col != 'COSTO':
+                    if 'COSTO' in df.columns:
+                        df = df.drop(columns=['COSTO'])
+                    df = df.rename(columns={costo_col: 'COSTO'})
+                df['COSTO'] = pd.to_numeric(df['COSTO'].astype(str).str.replace(',', '').str.replace(' ', ''), errors='coerce').fillna(0)
+
+            # --- Columna de total (opcional, calculamos si no existe) ---
+            if 'TOTAL' not in df.columns:
+                if 'CANTIDAD' in df.columns and 'COSTO' in df.columns:
+                    df['TOTAL'] = df['CANTIDAD'] * df['COSTO']
+
+            # --- Columna de fecha ---
             fecha_col = None
             fecha_aliases = ['FECHA', 'DATE', 'DIA', 'DAY']
             for alias in fecha_aliases:
@@ -2178,11 +2224,16 @@ class DataProcessor:
                     fecha_col = matching_cols[0]
                     break
             if fecha_col:
-                df = df.rename(columns={fecha_col: 'FECHA'})
+                if fecha_col != 'FECHA':
+                    if 'FECHA' in df.columns:
+                        df = df.drop(columns=['FECHA'])
+                    df = df.rename(columns={fecha_col: 'FECHA'})
                 df['FECHA'] = pd.to_datetime(df['FECHA'], errors='coerce', dayfirst=True)
+
             if df.empty or 'PRODUCTO' not in df.columns:
                 st.error("No se encontraron datos válidos para clasificar.")
                 return pd.DataFrame()
+
             df = self._classify_products(df)
             return df
         except Exception as e:
@@ -2190,17 +2241,6 @@ class DataProcessor:
             import traceback
             st.error(traceback.format_exc())
             return pd.DataFrame()
-    
-    def _classify_products(self, df):
-        classifications = []
-        for prod in df['PRODUCTO']:
-            classifications.append(self.classifier.classify_product(prod))
-        class_df = pd.DataFrame(classifications)
-        cols_to_drop = [col for col in class_df.columns if col in df.columns and col != 'PRODUCTO']
-        if cols_to_drop:
-            df = df.drop(columns=cols_to_drop)
-        result = pd.concat([df.reset_index(drop=True), class_df.reset_index(drop=True)], axis=1)
-        return result
 
 def mostrar_clasificacion_inteligente():
     st.markdown("### 📂 Cargar archivo de productos para clasificación inteligente")
@@ -2524,6 +2564,7 @@ def mostrar_kpi_diario():
     if 'kdi_current_data' not in st.session_state:
         st.session_state.kdi_current_data = pd.DataFrame()
         st.session_state.kdi_loaded = False
+
     processor = DataProcessor()
     st.markdown("### 📂 Cargar archivo de transferencias diarias")
     col_up1, col_up2 = st.columns([3, 1])
@@ -2534,6 +2575,7 @@ def mostrar_kpi_diario():
             st.session_state.kdi_current_data = pd.DataFrame()
             st.session_state.kdi_loaded = False
             st.rerun()
+
     if uploaded:
         with st.spinner("Procesando archivo..."):
             new_data = processor.process_excel_file(uploaded)
@@ -2543,29 +2585,38 @@ def mostrar_kpi_diario():
                 st.success("Datos cargados exitosamente")
             else:
                 st.warning("El archivo no pudo ser procesado. Revise el formato.")
+
     if not st.session_state.kdi_loaded or st.session_state.kdi_current_data.empty:
         st.info("👆 Sube un archivo para comenzar el análisis.")
         with st.expander("📋 Estructura esperada del archivo"):
-            st.markdown("**Columnas requeridas (se detectan automáticamente):**\n- `Producto`: nombre del producto\n- `Fecha`: fecha de la transferencia (ej. 15/01/2024)\n- `Cantidad`: número de unidades\n- `Bodega Recibe` (o `Bodega Destino`, `Sucursal Destino`, etc.): destino de la mercadería")
+            st.markdown("**Columnas requeridas (se detectan automáticamente):**\n"
+                        "- `Producto`: nombre del producto\n"
+                        "- `Fecha`: fecha de la transferencia\n"
+                        "- `Cantidad`: unidades\n"
+                        "- `Bodega Recibe` (o similar): tienda destino\n"
+                        "- `Costo` (opcional): costo unitario\n"
+                        "Otras columnas como `Línea`, `Grupo`, `Categoría` enriquecen el análisis.")
         return
+
     st.markdown("### 🔍 Filtros")
     data = st.session_state.kdi_current_data
     filtered = data.copy()
+
     col_f1, col_f2, col_f3, col_f4 = st.columns(4)
     with col_f1:
-        if 'Fecha' in filtered.columns and not filtered.empty:
-            min_d = filtered['Fecha'].min().date()
-            max_d = filtered['Fecha'].max().date()
+        if 'FECHA' in filtered.columns and not filtered.empty:
+            min_d = filtered['FECHA'].min().date()
+            max_d = filtered['FECHA'].max().date()
             dr = st.date_input("Rango de fechas", [min_d, max_d], key="kdi_fecha")
             if len(dr) == 2:
-                mask = (filtered['Fecha'].dt.date >= dr[0]) & (filtered['Fecha'].dt.date <= dr[1])
+                mask = (filtered['FECHA'].dt.date >= dr[0]) & (filtered['FECHA'].dt.date <= dr[1])
                 filtered = filtered[mask].copy()
     with col_f2:
-        if 'Bodega Recibe' in filtered.columns:
-            opts = ['Todas'] + sorted(filtered['Bodega Recibe'].dropna().unique())
+        if 'BODEGA_RECIBE' in filtered.columns:
+            opts = ['Todas'] + sorted(filtered['BODEGA_RECIBE'].dropna().unique())
             sel = st.selectbox("Bodega", opts, key="kdi_bod")
             if sel != 'Todas':
-                filtered = filtered[filtered['Bodega Recibe'] == sel]
+                filtered = filtered[filtered['BODEGA_RECIBE'] == sel]
     with col_f3:
         if 'Genero' in filtered.columns:
             opts = ['Todos'] + sorted(filtered['Genero'].dropna().unique())
@@ -2578,25 +2629,37 @@ def mostrar_kpi_diario():
             sel = st.selectbox("Categoría", opts, key="kdi_cat")
             if sel != 'Todas':
                 filtered = filtered[filtered['Categoria'] == sel]
+
     st.markdown("---")
     if filtered.empty:
         st.warning("No hay datos con los filtros actuales.")
         return
-    total_units = int(filtered['Cantidad'].sum()) if 'Cantidad' in filtered.columns else 0
-    n_bodegas = filtered['Bodega Recibe'].nunique() if 'Bodega Recibe' in filtered.columns else 0
-    n_transfers = filtered['ID_Transferencia'].nunique() if 'ID_Transferencia' in filtered.columns else len(filtered)
-    n_products = filtered['Producto'].nunique() if 'Producto' in filtered.columns else 0
-    k1, k2, k3, k4 = st.columns(4)
+
+    # --- KPIs principales ---
+    total_units = int(filtered['CANTIDAD'].sum()) if 'CANTIDAD' in filtered.columns else 0
+    total_cost = filtered['TOTAL'].sum() if 'TOTAL' in filtered.columns else 0
+    avg_cost_unit = total_cost / total_units if total_units > 0 else 0
+    n_bodegas = filtered['BODEGA_RECIBE'].nunique() if 'BODEGA_RECIBE' in filtered.columns else 0
+    n_transfers = filtered['Secuencial - Factura'].nunique() if 'Secuencial - Factura' in filtered.columns else len(filtered)
+    n_products = filtered['PRODUCTO'].nunique() if 'PRODUCTO' in filtered.columns else 0
+
+    k1, k2, k3, k4, k5 = st.columns(5)
     with k1: st.metric("📦 Unidades Totales", f"{total_units:,}")
-    with k2: st.metric("🏪 Bodegas Destino", n_bodegas)
-    with k3: st.metric("📋 Transferencias", n_transfers)
-    with k4: st.metric("👕 Productos Únicos", n_products)
+    with k2: st.metric("💰 Costo Total", f"${total_cost:,.2f}")
+    with k3: st.metric("🏷️ Costo Prom. Unitario", f"${avg_cost_unit:,.2f}")
+    with k4: st.metric("🏪 Bodegas Destino", n_bodegas)
+    with k5: st.metric("📋 Transferencias", n_transfers)
+
     st.markdown("---")
     st.markdown("### 📊 Análisis por Dimensiones")
-    dim_tab1, dim_tab2, dim_tab3, dim_tab4, dim_tab5 = st.tabs(["🎨 Color","📏 Talla","⚧ Género","🏷️ Categoría/Departamento","📦 Productos"])
+    dim_tab1, dim_tab2, dim_tab3, dim_tab4, dim_tab5, dim_tab6 = st.tabs([
+        "🎨 Color", "📏 Talla", "⚧ Género", "🏷️ Categoría/Departamento",
+        "📦 Productos", "🔍 Análisis Avanzado"
+    ])
+
     with dim_tab1:
         if 'Color' in filtered.columns:
-            col_stats = filtered.groupby('Color').agg({'Cantidad':['sum','count']}).reset_index()
+            col_stats = filtered.groupby('Color').agg({'CANTIDAD':['sum','count']}).reset_index()
             col_stats.columns = ['Color','Unidades','Frecuencia']
             col_stats['Porcentaje'] = (col_stats['Unidades']/total_units*100).round(2)
             col_stats = col_stats.sort_values('Unidades', ascending=False)
@@ -2610,9 +2673,10 @@ def mostrar_kpi_diario():
                 st.dataframe(col_stats[['Color','Unidades','Porcentaje']].style.format({'Unidades':'{:,}','Porcentaje':'{:.2f}%'}), use_container_width=True, height=400)
         else:
             st.info("No hay datos de color disponibles")
+
     with dim_tab2:
         if 'Talla' in filtered.columns:
-            talla_stats = filtered.groupby('Talla').agg({'Cantidad':['sum','count']}).reset_index()
+            talla_stats = filtered.groupby('Talla').agg({'CANTIDAD':['sum','count']}).reset_index()
             talla_stats.columns = ['Talla','Unidades','Frecuencia']
             talla_stats['Porcentaje'] = (talla_stats['Unidades']/total_units*100).round(2)
             size_order = ['XS','S','M','L','XL','2XL','3XL','4XL','Única']
@@ -2627,9 +2691,10 @@ def mostrar_kpi_diario():
                 st.dataframe(talla_stats[['Talla','Unidades','Porcentaje']].style.format({'Unidades':'{:,}','Porcentaje':'{:.2f}%'}), use_container_width=True, height=400)
         else:
             st.info("No hay datos de talla disponibles")
+
     with dim_tab3:
         if 'Genero' in filtered.columns:
-            gen_stats = filtered.groupby('Genero').agg({'Cantidad':['sum','count']}).reset_index()
+            gen_stats = filtered.groupby('Genero').agg({'CANTIDAD':['sum','count']}).reset_index()
             gen_stats.columns = ['Genero','Unidades','Frecuencia']
             gen_stats['Porcentaje'] = (gen_stats['Unidades']/total_units*100).round(2)
             gen_stats = gen_stats.sort_values('Unidades', ascending=False)
@@ -2643,97 +2708,136 @@ def mostrar_kpi_diario():
                 st.dataframe(gen_stats[['Genero','Unidades','Porcentaje']].style.format({'Unidades':'{:,}','Porcentaje':'{:.2f}%'}), use_container_width=True, height=400)
         else:
             st.info("No hay datos de género disponibles")
+
     with dim_tab4:
         if 'Categoria' in filtered.columns:
-            cat_stats = filtered.groupby('Categoria').agg({'Cantidad':['sum','count']}).reset_index()
-            cat_stats.columns = ['Categoria','Unidades','Frecuencia']
+            cat_stats = filtered.groupby('Categoria').agg({'CANTIDAD':['sum','count'], 'TOTAL':'sum'}).reset_index()
+            cat_stats.columns = ['Categoria','Unidades','Frecuencia','Costo Total']
             cat_stats['Porcentaje'] = (cat_stats['Unidades']/total_units*100).round(2)
             cat_stats = cat_stats.sort_values('Unidades', ascending=False)
             col1, col2 = st.columns([2,1])
             with col1:
-                fig = px.bar(cat_stats, x='Categoria', y='Unidades', title="Distribución por Categoría", color='Unidades', color_continuous_scale='Plasma')
+                fig = px.bar(cat_stats, x='Categoria', y='Unidades', title="Distribución por Categoría", color='Costo Total', color_continuous_scale='Plasma')
                 fig.update_layout(template="plotly_dark")
                 st.plotly_chart(fig, use_container_width=True)
             with col2:
-                st.dataframe(cat_stats[['Categoria','Unidades','Porcentaje']].style.format({'Unidades':'{:,}','Porcentaje':'{:.2f}%'}), use_container_width=True, height=400)
+                st.dataframe(cat_stats[['Categoria','Unidades','Costo Total','Porcentaje']].style.format({'Unidades':'{:,}','Costo Total':'${:,.2f}','Porcentaje':'{:.2f}%'}), use_container_width=True, height=400)
         else:
             st.info("No hay datos de categoría disponible")
+
     with dim_tab5:
-        st.markdown("### 📊 Análisis por Producto")
-        if 'Producto_Base' in filtered.columns:
-            top_productos = filtered.groupby('Producto_Base').agg({'Cantidad':'sum','ID_Transferencia':'nunique','Producto':'nunique'}).reset_index().rename(columns={'ID_Transferencia':'Transferencias','Producto':'Variantes'}).sort_values('Cantidad', ascending=False)
-            top_productos['Porcentaje'] = (top_productos['Cantidad']/total_units*100).round(2)
+        st.markdown("### 📊 Análisis por Producto (Top 10 por Costo Total)")
+        if 'PRODUCTO' in filtered.columns and 'TOTAL' in filtered.columns:
+            top_productos = filtered.groupby('PRODUCTO').agg({'CANTIDAD':'sum','TOTAL':'sum'}).sort_values('TOTAL', ascending=False).head(10).reset_index()
+            top_productos.columns = ['Producto','Unidades','Costo Total']
+            top_productos['% Costo'] = (top_productos['Costo Total'] / total_cost * 100).round(2)
             col_p1, col_p2 = st.columns([2,1])
             with col_p1:
-                top10 = top_productos.head(10)
-                fig = px.bar(top10, x='Cantidad', y='Producto_Base', orientation='h', title='Top 10 Productos Base por Unidades', color='Cantidad', color_continuous_scale='Blues')
+                fig = px.bar(top_productos, x='Costo Total', y='Producto', orientation='h', title='Top 10 Productos por Costo Total', color='Costo Total', color_continuous_scale='Blues')
                 fig.update_layout(yaxis={'categoryorder':'total ascending'}, template="plotly_dark")
                 st.plotly_chart(fig, use_container_width=True)
             with col_p2:
-                st.dataframe(top_productos.head(10)[['Producto_Base','Cantidad','Porcentaje']], use_container_width=True, height=350)
-            st.markdown("#### 🔍 Detalle de tallas por producto")
-            producto_seleccionado = st.selectbox("Selecciona un producto base para ver distribución por talla", options=[''] + list(top_productos['Producto_Base'].unique()))
-            if producto_seleccionado:
-                df_prod = filtered[filtered['Producto_Base'] == producto_seleccionado]
-                talla_stats = df_prod.groupby('Talla')['Cantidad'].sum().reset_index()
-                talla_order = ['XS','S','M','L','XL','2XL','3XL','Única']
-                talla_stats['Talla_Order'] = talla_stats['Talla'].apply(lambda x: talla_order.index(x) if x in talla_order else 999)
-                talla_stats = talla_stats.sort_values('Talla_Order')
-                col_t1, col_t2 = st.columns([2,1])
-                with col_t1:
-                    fig2 = px.bar(talla_stats, x='Talla', y='Cantidad', title=f'Distribución por talla - {producto_seleccionado}', color='Cantidad', color_continuous_scale='Oranges')
-                    fig2.update_layout(template="plotly_dark")
-                    st.plotly_chart(fig2, use_container_width=True)
-                with col_t2:
-                    st.dataframe(talla_stats[['Talla','Cantidad']], use_container_width=True)
-            st.markdown("#### 📋 Tabla de Producto vs Talla")
-            productos_con_datos = top_productos[top_productos['Cantidad'] > 0]['Producto_Base'].tolist()
-            if productos_con_datos:
-                pivot_data = filtered[filtered['Producto_Base'].isin(productos_con_datos)]
-                pivot = pivot_data.pivot_table(values='Cantidad', index='Producto_Base', columns='Talla', aggfunc='sum', fill_value=0, margins=True, margins_name='Total')
-                pivot = pivot.sort_values('Total', ascending=False)
-                st.dataframe(pivot, use_container_width=True, height=500)
-            else:
-                st.info("No hay datos para mostrar la tabla pivotante.")
+                st.dataframe(top_productos[['Producto','Unidades','Costo Total','% Costo']].style.format({'Unidades':'{:,}','Costo Total':'${:,.2f}','% Costo':'{:.2f}%'}), use_container_width=True, height=350)
         else:
-            st.info("No se pudo generar la columna Producto_Base. Verificar clasificación.")
+            st.info("No hay datos de costo para este análisis.")
+
+    with dim_tab6:
+        st.subheader("🌳 Jerarquía de Productos (Línea → Grupo → Categoría)")
+        if all(col in filtered.columns for col in ['LINEA','GRUPO','CATEGORIA']):
+            # Preparar datos para Sunburst
+            sunburst_cols = ['LINEA','GRUPO','CATEGORIA']
+            df_sun = filtered.dropna(subset=sunburst_cols)
+            if not df_sun.empty:
+                fig_sun = px.sunburst(df_sun, path=['LINEA','GRUPO','CATEGORIA'], values='CANTIDAD', 
+                                      title='Distribución por Línea → Grupo → Categoría',
+                                      color='CANTIDAD', color_continuous_scale='Viridis')
+                fig_sun.update_layout(template="plotly_dark")
+                st.plotly_chart(fig_sun, use_container_width=True)
+
+        st.subheader("🗺️ Mapa de Calor – Envíos por Tienda y Día")
+        if 'BODEGA_RECIBE' in filtered.columns and 'FECHA' in filtered.columns:
+            df_hm = filtered.copy()
+            df_hm['DIA_SEMANA'] = df_hm['FECHA'].dt.day_name().str.capitalize()
+            dias_orden = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday']
+            df_hm['DIA_SEMANA'] = pd.Categorical(df_hm['DIA_SEMANA'], categories=dias_orden, ordered=True)
+            heat_data = df_hm.pivot_table(
+                index='BODEGA_RECIBE', columns='DIA_SEMANA', 
+                values='CANTIDAD', aggfunc='sum', fill_value=0
+            )
+            # Limitar a 15 tiendas con más movimiento
+            top_tiendas = heat_data.sum(axis=1).nlargest(15).index
+            heat_data = heat_data.loc[top_tiendas]
+            fig_hm = px.imshow(heat_data, text_auto=True, aspect='auto', 
+                               title='Intensidad de envíos (unidades)',
+                               labels=dict(x="Día de la semana", y="Tienda", color="Unidades"),
+                               color_continuous_scale='YlOrRd')
+            fig_hm.update_layout(template="plotly_dark")
+            st.plotly_chart(fig_hm, use_container_width=True)
+
+        st.subheader("📊 Costo por Línea de Negocio")
+        if 'LINEA' in filtered.columns and 'TOTAL' in filtered.columns:
+            linea_cost = filtered.groupby('LINEA').agg({'CANTIDAD':'sum','TOTAL':'sum'}).sort_values('TOTAL', ascending=False).reset_index()
+            linea_cost['% Costo'] = (linea_cost['TOTAL'] / total_cost * 100).round(2)
+            col_a, col_b = st.columns([2,1])
+            with col_a:
+                fig_lc = px.bar(linea_cost, x='LINEA', y='TOTAL', title='Costo Total por Línea', color='TOTAL', color_continuous_scale='Teal')
+                fig_lc.update_layout(template="plotly_dark")
+                st.plotly_chart(fig_lc, use_container_width=True)
+            with col_b:
+                st.dataframe(linea_cost.style.format({'CANTIDAD':'{:,}','TOTAL':'${:,.2f}','% Costo':'{:.2f}%'}), use_container_width=True)
+
+        st.subheader("🏷️ Distribución por Marca")
+        if 'MARCA' in filtered.columns:
+            marca_stats = filtered.groupby('MARCA').agg({'CANTIDAD':'sum','TOTAL':'sum'}).sort_values('TOTAL', ascending=False).reset_index()
+            marca_stats['% Costo'] = (marca_stats['TOTAL'] / total_cost * 100).round(2)
+            col_ma1, col_ma2 = st.columns(2)
+            with col_ma1:
+                fig_marca = px.pie(marca_stats, values='CANTIDAD', names='MARCA', title='Unidades por Marca')
+                fig_marca.update_traces(textposition='inside', textinfo='percent+label')
+                fig_marca.update_layout(template="plotly_dark")
+                st.plotly_chart(fig_marca, use_container_width=True)
+            with col_ma2:
+                st.dataframe(marca_stats.style.format({'CANTIDAD':'{:,}','TOTAL':'${:,.2f}','% Costo':'{:.2f}%'}), use_container_width=True)
+
+    # --- Secciones finales (top bodegas, tendencia diaria, detalle, descarga) ---
     st.markdown("---")
     col_g1, col_g2 = st.columns(2)
     with col_g1:
-        st.subheader("📊 Top 10 Bodegas")
-        if 'Bodega Recibe' in filtered.columns:
-            top_bod = filtered.groupby('Bodega Recibe')['Cantidad'].sum().nlargest(10)
+        st.subheader("📊 Top 10 Bodegas por Unidades")
+        if 'BODEGA_RECIBE' in filtered.columns:
+            top_bod = filtered.groupby('BODEGA_RECIBE')['CANTIDAD'].sum().nlargest(10)
             if not top_bod.empty:
                 fig = px.bar(x=top_bod.values, y=top_bod.index, orientation='h', color=top_bod.values, color_continuous_scale='Viridis', labels={'x':'Unidades','y':''})
                 fig.update_layout(height=350, template="plotly_dark")
                 st.plotly_chart(fig, use_container_width=True)
     with col_g2:
-        st.subheader("📈 Tendencia Diaria")
-        if 'Fecha' in filtered.columns:
-            daily = filtered.groupby(filtered['Fecha'].dt.date)['Cantidad'].sum().reset_index()
-            daily.columns = ['Fecha','Unidades']
-            fig = px.line(daily, x='Fecha', y='Unidades', markers=True)
+        st.subheader("📈 Tendencia Diaria de Costos")
+        if 'FECHA' in filtered.columns and 'TOTAL' in filtered.columns:
+            daily = filtered.groupby(filtered['FECHA'].dt.date)['TOTAL'].sum().reset_index()
+            daily.columns = ['Fecha','Costo Total']
+            fig = px.line(daily, x='Fecha', y='Costo Total', markers=True)
             fig.update_layout(template="plotly_dark")
             st.plotly_chart(fig, use_container_width=True)
+
     st.markdown("---")
     st.subheader("📋 Detalle de Transferencias")
-    cols_display = ['Fecha','Bodega Recibe','Producto','Genero','Categoria','Color','Talla','Cantidad']
+    cols_display = ['FECHA','BODEGA_RECIBE','PRODUCTO','CANTIDAD','COSTO','TOTAL','LINEA','GRUPO','CATEGORIA','MARCA']
     cols_display = [c for c in cols_display if c in filtered.columns]
-    st.dataframe(filtered[cols_display].sort_values('Fecha', ascending=False), use_container_width=True, height=300)
+    st.dataframe(filtered[cols_display].sort_values('FECHA', ascending=False), use_container_width=True, height=300)
+
     st.markdown("---")
     st.subheader("📄 Generar Reporte")
     col_r1, col_r2, col_r3 = st.columns([1,1,2])
     with col_r1:
-        r_start = st.date_input("Fecha inicio", filtered['Fecha'].min().date(), key="r_start")
+        r_start = st.date_input("Fecha inicio", filtered['FECHA'].min().date() if 'FECHA' in filtered.columns else datetime.now().date(), key="r_start")
     with col_r2:
-        r_end = st.date_input("Fecha fin", filtered['Fecha'].max().date(), key="r_end")
+        r_end = st.date_input("Fecha fin", filtered['FECHA'].max().date() if 'FECHA' in filtered.columns else datetime.now().date(), key="r_end")
     with col_r3:
         if st.button("📥 Descargar reporte Excel", use_container_width=True):
             with st.spinner("Generando reporte..."):
-                excel = generar_reporte_excel_simple(filtered, r_start, r_end)
+                excel_bytes = generar_reporte_excel_simple(filtered, r_start, r_end)
                 ts = datetime.now().strftime('%Y%m%d_%H%M%S')
-                st.download_button(label="⬇️ Descargar", data=excel, file_name=f"KPI_Diario_{ts}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
-
+                st.download_button(label="⬇️ Descargar", data=excel_bytes, file_name=f"KPI_Diario_{ts}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
 def mostrar_dashboard_transferencias():
     st.markdown("""
     <div class='main-header'>
