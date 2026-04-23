@@ -2120,7 +2120,7 @@ class DataProcessor:
     def __init__(self):
         self.classifier = TextileClassifier()
     
-    def process_excel_file(self, file) -> pd.DataFrame:
+def process_excel_file(self, file) -> pd.DataFrame:
     try:
         if hasattr(file, 'name'):
             filename = file.name.lower()
