@@ -2134,7 +2134,7 @@ def process_excel_file(self, file) -> pd.DataFrame:
         df.columns = df.columns.str.strip().str.upper()
 
             # --- Detección de columna de producto (PRIORIZA coincidencia exacta) ---
-            product_col = None
+        product_col = None
             # Primero buscar columna exactamente "PRODUCTO"
             if 'PRODUCTO' in df.columns:
                 product_col = 'PRODUCTO'
