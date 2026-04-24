@@ -2588,283 +2588,492 @@ def generar_reporte_excel_simple(df: pd.DataFrame, fecha_inicio, fecha_fin) -> b
     return output.getvalue()
 
 def mostrar_kpi_diario():
-    if 'kdi_current_data' not in st.session_state:
-        st.session_state.kdi_current_data = pd.DataFrame()
+    """Dashboard de KPI Diario con clasificación inteligente y análisis avanzado"""
+
+    # ---------------------------------------------------------------
+    # 0. Inicialización y helpers
+    # ---------------------------------------------------------------
+    if 'kdi_df' not in st.session_state:
+        st.session_state.kdi_df = pd.DataFrame()
         st.session_state.kdi_loaded = False
 
-    processor = DataProcessor()
+    TALLAS_MAP = {
+        'XSMALL': 'XS', 'SMALL': 'S', 'MEDIUM': 'M', 'LARGE': 'L',
+        'XLARGE': 'XL', 'XXLARGE': 'XXL', 'ONESZ': 'ÚNICA'
+    }
+    TALLAS_ORDEN = ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'ÚNICA']
+
+    def extraer_color_talla(nombre_producto: str):
+        """Extrae color y talla del nombre del producto."""
+        if not isinstance(nombre_producto, str):
+            return 'DESCONOCIDO', 'DESCONOCIDO'
+
+        tokens = nombre_producto.upper().split()
+        talla = 'DESCONOCIDO'
+        talla_idx = -1
+
+        search_tokens = tokens.copy()
+        if search_tokens and search_tokens[-1] == 'REGULAR':
+            search_tokens = search_tokens[:-1]
+
+        for i in range(len(search_tokens) - 1, -1, -1):
+            if search_tokens[i] in TALLAS_MAP:
+                talla = TALLAS_MAP[search_tokens[i]]
+                talla_idx = i
+                break
+
+        if talla_idx > 2:
+            stop_words = {'SS', 'LS', 'GRAPHIC', 'SOLID', 'LEVEL', '1', '2',
+                          'GUYS', 'GIRLS', 'WOMENS', 'MENS', 'AERO', 'TEE',
+                          'TEES', 'POLO', 'TOPS', 'SHIRT', 'SWEATER', 'HOODIE'}
+            color_tokens = [t for t in search_tokens[3:talla_idx] if t not in stop_words]
+            color = ' '.join(color_tokens) if color_tokens else 'DESCONOCIDO'
+        else:
+            color = 'DESCONOCIDO'
+
+        return color.strip() or 'DESCONOCIDO', talla
+
+    # ---------------------------------------------------------------
+    # Carga de archivo
+    # ---------------------------------------------------------------
     st.markdown("### 📂 Cargar archivo de transferencias diarias")
     col_up1, col_up2 = st.columns([3, 1])
     with col_up1:
-        uploaded = st.file_uploader("Seleccionar archivo Excel", type=['xlsx','xls','csv'], key="kdi_upload", label_visibility="collapsed")
+        uploaded = st.file_uploader(
+            "Seleccionar archivo Excel",
+            type=['xlsx', 'xls', 'csv'],
+            key="kdi_upload",
+            label_visibility="collapsed"
+        )
     with col_up2:
         if st.button("🔄 Limpiar datos", key="kdi_clear"):
-            st.session_state.kdi_current_data = pd.DataFrame()
+            st.session_state.kdi_df = pd.DataFrame()
             st.session_state.kdi_loaded = False
             st.rerun()
 
     if uploaded:
         with st.spinner("Procesando archivo..."):
-            new_data = processor.process_excel_file(uploaded)
-            if not new_data.empty:
-                st.session_state.kdi_current_data = new_data
-                st.session_state.kdi_loaded = True
-                st.success("Datos cargados exitosamente")
-            else:
-                st.warning("El archivo no pudo ser procesado. Revise el formato.")
+            try:
+                if uploaded.name.endswith('.csv'):
+                    df = pd.read_csv(uploaded, encoding='utf-8')
+                else:
+                    df = pd.read_excel(uploaded, engine='openpyxl')
 
-    if not st.session_state.kdi_loaded or st.session_state.kdi_current_data.empty:
+                # Normalizar nombres de columna
+                df.columns = [str(c).strip().upper() for c in df.columns]
+
+                # Mapeo de columnas esperadas
+                col_map = {
+                    'FECHA': 'FECHA',
+                    'SECUENCIAL - FACTURA': 'SECUENCIAL',
+                    'BODEGA RECIBE': 'TIENDA',
+                    'PRODUCTO': 'PRODUCTO',
+                    'CANTIDAD': 'CANTIDAD',
+                    'TOTAL': 'TOTAL',
+                    'COSTO': 'COSTO',
+                    'GRUPO': 'GRUPO',
+                    'CATEGORIA': 'CATEGORIA',
+                    'LINEA': 'LINEA',
+                    'MARCA': 'MARCA',
+                    'CODIGO PRODUCTO': 'CODIGO',
+                }
+                ren = {}
+                for orig, dest in col_map.items():
+                    if orig in df.columns:
+                        ren[orig] = dest
+                df.rename(columns=ren, inplace=True)
+
+                # Conversiones
+                if 'FECHA' in df.columns:
+                    df['FECHA'] = pd.to_datetime(df['FECHA'], errors='coerce').dt.date
+                    df = df.dropna(subset=['FECHA'])
+                if 'CANTIDAD' in df.columns:
+                    df['CANTIDAD'] = pd.to_numeric(df['CANTIDAD'], errors='coerce').fillna(0)
+                if 'TOTAL' in df.columns:
+                    df['TOTAL'] = pd.to_numeric(df['TOTAL'], errors='coerce').fillna(0)
+                if 'COSTO' in df.columns:
+                    df['COSTO'] = pd.to_numeric(df['COSTO'], errors='coerce').fillna(0)
+                if 'SECUENCIAL' in df.columns:
+                    df['SECUENCIAL'] = df['SECUENCIAL'].astype(str)
+
+                # Extraer color y talla
+                if 'PRODUCTO' in df.columns:
+                    df[['COLOR', 'TALLA']] = df['PRODUCTO'].apply(
+                        lambda x: pd.Series(extraer_color_talla(x))
+                    )
+
+                st.session_state.kdi_df = df
+                st.session_state.kdi_loaded = True
+                st.success(
+                    f"✅ {len(df):,} filas cargadas | "
+                    f"{df['TIENDA'].nunique() if 'TIENDA' in df.columns else 0} tiendas | "
+                    f"{df['SECUENCIAL'].nunique() if 'SECUENCIAL' in df.columns else 0} transferencias | "
+                    f"{int(df['CANTIDAD'].sum()):,} unidades"
+                )
+            except Exception as e:
+                st.error(f"Error al procesar archivo: {str(e)}")
+                import traceback
+                st.error(traceback.format_exc())
+
+    if not st.session_state.kdi_loaded or st.session_state.kdi_df.empty:
         st.info("👆 Sube un archivo para comenzar el análisis.")
         with st.expander("📋 Estructura esperada del archivo"):
-            st.markdown("**Columnas requeridas (se detectan automáticamente):**\n"
-                        "- `Producto`: nombre del producto\n"
-                        "- `Fecha`: fecha de la transferencia\n"
-                        "- `Cantidad`: unidades\n"
-                        "- `Bodega Recibe` (o similar): tienda destino\n"
-                        "- `Costo` (opcional): costo unitario\n"
-                        "Otras columnas como `Línea`, `Grupo`, `Categoría` enriquecen el análisis.")
+            st.markdown("""
+            **Columnas requeridas (detectadas automáticamente):**
+            - `Producto`: nombre completo del producto
+            - `Fecha`: fecha de la transferencia
+            - `Cantidad`: número de unidades
+            - `Bodega Recibe`: tienda destino
+            - `Secuencial - Factura`: número único de transferencia
+            - `Total`: valor monetario
+            - `Costo`: costo unitario
+            - `Grupo`, `Categoria`, `Linea`: campos de clasificación
+            """)
         return
 
-    st.markdown("### 🔍 Filtros")
-    data = st.session_state.kdi_current_data
-    filtered = data.copy()
+    # ---------------------------------------------------------------
+    # 1. Panel de filtros
+    # ---------------------------------------------------------------
+    df = st.session_state.kdi_df.copy()
 
-    col_f1, col_f2, col_f3, col_f4 = st.columns(4)
+    st.markdown("### 🔍 Filtros")
+    col_f1, col_f2, col_f3, col_f4, col_f5 = st.columns(5)
     with col_f1:
-        if 'FECHA' in filtered.columns and not filtered.empty:
-            min_d = filtered['FECHA'].min().date()
-            max_d = filtered['FECHA'].max().date()
-            dr = st.date_input("Rango de fechas", [min_d, max_d], key="kdi_fecha")
-            if len(dr) == 2:
-                mask = (filtered['FECHA'].dt.date >= dr[0]) & (filtered['FECHA'].dt.date <= dr[1])
-                filtered = filtered[mask].copy()
+        if 'FECHA' in df.columns:
+            fechas = sorted(df['FECHA'].dropna().unique())
+            if len(fechas) >= 2:
+                dr = st.date_input("Rango de fechas", [fechas[0], fechas[-1]], key="kdi_fecha")
+                if len(dr) == 2:
+                    df = df[(df['FECHA'] >= dr[0]) & (df['FECHA'] <= dr[1])]
     with col_f2:
-        if 'BODEGA_RECIBE' in filtered.columns:
-            opts = ['Todas'] + sorted(filtered['BODEGA_RECIBE'].dropna().unique())
-            sel = st.selectbox("Bodega", opts, key="kdi_bod")
+        if 'TIENDA' in df.columns:
+            tiendas = ['Todas'] + sorted(df['TIENDA'].dropna().unique())
+            sel = st.selectbox("Tienda", tiendas, key="kdi_tienda")
             if sel != 'Todas':
-                filtered = filtered[filtered['BODEGA_RECIBE'] == sel]
+                df = df[df['TIENDA'] == sel]
     with col_f3:
-        if 'Genero' in filtered.columns:
-            opts = ['Todos'] + sorted(filtered['Genero'].dropna().unique())
-            sel = st.selectbox("Género", opts, key="kdi_gen")
-            if sel != 'Todos':
-                filtered = filtered[filtered['Genero'] == sel]
+        if 'GRUPO' in df.columns:
+            grupos = ['Todos'] + sorted(df['GRUPO'].dropna().unique())
+            selg = st.selectbox("Grupo", grupos, key="kdi_grupo")
+            if selg != 'Todos':
+                df = df[df['GRUPO'] == selg]
     with col_f4:
-        if 'Categoria' in filtered.columns:
-            opts = ['Todas'] + sorted(filtered['Categoria'].dropna().unique())
-            sel = st.selectbox("Categoría", opts, key="kdi_cat")
-            if sel != 'Todas':
-                filtered = filtered[filtered['Categoria'] == sel]
+        if 'CATEGORIA' in df.columns:
+            cats = ['Todas'] + sorted(df['CATEGORIA'].dropna().unique())
+            selc = st.selectbox("Categoría", cats, key="kdi_cat")
+            if selc != 'Todas':
+                df = df[df['CATEGORIA'] == selc]
+    with col_f5:
+        if 'TALLA' in df.columns:
+            tallas_opts = ['Todas'] + [t for t in TALLAS_ORDEN if t in df['TALLA'].values]
+            selt = st.selectbox("Talla", tallas_opts, key="kdi_talla")
+            if selt != 'Todas':
+                df = df[df['TALLA'] == selt]
+
+    if st.button("🔄 Resetear filtros", key="kdi_reset"):
+        st.rerun()
 
     st.markdown("---")
-    if filtered.empty:
+    if df.empty:
         st.warning("No hay datos con los filtros actuales.")
         return
 
-    # --- KPIs principales ---
-    total_units = int(filtered['CANTIDAD'].sum()) if 'CANTIDAD' in filtered.columns else 0
-    total_cost = filtered['TOTAL'].sum() if 'TOTAL' in filtered.columns else 0
-    avg_cost_unit = total_cost / total_units if total_units > 0 else 0
-    n_bodegas = filtered['BODEGA_RECIBE'].nunique() if 'BODEGA_RECIBE' in filtered.columns else 0
-    n_transfers = filtered['Secuencial - Factura'].nunique() if 'Secuencial - Factura' in filtered.columns else len(filtered)
-    n_products = filtered['PRODUCTO'].nunique() if 'PRODUCTO' in filtered.columns else 0
+    # ---------------------------------------------------------------
+    # 2. KPIs ejecutivos
+    # ---------------------------------------------------------------
+    total_unidades = int(df['CANTIDAD'].sum()) if 'CANTIDAD' in df.columns else 0
+    total_valor = df['TOTAL'].sum() if 'TOTAL' in df.columns else 0
+    costo_prom = total_valor / total_unidades if total_unidades else 0
+    n_transf = df['SECUENCIAL'].nunique() if 'SECUENCIAL' in df.columns else 0
+    n_tiendas = df['TIENDA'].nunique() if 'TIENDA' in df.columns else 0
+    n_prods = df['PRODUCTO'].nunique() if 'PRODUCTO' in df.columns else 0
 
-    k1, k2, k3, k4, k5 = st.columns(5)
-    with k1: st.metric("📦 Unidades Totales", f"{total_units:,}")
-    with k2: st.metric("💰 Costo Total", f"${total_cost:,.2f}")
-    with k3: st.metric("🏷️ Costo Prom. Unitario", f"${avg_cost_unit:,.2f}")
-    with k4: st.metric("🏪 Bodegas Destino", n_bodegas)
-    with k5: st.metric("📋 Transferencias", n_transfers)
+    k1, k2, k3, k4, k5, k6 = st.columns(6)
+    k1.metric("📦 Unidades Totales", f"{total_unidades:,}")
+    k2.metric("💰 Valor Total (USD)", f"${total_valor:,.2f}")
+    k3.metric("🏷️ Costo Prom./Unidad", f"${costo_prom:.2f}")
+    k4.metric("📋 Transferencias", n_transf)
+    k5.metric("🏪 Tiendas Atendidas", n_tiendas)
+    k6.metric("🎽 Productos Distintos", n_prods)
 
     st.markdown("---")
-    st.markdown("### 📊 Análisis por Dimensiones")
-    dim_tab1, dim_tab2, dim_tab3, dim_tab4, dim_tab5, dim_tab6 = st.tabs([
-        "🎨 Color", "📏 Talla", "⚧ Género", "🏷️ Categoría/Departamento",
-        "📦 Productos", "🔍 Análisis Avanzado"
+
+    # ---------------------------------------------------------------
+    # 3. Tabla dinámica interactiva
+    # ---------------------------------------------------------------
+    st.markdown("### 📊 Tabla Dinámica Interactiva")
+    col_p1, col_p2, col_p3, col_p4 = st.columns(4)
+    fila_opts = [c for c in ['TIENDA', 'COLOR', 'TALLA', 'GRUPO', 'CATEGORIA', 'MARCA'] if c in df.columns]
+    col_opts = [c for c in ['COLOR', 'TALLA', 'GRUPO', 'CATEGORIA', 'TIENDA', 'MARCA'] if c in df.columns]
+    val_opts = [c for c in ['CANTIDAD', 'TOTAL', 'COSTO'] if c in df.columns]
+
+    with col_p1:
+        fila_dim = st.selectbox("Filas (índice)", fila_opts, index=0, key="pivot_fila")
+    with col_p2:
+        col_dim = st.selectbox("Columnas", col_opts, index=min(1, len(col_opts)-1), key="pivot_col")
+    with col_p3:
+        val_dim = st.selectbox("Valores", val_opts, index=0, key="pivot_val")
+    with col_p4:
+        func_dim = st.selectbox("Función", ['Suma', 'Promedio', 'Conteo', 'Máximo'], key="pivot_func")
+
+    func_map = {'Suma': 'sum', 'Promedio': 'mean', 'Conteo': 'count', 'Máximo': 'max'}
+    try:
+        pivot = pd.pivot_table(
+            df, values=val_dim, index=fila_dim, columns=col_dim,
+            aggfunc=func_map[func_dim], fill_value=0,
+            margins=True, margins_name='TOTAL'
+        )
+        styled_pivot = pivot.style.background_gradient(cmap='Blues', axis=1).format(
+            {'TOTAL': '{:,.0f}'} if 'TOTAL' in pivot.columns else None
+        )
+        st.dataframe(styled_pivot, use_container_width=True, height=450)
+
+        # Exportar
+        buf = BytesIO()
+        with pd.ExcelWriter(buf, engine='openpyxl') as writer:
+            pivot.to_excel(writer, sheet_name='TablaDinamica')
+        st.download_button(
+            "📥 Exportar tabla dinámica",
+            data=buf.getvalue(),
+            file_name=f"pivot_{fila_dim}_x_{col_dim}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True
+        )
+    except Exception as e:
+        st.error(f"Error generando tabla: {str(e)}")
+
+    st.markdown("---")
+
+    # ---------------------------------------------------------------
+    # 4. Sub‑tabs de análisis
+    # ---------------------------------------------------------------
+    t1, t2, t3, t4, t5, t6 = st.tabs([
+        "🏪 Por Tienda", "🎨 Por Color", "📏 Por Talla",
+        "🎽 Por Producto", "📦 Por Marca/Grupo", "🔢 Detalle Completo"
     ])
 
-    with dim_tab1:
-        if 'Color' in filtered.columns:
-            col_stats = filtered.groupby('Color').agg({'CANTIDAD':['sum','count']}).reset_index()
-            col_stats.columns = ['Color','Unidades','Frecuencia']
-            col_stats['Porcentaje'] = (col_stats['Unidades']/total_units*100).round(2)
-            col_stats = col_stats.sort_values('Unidades', ascending=False)
-            col1, col2 = st.columns([2,1])
-            with col1:
-                fig = px.pie(col_stats, values='Unidades', names='Color', title="Distribución por Color", color_discrete_sequence=px.colors.qualitative.Set3)
-                fig.update_traces(textposition='inside', textinfo='percent+label')
-                fig.update_layout(template="plotly_dark")
-                st.plotly_chart(fig, use_container_width=True)
-            with col2:
-                st.dataframe(col_stats[['Color','Unidades','Porcentaje']].style.format({'Unidades':'{:,}','Porcentaje':'{:.2f}%'}), use_container_width=True, height=400)
-        else:
-            st.info("No hay datos de color disponibles")
+    with t1:
+        st.subheader("🏪 Análisis por Tienda")
+        if 'TIENDA' in df.columns and 'CANTIDAD' in df.columns:
+            tienda_stats = df.groupby('TIENDA').agg(
+                Unidades=('CANTIDAD', 'sum'),
+                Valor=('TOTAL', 'sum') if 'TOTAL' in df.columns else pd.NamedAgg(column='CANTIDAD', aggfunc='sum'),
+                Transferencias=('SECUENCIAL', 'nunique') if 'SECUENCIAL' in df.columns else pd.NamedAgg(column='CANTIDAD', aggfunc='count'),
+                Productos=('PRODUCTO', 'nunique') if 'PRODUCTO' in df.columns else pd.NamedAgg(column='CANTIDAD', aggfunc='count'),
+            ).reset_index().sort_values('Unidades', ascending=False)
 
-    with dim_tab2:
-        if 'Talla' in filtered.columns:
-            talla_stats = filtered.groupby('Talla').agg({'CANTIDAD':['sum','count']}).reset_index()
-            talla_stats.columns = ['Talla','Unidades','Frecuencia']
-            talla_stats['Porcentaje'] = (talla_stats['Unidades']/total_units*100).round(2)
-            size_order = ['XS','S','M','L','XL','2XL','3XL','4XL','Única']
-            talla_stats['Talla_Order'] = talla_stats['Talla'].apply(lambda x: size_order.index(x) if x in size_order else 999)
-            talla_stats = talla_stats.sort_values('Talla_Order')
-            col1, col2 = st.columns([2,1])
-            with col1:
-                fig = px.bar(talla_stats, x='Talla', y='Unidades', title="Distribución por Talla", color='Unidades', color_continuous_scale='Viridis')
-                fig.update_layout(template="plotly_dark")
-                st.plotly_chart(fig, use_container_width=True)
-            with col2:
-                st.dataframe(talla_stats[['Talla','Unidades','Porcentaje']].style.format({'Unidades':'{:,}','Porcentaje':'{:.2f}%'}), use_container_width=True, height=400)
-        else:
-            st.info("No hay datos de talla disponibles")
+            tienda_stats['% del Total'] = (tienda_stats['Unidades'] / total_unidades * 100).round(1)
 
-    with dim_tab3:
-        if 'Genero' in filtered.columns:
-            gen_stats = filtered.groupby('Genero').agg({'CANTIDAD':['sum','count']}).reset_index()
-            gen_stats.columns = ['Genero','Unidades','Frecuencia']
-            gen_stats['Porcentaje'] = (gen_stats['Unidades']/total_units*100).round(2)
-            gen_stats = gen_stats.sort_values('Unidades', ascending=False)
-            col1, col2 = st.columns([2,1])
-            with col1:
-                fig = px.pie(gen_stats, values='Unidades', names='Genero', title="Distribución por Género", color_discrete_sequence=['#FF6B6B','#4ECDC4','#45B7D1','#96CEB4'])
-                fig.update_traces(textposition='inside', textinfo='percent+label')
-                fig.update_layout(template="plotly_dark")
-                st.plotly_chart(fig, use_container_width=True)
-            with col2:
-                st.dataframe(gen_stats[['Genero','Unidades','Porcentaje']].style.format({'Unidades':'{:,}','Porcentaje':'{:.2f}%'}), use_container_width=True, height=400)
-        else:
-            st.info("No hay datos de género disponibles")
-
-    with dim_tab4:
-        if 'Categoria' in filtered.columns:
-            cat_stats = filtered.groupby('Categoria').agg({'CANTIDAD':['sum','count'], 'TOTAL':'sum'}).reset_index()
-            cat_stats.columns = ['Categoria','Unidades','Frecuencia','Costo Total']
-            cat_stats['Porcentaje'] = (cat_stats['Unidades']/total_units*100).round(2)
-            cat_stats = cat_stats.sort_values('Unidades', ascending=False)
-            col1, col2 = st.columns([2,1])
-            with col1:
-                fig = px.bar(cat_stats, x='Categoria', y='Unidades', title="Distribución por Categoría", color='Costo Total', color_continuous_scale='Plasma')
-                fig.update_layout(template="plotly_dark")
-                st.plotly_chart(fig, use_container_width=True)
-            with col2:
-                st.dataframe(cat_stats[['Categoria','Unidades','Costo Total','Porcentaje']].style.format({'Unidades':'{:,}','Costo Total':'${:,.2f}','Porcentaje':'{:.2f}%'}), use_container_width=True, height=400)
-        else:
-            st.info("No hay datos de categoría disponible")
-
-    with dim_tab5:
-        st.markdown("### 📊 Análisis por Producto (Top 10 por Costo Total)")
-        if 'PRODUCTO' in filtered.columns and 'TOTAL' in filtered.columns:
-            top_productos = filtered.groupby('PRODUCTO').agg({'CANTIDAD':'sum','TOTAL':'sum'}).sort_values('TOTAL', ascending=False).head(10).reset_index()
-            top_productos.columns = ['Producto','Unidades','Costo Total']
-            top_productos['% Costo'] = (top_productos['Costo Total'] / total_cost * 100).round(2)
-            col_p1, col_p2 = st.columns([2,1])
-            with col_p1:
-                fig = px.bar(top_productos, x='Costo Total', y='Producto', orientation='h', title='Top 10 Productos por Costo Total', color='Costo Total', color_continuous_scale='Blues')
-                fig.update_layout(yaxis={'categoryorder':'total ascending'}, template="plotly_dark")
-                st.plotly_chart(fig, use_container_width=True)
-            with col_p2:
-                st.dataframe(top_productos[['Producto','Unidades','Costo Total','% Costo']].style.format({'Unidades':'{:,}','Costo Total':'${:,.2f}','% Costo':'{:.2f}%'}), use_container_width=True, height=350)
-        else:
-            st.info("No hay datos de costo para este análisis.")
-
-    with dim_tab6:
-        st.subheader("🌳 Jerarquía de Productos (Línea → Grupo → Categoría)")
-        if all(col in filtered.columns for col in ['LINEA','GRUPO','CATEGORIA']):
-            # Preparar datos para Sunburst
-            sunburst_cols = ['LINEA','GRUPO','CATEGORIA']
-            df_sun = filtered.dropna(subset=sunburst_cols)
-            if not df_sun.empty:
-                fig_sun = px.sunburst(df_sun, path=['LINEA','GRUPO','CATEGORIA'], values='CANTIDAD', 
-                                      title='Distribución por Línea → Grupo → Categoría',
-                                      color='CANTIDAD', color_continuous_scale='Viridis')
-                fig_sun.update_layout(template="plotly_dark")
-                st.plotly_chart(fig_sun, use_container_width=True)
-
-        st.subheader("🗺️ Mapa de Calor – Envíos por Tienda y Día")
-        if 'BODEGA_RECIBE' in filtered.columns and 'FECHA' in filtered.columns:
-            df_hm = filtered.copy()
-            df_hm['DIA_SEMANA'] = df_hm['FECHA'].dt.day_name().str.capitalize()
-            dias_orden = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday']
-            df_hm['DIA_SEMANA'] = pd.Categorical(df_hm['DIA_SEMANA'], categories=dias_orden, ordered=True)
-            heat_data = df_hm.pivot_table(
-                index='BODEGA_RECIBE', columns='DIA_SEMANA', 
-                values='CANTIDAD', aggfunc='sum', fill_value=0
+            fig = px.bar(
+                tienda_stats.head(15), x='Unidades', y='TIENDA', orientation='h',
+                title="Top 15 Tiendas por Unidades",
+                color='Unidades', color_continuous_scale='Blues',
+                text='Unidades',
             )
-            # Limitar a 15 tiendas con más movimiento
-            top_tiendas = heat_data.sum(axis=1).nlargest(15).index
-            heat_data = heat_data.loc[top_tiendas]
-            fig_hm = px.imshow(heat_data, text_auto=True, aspect='auto', 
-                               title='Intensidad de envíos (unidades)',
-                               labels=dict(x="Día de la semana", y="Tienda", color="Unidades"),
-                               color_continuous_scale='YlOrRd')
-            fig_hm.update_layout(template="plotly_dark")
-            st.plotly_chart(fig_hm, use_container_width=True)
-
-        st.subheader("📊 Costo por Línea de Negocio")
-        if 'LINEA' in filtered.columns and 'TOTAL' in filtered.columns:
-            linea_cost = filtered.groupby('LINEA').agg({'CANTIDAD':'sum','TOTAL':'sum'}).sort_values('TOTAL', ascending=False).reset_index()
-            linea_cost['% Costo'] = (linea_cost['TOTAL'] / total_cost * 100).round(2)
-            col_a, col_b = st.columns([2,1])
-            with col_a:
-                fig_lc = px.bar(linea_cost, x='LINEA', y='TOTAL', title='Costo Total por Línea', color='TOTAL', color_continuous_scale='Teal')
-                fig_lc.update_layout(template="plotly_dark")
-                st.plotly_chart(fig_lc, use_container_width=True)
-            with col_b:
-                st.dataframe(linea_cost.style.format({'CANTIDAD':'{:,}','TOTAL':'${:,.2f}','% Costo':'{:.2f}%'}), use_container_width=True)
-
-        st.subheader("🏷️ Distribución por Marca")
-        if 'MARCA' in filtered.columns:
-            marca_stats = filtered.groupby('MARCA').agg({'CANTIDAD':'sum','TOTAL':'sum'}).sort_values('TOTAL', ascending=False).reset_index()
-            marca_stats['% Costo'] = (marca_stats['TOTAL'] / total_cost * 100).round(2)
-            col_ma1, col_ma2 = st.columns(2)
-            with col_ma1:
-                fig_marca = px.pie(marca_stats, values='CANTIDAD', names='MARCA', title='Unidades por Marca')
-                fig_marca.update_traces(textposition='inside', textinfo='percent+label')
-                fig_marca.update_layout(template="plotly_dark")
-                st.plotly_chart(fig_marca, use_container_width=True)
-            with col_ma2:
-                st.dataframe(marca_stats.style.format({'CANTIDAD':'{:,}','TOTAL':'${:,.2f}','% Costo':'{:.2f}%'}), use_container_width=True)
-
-    # --- Secciones finales (top bodegas, tendencia diaria, detalle, descarga) ---
-    st.markdown("---")
-    col_g1, col_g2 = st.columns(2)
-    with col_g1:
-        st.subheader("📊 Top 10 Bodegas por Unidades")
-        if 'BODEGA_RECIBE' in filtered.columns:
-            top_bod = filtered.groupby('BODEGA_RECIBE')['CANTIDAD'].sum().nlargest(10)
-            if not top_bod.empty:
-                fig = px.bar(x=top_bod.values, y=top_bod.index, orientation='h', color=top_bod.values, color_continuous_scale='Viridis', labels={'x':'Unidades','y':''})
-                fig.update_layout(height=350, template="plotly_dark")
-                st.plotly_chart(fig, use_container_width=True)
-    with col_g2:
-        st.subheader("📈 Tendencia Diaria de Costos")
-        if 'FECHA' in filtered.columns and 'TOTAL' in filtered.columns:
-            daily = filtered.groupby(filtered['FECHA'].dt.date)['TOTAL'].sum().reset_index()
-            daily.columns = ['Fecha','Costo Total']
-            fig = px.line(daily, x='Fecha', y='Costo Total', markers=True)
+            fig.update_traces(texttemplate='%{text:,.0f}', textposition='outside')
             fig.update_layout(template="plotly_dark")
             st.plotly_chart(fig, use_container_width=True)
 
-    st.markdown("---")
-    st.subheader("📋 Detalle de Transferencias")
-    cols_display = ['FECHA','BODEGA_RECIBE','PRODUCTO','CANTIDAD','COSTO','TOTAL','LINEA','GRUPO','CATEGORIA','MARCA']
-    cols_display = [c for c in cols_display if c in filtered.columns]
-    st.dataframe(filtered[cols_display].sort_values('FECHA', ascending=False), use_container_width=True, height=300)
+            # Tabla
+            styled = tienda_stats.style.format({
+                'Unidades': '{:,.0f}',
+                'Valor': '${:,.2f}',
+                '% del Total': '{:.1f}%'
+            }).background_gradient(subset=['Unidades'], cmap='Blues')
+            st.dataframe(styled, use_container_width=True, height=400)
 
-    st.markdown("---")
-    st.subheader("📄 Generar Reporte")
-    col_r1, col_r2, col_r3 = st.columns([1,1,2])
-    with col_r1:
-        r_start = st.date_input("Fecha inicio", filtered['FECHA'].min().date() if 'FECHA' in filtered.columns else datetime.now().date(), key="r_start")
-    with col_r2:
-        r_end = st.date_input("Fecha fin", filtered['FECHA'].max().date() if 'FECHA' in filtered.columns else datetime.now().date(), key="r_end")
-    with col_r3:
-        if st.button("📥 Descargar reporte Excel", use_container_width=True):
-            with st.spinner("Generando reporte..."):
-                excel_bytes = generar_reporte_excel_simple(filtered, r_start, r_end)
-                ts = datetime.now().strftime('%Y%m%d_%H%M%S')
-                st.download_button(label="⬇️ Descargar", data=excel_bytes, file_name=f"KPI_Diario_{ts}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
+            # Treemap
+            if 'GRUPO' in df.columns:
+                fig_tree = px.treemap(
+                    df, path=['GRUPO', 'TIENDA'], values='CANTIDAD',
+                    title="Peso relativo por tienda"
+                )
+                fig_tree.update_traces(textinfo="label+value")
+                fig_tree.update_layout(template="plotly_dark")
+                st.plotly_chart(fig_tree, use_container_width=True)
+
+    with t2:
+        st.subheader("🎨 Análisis por Color")
+        if 'COLOR' in df.columns and 'CANTIDAD' in df.columns:
+            color_stats = df.groupby('COLOR')['CANTIDAD'].sum().nlargest(10).reset_index()
+            fig_color = px.bar(
+                color_stats, x='CANTIDAD', y='COLOR', orientation='h',
+                title="Top 10 Colores", color='CANTIDAD',
+                color_continuous_scale='Viridis', text='CANTIDAD'
+            )
+            fig_color.update_traces(texttemplate='%{text:,.0f}', textposition='outside')
+            fig_color.update_layout(template="plotly_dark")
+            st.plotly_chart(fig_color, use_container_width=True)
+
+            # Pie
+            pie_data = df.groupby('COLOR')['CANTIDAD'].sum().nlargest(10)
+            others = df['CANTIDAD'].sum() - pie_data.sum()
+            if others > 0:
+                pie_data['Otros'] = others
+            fig_pie = px.pie(
+                values=pie_data.values, names=pie_data.index,
+                title="Distribución de colores (top 10 + Otros)",
+                hole=0.4
+            )
+            fig_pie.update_traces(textposition='inside', textinfo='percent+label')
+            fig_pie.update_layout(template="plotly_dark")
+            st.plotly_chart(fig_pie, use_container_width=True)
+
+            # Pivot color x tienda
+            if 'TIENDA' in df.columns:
+                pivot_ct = pd.pivot_table(
+                    df, values='CANTIDAD', index='COLOR', columns='TIENDA',
+                    aggfunc='sum', fill_value=0, margins=True
+                )
+                st.dataframe(pivot_ct.style.background_gradient(cmap='Blues', axis=1), use_container_width=True, height=400)
+
+    with t3:
+        st.subheader("📏 Análisis por Talla")
+        if 'TALLA' in df.columns and 'CANTIDAD' in df.columns:
+            talla_stats = df.groupby('TALLA')['CANTIDAD'].sum().reset_index()
+            talla_stats['TALLA_ORD'] = talla_stats['TALLA'].apply(
+                lambda x: TALLAS_ORDEN.index(x) if x in TALLAS_ORDEN else 999
+            )
+            talla_stats = talla_stats.sort_values('TALLA_ORD')
+
+            fig_talla = px.bar(
+                talla_stats, x='TALLA', y='CANTIDAD',
+                title="Distribución por Talla", color='CANTIDAD',
+                color_continuous_scale='Viridis', text='CANTIDAD'
+            )
+            fig_talla.update_traces(texttemplate='%{text:,.0f}', textposition='outside')
+            fig_talla.update_layout(template="plotly_dark")
+            st.plotly_chart(fig_talla, use_container_width=True)
+
+            # Heatmap talla x tienda
+            if 'TIENDA' in df.columns:
+                pivot_tt = pd.pivot_table(
+                    df, values='CANTIDAD', index='TALLA', columns='TIENDA',
+                    aggfunc='sum', fill_value=0
+                )
+                fig_hm = px.imshow(
+                    pivot_tt, text_auto=True, aspect="auto",
+                    title="Heatmap Talla × Tienda",
+                    color_continuous_scale='Blues'
+                )
+                fig_hm.update_layout(template="plotly_dark")
+                st.plotly_chart(fig_hm, use_container_width=True)
+
+    with t4:
+        st.subheader("🎽 Análisis por Producto")
+        if 'PRODUCTO' in df.columns and 'CANTIDAD' in df.columns:
+            topn = st.slider("Top N productos", 5, 50, 15, key="kdi_topn")
+            busqueda = st.text_input("🔍 Filtrar producto...", key="kdi_buscar_prod")
+            prod_stats = df.groupby('PRODUCTO').agg(
+                Unidades=('CANTIDAD', 'sum'),
+                Valor=('TOTAL', 'sum') if 'TOTAL' in df.columns else pd.NamedAgg(column='CANTIDAD', aggfunc='sum'),
+                Tiendas=('TIENDA', 'nunique') if 'TIENDA' in df.columns else pd.NamedAgg(column='CANTIDAD', aggfunc='count')
+            ).reset_index()
+            if busqueda:
+                prod_stats = prod_stats[prod_stats['PRODUCTO'].str.contains(busqueda, case=False)]
+            prod_stats = prod_stats.sort_values('Unidades', ascending=False).head(topn)
+            fig_prod = px.bar(
+                prod_stats, x='Unidades', y='PRODUCTO', orientation='h',
+                title=f"Top {topn} Productos", color='Unidades',
+                color_continuous_scale='Blues', text='Unidades'
+            )
+            fig_prod.update_traces(texttemplate='%{text:,.0f}', textposition='outside')
+            fig_prod.update_layout(template="plotly_dark")
+            st.plotly_chart(fig_prod, use_container_width=True)
+
+            st.dataframe(
+                prod_stats.style.format({'Unidades': '{:,.0f}', 'Valor': '${:,.2f}'}),
+                use_container_width=True, height=400
+            )
+            buf_prod = BytesIO()
+            with pd.ExcelWriter(buf_prod, engine='openpyxl') as writer:
+                prod_stats.to_excel(writer, index=False, sheet_name='TopProductos')
+            st.download_button(
+                "📥 Exportar lista de productos",
+                data=buf_prod.getvalue(),
+                file_name="top_productos.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+
+    with t5:
+        st.subheader("📦 Análisis por Marca/Grupo")
+        if 'GRUPO' in df.columns and 'CANTIDAD' in df.columns:
+            grupo_stats = df.groupby('GRUPO').agg(
+                Unidades=('CANTIDAD', 'sum'),
+                Valor=('TOTAL', 'sum') if 'TOTAL' in df.columns else pd.NamedAgg(column='CANTIDAD', aggfunc='sum'),
+                Transferencias=('SECUENCIAL', 'nunique') if 'SECUENCIAL' in df.columns else pd.NamedAgg(column='CANTIDAD', aggfunc='count'),
+                Tiendas=('TIENDA', 'nunique') if 'TIENDA' in df.columns else pd.NamedAgg(column='CANTIDAD', aggfunc='count'),
+                Productos=('PRODUCTO', 'nunique') if 'PRODUCTO' in df.columns else pd.NamedAgg(column='CANTIDAD', aggfunc='count')
+            ).reset_index()
+
+            col_g = st.columns(len(grupo_stats))
+            for i, (_, row) in enumerate(grupo_stats.iterrows()):
+                with col_g[i]:
+                    st.metric(f"📌 {row['GRUPO']}", f"{int(row['Unidades']):,} unds")
+                    st.caption(f"${row['Valor']:,.2f} | {row['Transferencias']} transf")
+
+            fig_sun = px.sunburst(
+                df.dropna(subset=['GRUPO']),
+                path=['GRUPO', 'CATEGORIA' if 'CATEGORIA' in df.columns else 'TIENDA', 'COLOR' if 'COLOR' in df.columns else 'TALLA'],
+                values='CANTIDAD',
+                title="Jerarquía Grupo → Categoría → Color"
+            )
+            fig_sun.update_layout(template="plotly_dark")
+            st.plotly_chart(fig_sun, use_container_width=True)
+
+    with t6:
+        st.subheader("🔢 Detalle Completo")
+        cols_show = [c for c in df.columns if c not in ['LOTE/SERIE', 'IMPUESTO', 'UNIDAD', 'DETALLE']]
+        st.dataframe(df[cols_show], use_container_width=True, height=600)
+        buf_raw = BytesIO()
+        with pd.ExcelWriter(buf_raw, engine='openpyxl') as writer:
+            df.to_excel(writer, index=False, sheet_name='DatosFiltrados')
+        st.download_button(
+            "📥 Descargar datos filtrados (Excel)",
+            data=buf_raw.getvalue(),
+            file_name=f"kpi_diario_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+
+    # ---------------------------------------------------------------
+    # 5. Análisis avanzado
+    # ---------------------------------------------------------------
+    with st.expander("🔬 Análisis Avanzado — Concentración y Eficiencia", expanded=False):
+        st.markdown("### Curva de Pareto (Productos → Unidades)")
+        if 'PRODUCTO' in df.columns and 'CANTIDAD' in df.columns:
+            prod_cant = df.groupby('PRODUCTO')['CANTIDAD'].sum().sort_values(ascending=False)
+            cumsum = prod_cant.cumsum() / prod_cant.sum() * 100
+            fig_pareto = go.Figure()
+            fig_pareto.add_trace(go.Bar(
+                x=list(range(1, len(prod_cant)+1)),
+                y=prod_cant.values,
+                name='Unidades'
+            ))
+            fig_pareto.add_trace(go.Scatter(
+                x=list(range(1, len(cumsum)+1)),
+                y=cumsum.values,
+                name='% Acumulado',
+                yaxis='y2',
+                line=dict(color='red', width=2)
+            ))
+            fig_pareto.update_layout(
+                title="Curva de Pareto (unidades por producto)",
+                xaxis=dict(title="Productos (ordenados por unidades)"),
+                yaxis=dict(title="Unidades"),
+                yaxis2=dict(title="% Acumulado", overlaying='y', side='right', range=[0, 100]),
+                template="plotly_dark"
+            )
+            st.plotly_chart(fig_pareto, use_container_width=True)
+
+            # Top 3 tiendas
+            if 'TIENDA' in df.columns:
+                top3 = df.groupby('TIENDA')['CANTIDAD'].sum().nlargest(3)
+                st.metric("Concentración Top‑3 Tiendas", f"{(top3.sum()/total_unidades*100):.1f}% del total")
+
+            # Diversidad de colores
+            if 'COLOR' in df.columns and 'TIENDA' in df.columns:
+                div_col = df.groupby('TIENDA')['COLOR'].nunique().reset_index(name='Colores distintos')
+                st.dataframe(div_col.sort_values('Colores distintos', ascending=False), use_container_width=True)
 def mostrar_dashboard_transferencias():
     st.markdown("""
     <div class='main-header'>
