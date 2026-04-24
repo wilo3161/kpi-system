@@ -3192,7 +3192,7 @@ def show_gestion_equipo():
                 st.session_state.chat_gemini.append({"role": "user", "content": prompt})
                 # Llamar a Gemini
                 with st.spinner("🤖 Pensando..."):
-                    respuesta = llamar_gemini(prompt, EQUIPO_LOGISTICO, st.session_state.chat_gemini)
+                    respuesta = llamar_groq(prompt, EQUIPO_LOGISTICO, st.session_state.chat_gemini)
                 st.session_state.chat_gemini.append({"role": "assistant", "content": respuesta})
                 st.rerun()
 
@@ -3201,7 +3201,7 @@ def show_gestion_equipo():
             if user_input:
                 st.session_state.chat_gemini.append({"role": "user", "content": user_input})
                 with st.spinner("🤖 Pensando..."):
-                    respuesta = llamar_gemini(user_input, EQUIPO_LOGISTICO, st.session_state.chat_gemini)
+                    respuesta = llamar_groq(user_input, EQUIPO_LOGISTICO, st.session_state.chat_gemini)
                 st.session_state.chat_gemini.append({"role": "assistant", "content": respuesta})
                 st.rerun()
 
@@ -3211,20 +3211,24 @@ def show_gestion_equipo():
                 "incluirá un enlace directo a WhatsApp (wa.me) para facilitar el envío.")
 
     st.markdown('</div>', unsafe_allow_html=True)
-# ==============================================================================
-# FUNCIONES AUXILIARES PARA GEMINI (ASISTENTE IA)
-# ==============================================================================
-def llamar_gemini(prompt_usuario: str, contexto_equipo: dict, historial: list) -> str:
-    """
-    Llama a la API REST de Gemini 2.0 Flash con system context, historial y el mensaje del usuario.
-    Retorna el texto de respuesta del asistente.
-    """
-    GEMINI_API_KEY = "AIzaSyBHJf0e19FJekx3Mo2AboI9bLyvAwMkLE4"
-    GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
 
-    headers = {"Content-Type": "application/json"}
+# ==============================================================================
+# FUNCIONES AUXILIARES PARA GROQ (ASISTENTE IA)
+# ==============================================================================
+def llamar_groq(prompt_usuario: str, contexto_equipo: dict, historial: list) -> str:
+    """
+    Llama a la API de Groq usando el modelo Llama 3.3 70B (gratuito).
+    Reintenta automáticamente si hay error de límite (429).
+    """
+    GROQ_API_KEY = "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"  # ← reemplaza esto
+    GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 
-    # Construir descripción textual del equipo incluyendo contactos guardados
+    headers = {
+        "Authorization": f"Bearer {GROQ_API_KEY}",
+        "Content-Type": "application/json"
+    }
+
+    # Construir descripción del equipo
     equipo_txt = "EQUIPO DE TRABAJO DEL CENTRO DE DISTRIBUCIÓN AEROPOSTALE:\n"
     contactos = st.session_state.get("equipo_contactos", {})
     for area, miembros in contexto_equipo.items():
@@ -3256,36 +3260,50 @@ Tu función principal es ayudar a Wilson con la comunicación hacia su equipo:
 - Responde siempre en español formal pero directo. Sé proactivo.
 Fecha y hora actual: {datetime.now().strftime('%d/%m/%Y %H:%M')}"""
 
-    # Construir los contenidos respetando el historial (máximo 10 turnos)
-    contents = []
-    for msg in historial[-10:]:
-        role = "user" if msg["role"] == "user" else "model"
-        contents.append({"role": role, "parts": [{"text": msg["content"]}]})
-    contents.append({"role": "user", "parts": [{"text": prompt_usuario}]})
+    # Convertir historial al formato esperado por Groq (OpenAI-like)
+    messages = [{"role": "system", "content": system_prompt}]
+    for msg in historial[-10:]:  # últimos 10 turnos
+        role = "user" if msg["role"] == "user" else "assistant"
+        messages.append({"role": role, "content": msg["content"]})
+    messages.append({"role": "user", "content": prompt_usuario})
 
     payload = {
-        "system_instruction": {"parts": [{"text": system_prompt}]},
-        "contents": contents,
-        "generationConfig": {
-            "temperature": 0.7,
-            "maxOutputTokens": 1024
-        }
+        "model": "llama-3.3-70b-versatile",
+        "messages": messages,
+        "temperature": 0.7,
+        "max_tokens": 1024
     }
 
-    try:
-        resp = requests.post(
-            f"{GEMINI_API_URL}?key={GEMINI_API_KEY}",
-            headers=headers,
-            json=payload,
-            timeout=30
-        )
-        resp.raise_for_status()
-        data = resp.json()
-        return data["candidates"][0]["content"]["parts"][0]["text"]
-    except requests.exceptions.RequestException as e:
-        return f"❌ Error al conectar con Gemini: {str(e)}"
-    except (KeyError, IndexError) as e:
-        return "❌ Respuesta inesperada de la API. Intenta nuevamente."
+    max_reintentos = 3
+    for intento in range(max_reintentos):
+        try:
+            resp = requests.post(
+                GROQ_API_URL,
+                headers=headers,
+                json=payload,
+                timeout=30
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                return data["choices"][0]["message"]["content"]
+            elif resp.status_code == 429:
+                if intento < max_reintentos - 1:
+                    espera = 2 ** intento  # 1, 2, 4 segundos
+                    st.warning(f"⏳ Límite de uso alcanzado. Reintentando en {espera} segundos...")
+                    time.sleep(espera)
+                else:
+                    return "❌ Límite de solicitudes excedido. Espera un minuto y vuelve a intentarlo."
+            else:
+                resp.raise_for_status()
+        except requests.exceptions.RequestException as e:
+            if intento < max_reintentos - 1:
+                time.sleep(1)
+            else:
+                return f"❌ Error al conectar con Groq: {str(e)}"
+        except (KeyError, IndexError) as e:
+            return "❌ Respuesta inesperada de la API. Intenta nuevamente."
+
+    return "❌ No se pudo obtener respuesta después de varios intentos."
 # ==============================================================================
 # FUNCIONES AUXILIARES PARA GENERAR GUÍAS
 # ==============================================================================
