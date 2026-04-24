@@ -277,12 +277,38 @@ except ImportError as e:
 # ==============================================================================
 def initialize_session_state():
     defaults = {
-        "current_page": "Inicio", "module_data": {}, "guias_registradas": [], "contador_guias": 1000,
-        "qr_images": {}, "logos": {}, "gastos_datos": {"manifesto": None, "facturas": None, "resultado": None, "metricas": None, "resumen": None, "validacion": None, "guias_anuladas": None, "procesado": False},
-        "clasificacion_data": pd.DataFrame(), "clasificacion_loaded": False, "kdi_current_data": pd.DataFrame(), "kdi_loaded": False,
+        "current_page": "Inicio",
+        "module_data": {},
+        "guias_registradas": [],
+        "contador_guias": 1000,
+        "qr_images": {},
+        "logos": {},
+        "gastos_datos": {
+            "manifesto": None,
+            "facturas": None,
+            "resultado": None,
+            "metricas": None,
+            "resumen": None,
+            "validacion": None,
+            "guias_anuladas": None,
+            "procesado": False,
+        },
+        "clasificacion_data": pd.DataFrame(),
+        "clasificacion_loaded": False,
+        "kdi_current_data": pd.DataFrame(),
+        "kdi_loaded": False,
     }
     for key, value in defaults.items():
-        if key not in st.session_state: st.session_state[key] = value
+        if key not in st.session_state:
+            st.session_state[key] = value
+
+    # Nuevos estados para Gestión de Equipo
+    if "chat_gemini" not in st.session_state:
+        st.session_state.chat_gemini = []
+    if "equipo_contactos" not in st.session_state:
+        st.session_state.equipo_contactos = {}
+    if "prompt_rapido" not in st.session_state:
+        st.session_state.prompt_rapido = ""
 
 # ==============================================================================
 # ESTILOS CSS - MEJORADO CON TENDENCIAS 2024/2025 (GLASSMORPHISM, NEUMORPHISM, ANIMACIONES FLUIDAS)
