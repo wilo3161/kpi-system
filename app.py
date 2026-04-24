@@ -2977,11 +2977,315 @@ def show_logistica():
 # ==============================================================================
 def show_gestion_equipo():
     add_back_button(key="back_equipo")
-    show_module_header("👥 Gestión de Equipo", "Administración del personal del Centro de Distribución")
+    show_module_header("👥 Gestión de Equipo", "Directorio del equipo y asistente inteligente para comunicaciones")
     st.markdown('<div class="module-content">', unsafe_allow_html=True)
-    st.info("Módulo de gestión de equipo. Implementación completa disponible en versiones anteriores.")
-    st.markdown('</div>', unsafe_allow_html=True)
 
+    # ─────────────────────────────────────────────────────────────────
+    # DATOS DEL EQUIPO (hardcoded)
+    # ─────────────────────────────────────────────────────────────────
+    EQUIPO_LOGISTICO = {
+        "Liderazgo y Control": [
+            {"nombre": "Wilson Pérez", "cargo": "Jefe de Logística / Centro de Distribución",
+             "area": "Liderazgo", "whatsapp": "", "email": ""}
+        ],
+        "Transferencias": [
+            {"nombre": "César Yépez",    "cargo": "Transferencias Fashion",
+             "area": "Transferencias", "whatsapp": "", "email": ""},
+            {"nombre": "Luis Perugachi", "cargo": "Pivote de Transferencias y Distribución",
+             "area": "Transferencias", "whatsapp": "", "email": ""},
+            {"nombre": "Josué Imbacuán","cargo": "Transferencias Tempo",
+             "area": "Transferencias", "whatsapp": "", "email": ""}
+        ],
+        "Distribución": [
+            {"nombre": "Jessica Suárez", "cargo": "Distribución",
+             "area": "Distribución",   "whatsapp": "", "email": ""},
+            {"nombre": "Norma Paredes",  "cargo": "Distribución (recientemente integrada)",
+             "area": "Distribución",  "whatsapp": "", "email": ""}
+        ],
+        "Empaque, Guías y Envíos": [
+            {"nombre": "Jhonny Villa",   "cargo": "Encargado de Empaque y Gestión de Guías",
+             "area": "Empaque",        "whatsapp": "", "email": ""},
+            {"nombre": "Simón Vera",     "cargo": "Apoyo en Guías y Envíos",
+             "area": "Empaque",        "whatsapp": "", "email": ""}
+        ],
+        "Ventas al Por Mayor (Picking y Packing)": [
+            {"nombre": "Jhonny Guadalupe","cargo": "Ventas al Por Mayor",
+             "area": "Ventas Mayoristas","whatsapp": "","email": ""},
+            {"nombre": "Rocío Cadena",   "cargo": "Ventas al Por Mayor",
+             "area": "Ventas Mayoristas","whatsapp": "","email": ""}
+        ],
+        "Cuarentena y Calidad": [
+            {"nombre": "Diana García",   "cargo": "Reprocesado de Prendas en Cuarentena",
+             "area": "Cuarentena",    "whatsapp": "", "email": ""}
+        ]
+    }
+
+    # Inicializar session state para contactos y chat
+    if "equipo_contactos" not in st.session_state:
+        st.session_state.equipo_contactos = {}
+    if "chat_gemini" not in st.session_state:
+        st.session_state.chat_gemini = []
+    if "prompt_rapido" not in st.session_state:
+        st.session_state.prompt_rapido = ""
+
+    # ───────────── PESTAÑAS ─────────────
+    tab1, tab2 = st.tabs(["👥 Directorio del Equipo", "🤖 Asistente IA — Gemini"])
+
+    # =====================================================================
+    # PESTAÑA 1 – DIRECTORIO DEL EQUIPO
+    # =====================================================================
+    with tab1:
+        st.markdown("### 📋 Directorio de Contactos")
+        # Calcular métricas
+        total_personas = sum(len(miembros) for miembros in EQUIPO_LOGISTICO.values())
+        total_areas = len(EQUIPO_LOGISTICO)
+        jefe = EQUIPO_LOGISTICO["Liderazgo y Control"][0]["nombre"]
+
+        col1, col2, col3 = st.columns(3)
+        col1.metric("👥 Total colaboradores", total_personas)
+        col2.metric("📂 Áreas funcionales", total_areas)
+        col3.metric("👑 Jefe de Logística", jefe)
+
+        st.markdown("---")
+
+        # Emojis por área para hacerlo visual
+        area_emojis = {
+            "Liderazgo y Control": "👑",
+            "Transferencias": "🔄",
+            "Distribución": "📦",
+            "Empaque, Guías y Envíos": "📮",
+            "Ventas al Por Mayor (Picking y Packing)": "💰",
+            "Cuarentena y Calidad": "🔍"
+        }
+
+        # Para cada área, un expander
+        for area_nombre, miembros in EQUIPO_LOGISTICO.items():
+            emoji = area_emojis.get(area_nombre, "👤")
+            with st.expander(f"{emoji} {area_nombre} ({len(miembros)} personas)", expanded=True):
+                # Distribuir tarjetas en columnas (máximo 3 por fila)
+                n_cols = min(len(miembros), 3)
+                if n_cols > 0:
+                    cols = st.columns(n_cols)
+                    for idx, persona in enumerate(miembros):
+                        with cols[idx % n_cols]:
+                            nombre = persona["nombre"]
+                            cargo = persona["cargo"]
+                            # Clave única para inputs
+                            key_base = nombre.replace(" ", "_").lower()
+                            wa_key = f"wa_{key_base}"
+                            email_key = f"email_{key_base}"
+
+                            # Obtener valores guardados previamente
+                            saved = st.session_state.equipo_contactos.get(nombre, {})
+                            wa_val = saved.get("whatsapp", "")
+                            email_val = saved.get("email", "")
+
+                            st.markdown(f"**{nombre}**")
+                            st.caption(cargo)
+                            whatsapp = st.text_input(
+                                "📱 WhatsApp",
+                                value=wa_val,
+                                key=wa_key,
+                                placeholder="+593 9XXXXXXXX"
+                            )
+                            correo = st.text_input(
+                                "📧 Email",
+                                value=email_val,
+                                key=email_key,
+                                placeholder="correo@aeropostale.com"
+                            )
+                            # Almacenar temporalmente en dict local (se guarda al pulsar el botón)
+                            # No usamos session_state directamente para no perder datos entre renders
+                            # pero sí se necesita un mecanismo de guardado.
+                            # Usaremos on_change o guardado manual. Aquí simplemente se guardará
+                            # al presionar el botón general, leyendo los valores de los inputs actuales.
+                            # (Los inputs ya viven en session_state por defecto con Streamlit)
+
+        # Botón para persistir todos los contactos
+        if st.button("💾 Guardar contactos", use_container_width=True):
+            nuevos_contactos = {}
+            for area_nombre, miembros in EQUIPO_LOGISTICO.items():
+                for persona in miembros:
+                    nombre = persona["nombre"]
+                    key_base = nombre.replace(" ", "_").lower()
+                    wa_val = st.session_state.get(f"wa_{key_base}", "")
+                    email_val = st.session_state.get(f"email_{key_base}", "")
+                    # Guardar solo si no están vacíos
+                    if wa_val or email_val:
+                        nuevos_contactos[nombre] = {"whatsapp": wa_val, "email": email_val}
+            st.session_state.equipo_contactos = nuevos_contactos
+            st.success("✅ Contactos guardados correctamente.")
+            st.rerun()
+
+    # =====================================================================
+    # PESTAÑA 2 – ASISTENTE IA GEMINI
+    # =====================================================================
+    with tab2:
+        st.markdown("### 🤖 Asistente Inteligente — Gemini")
+
+        # Mensaje de bienvenida automático al abrir el chat
+        if len(st.session_state.chat_gemini) == 0:
+            mensaje_bienvenida = (
+                "¡Hola Wilson! 👋 Soy tu asistente Gemini para el Centro de Distribución.\n\n"
+                "Puedo ayudarte a:\n"
+                "• Redactar y enviar mensajes a tu equipo (WhatsApp o Email)\n"
+                "• Enviar reportes a tu jefe Miguel\n"
+                "• Consultar información del equipo\n"
+                "• Coordinar comunicaciones de operaciones\n\n"
+                "¿En qué te ayudo hoy?"
+            )
+            st.session_state.chat_gemini.append({"role": "assistant", "content": mensaje_bienvenida})
+
+        # Layout de dos columnas: izquierda para acciones rápidas, derecha para el chat
+        col_izq, col_der = st.columns([0.3, 0.7])
+
+        # --- PANEL DE ACCIONES RÁPIDAS ---
+        with col_izq:
+            st.subheader("⚡ Acciones rápidas")
+            if st.button("📋 Solicitar actividades diarias al equipo", use_container_width=True):
+                st.session_state.prompt_rapido = (
+                    "Envía un mensaje a todo mi equipo pidiéndoles que me envíen "
+                    "un resumen de las actividades realizadas hoy antes de las 5pm."
+                )
+                st.rerun()
+            if st.button("📦 Informar distribución del día", use_container_width=True):
+                st.session_state.prompt_rapido = (
+                    "Redacta un comunicado para el equipo de Distribución avisando "
+                    "que la carga del día ya está lista para ser recolectada a las 10am."
+                )
+                st.rerun()
+            if st.button("🔄 Reporte de transferencias a jefe", use_container_width=True):
+                st.session_state.prompt_rapido = (
+                    "Genera un breve reporte de transferencias del día de hoy "
+                    "para enviárselo a mi jefe Miguel por correo."
+                )
+                st.rerun()
+            if st.button("📣 Comunicado general al equipo", use_container_width=True):
+                st.session_state.prompt_rapido = (
+                    "Envía un mensaje a todo el equipo recordándoles la reunión "
+                    "de mañana a las 8am en la sala principal."
+                )
+                st.rerun()
+
+            st.markdown("---")
+            if st.button("🗑️ Limpiar conversación", use_container_width=True):
+                st.session_state.chat_gemini = []
+                st.session_state.prompt_rapido = ""
+                st.rerun()
+
+        # --- ÁREA DE CHAT ---
+        with col_der:
+            st.caption("🤖 Asistente Gemini — Centro de Distribución Aeropostale")
+            chat_container = st.container(height=500)
+
+            # Mostrar historial acumulado
+            with chat_container:
+                for msg in st.session_state.chat_gemini:
+                    with st.chat_message(msg["role"]):
+                        st.markdown(msg["content"])
+
+            # Procesar prompt rápido si existe (se ejecuta en el siguiente ciclo tras pulsar botón)
+            if st.session_state.prompt_rapido:
+                prompt = st.session_state.prompt_rapido
+                st.session_state.prompt_rapido = ""  # Reset
+                # Agregar mensaje del usuario al historial
+                st.session_state.chat_gemini.append({"role": "user", "content": prompt})
+                # Llamar a Gemini
+                with st.spinner("🤖 Pensando..."):
+                    respuesta = llamar_gemini(prompt, EQUIPO_LOGISTICO, st.session_state.chat_gemini)
+                st.session_state.chat_gemini.append({"role": "assistant", "content": respuesta})
+                st.rerun()
+
+            # Entrada de chat normal
+            user_input = st.chat_input("Escribe tu mensaje o comando...")
+            if user_input:
+                st.session_state.chat_gemini.append({"role": "user", "content": user_input})
+                with st.spinner("🤖 Pensando..."):
+                    respuesta = llamar_gemini(user_input, EQUIPO_LOGISTICO, st.session_state.chat_gemini)
+                st.session_state.chat_gemini.append({"role": "assistant", "content": respuesta})
+                st.rerun()
+
+        # Información adicional sobre envío manual
+        st.info("📋 **Nota:** Los mensajes generados son **texto listo para copiar y pegar** en "
+                "tu WhatsApp o cliente de correo. Cuando haya número registrado, el asistente "
+                "incluirá un enlace directo a WhatsApp (wa.me) para facilitar el envío.")
+
+    st.markdown('</div>', unsafe_allow_html=True)
+# ==============================================================================
+# FUNCIONES AUXILIARES PARA GEMINI (ASISTENTE IA)
+# ==============================================================================
+def llamar_gemini(prompt_usuario: str, contexto_equipo: dict, historial: list) -> str:
+    """
+    Llama a la API REST de Gemini 2.0 Flash con system context, historial y el mensaje del usuario.
+    Retorna el texto de respuesta del asistente.
+    """
+    GEMINI_API_KEY = "AIzaSyBHJf0e19FJekx3Mo2AboI9bLyvAwMkLE4"
+    GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
+
+    headers = {"Content-Type": "application/json"}
+
+    # Construir descripción textual del equipo incluyendo contactos guardados
+    equipo_txt = "EQUIPO DE TRABAJO DEL CENTRO DE DISTRIBUCIÓN AEROPOSTALE:\n"
+    contactos = st.session_state.get("equipo_contactos", {})
+    for area, miembros in contexto_equipo.items():
+        equipo_txt += f"\nÁrea: {area}\n"
+        for m in miembros:
+            info = contactos.get(m["nombre"], {})
+            wa = info.get("whatsapp", "no registrado")
+            em = info.get("email", "no registrado")
+            equipo_txt += (
+                f"  - {m['nombre']} | Cargo: {m['cargo']} | "
+                f"WhatsApp: {wa} | Email: {em}\n"
+            )
+
+    system_prompt = f"""Eres el asistente inteligente de Wilson Pérez, Jefe de Logística del Centro de Distribución de Aeropostale Ecuador. Su jefe superior es Miguel.
+
+{equipo_txt}
+
+Tu función principal es ayudar a Wilson con la comunicación hacia su equipo:
+- Redactar mensajes para enviar por WhatsApp o Email a miembros concretos o grupos.
+- Generar reportes breves que se puedan reenviar a Miguel.
+- Cuando Wilson pida “enviar un mensaje a…” o “comunicar…”, debes:
+    1. Identificar al destinatario exacto (nombre o grupo como “todo el equipo”, “transferencias”, etc.).
+    2. Redactar el texto del mensaje de forma profesional, clara y directa.
+    3. Indicar el canal recomendado (WhatsApp si hay número, Email si hay correo).
+    4. Mostrar el texto listo para que Wilson lo copie y envíe manualmente.
+    5. Si tienes un número de WhatsApp, incluir también un enlace wa.me con el mensaje codificado.
+        Ejemplo: https://wa.me/593XXXXXXXXX?text=MENSAJE_CODIFICADO
+- Si Wilson hace preguntas generales sobre logística, el equipo o las operaciones, responde con información útil y concisa.
+- Responde siempre en español formal pero directo. Sé proactivo.
+Fecha y hora actual: {datetime.now().strftime('%d/%m/%Y %H:%M')}"""
+
+    # Construir los contenidos respetando el historial (máximo 10 turnos)
+    contents = []
+    for msg in historial[-10:]:
+        role = "user" if msg["role"] == "user" else "model"
+        contents.append({"role": role, "parts": [{"text": msg["content"]}]})
+    contents.append({"role": "user", "parts": [{"text": prompt_usuario}]})
+
+    payload = {
+        "system_instruction": {"parts": [{"text": system_prompt}]},
+        "contents": contents,
+        "generationConfig": {
+            "temperature": 0.7,
+            "maxOutputTokens": 1024
+        }
+    }
+
+    try:
+        resp = requests.post(
+            f"{GEMINI_API_URL}?key={GEMINI_API_KEY}",
+            headers=headers,
+            json=payload,
+            timeout=30
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        return data["candidates"][0]["content"]["parts"][0]["text"]
+    except requests.exceptions.RequestException as e:
+        return f"❌ Error al conectar con Gemini: {str(e)}"
+    except (KeyError, IndexError) as e:
+        return "❌ Respuesta inesperada de la API. Intenta nuevamente."
 # ==============================================================================
 # FUNCIONES AUXILIARES PARA GENERAR GUÍAS
 # ==============================================================================
