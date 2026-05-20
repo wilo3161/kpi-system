@@ -6098,11 +6098,12 @@ def consultar_historico_logistico(fecha_inicio, fecha_fin, tipos_operacion):
     for fecha in fechas:
         for tipo in tipos_operacion:
             # Generar datos aleatorios para demo
-            cantidad = pd.np.random.randint(10, 500) if hasattr(pd, 'np') else 100
+            # FIX [RENDIMIENTO] - Reemplazar pd.np.random obsoleto - 2026-05-20
+            cantidad = np.random.randint(10, 500)
             datos.append({
                 'fecha': fecha,
                 'tipo_operacion': tipo,
-                'cantidad': cantidad,
+                'cantidad': int(cantidad),
                 'estado': 'COMPLETADA',
                 'responsable': 'Sistema'
             })
