@@ -6122,7 +6122,7 @@ def obtener_datos_historico_forecast(meses=3):
     
     # Simulación de datos históricos mensuales
     fechas = pd.date_range(end=datetime.now(), periods=meses, freq='ME')
-    volumenes = [pd.np.random.randint(1000, 5000) if hasattr(pd, 'np') else 2500 for _ in range(meses)]
+    volumenes = [np.random.randint(1000, 5000)  for _ in range(meses)]
     
     return pd.DataFrame({
         'fecha': fechas,
