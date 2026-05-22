@@ -1,0 +1,89 @@
+<USER_REQUEST>
+ REGLAS DE ORO ANTES DE TOCAR UNA SOLA LÍNEA DE CÓDIGO
+
+Estas reglas son absolutas. Cualquier decisión que las contradiga requiere aprobación explícita del propietario del sistema antes de implementarse.
+
+
+NO ROMPER LO QUE YA FUNCIONA. Este ERP es un ecosistema vivo. Cada módulo interactúa con los demás. Antes de modificar cualquier función existente, traza el árbol de dependencias completo.
+PRINCIPIO DE INTERVENCIÓN MÍNIMA. Solo se modifica lo que está explícitamente mencionado en este documento. El resto del código se toca únicamente si es estrictamente necesario para que la corrección funcione.
+CONSULTAR ANTES DE CAMBIOS DRÁSTICOS. Si una corrección requiere refactorizar arquitectura, cambiar modelos de datos, o afectar más de un módulo, DETENTE y presenta al propietario: (a) qué cambiaría, (b) por qué, (c) qué riesgos implica, (d) qué alternativa menos invasiva existe.
+CADA FIX VA ACOMPAÑADO DE SU TEST. Ningún cambio se considera completo sin una prueba que demuestre que funciona y que no rompe los módulos adyacentes.
+DOCUMENTAR CADA CAMBIO con comentario en código: # FIX [MÓDULO] - [descripción] - [fecha]
+
+
+📁 CONTEXTO DEL PROYECTO
+Sistema: ERP personalizado desarrollado en Python (Streamlit)
+Empresa: Fashion Club — Aeropostale Ecuador
+Operación: Centro de Distribución + Red de tiendas
+Industria: Comercialización textil / moda (retail de ropa)
+Infraestructura adicional:
+
+Handheld con CenturyCloud (dispositivo de bodega existente)
+Integración de alertas por Telegram (a implementar)
+Correo empresarial gestionado desde módulo Auditoría (credenciales ya configuradas)
+
+
+ADJUNTAR TODOS LOS ARCHIVOS DEL PROYECTO al iniciar la sesión de trabajo. El programador debe leer la estructura completa antes de intervenir.
+
+
+🔍 FASE 0 — DIAGNÓSTICO GLOBAL OBLIGATORIO
+Antes de cualquier implementación, el programador debe ejecutar este diagnóstico completo:
+0.1 Mapeo de arquitectura
+- Listar todos los módulos existentes y sus dependencias entre sí
+- Identificar
+<truncated 34289 bytes>
+_minimo * 0.5
+        AND activo = 1
+    """)
+    
+    for prod in productos_criticos:
+        disparar_alerta(
+            tipo='STOCK_CRITICO',
+            mensaje=f"Stock crítico en {prod['descripcion']} ({prod['codigo']}): "
+                    f"{prod['stock_actual']} unidades (mínimo: {prod['stock_minimo']})",
+            modulo='INVENTARIO',
+            datos={'producto': prod['codigo'], 'stock': prod['stock_actual']}
+        )
+
+def verificar_guias_vencidas():
+    """Alerta por guías pendientes sin procesar — SAP Delivery Due List."""
+    from datetime import date, timedelta
+    
+    guias_vencidas = db.query("""
+        SELECT numero_guia, tipo_guia, fecha_esperada, proveedor_origen
+        FROM guias
+        WHERE estado IN ('PENDIENTE', 'EN_PROCESO')
+        AND fecha_esperada < :hoy
+    """, {'hoy': date.today().isoformat()})
+    
+    for guia in guias_vencidas:
+        dias_retraso = (date.today() - date.fromisoformat(guia['fecha_esperada'])).days
+        disparar_alerta(
+            tipo='GUIA_VENCIDA',
+            mensaje=f"Guía {guia['numero_guia']} con {dias_retraso} día(s) de retraso. "
+                    f"Proveedor: {guia['proveedor_origen']}",
+            modulo='GUIAS'
+        )
+
+def verificar_diferencias_recepcion():
+    """Alerta por diferencias significativas en recepciones del día."""
+    diferencias = db.query("""
+        SELECT guia_id, COUNT(*) as items_con_diferencia,
+               SUM(ABS(diferencia)) as total_diferencia
+        FROM diferencias_recepcion
+        WHERE DATE(timestamp) = DATE('now')
+        GROUP BY guia_id
+        HAVING total_diferencia > 10
+    """)
+    
+    for d in diferencias:
+        disparar_alerta(
+            tipo='DIFERENCIA_RECEPCION',
+            mensaje=f"Guía {d['guia_id']}: {d['items_con_diferencia']} ítems con diferencia "
+                    f"({d['total_diferencia']} unidades total)",
+            modulo='RECEPCION'
+        )
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-05-19T20:37:45-05:00.
+</ADDITIONAL_METADATA>

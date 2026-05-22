@@ -1,0 +1,1 @@
+Step 0: <USER_REQUEST> Search the codebase in the current workspace for any occurrences of 'Inicio', 'navigate_to', 'st.session_
