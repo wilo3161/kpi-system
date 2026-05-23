@@ -174,24 +174,32 @@ def inject_global_styles():
         from { opacity:0; transform: translateY(30px) rotateX(8deg); }
         to   { opacity:1; transform: translateY(0) rotateX(0); }
     }
-    /* Botón global (excluye el submit del formulario de login) */
+
+    /* =========================================== */
+    /* ESTILO ÚNICO PARA BOTONES (AZUL)            */
+    /* =========================================== */
     .stButton > button {
         font-family: var(--font-ui) !important;
         font-weight: 600 !important;
         letter-spacing: .05em !important;
         text-transform: uppercase !important;
-        background: linear-gradient(135deg, #CF0A2C, #8B0011) !important;
+        background: linear-gradient(95deg, #1E3A8A, #2563EB) !important;
         color: #fff !important;
         border: none !important;
         border-radius: 8px !important;
-        box-shadow: 0 4px 20px rgba(207,10,44,.35) !important;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.2) !important;
         transition: transform .2s ease, box-shadow .2s ease !important;
     }
     .stButton > button:hover {
+        background: linear-gradient(95deg, #2563EB, #1E40AF) !important;
         transform: translateY(-2px) !important;
-        box-shadow: 0 8px 32px rgba(207,10,44,.55) !important;
+        box-shadow: 0 12px 20px rgba(37,99,235,0.4) !important;
     }
-    /* Botón submit del login: estilos específicos en auth.py tienen prioridad */
+    .stButton > button:active {
+        transform: translateY(1px) !important;
+    }
+
+    /* Botón de login (se mantiene rojo, pues es una pantalla separada) */
     div[data-testid="stFormSubmitButton"] > button {
         background: #A52030 !important;
         border-radius: 6px !important;
@@ -205,6 +213,8 @@ def inject_global_styles():
         transform: none !important;
         box-shadow: 0 6px 24px rgba(207,10,44,0.35) !important;
     }
+
+    /* Tablas y otros componentes... */
     .stDataFrame tbody tr {
         animation: rowFadeIn .4s ease both;
         font-family: var(--font-data);
@@ -364,7 +374,8 @@ def show_header():
     with col3:
         if st.button("🚪 Salir", use_container_width=True, key="__header_logout__"):
             for key in ["authenticated", "username", "role", "user_name"]:
-                if key in st.session_state: del st.session_state[key]
+                if key in st.session_state:
+                    del st.session_state[key]
             st.rerun()
 
 def show_module_header(title, subtitle):
@@ -399,7 +410,7 @@ def kpi_card(col, titulo, valor, meta=None, unidad="", frecuencia=""):
     """, unsafe_allow_html=True)
 
 def create_module_card(icon, title, description, module_key):
-    """Tarjeta de acceso a módulo en la página principal."""
+    """Tarjeta de acceso a módulo en la página principal (estilo legacy)."""
     st.markdown(f"""
     <div class="kpi-card" style="height: 180px; display: flex; flex-direction: column; justify-content: center;">
         <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">{icon}</div>
@@ -412,6 +423,7 @@ def create_module_card(icon, title, description, module_key):
         st.rerun()
 
 def add_back_button(key: str = "back"):
+    """Botón para volver al inicio. Acepta un parámetro 'key' para identificar el botón."""
     if st.button("⬅️ VOLVER AL INICIO", key=key):
         st.session_state.current_page = "Inicio"
         st.rerun()

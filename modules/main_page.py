@@ -1,94 +1,238 @@
-"""
-modules/main_page.py — PÁGINA PRINCIPAL AEROPOSTALE ERP (v2 CORREGIDA)
-=====================================================================
-- Sin recursión infinita
-- Muestra solo módulos accesibles según rol
-- Tarjetas de acceso rápido
-- KPIs resistentes (no rompen si no hay datos)
-"""
-
+# modules/main_page.py
 import streamlit as st
-from datetime import datetime, timedelta
-from utils.roles import can_access, navigate_to_module
-from database.manager import local_db
+from pathlib import Path
+import base64
+from utils.ui import load_css
 
+def show_module_header(title_with_icon, subtitle):
+    icon = title_with_icon[0] if title_with_icon else ""
+    title_text = title_with_icon[1:].strip() if title_with_icon else ""
+    st.markdown(f"""
+    <div class="module-header fade-in">
+        <h1 class="header-title">
+            <span class="header-icon">{icon}</span> 
+            <span class="header-text">{title_text}</span>
+        </h1>
+        <p class="header-subtitle">{subtitle}</p>
+    </div>
+    """, unsafe_allow_html=True)
 
-def create_module_card(icon, title, description, module_key):
-    """Crea una tarjeta clicable de módulo, con verificación de permisos."""
-    if not can_access(module_key):
-        return  # No mostrar si no tiene permiso
+def navigate_to_module(module_key):
+    st.session_state.current_page = module_key
+    st.session_state["_navigate_to"] = module_key
 
-    # Usar columna y botón para navegar
-    with st.container():
-        st.markdown(f"### {icon} {title}")
-        st.caption(description)
-        if st.button(f"Ir a {title}", key=f"card_{module_key}", use_container_width=True):
-            navigate_to_module(module_key)
-        st.markdown("---")
+def create_module_card(icon, title, description, module_key, image_name=None):
+    """
+    Crea una tarjeta de módulo con fondo transparente y efecto hover.
+    La imagen de fondo se escala para cubrir toda la tarjeta.
+    """
+    # Ruta de la imagen del módulo
+    bg_image_base64 = None
+    if image_name:
+        png_path = Path(f"images/{image_name}.png")
+        jpg_path = Path(f"images/{image_name}.jpg")
+        if png_path.exists():
+            with open(png_path, "rb") as f:
+                bg_image_base64 = base64.b64encode(f.read()).decode()
+        elif jpg_path.exists():
+            with open(jpg_path, "rb") as f:
+                bg_image_base64 = base64.b64encode(f.read()).decode()
 
+    # Construir estilo de fondo con imagen escalada
+    if bg_image_base64:
+        bg_style = f"""
+            background-image: url('data:image/png;base64,{bg_image_base64}');
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+        """
+    else:
+        bg_style = "background: rgba(0,0,0,0.3); backdrop-filter: blur(4px);"
+
+    card_html = f"""
+    <div class="card-transparent" data-module="{module_key}" style="{bg_style}">
+        <div class="card-overlay"></div>
+        <div class="card-icon">{icon}</div>
+        <div class="card-title">{title}</div>
+        <div class="card-description">{description}</div>
+    </div>
+    """
+    st.markdown(card_html, unsafe_allow_html=True)
+
+    st.button(
+        f"Ingresar a {title}",
+        key=f"btn_{module_key}",
+        use_container_width=True,
+        on_click=navigate_to_module,
+        args=(module_key,)
+    )
 
 def show_main_page():
-    """Página principal con bienvenida y KPIs ligeros."""
+    load_css()
 
-    st.markdown("# 👕 AEROPOSTALE ERP")
-    st.markdown(f"**Bienvenido, {st.session_state.get('username', 'Usuario')}** ({st.session_state.get('role', '')})")
-    st.markdown("---")
+    if st.session_state.get("_navigate_to"):
+        target = st.session_state.pop("_navigate_to")
+        st.session_state.current_page = target
+        st.rerun()
 
-    # =====================================================================
-    # KPIs RÁPIDOS  (no intensivos en recursos)
-    # =====================================================================
-    st.markdown("### 📊 Resumen Rápido")
+    # Fondo general oscuro
+    st.markdown("""
+    <style>
+    .stApp {
+        background: linear-gradient(135deg, #0A0A1A, #1A1A2E);
+        background-size: cover;
+        background-attachment: fixed;
+    }
+    .brand-title {
+        font-family: 'Bebas Neue', 'Impact', sans-serif;
+        font-size: 5rem;
+        font-weight: 400;
+        text-align: center;
+        background: linear-gradient(135deg, #FFFFFF, #E0E0E0);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        margin-top: 20px;
+        letter-spacing: 2px;
+        text-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    }
+    .brand-subtitle {
+        font-family: 'Inter', sans-serif;
+        text-align: center;
+        color: #CCCCCC;
+        letter-spacing: 1px;
+        margin-bottom: 40px;
+        font-size: 1.2rem;
+        font-weight: 400;
+        text-shadow: 0 1px 3px rgba(0,0,0,0.3);
+    }
+    /* Tarjeta transparente con imagen de fondo escalada */
+    .card-transparent {
+        position: relative;
+        border-radius: 28px;
+        padding: 25px 20px 20px;
+        transition: all 0.4s cubic-bezier(0.2, 0.9, 0.4, 1.1);
+        overflow: hidden;
+        margin-bottom: 12px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        min-height: 280px;
+        cursor: pointer;
+        background-color: rgba(0, 0, 0, 0.25);
+        backdrop-filter: blur(8px);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+    }
+    /* Overlay oscuro sobre la imagen para mejorar legibilidad */
+    .card-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 1;
+        pointer-events: none;
+        border-radius: 28px;
+        transition: background 0.3s ease;
+    }
+    .card-transparent:hover .card-overlay {
+        background: rgba(0, 0, 0, 0.7);
+    }
+    .card-icon, .card-title, .card-description {
+        position: relative;
+        z-index: 2;
+    }
+    .card-transparent:hover {
+        transform: translateY(-8px) scale(1.02);
+        border: 1px solid rgba(207, 10, 44, 0.6);
+        box-shadow: 0 20px 30px -8px rgba(0, 0, 0, 0.5), 0 0 0 2px rgba(207,10,44,0.3);
+        backdrop-filter: blur(12px);
+    }
+    .card-icon {
+        font-size: 3.2rem;
+        margin-bottom: 12px;
+        filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
+        transition: all 0.3s ease;
+        background: rgba(0,0,0,0.4);
+        padding: 8px 16px;
+        border-radius: 60px;
+        backdrop-filter: blur(4px);
+        color: #FFFFFF;
+    }
+    .card-transparent:hover .card-icon {
+        transform: scale(1.1);
+        background: rgba(0,0,0,0.6);
+        color: #CF0A2C;
+    }
+    .card-title {
+        font-family: 'Inter', sans-serif;
+        font-size: 1.4rem;
+        font-weight: 800;
+        color: #FFFFFF;
+        margin-bottom: 8px;
+        letter-spacing: 0.5px;
+        text-shadow: 0 1px 3px rgba(0,0,0,0.5);
+    }
+    .card-description {
+        font-family: 'Inter', sans-serif;
+        font-size: 0.85rem;
+        color: #E2E8F0;
+        line-height: 1.5;
+        margin-bottom: 10px;
+        padding: 0 8px;
+        text-shadow: 0 1px 2px rgba(0,0,0,0.4);
+    }
+    .footer-text {
+        text-align: center;
+        margin-top: 50px;
+        color: #94A3B8;
+        font-size: 0.8rem;
+        font-family: 'Inter', sans-serif;
+        border-top: 1px solid rgba(255,255,255,0.1);
+        padding-top: 25px;
+    }
+    </style>
+    """, unsafe_allow_html=True)
 
-    try:
-        total_guias = local_db.count_fast("guias", use_cache=True)
-        guias_recibidas = local_db.count_fast("guias", {"estado": "RECIBIDA"})
-        guias_pendientes = local_db.count_fast("guias", {"estado": "PENDIENTE"})
-        total_notificaciones = local_db.count_fast("notificaciones", {"leida": False, "modulo": "guias"})
-    except Exception:
-        total_guias = guias_recibidas = guias_pendientes = total_notificaciones = 0
+    st.markdown("""
+    <div class="fade-in">
+        <div class="brand-title">AEROPOSTALE</div>
+        <div class="brand-subtitle">Centro de Distribución Ecuador | ERP</div>
+    </div>
+    """, unsafe_allow_html=True)
 
-    c1, c2, c3, c4 = st.columns(4)
-    with c1:
-        st.metric("📦 Guías Totales", total_guias)
-    with c2:
-        st.metric("✅ Recibidas", guias_recibidas)
-    with c3:
-        st.metric("⏳ Pendientes", guias_pendientes)
-    with c4:
-        if total_notificaciones > 0:
-            st.metric("🔔 Notificaciones", total_notificaciones)
-        else:
-            st.metric("🔔 Notificaciones", "0")
-
-    st.markdown("---")
-
-    # =====================================================================
-    # MÓDULOS DISPONIBLES  (tarjetas, sin recursión)
-    # =====================================================================
-    st.markdown("### 🧩 Módulos Disponibles")
-
+    # Lista completa de módulos
     all_modules = [
-        ("📊", "Dashboard KPIs", "Métricas principales del negocio", "dashboard_kpis"),
-        ("📈", "KPI Analytics", "Análisis detallado de rendimiento", "kpi_analytics"),
-        ("🔗", "Reconciliación", "Reconciliación de datos", "reconciliacion"),
-        ("📬", "Auditoría Correos", "Revisión de comunicaciones", "auditoria_correos"),
-        ("🚚", "Logística", "Dashboard y gestión logística", "logistica"),
-        ("👥", "Equipo Logístico", "Personal y contactos", "equipo"),
-        ("📦", "Guías de Transferencia", "Generación de guías", "guias"),
-        ("📦", "Control Inventario", "Stock y búsqueda", "inventario"),
-        ("📬", "Recepción de Guías", "Recibir en tienda", "recepcion"),
-        ("⚙️", "Configuración", "Ajustes del sistema", "configuracion"),
+        {"icon": "📊", "title": "Dashboard KPIs",        "description": "KPIs globales, IA y control nacional",        "key": "dashboard_kpis",   "image": "dashboard_kpis"},
+        {"icon": "📈", "title": "KPI Analytics",         "description": "Indicadores detallados, predicciones y ABC", "key": "kpi_analytics",     "image": "kpi_analytics"},
+        {"icon": "💰", "title": "Reconciliación",        "description": "Conciliación financiera y análisis de facturas", "key": "reconciliacion", "image": "reconciliacion"},
+        {"icon": "📧", "title": "Auditoría de Correos",   "description": "Análisis inteligente de novedades por email", "key": "auditoria_correos", "image": "auditoria_correos"},
+        {"icon": "📦", "title": "Dashboard Logístico",    "description": "Control de transferencias y distribución",    "key": "logistica",          "image": "logistica"},
+        {"icon": "👥", "title": "Gestión de Equipo",      "description": "Administración del personal del centro",     "key": "equipo",             "image": "equipo"},
+        {"icon": "🚚", "title": "Generar Guías",          "description": "Sistema de envíos con seguimiento QR",       "key": "guias",              "image": "guias"},
+        {"icon": "📋", "title": "Control de Inventario",  "description": "Gestión de stock en tiempo real",           "key": "inventario",         "image": "inventario"},
+        {"icon": "📥", "title": "Recepción",              "description": "Registro y gestión de mercancía entrante",   "key": "recepcion",          "image": "recepcion"},
+        {"icon": "⚙️", "title": "Configuración",          "description": "Personalización del sistema ERP",            "key": "configuracion",      "image": "configuracion"},
     ]
 
-    # Mostrar en grid de 2 columnas
-    cols = st.columns(2)
-    col_idx = 0
-    for icon, title, desc, module_key in all_modules:
-        if can_access(module_key):
-            with cols[col_idx % 2]:
-                create_module_card(icon, title, desc, module_key)
-            col_idx += 1
+    # Mostrar tarjetas en columnas de 3
+    cols = st.columns(3)
+    for idx, module in enumerate(all_modules):
+        with cols[idx % 3]:
+            create_module_card(
+                icon=module["icon"],
+                title=module["title"],
+                description=module["description"],
+                module_key=module["key"],
+                image_name=module["image"]
+            )
 
-    # Si no hay módulos accesibles
-    if col_idx == 0:
-        st.warning("⚠️ No tienes módulos asignados. Contacta al administrador.")
+    st.markdown("""
+    <div class="footer-text fade-in">
+        <p><strong>Sistema ERP</strong> • Desarrollado por Wilson Pérez</p>
+        <p style="font-size:12px;">© 2026 AEROPOSTALE Ecuador</p>
+    </div>
+    """, unsafe_allow_html=True)

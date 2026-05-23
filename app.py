@@ -1,125 +1,178 @@
-"""
-app.py — AEROPOSTALE ERP SYSTEM (v3 CONECTADO COMPLETO)
-=========================================================
-- Todos los módulos enlazados sin errores
-- Navegación protegida por roles
-- Seed automático en cada inicio
-"""
-
+# app.py
 import streamlit as st
-from datetime import datetime
+from pathlib import Path
+import base64
+import traceback
+from utils.auth import check_password
+from utils.ui import show_header, load_css
+from modules.main_page import show_main_page
 
-from utils.auth import verificar_login, mostrar_login
-from utils.ui import load_css
-from utils.roles import can_access, navigate_to_module, ensure_all_store_users
-from utils.error_handler import setup_global_error_handler
-setup_global_error_handler()
+# Importaciones de todos los módulos (con try/except para identificar fallos)
+try:
+    from modules.reconciliacion import show_reconciliacion_v8
+except Exception as e:
+    st.error(f"Error importando reconciliacion: {e}")
+    show_reconciliacion_v8 = None
+
+try:
+    from modules.auditoria import show_gestor_correos
+except Exception as e:
+    st.error(f"Error importando auditoria: {e}")
+    show_gestor_correos = None
+
+try:
+    from modules.logistica import show_logistica
+except Exception as e:
+    st.error(f"Error importando logistica: {e}")
+    show_logistica = None
+
+try:
+    from modules.kpi_analytics import show_kpi_analytics
+except Exception as e:
+    st.error(f"Error importando kpi_analytics: {e}")
+    show_kpi_analytics = None
+
+try:
+    from modules.equipo import show_gestion_equipo
+except Exception as e:
+    st.error(f"Error importando equipo: {e}")
+    show_gestion_equipo = None
+
+try:
+    from modules.guias import show_generar_guias
+except Exception as e:
+    st.error(f"Error importando guias: {e}")
+    show_generar_guias = None
+
+try:
+    from modules.configuracion import show_configuracion
+except Exception as e:
+    st.error(f"Error importando configuracion: {e}")
+    show_configuracion = None
+
+try:
+    from modules.recepcion import show_recepcion_tienda
+except Exception as e:
+    st.error(f"Error importando recepcion: {e}")
+    show_recepcion_tienda = None
+
+try:
+    from modules.dashboard_kpis import show_dashboard_kpis
+except Exception as e:
+    st.error(f"Error importando dashboard_kpis: {e}")
+    show_dashboard_kpis = None
+
+# Inventario con fallback
+try:
+    from modules.inventario import show_control_inventario
+    INVENTARIO_DISPONIBLE = True
+except Exception as e:
+    st.error(f"Error importando inventario: {e}")
+    INVENTARIO_DISPONIBLE = False
+    def show_control_inventario():
+        st.error("❌ Módulo de inventario no disponible.")
 
 st.set_page_config(
-    page_title="AEROPOSTALE ERP",
-    page_icon="👕",
     layout="wide",
-    initial_sidebar_state="expanded",
+    page_title="AEROPOSTALE ERP | Control Total",
+    page_icon="👔",
+    initial_sidebar_state="collapsed",
 )
 
-load_css()
+def main():
+    # Acceso directo a recepción desde QR
+    if st.query_params.get("modulo") == "recepcion":
+        if show_recepcion_tienda:
+            show_recepcion_tienda()
+        else:
+            st.error("Módulo de recepción no disponible")
+        return
 
-# Seed automático de usuarios de tienda + datos demo (solo primera vez)
-if "seed_done" not in st.session_state:
-    try:
-        ensure_all_store_users()
-        from scripts.seed_demo_data import seed_demo_all
-        seed_demo_all()
-    except Exception:
-        pass
-    st.session_state.seed_done = True
+    if "current_page" not in st.session_state:
+        st.session_state.current_page = "Inicio"
 
-# Login
-if "authenticated" not in st.session_state:
-    st.session_state.authenticated = False
-    st.session_state.username = ""
-    st.session_state.role = ""
-    st.session_state.assigned_store = ""
+    if not check_password():
+        return
 
-if not st.session_state.authenticated:
-    mostrar_login()
-    st.stop()
+    # Mostrar rol y página actual para depuración
+    st.sidebar.info(f"👤 Rol: {st.session_state.get('role', '?')}")
+    st.sidebar.info(f"📄 Página: {st.session_state.current_page}")
 
-# =============================================================================
-# SIDEBAR
-# =============================================================================
-st.sidebar.image("https://upload.wikimedia.org/wikipedia/commons/5/5e/Aeropostale_Logo.svg",
-                 width=150)
+    # Conexión a BD
+    from database.manager import local_db
+    if not local_db.connected:
+        st.sidebar.error("🔴 Sin conexión a BD")
+    else:
+        st.sidebar.success("🟢 Conectado a MongoDB")
 
-st.sidebar.markdown(f"""
-👤 **{st.session_state.get('username', '')}**
-🔑 {st.session_state.get('role', '')}
-""")
-if st.session_state.get("assigned_store"):
-    st.sidebar.markdown(f"🏪 {st.session_state.assigned_store}")
+    # Fondo común
+    image_path = Path("images/presentacion.png")
+    if image_path.exists():
+        with open(image_path, "rb") as f:
+            img_b64 = base64.b64encode(f.read()).decode()
+        st.markdown(f"""
+        <style>
+        .stApp {{
+            background-image: url(data:image/png;base64,{img_b64}) !important;
+            background-size: cover !important;
+            background-position: center !important;
+            background-attachment: fixed !important;
+        }}
+        </style>
+        """, unsafe_allow_html=True)
 
-st.sidebar.markdown("---")
+    show_header()
 
-MODULES = [
-    ("🛡️", "Monitor IA", "monitor_errores"),
-    ("📊", "Dashboard Principal", "dashboard_kpis"),
-    ("📈", "KPI Analytics", "kpi_analytics"),
-    ("🔗", "Reconciliación", "reconciliacion"),
-    ("📬", "Auditoría Correos", "auditoria_correos"),
-    ("🚚", "Logística", "logistica"),
-    ("👥", "Equipo", "equipo"),
-    ("📦", "Guías", "guias"),
-    ("📦", "Inventario", "inventario"),
-    ("📬", "Recepción", "recepcion"),
-    ("⚙️", "Configuración", "configuracion"),
-]
+    # Mapeo de páginas (solo funciones que se importaron correctamente)
+    page_mapping = {
+        "Inicio": show_main_page,
+    }
+    if show_dashboard_kpis:
+        page_mapping["dashboard_kpis"] = show_dashboard_kpis
+    if show_kpi_analytics:
+        page_mapping["kpi_analytics"] = show_kpi_analytics
+    if show_reconciliacion_v8:
+        page_mapping["reconciliacion"] = show_reconciliacion_v8
+        page_mapping["reconciliacion_v8"] = show_reconciliacion_v8
+    if show_gestor_correos:
+        page_mapping["auditoria_correos"] = show_gestor_correos
+    if show_logistica:
+        page_mapping["logistica"] = show_logistica
+        page_mapping["dashboard_logistico"] = show_logistica
+    if show_gestion_equipo:
+        page_mapping["equipo"] = show_gestion_equipo
+        page_mapping["gestion_equipo"] = show_gestion_equipo
+    if show_generar_guias:
+        page_mapping["guias"] = show_generar_guias
+        page_mapping["generar_guias"] = show_generar_guias
+    if show_configuracion:
+        page_mapping["configuracion"] = show_configuracion
+    if show_recepcion_tienda:
+        page_mapping["recepcion"] = show_recepcion_tienda
+    if INVENTARIO_DISPONIBLE and show_control_inventario:
+        page_mapping["inventario"] = show_control_inventario
+        page_mapping["control_inventario"] = show_control_inventario
 
-for icon, title, module_key in MODULES:
-    if can_access(module_key):
-        if st.sidebar.button(f"{icon} {title}", key=f"nav_{module_key}", use_container_width=True):
-            navigate_to_module(module_key)
+    current_page = st.session_state.current_page
+    if current_page in page_mapping:
+        try:
+            # Ejecutar el módulo
+            page_mapping[current_page]()
+        except Exception as e:
+            # Mostrar error detallado en la página (NO redirigir automáticamente)
+            st.error(f"❌ **Error en el módulo '{current_page}'**")
+            st.code(traceback.format_exc(), language="python")
+            st.warning("El módulo no se pudo cargar correctamente. Revisa el error arriba.")
+            # Opcional: botón para volver al inicio
+            if st.button("🏠 Volver al inicio"):
+                st.session_state.current_page = "Inicio"
+                st.rerun()
+    else:
+        st.error(f"❌ La página '{current_page}' no está disponible.")
+        st.info("Páginas disponibles: " + ", ".join(page_mapping.keys()))
+        if st.button("Ir a Inicio"):
+            st.session_state.current_page = "Inicio"
+            st.rerun()
 
-st.sidebar.markdown("---")
-if st.sidebar.button("🚪 Cerrar Sesión", use_container_width=True):
-    for k in ["authenticated", "username", "role", "assigned_store", "current_page"]:
-        st.session_state.pop(k, None)
-    st.rerun()
-
-st.sidebar.caption(f"v3.0 — {datetime.now().strftime('%H:%M')}")
-
-# =============================================================================
-# MAIN ROUTER
-# =============================================================================
-current_page = st.session_state.get("current_page", "dashboard_kpis")
-
-PAGES = {
-    "dashboard_kpis": ("modules.main_page", "show_main_page"),
-    "kpi_analytics": ("modules.kpi_analytics", "show_kpi_analytics"),
-    "reconciliacion": ("modules.reconciliacion", "show_reconciliacion"),
-    "auditoria_correos": ("modules.reconciliacion", "show_auditoria_correos"),  # reutiliza reconciliacion
-    "logistica": ("modules.logistica", "show_logistica"),
-    "equipo": ("modules.equipo", "show_equipo"),
-    "guias": ("modules.guias", "show_guias"),
-    "inventario": ("modules.inventario", "show_control_inventario"),
-    "recepcion": ("modules.recepcion", "show_recepcion"),
-    "configuracion": ("modules.configuracion", "show_configuracion"),
-    "monitor_errores": ("modules.monitor_errores", "show_monitor"),
-}
-
-if current_page in PAGES:
-    mod_path, func_name = PAGES[current_page]
-    try:
-        import importlib
-        mod = importlib.import_module(mod_path)
-        getattr(mod, func_name)()
-    except ImportError as e:
-        st.error(f"⚠️ Módulo no encontrado: {mod_path} ({e})")
-        from modules.main_page import show_main_page
-        show_main_page()
-    except Exception as e:
-        st.error(f"⚠️ Error al cargar {current_page}: {str(e)}")
-        from modules.main_page import show_main_page
-        show_main_page()
-else:
-    from modules.main_page import show_main_page
-    show_main_page()
+if __name__ == '__main__':
+    main()

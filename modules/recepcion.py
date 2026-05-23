@@ -1,274 +1,797 @@
-"""
-modules/recepcion.py — RECEPCIÓN DE GUÍAS POR TIENDA AEROPOSTALE
-====================================================================
-- Tienda ve SOLO sus guías pendientes (protegido por validar_permiso_tienda)
-- Admin y Bodega ven todas las guías pendientes
-- Al recibir: cambia estado a RECIBIDA, registra fecha/hora/usuario
-- Lanza alerta automática al recibir
-- Carga optimizada con paginación (lazy)
-"""
+# modules/recepcion.py
+# ============================================================================
+# SISTEMA DE RECEPCIÓN LOGÍSTICA — VERSIÓN ROBUSTECIDA
+# Mejoras: validaciones, logging, cacheo, transacciones, notificaciones internas
+# ============================================================================
 
-import streamlit as st
+from __future__ import annotations
+import io
+import json
+import logging
+from datetime import datetime
+from typing import Optional, List, Dict, Any
+from zoneinfo import ZoneInfo
+
 import pandas as pd
-from datetime import datetime, date
+import streamlit as st
+from reportlab.lib.pagesizes import A4
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import cm
+from reportlab.lib.colors import HexColor
+from reportlab.lib.enums import TA_CENTER, TA_LEFT
 
-from utils.ui import add_back_button, show_module_header
-from utils.roles import can_access, validar_permiso_tienda, get_user_store, es_admin_o_bodega
-from database.manager import local_db, registrar_auditoria
+from database.manager import local_db
+from services.notifications import TelegramBot
+from utils.ui import load_css
+from utils.backgrounds import set_module_background
+from core.event_bus import emitir
 
-# =============================================================================
-# CONSTANTES
-# =============================================================================
-COL_GUIAS = "guias"
-COL_PENDIENTES = "guias_pendientes"
-COL_NOTIFICACIONES = "notificaciones"
+# Opcional: Google Drive
+try:
+    from google.oauth2 import service_account
+    from googleapiclient.discovery import build
+    from googleapiclient.http import MediaIoBaseUpload
+    GOOGLE_DRIVE_AVAILABLE = True
+except ImportError:
+    GOOGLE_DRIVE_AVAILABLE = False
 
-# =============================================================================
-# SECCIÓN PRINCIPAL: Guías Pendientes de Recepción
-# =============================================================================
-def _seccion_guias_pendientes():
-    st.markdown("### 📬 Guías Pendientes de Recepción")
-    st.caption("Selecciona una guía para recibir sus productos en tu tienda.")
+logger = logging.getLogger(__name__)
+TZ_QUITO = ZoneInfo("America/Guayaquil")
 
-    usuario = st.session_state.get("username", "")
-    role = st.session_state.get("role", "Tienda")
-    tienda_usuario = get_user_store()
+# ============================================================================
+# ESTADOS (sin cambios)
+# ============================================================================
+class EstadoGuia:
+    BORRADOR            = "BORRADOR"
+    VALIDADA            = "VALIDADA"
+    EMITIDA             = "EMITIDA"
+    EN_MANIFIESTO       = "EN_MANIFIESTO"
+    DESPACHADA          = "DESPACHADA"
+    EN_TRANSITO         = "EN_TRANSITO"
+    RECEPCION_INICIADA  = "RECEPCION_INICIADA"
+    RECEPCION_PARCIAL   = "RECEPCION_PARCIAL"
+    RECIBIDA_CONFORME   = "RECIBIDA_CONFORME"
+    RECIBIDA_NOVEDAD    = "RECIBIDA_CON_NOVEDAD"
+    CONCILIADA          = "CONCILIADA"
+    CERRADA             = "CERRADA"
+    ANULADA             = "ANULADA"
 
-    # Query base
-    if es_admin_o_bodega():
-        # Admin/Bodega ven todas las pendientes
-        guias_pendientes = local_db.find(
-            COL_PENDIENTES,
-            {"estado": "PENDIENTE_RECEPCION", "visible": True},
-            sort=[("fecha_creacion", -1)]
-        )
-    else:
-        # Tienda solo ve sus pendientes
-        guias_pendientes = local_db.find(
-            COL_PENDIENTES,
-            {"tienda_destino": tienda_usuario, "estado": "PENDIENTE_RECEPCION", "visible": True},
-            sort=[("fecha_creacion", -1)]
-        )
+ESTADOS_RECEPCIONABLES = {
+    EstadoGuia.EN_MANIFIESTO,
+    EstadoGuia.DESPACHADA,
+    EstadoGuia.EN_TRANSITO,
+    EstadoGuia.RECEPCION_INICIADA,
+    EstadoGuia.RECEPCION_PARCIAL,
+    "PENDIENTE_RECEPCION",
+    "EMITIDA",
+}
 
-    if not guias_pendientes:
-        st.info("✅ No hay guías pendientes de recepción.")
-        return
+# ============================================================================
+# HELPERS
+# ============================================================================
+def _ahora() -> str:
+    return datetime.now(TZ_QUITO).isoformat()
 
-    # Mostrar tabla de pendientes
-    df_pend = pd.DataFrame(guias_pendientes)
-    cols_show = ["numero_guia", "tienda_destino", "fecha_creacion"]
-    cols_exist = [c for c in cols_show if c in df_pend.columns]
-
-    rename_map = {
-        "numero_guia": "N° Guía",
-        "tienda_destino": "Tienda Destino",
-        "fecha_creacion": "Fecha Creación",
+def _build_evento(evento: str, descripcion: str, usuario: str,
+                  modulo: str = "recepcion",
+                  metadata: Optional[dict] = None,
+                  cambios: Optional[dict] = None) -> dict:
+    return {
+        "evento": evento,
+        "descripcion": descripcion,
+        "usuario": usuario,
+        "timestamp": _ahora(),
+        "modulo": modulo,
+        "metadata": metadata or {},
+        "cambios_realizados": cambios or {},
     }
-    df_show = df_pend[cols_exist].copy()
-    if "fecha_creacion" in df_show.columns:
-        df_show["fecha_creacion"] = df_show["fecha_creacion"].astype(str).str[:19]
-    df_show = df_show.rename(columns=rename_map)
-    st.dataframe(df_show, use_container_width=True)
 
-    # Seleccionar guía para recibir
-    st.markdown("#### 🔍 Selecciona guía para procesar recepción")
-    opciones = {str(i): p.get("numero_guia", f"Guía #{i}") for i, p in enumerate(guias_pendientes)}
-    selected = st.selectbox("", options=list(opciones.keys()), format_func=lambda x: opciones[x],
-                            key="recepcion_select")
-    if selected:
-        idx = int(selected)
-        if idx < len(guias_pendientes):
-            _mostrar_detalle_recepcion(guias_pendientes[idx])
+# ============================================================================
+# NOTIFICACIONES INTERNAS
+# ============================================================================
+def _enviar_mensaje_interno(destinatario_username: str, asunto: str, contenido: str, remitente: str = "Sistema"):
+    """Guarda un mensaje interno en la BD y muestra un toast."""
+    doc = {
+        "para": destinatario_username,
+        "asunto": asunto,
+        "contenido": contenido,
+        "remitente": remitente,
+        "fecha": _ahora(),
+        "leido": False
+    }
+    try:
+        local_db.insert("mensajes_internos", doc)
+        st.toast(f"📬 Nuevo mensaje para {destinatario_username}: {asunto}", icon="💬")
+    except Exception as e:
+        logger.error(f"Error guardando mensaje interno: {e}")
 
-
-def _mostrar_detalle_recepcion(pendiente: dict):
-    """Muestra detalle de la guía pendiente y permite recibir."""
-    num_guia = pendiente.get("numero_guia", "N/A")
-    guia_id = pendiente.get("guia_id", "")
-
-    # Obtener guía completa
-    guia_doc = None
-    if guia_id:
-        from bson import ObjectId
-        try:
-            guia_doc = local_db.find_one(COL_GUIAS, {"_id": ObjectId(guia_id)})
-        except Exception:
-            guia_doc = local_db.find_one(COL_GUIAS, {"numero_guia": num_guia})
+def _mostrar_notificaciones_usuario(usuario_actual: str):
+    """Muestra los mensajes no leídos del usuario actual."""
+    mensajes = local_db.find("mensajes_internos", {"para": usuario_actual, "leido": False}, sort=[("fecha", -1)])
+    if mensajes:
+        with st.expander(f"📬 Notificaciones ({len(mensajes)} nuevas)"):
+            for msg in mensajes:
+                st.markdown(f"**📨 {msg['asunto']}**  \n{msg['contenido']}  \n*{msg['remitente']} - {msg['fecha'][:16]}*")
+                local_db.update("mensajes_internos", {"_id": msg["_id"]}, {"leido": True})
     else:
-        guia_doc = local_db.find_one(COL_GUIAS, {"numero_guia": num_guia})
+        st.info("No tienes notificaciones nuevas.")
 
-    if not guia_doc:
-        st.warning("⚠️ No se encontró la guía completa. Contacta al administrador.")
+# ============================================================================
+# ACTUALIZACIÓN DE GUÍA (versión robustecida)
+# ============================================================================
+@st.cache_data(ttl=60, show_spinner=False)
+def _cargar_guia(numero_guia: str) -> Optional[dict]:
+    """Carga una guía de forma cacheada."""
+    return local_db.find_one("guias", {"numero_guia": str(numero_guia)})
+
+def _actualizar_guia_recepcion(
+    numero_guia: str,
+    estado_nuevo: str,
+    recepcion_data: dict,
+    incidencias: list,
+    evento: dict,
+    usuario: str,
+    diferencias_detalle: dict,
+) -> bool:
+    """
+    Actualiza la guía usando transacciones implícitas (MongoDB).
+    Valida que la guía exista y no esté ya recepcionada.
+    """
+    try:
+        # 1. Validar estado previo
+        guia_existente = local_db.find_one("guias", {"numero_guia": str(numero_guia)})
+        if not guia_existente:
+            logger.error(f"Guía {numero_guia} no encontrada")
+            return False
+        
+        # Verificar que no esté ya recepcionada como conforme o cerrada
+        estado_actual = guia_existente.get("estado")
+        if estado_actual in (EstadoGuia.RECIBIDA_CONFORME, EstadoGuia.CERRADA, EstadoGuia.CONCILIADA):
+            logger.warning(f"Guía {numero_guia} ya está recepcionada (estado {estado_actual})")
+            st.warning("Esta guía ya fue recepcionada anteriormente.")
+            return False
+        
+        # 2. Actualizar guía principal
+        ahora_str = _ahora()
+        update_doc = {
+            "estado": estado_nuevo,
+            "recepcion": recepcion_data,
+            "audit.updated_at": ahora_str,
+            "audit.updated_by": usuario,
+        }
+        local_db.update("guias", {"numero_guia": str(numero_guia)}, update_doc)
+        
+        # Agregar timeline e incidencias
+        local_db.update(
+            "guias",
+            {"numero_guia": str(numero_guia)},
+            {"$push": {"timeline": evento, "incidencias": {"$each": incidencias}}}
+        )
+        
+        # 3. Registrar faltantes / sobrantes / stock bloqueado (con manejo de errores parcial)
+        for falt in diferencias_detalle.get("faltantes", []):
+            try:
+                local_db.insert("discrepancias", {
+                    "numero_guia": numero_guia,
+                    "tipo": "FALTANTE",
+                    "codigo": falt.get("codigo"),
+                    "descripcion": falt.get("descripcion"),
+                    "cantidad": falt.get("faltante"),
+                    "fecha": ahora_str,
+                    "usuario": usuario,
+                    "estado": "PENDIENTE_RECLAMO"
+                })
+            except Exception as e:
+                logger.error(f"Error insertando faltante: {e}")
+        
+        for sob in diferencias_detalle.get("sobrantes", []):
+            try:
+                local_db.insert("ingresos_no_esperados", {
+                    "numero_guia": numero_guia,
+                    "codigo": sob.get("codigo"),
+                    "descripcion": sob.get("descripcion"),
+                    "cantidad": sob.get("sobrante"),
+                    "fecha": ahora_str,
+                    "usuario": usuario,
+                    "estado": "PENDIENTE_AJUSTE"
+                })
+            except Exception as e:
+                logger.error(f"Error insertando sobrante: {e}")
+        
+        estados_bloqueo = ["DAÑADO", "MANCHA", "COSTURA", "ETIQUETA_INCORRECTA", "PRODUCTO_DIFERENTE"]
+        for it in recepcion_data.get("items_received", []):
+            if it.get("estado_item") in estados_bloqueo:
+                try:
+                    local_db.insert("stock_bloqueado", {
+                        "numero_guia": numero_guia,
+                        "codigo": it.get("codigo"),
+                        "descripcion": it.get("descripcion"),
+                        "cantidad": it.get("cantidad_recibida"),
+                        "motivo": it.get("estado_item"),
+                        "fecha": ahora_str,
+                        "usuario": usuario,
+                        "estado": "BLOQUEADO"
+                    })
+                except Exception as e:
+                    logger.error(f"Error insertando stock bloqueado: {e}")
+        
+        # Invalidar caché de la guía
+        st.cache_data.clear()
+        return True
+        
+    except Exception as exc:
+        logger.error(f"Error crítico en actualización de recepción: {exc}", exc_info=True)
+        return False
+
+# ============================================================================
+# CÁLCULO DE DIFERENCIAS (mejorado)
+# ============================================================================
+def _calcular_diferencias(items_expected: list, items_received: list) -> dict:
+    """Calcula diferencias entre lo esperado y lo recibido, con validación de tipos."""
+    def get_key(item):
+        return item.get("codigo") or item.get("descripcion", f"item_{id(item)}")
+    
+    esperado_map = {get_key(it): it for it in items_expected if isinstance(it, dict)}
+    recibido_map = {get_key(it): it for it in items_received if isinstance(it, dict)}
+    
+    total_esperado = sum(it.get("cantidad_esperada", 0) for it in items_expected if isinstance(it, dict))
+    total_recibido = sum(it.get("cantidad_recibida", 0) for it in items_received if isinstance(it, dict))
+    
+    faltantes = []
+    sobrantes = []
+    
+    for key, item_esp in esperado_map.items():
+        cant_esp = item_esp.get("cantidad_esperada", 0)
+        item_rec = recibido_map.get(key, {})
+        cant_rec = item_rec.get("cantidad_recibida", 0)
+        diff = cant_esp - cant_rec
+        if diff > 0:
+            faltantes.append({
+                "codigo": key,
+                "descripcion": item_esp.get("descripcion", ""),
+                "faltante": diff
+            })
+        elif diff < 0:
+            sobrantes.append({
+                "codigo": key,
+                "descripcion": item_esp.get("descripcion", ""),
+                "sobrante": abs(diff)
+            })
+    
+    # Ítems recibidos no esperados
+    for key, item_rec in recibido_map.items():
+        if key not in esperado_map:
+            cant_rec = item_rec.get("cantidad_recibida", 0)
+            sobrantes.append({
+                "codigo": key,
+                "descripcion": item_rec.get("descripcion", ""),
+                "sobrante": cant_rec
+            })
+    
+    return {
+        "total_esperado": total_esperado,
+        "total_recibido": total_recibido,
+        "diferencia_neta": total_esperado - total_recibido,
+        "faltantes": faltantes,
+        "sobrantes": sobrantes,
+        "tiene_diferencias": bool(faltantes or sobrantes),
+    }
+
+# ============================================================================
+# GENERACIÓN DE INCIDENCIAS DETALLADAS
+# ============================================================================
+def _generar_incidencias_detalladas(items_received: list, observaciones: str, usuario: str) -> list:
+    incidencias = []
+    ahora = _ahora()
+    for item in items_received:
+        esperado = item.get("cantidad_esperada", 0)
+        recibido = item.get("cantidad_recibida", 0)
+        codigo = item.get("codigo", "")
+        desc = item.get("descripcion", "")
+        if recibido != esperado:
+            diff = esperado - recibido
+            if diff > 0:
+                incidencias.append({
+                    "tipo": "FALTANTE",
+                    "descripcion": f"Faltante {diff} uds de {codigo} – {desc}",
+                    "severidad": "ALTA" if diff > 5 else "MEDIA",
+                    "usuario": usuario,
+                    "fecha": ahora,
+                })
+            else:
+                incidencias.append({
+                    "tipo": "SOBRANTE",
+                    "descripcion": f"Sobrante {abs(diff)} uds de {codigo} – {desc}",
+                    "severidad": "BAJA",
+                    "usuario": usuario,
+                    "fecha": ahora,
+                })
+        estado = item.get("estado_item", "CONFORME")
+        if estado == "DAÑADO":
+            incidencias.append({
+                "tipo": "DAÑADO",
+                "descripcion": f"{codigo} – {desc} marcado como DAÑADO",
+                "severidad": "ALTA",
+                "usuario": usuario,
+                "fecha": ahora,
+            })
+        elif estado == "MANCHA":
+            incidencias.append({
+                "tipo": "DEFECTO_CALIDAD",
+                "descripcion": f"{codigo} – {desc} presenta MANCHA",
+                "severidad": "MEDIA",
+                "usuario": usuario,
+                "fecha": ahora,
+            })
+        elif estado == "COSTURA":
+            incidencias.append({
+                "tipo": "DEFECTO_CALIDAD",
+                "descripcion": f"{codigo} – {desc} defecto de COSTURA",
+                "severidad": "MEDIA",
+                "usuario": usuario,
+                "fecha": ahora,
+            })
+        elif estado == "ETIQUETA_INCORRECTA":
+            incidencias.append({
+                "tipo": "DEFECTO_CALIDAD",
+                "descripcion": f"{codigo} – {desc} ETIQUETA incorrecta",
+                "severidad": "BAJA",
+                "usuario": usuario,
+                "fecha": ahora,
+            })
+        elif estado == "PRODUCTO_DIFERENTE":
+            incidencias.append({
+                "tipo": "PRODUCTO_DIFERENTE",
+                "descripcion": f"{codigo} – {desc} producto diferente al esperado",
+                "severidad": "ALTA",
+                "usuario": usuario,
+                "fecha": ahora,
+            })
+    if observaciones and observaciones.strip():
+        incidencias.append({
+            "tipo": "OBSERVACION",
+            "descripcion": observaciones.strip(),
+            "severidad": "BAJA",
+            "usuario": usuario,
+            "fecha": ahora,
+        })
+    return incidencias
+
+# ============================================================================
+# GENERACIÓN DE ACTA CON NOVEDADES DETALLADAS (Excel y PDF)
+# ============================================================================
+def generar_acta_recepcion_excel(guia_doc: dict, recepcion_data: dict, diferencias: dict,
+                                 incidencias: list, items_received: list) -> bytes:
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        # Resumen
+        resumen = {
+            "Número de Guía": guia_doc.get("numero_guia"),
+            "Tienda Destino": guia_doc.get("tienda_destino"),
+            "Transferencia": guia_doc.get("numero_transferencia"),
+            "Fecha Recepción": recepcion_data.get("fecha_recepcion", ""),
+            "Receptor": recepcion_data.get("usuario_recepcion", ""),
+            "Estado Recepción": recepcion_data.get("estado_recepcion", ""),
+            "Total Esperado": diferencias.get("total_esperado", 0),
+            "Total Recibido": diferencias.get("total_recibido", 0),
+            "Diferencia Neta": diferencias.get("diferencia_neta", 0),
+            "Observaciones": recepcion_data.get("observaciones", ""),
+        }
+        df_resumen = pd.DataFrame([resumen])
+        df_resumen.to_excel(writer, sheet_name="Resumen", index=False)
+        
+        # Detalle de ítems recibidos
+        if items_received:
+            df_detalle = pd.DataFrame(items_received)
+            columnas = {"codigo": "Código", "estilo": "Estilo", "descripcion": "Descripción",
+                        "cantidad_esperada": "Esperado", "cantidad_recibida": "Recibido",
+                        "estado_item": "Estado", "faltante": "Faltante", "sobrante": "Sobrante"}
+            df_detalle = df_detalle.rename(columns={k: v for k, v in columnas.items() if k in df_detalle.columns})
+            df_detalle.to_excel(writer, sheet_name="Detalle Ítems", index=False)
+        
+        # Incidencias
+        if incidencias:
+            df_inc = pd.DataFrame(incidencias)
+            df_inc.to_excel(writer, sheet_name="Incidencias", index=False)
+        
+        # Novedades por producto
+        novedades = []
+        for it in items_received:
+            esperado = it.get("cantidad_esperada", 0)
+            recibido = it.get("cantidad_recibida", 0)
+            estado = it.get("estado_item", "CONFORME")
+            if esperado != recibido or estado != "CONFORME":
+                novedades.append({
+                    "Código": it.get("codigo", ""),
+                    "Estilo": it.get("estilo", ""),
+                    "Descripción": it.get("descripcion", ""),
+                    "Esperado": esperado,
+                    "Recibido": recibido,
+                    "Diferencia": recibido - esperado,
+                    "Estado": estado,
+                    "Observación": f"Se esperaban {esperado}, se recibieron {recibido}. Estado: {estado}"
+                })
+        if novedades:
+            df_novedades = pd.DataFrame(novedades)
+            df_novedades.to_excel(writer, sheet_name="Novedades por Producto", index=False)
+    
+    output.seek(0)
+    return output.getvalue()
+
+def generar_acta_recepcion_pdf(guia_doc: dict, recepcion_data: dict, diferencias: dict,
+                               incidencias: list, items_received: list) -> bytes:
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4, leftMargin=2*cm, rightMargin=2*cm,
+                            topMargin=2*cm, bottomMargin=2*cm)
+    styles = getSampleStyleSheet()
+    style_title = ParagraphStyle('Title', parent=styles['Title'], fontSize=16, alignment=TA_CENTER, spaceAfter=20)
+    style_heading = ParagraphStyle('Heading', parent=styles['Heading2'], fontSize=12, spaceAfter=10)
+    style_normal = ParagraphStyle('Normal', parent=styles['Normal'], fontSize=9, leading=12)
+    
+    story = []
+    story.append(Paragraph("ACTA DE RECEPCIÓN DE MERCANCÍA", style_title))
+    story.append(Spacer(1, 0.5*cm))
+    
+    # Datos generales
+    data = [
+        ["Número de Guía:", guia_doc.get("numero_guia")],
+        ["Tienda Destino:", guia_doc.get("tienda_destino")],
+        ["Transferencia:", guia_doc.get("numero_transferencia")],
+        ["Fecha Recepción:", recepcion_data.get("fecha_recepcion", "")[:16]],
+        ["Receptor:", recepcion_data.get("usuario_recepcion", "")],
+        ["Estado:", recepcion_data.get("estado_recepcion", "")],
+        ["Total Esperado:", str(diferencias.get("total_esperado", 0))],
+        ["Total Recibido:", str(diferencias.get("total_recibido", 0))],
+        ["Diferencia Neta:", str(diferencias.get("diferencia_neta", 0))],
+        ["Observaciones:", recepcion_data.get("observaciones", "")],
+    ]
+    table = Table(data, colWidths=[4*cm, 10*cm])
+    table.setStyle(TableStyle([
+        ('BACKGROUND', (0,0), (0,-1), HexColor('#E5E7EB')),
+        ('GRID', (0,0), (-1,-1), 0.5, HexColor('#CBD5E1')),
+        ('VALIGN', (0,0), (-1,-1), 'TOP'),
+        ('PADDING', (0,0), (-1,-1), 6),
+    ]))
+    story.append(table)
+    story.append(Spacer(1, 0.7*cm))
+    
+    # Detalle de ítems
+    if items_received:
+        story.append(Paragraph("Detalle de productos recibidos", style_heading))
+        headers = ["Código", "Estilo", "Descripción", "Esperado", "Recibido", "Estado"]
+        tbl_data = [headers]
+        for it in items_received:
+            tbl_data.append([
+                it.get("codigo", ""), it.get("estilo", ""), it.get("descripcion", ""),
+                str(it.get("cantidad_esperada", 0)), str(it.get("cantidad_recibida", 0)),
+                it.get("estado_item", "")
+            ])
+        t = Table(tbl_data, repeatRows=1, colWidths=[2.5*cm, 2.5*cm, 5*cm, 1.5*cm, 1.5*cm, 2*cm])
+        t.setStyle(TableStyle([
+            ('BACKGROUND', (0,0), (-1,0), HexColor('#1E293B')), ('TEXTCOLOR', (0,0), (-1,0), (255,255,255)),
+            ('GRID', (0,0), (-1,-1), 0.5, HexColor('#CBD5E1')), ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0,0), (-1,-1), 8), ('ALIGN', (0,0), (-1,-1), 'LEFT'), ('VALIGN', (0,0), (-1,-1), 'TOP')
+        ]))
+        story.append(t)
+        story.append(Spacer(1, 0.5*cm))
+    
+    # Novedades
+    novedades = []
+    for it in items_received:
+        esperado = it.get("cantidad_esperada", 0)
+        recibido = it.get("cantidad_recibida", 0)
+        estado = it.get("estado_item", "CONFORME")
+        if esperado != recibido or estado != "CONFORME":
+            diff = recibido - esperado
+            novedades.append(f"• {it.get('codigo')} - {it.get('descripcion')}: Esperado {esperado}, Recibido {recibido} ({'+' if diff>0 else ''}{diff} unidades). Estado: {estado}")
+    if novedades:
+        story.append(Paragraph("NOVEDADES POR PRODUCTO", style_heading))
+        for n in novedades:
+            story.append(Paragraph(n, style_normal))
+        story.append(Spacer(1, 0.5*cm))
+    
+    # Incidencias
+    if incidencias:
+        story.append(Paragraph("Incidencias reportadas", style_heading))
+        for inc in incidencias:
+            story.append(Paragraph(f"• <b>{inc.get('tipo')}</b>: {inc.get('descripcion')} (severidad {inc.get('severidad')})", style_normal))
+        story.append(Spacer(1, 0.5*cm))
+    
+    story.append(Paragraph("Documento generado electrónicamente - Válido como acta de recepción", style_normal))
+    doc.build(story)
+    buffer.seek(0)
+    return buffer.getvalue()
+
+# ============================================================================
+# SUBIDA A GOOGLE DRIVE
+# ============================================================================
+def subir_a_google_drive(archivo_bytes: bytes, nombre_archivo: str, mime_type: str, carpeta_id: str = None) -> str:
+    if not GOOGLE_DRIVE_AVAILABLE:
+        raise ImportError("google-api-python-client no instalado")
+    try:
+        creds_json = st.secrets["gdrive_service_account"]
+        import json
+        creds_info = json.loads(creds_json)
+        credentials = service_account.Credentials.from_service_account_info(creds_info, scopes=['https://www.googleapis.com/auth/drive.file'])
+        service = build('drive', 'v3', credentials=credentials)
+        media = MediaIoBaseUpload(io.BytesIO(archivo_bytes), mimetype=mime_type, resumable=True)
+        file_metadata = {'name': nombre_archivo}
+        if carpeta_id:
+            file_metadata['parents'] = [carpeta_id]
+        file = service.files().create(body=file_metadata, media_body=media, fields='id, webViewLink').execute()
+        return file.get('webViewLink', '')
+    except Exception as e:
+        logger.error(f"Error subiendo a Drive: {e}")
+        raise
+
+# ============================================================================
+# NOTIFICACIONES TELEGRAM
+# ============================================================================
+def _notificar_segun_incidencia(guia_doc: dict, estado_recepcion: str, incidencias: list, receptor: str, diferencias: dict):
+    try:
+        bot = TelegramBot()
+        numero_guia = guia_doc.get('numero_guia')
+        tienda = guia_doc.get('tienda_destino')
+        if estado_recepcion == "CONFORME":
+            msg = f"✅ RECEPCIÓN CONFORME\nGuía: {numero_guia}\nTienda: {tienda}\nReceptor: {receptor}"
+            bot.enviar_mensaje(msg)
+        else:
+            msg = f"⚠️ RECEPCIÓN CON NOVEDADES\nGuía: {numero_guia}\nTienda: {tienda}\nReceptor: {receptor}\nIncidencias: {len(incidencias)}"
+            bot.enviar_mensaje(msg)
+    except Exception as e:
+        logger.warning(f"Error en notificación: {e}")
+
+# ============================================================================
+# PROCESO PRINCIPAL DE RECEPCIÓN (con todas las validaciones)
+# ============================================================================
+def _proceso_recepcion_completo(guia_doc: dict) -> None:
+    numero_guia = str(guia_doc.get("numero_guia", ""))
+    usuario = st.session_state.get("user_name", "receptor")
+    creador_guia = guia_doc.get("usuario_genera", "")
+    
+    # Validar estado previo
+    estado_actual = guia_doc.get("estado", "")
+    if estado_actual in (EstadoGuia.RECIBIDA_CONFORME, EstadoGuia.CERRADA, EstadoGuia.CONCILIADA):
+        st.success("✅ Esta guía ya fue recepcionada.")
         return
-
-    # Validar permiso de tienda
-    if not es_admin_o_bodega():
-        if not validar_permiso_tienda(guia_doc):
-            st.error("⛔ No autorizado: esta guía no pertenece a tu tienda")
+    if estado_actual == EstadoGuia.ANULADA:
+        st.error("❌ Guía anulada. No se puede recepcionar.")
+        return
+    if estado_actual not in ESTADOS_RECEPCIONABLES:
+        st.warning(f"Estado {estado_actual} no permite recepción.")
+        return
+    
+    # Cargar items esperados
+    items_expected = guia_doc.get("items_expected", [])
+    items_expected = [it for it in items_expected if str(it.get("codigo", "")).strip()]
+    total_esperado = guia_doc.get("total_prendas", 0)
+    
+    st.subheader("📦 Mercadería Esperada")
+    if items_expected:
+        df_esp = pd.DataFrame(items_expected)[["codigo", "estilo", "descripcion", "cantidad_esperada"]]
+        st.dataframe(df_esp, use_container_width=True)
+    else:
+        st.info(f"Total declarado: {total_esperado} prendas. Sin detalle por ítem.")
+    
+    st.subheader("📋 Registro de Recepción")
+    edicion_items = []
+    tiene_novedad = False
+    
+    if items_expected:
+        # Tabla editable con +/-
+        for i, item in enumerate(items_expected):
+            cols = st.columns([2, 2, 3, 1, 1, 1.5])
+            codigo = item.get("codigo", "")
+            estilo = item.get("estilo", "")
+            desc = item.get("descripcion", "")
+            esperado = item.get("cantidad_esperada", 0)
+            
+            cols[0].markdown(f"**{codigo}**")
+            cols[1].markdown(estilo)
+            cols[2].markdown(desc)
+            cols[3].markdown(esperado)
+            
+            recibido = cols[4].number_input(
+                "Recibido", min_value=0, value=esperado, step=1,
+                key=f"rec_{numero_guia}_{i}", label_visibility="collapsed"
+            )
+            estado = cols[5].selectbox(
+                "Estado", ["CONFORME", "FALTANTE", "SOBRANTE", "DAÑADO", "MANCHA", "COSTURA", "ETIQUETA_INCORRECTA", "PRODUCTO_DIFERENTE"],
+                key=f"est_{numero_guia}_{i}", label_visibility="collapsed"
+            )
+            
+            edicion_items.append({
+                "codigo": codigo, "estilo": estilo, "descripcion": desc,
+                "cantidad_esperada": esperado, "cantidad_recibida": recibido,
+                "estado_item": estado, "faltante": max(0, esperado - recibido),
+                "sobrante": max(0, recibido - esperado),
+            })
+        total_recibido = sum(it["cantidad_recibida"] for it in edicion_items)
+        tiene_novedad = any(it["cantidad_recibida"] != it["cantidad_esperada"] or it["estado_item"] != "CONFORME" for it in edicion_items)
+    else:
+        tipo = st.radio("¿Cómo recibiste la mercadería?", ["✅ Todo completo", "⚠️ Con novedad"], key=f"tipo_{numero_guia}")
+        tiene_novedad = tipo == "⚠️ Con novedad"
+        total_recibido = st.number_input("Cantidad real recibida", min_value=0, value=total_esperado, step=1, key=f"total_rec_{numero_guia}") if tiene_novedad else total_esperado
+        edicion_items = [{
+            "codigo": "GENERAL", "descripcion": "Mercadería general",
+            "cantidad_esperada": total_esperado, "cantidad_recibida": total_recibido,
+            "estado_item": "CONFORME" if total_recibido == total_esperado else "FALTANTE",
+        }]
+    
+    observaciones = st.text_area("Observaciones adicionales", key=f"obs_{numero_guia}")
+    
+    if st.button("✅ Confirmar Recepción", type="primary", use_container_width=True):
+        items_received = edicion_items
+        diferencias = _calcular_diferencias(items_expected, items_received)
+        
+        # Determinar estado final
+        if tiene_novedad and any(it.get("estado_item") not in ["CONFORME", "FALTANTE", "SOBRANTE"] for it in items_received):
+            estado_final = EstadoGuia.RECIBIDA_NOVEDAD
+            estado_recepcion = "CON_NOVEDAD"
+        elif tiene_novedad:
+            estado_final = EstadoGuia.RECEPCION_PARCIAL
+            estado_recepcion = "PARCIAL"
+        else:
+            estado_final = EstadoGuia.RECIBIDA_CONFORME
+            estado_recepcion = "CONFORME"
+        
+        incidencias = _generar_incidencias_detalladas(items_received, observaciones, usuario)
+        ahora_str = _ahora()
+        recepcion_doc = {
+            "estado_recepcion": estado_recepcion, "fecha_recepcion": ahora_str,
+            "usuario_recepcion": usuario, "observaciones": observaciones,
+            "diferencias_detectadas": diferencias.get("tiene_diferencias", False),
+            "diferencias": diferencias, "items_received": items_received, "evidencias": [],
+        }
+        evento = _build_evento(
+            evento=f"RECEPCION_{estado_recepcion}",
+            descripcion=f"Recepción {estado_recepcion}: {diferencias.get('total_recibido', total_recibido)}/{diferencias.get('total_esperado', total_esperado)} prendas. {len(incidencias)} incidencias.",
+            usuario=usuario, metadata={"total_esperado": diferencias.get("total_esperado"), "total_recibido": diferencias.get("total_recibido")}
+        )
+        
+        ok = _actualizar_guia_recepcion(numero_guia, estado_final, recepcion_doc, incidencias, evento, usuario, diferencias)
+        if not ok:
+            st.error("❌ Error al guardar la recepción. Por favor contacte a soporte.")
             return
+        
+        st.success("✅ Recepción guardada exitosamente")
+        st.balloons()
+        
+        # Envío de mensaje interno al creador de la guía
+        novedades_texto = ""
+        if diferencias.get("tiene_diferencias"):
+            novedades_texto = "\n\n**Novedades detectadas:**\n"
+            for it in items_received:
+                esp = it.get("cantidad_esperada", 0)
+                rec = it.get("cantidad_recibida", 0)
+                est = it.get("estado_item", "CONFORME")
+                if esp != rec or est != "CONFORME":
+                    novedades_texto += f"- {it.get('codigo')} - {it.get('descripcion')}: Esperado {esp}, Recibido {rec} ({'faltante' if rec<esp else 'sobrante' if rec>esp else 'ok'}). Estado: {est}\n"
+        else:
+            novedades_texto = "\n\n✅ Todo conforme, sin novedades."
+        contenido_mensaje = f"**Recepción de guía #{numero_guia}**\nTienda: {guia_doc.get('tienda_destino')}\nTotal esperado: {diferencias.get('total_esperado')}\nTotal recibido: {diferencias.get('total_recibido')}\nEstado: {estado_recepcion}{novedades_texto}"
+        if creador_guia:
+            _enviar_mensaje_interno(creador_guia, f"Recepción de guía #{numero_guia}", contenido_mensaje, remitente=usuario)
+        
+        # Disparar evento
+        try:
+            emitir("RECEPCION_CONFIRMADA", {
+                "guia": numero_guia, "tienda": guia_doc.get("tienda_destino"),
+                "incidencias": len(incidencias), "estado_recepcion": estado_recepcion,
+                "usuario": usuario, "timestamp": _ahora()
+            })
+        except Exception as e:
+            logger.warning(f"No se pudo emitir evento: {e}")
+        
+        # Generar acta
+        excel_bytes = generar_acta_recepcion_excel(guia_doc, recepcion_doc, diferencias, incidencias, items_received)
+        pdf_bytes = generar_acta_recepcion_pdf(guia_doc, recepcion_doc, diferencias, incidencias, items_received)
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            st.download_button("📥 Descargar Acta (Excel)", excel_bytes, f"acta_recepcion_{numero_guia}.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        with col2:
+            st.download_button("📥 Descargar Acta (PDF)", pdf_bytes, f"acta_recepcion_{numero_guia}.pdf", "application/pdf")
+        
+        if GOOGLE_DRIVE_AVAILABLE and st.checkbox("📤 Subir acta a Google Drive", key=f"subir_drive_{numero_guia}"):
+            try:
+                link = subir_a_google_drive(excel_bytes, f"acta_recepcion_{numero_guia}.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                st.success(f"Acta subida a Drive: [Ver archivo]({link})")
+            except Exception as e:
+                st.error(f"Error al subir a Drive: {e}")
+        
+        _notificar_segun_incidencia(guia_doc, estado_recepcion, incidencias, usuario, diferencias)
+        
+        st.subheader("Resumen de la Recepción")
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Esperado", diferencias["total_esperado"])
+        c2.metric("Recibido", diferencias["total_recibido"])
+        c3.metric("Diferencia", diferencias["diferencia_neta"])
+        if incidencias:
+            with st.expander("Ver incidencias"):
+                for inc in incidencias:
+                    st.markdown(f"• **{inc['tipo']}**: {inc['descripcion']}")
 
-    st.markdown(f"#### 📄 Detalle: {num_guia}")
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        st.metric("🏪 Tienda", guia_doc.get("tienda_destino", "N/A"))
-    with c2:
-        st.metric("📦 Prendas", guia_doc.get("total_prendas", 0))
-    with c3:
-        st.metric("📅 Fecha", str(guia_doc.get("fecha_guia", ""))[:10])
+# ============================================================================
+# PANELES DE BÚSQUEDA Y ADMIN
+# ============================================================================
+def _panel_busqueda_manual():
+    st.subheader("🔍 Buscar Guía para Recepcionar")
+    busqueda = st.text_input("N° de guía o transferencia", key="buscar_guia")
+    if st.button("Buscar", key="btn_buscar"):
+        guia = local_db.find_one("guias", {"numero_guia": busqueda.strip()}) or \
+               local_db.find_one("guias", {"numero_transferencia": busqueda.strip()})
+        if guia:
+            _proceso_recepcion_completo(guia)
+        else:
+            st.warning("No encontrada")
 
-    # Mostrar items
-    items = guia_doc.get("items", [])
-    if items:
-        st.markdown("#### 📦 Items de la Transferencia")
-        df_items = pd.DataFrame(items)
-        st.dataframe(df_items, use_container_width=True)
-        total = sum(item.get("cantidad", 0) for item in items)
-        st.caption(f"**Total prendas a recibir: {total}**")
-    else:
-        st.info("No hay items en esta guía")
-
-    # Control de calidad / notas
-    notas = st.text_area("📝 Notas de recepción (opcional)", key="notas_recepcion",
-                         placeholder="Ej: 2 prendas con etiqueta dañada, 1 cambio de talla")
-
-    # Botón para recibir
-    col_a, col_b = st.columns([1, 1])
-    with col_a:
-        if st.button("✅ Recibir Guía Completa", type="primary", key=f"recibir_{num_guia}"):
-            _procesar_recepcion(guia_doc, pendiente, notas, "COMPLETA")
-    with col_b:
-        if st.button("⚠️ Recibir con Discrepancias", type="secondary", key=f"recibir_parcial_{num_guia}"):
-            _procesar_recepcion(guia_doc, pendiente, notas, "PARCIAL")
-
-
-def _procesar_recepcion(guia_doc: dict, pendiente: dict, notas: str, tipo_recepcion: str):
-    """Procesa la recepción: actualiza estado, registra alerta, notifica."""
-    num_guia = guia_doc.get("numero_guia", "N/A")
-    usuario = st.session_state.get("username", "desconocido")
-    tienda = guia_doc.get("tienda_destino", "N/A")
-    now = datetime.now()
-
-    # 1. Actualizar guía principal
-    local_db.update(COL_GUIAS,
-        {"numero_guia": num_guia},
-        {
-            "$set": {
-                "estado": "RECIBIDA",
-                "fecha_recepcion": now.isoformat(),
-                "usuario_recepcion": usuario,
-                "notas": notas,
-                "tipo_recepcion": tipo_recepcion,
-            }
-        }
-    )
-
-    # 2. Marcar pendiente como recibida
-    local_db.update(COL_PENDIENTES,
-        {"numero_guia": num_guia},
-        {
-            "$set": {
-                "estado": "RECIBIDA",
-                "fecha_recepcion": now.isoformat(),
-                "usuario_recepcion": usuario,
-                "visible": False,
-            }
-        }
-    )
-
-    # 3. Lanzar alerta / notificación
-    mensaje = (
-        f"✅ Guía {num_guia} recepcionada por {usuario} en {tienda}"
-        + (f" — Notas: {notas}" if notas else "")
-        + (f" — ⚠️ Recepción parcial" if tipo_recepcion == "PARCIAL" else "")
-    )
-    local_db.insert(COL_NOTIFICACIONES, {
-        "mensaje": mensaje,
-        "fecha": now.isoformat(),
-        "modulo": "recepcion",
-        "tipo": "recepcion_completada",
-        "leida": False,
-        "numero_guia": num_guia,
-        "tienda": tienda,
-    })
-
-    # 4. Auditoría
-    registrar_auditoria("RECEPCION_GUIA", "recepcion",
-                       f"Usuario {usuario} recibió guía {num_guia} en {tienda} ({tipo_recepcion})")
-
-    st.success(f"✅ **Guía {num_guia} recibida exitosamente** en {tienda}")
-    if tipo_recepcion == "PARCIAL":
-        st.warning("⚠️ Se registró como recepción parcial. El admin debe revisar.")
-    st.balloons()
-
-
-# =============================================================================
-# HISTORIAL DE RECEPCIONES
-# =============================================================================
-def _seccion_historial_recepciones():
-    st.markdown("### 📜 Historial de Recepciones")
-    st.caption("Guías que ya fueron recibidas.")
-
-    tienda_usuario = get_user_store()
-    es_admin = es_admin_o_bodega()
-
-    if es_admin:
-        guias_recibidas = local_db.find(
-            COL_GUIAS,
-            {"estado": "RECIBIDA"},
-            sort=[("fecha_recepcion", -1)],
-            limit=200
-        )
-    else:
-        guias_recibidas = local_db.find(
-            COL_GUIAS,
-            {"tienda_destino": tienda_usuario, "estado": "RECIBIDA"},
-            sort=[("fecha_recepcion", -1)],
-            limit=200
-        )
-
-    if guias_recibidas:
-        df = pd.DataFrame(guias_recibidas)
-        cols_show = ["numero_guia", "tienda_destino", "fecha_guia", "total_prendas", "usuario_recepcion", "fecha_recepcion", "tipo_recepcion"]
-        cols_exist = [c for c in cols_show if c in df.columns]
-
-        rename_map = {
-            "numero_guia": "N° Guía",
-            "tienda_destino": "Tienda",
-            "fecha_guia": "Fecha",
-            "total_prendas": "Prendas",
-            "usuario_recepcion": "Recibido por",
-            "fecha_recepcion": "Recibida el",
-            "tipo_recepcion": "Tipo",
-        }
-        df_show = df[cols_exist].copy()
-        for col in ["fecha_guia", "fecha_recepcion"]:
-            if col in df_show.columns:
-                df_show[col] = df_show[col].astype(str).str[:19]
-        df_show = df_show.rename(columns=rename_map)
-        st.dataframe(df_show, use_container_width=True)
-
-        # Mostrar totales
-        total_recibidas = len(guias_recibidas)
-        total_prendas = sum(g.get("total_prendas", 0) for g in guias_recibidas)
-        st.caption(f"📊 Total: {total_recibidas} guías recibidas, {total_prendas} prendas")
-    else:
-        st.info("ℹ️ No hay guías recibidas aún")
-
-
-# =============================================================================
-# FUNCIÓN PRINCIPAL
-# =============================================================================
-def show_recepcion():
-    """Punto de entrada del módulo de Recepción."""
-    if not can_access("recepcion"):
-        st.error("⛔ No tienes permisos para acceder a Recepción")
+def _panel_guias_pendientes():
+    st.subheader("📋 Guías Pendientes")
+    estados = list(ESTADOS_RECEPCIONABLES) + [EstadoGuia.RECEPCION_PARCIAL]
+    guias = local_db.find("guias", {"estado": {"$in": estados}, "anulada": False}, sort=[("fecha", -1)], limit=50)
+    if not guias:
+        st.info("No hay guías pendientes")
         return
+    df = pd.DataFrame([{"N°": g["numero_guia"], "Tienda": g["tienda_destino"], "Estado": g["estado"], "Prendas": g["total_prendas"]} for g in guias])
+    st.dataframe(df, use_container_width=True)
+    seleccion = st.selectbox("Seleccionar guía", [str(g["numero_guia"]) for g in guias])
+    if st.button("Iniciar Recepción"):
+        guia = next((g for g in guias if str(g["numero_guia"]) == seleccion), None)
+        if guia:
+            _proceso_recepcion_completo(guia)
 
-    add_back_button(key="back_recepcion")
-    show_module_header("📬 Recepción de Guías", "Recibir y confirmar transferencias de productos")
+def _panel_historial():
+    st.subheader("📜 Historial de Recepciones")
+    guias = local_db.find("guias", {"estado": {"$in": [EstadoGuia.RECIBIDA_CONFORME, EstadoGuia.RECIBIDA_NOVEDAD, EstadoGuia.CONCILIADA, EstadoGuia.CERRADA]}}, sort=[("fecha", -1)], limit=100)
+    if not guias:
+        st.info("Sin recepciones")
+        return
+    data = []
+    for g in guias:
+        rec = g.get("recepcion", {})
+        data.append({
+            "Guía": g["numero_guia"], "Tienda": g["tienda_destino"],
+            "Fecha": rec.get("fecha_recepcion", "")[:16], "Receptor": rec.get("usuario_recepcion"),
+            "Estado": rec.get("estado_recepcion"), "Diferencias": "Sí" if rec.get("diferencias_detectadas") else "No"
+        })
+    st.dataframe(pd.DataFrame(data), use_container_width=True)
 
-    tab1, tab2 = st.tabs(["📬 Pendientes", "📜 Historial"])
+# ============================================================================
+# ENTRY POINT
+# ============================================================================
+def show_recepcion_tienda():
+    set_module_background("recepcion")
+    try:
+        load_css()
+    except:
+        pass
+    st.markdown('<div style="text-align:center;"><h1>AEROPOSTALE</h1><p>Sistema de Recepción Logística</p></div>', unsafe_allow_html=True)
+    st.markdown("---")
+    
+    # Mostrar notificaciones internas
+    usuario_actual = st.session_state.get("username", "")
+    if usuario_actual:
+        _mostrar_notificaciones_usuario(usuario_actual)
+    
+    guia_qr = st.query_params.get("guia")
+    if guia_qr:
+        guia = local_db.find_one("guias", {"numero_guia": str(guia_qr)})
+        if guia:
+            _proceso_recepcion_completo(guia)
+        else:
+            st.error("Guía no encontrada")
+        return
+    
+    tab1, tab2, tab3 = st.tabs(["📋 Pendientes", "🔍 Buscar", "📜 Historial"])
     with tab1:
-        _seccion_guias_pendientes()
+        _panel_guias_pendientes()
     with tab2:
-        _seccion_historial_recepciones()
+        _panel_busqueda_manual()
+    with tab3:
+        _panel_historial()
+    
+    if st.session_state.get("role") == "Administrador":
+        st.divider()
+        st.subheader("Panel Administrativo")
