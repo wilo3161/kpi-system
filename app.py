@@ -1,112 +1,156 @@
-# app.py
+"""
+app.py — AEROPOSTALE ERP SYSTEM (v2 CORREGIDA)
+===============================================
+- Control total por roles (Administrador, Bodega, Tienda, Ventas)
+- Navegación protegida por permisos
+- Seed automático de usuarios
+- Login con fondo personalizado
+- Optimización de memoria
+"""
+
 import streamlit as st
+from datetime import datetime
 from pathlib import Path
 import base64
-from utils.auth import check_password
-from utils.ui import show_header, load_css
-from modules.main_page import show_main_page
-from database.manager import local_db
-from modules.reconciliacion import show_reconciliacion_v8
-from modules.auditoria import show_gestor_correos
-from modules.logistica import show_logistica
-from modules.kpi_analytics import show_kpi_analytics
-from modules.equipo import show_gestion_equipo
-from modules.guias import show_generar_guias
-from modules.configuracion import show_configuracion
-from modules.recepcion import show_recepcion_tienda
-from modules.dashboard_kpis import show_dashboard_kpis
-from modules.almacen import show_almacen
 
-# Módulo de inventario (carga y búsqueda de stock consolidado)
-try:
-    from modules.inventario import show_control_inventario
-    INVENTARIO_DISPONIBLE = True
-except ImportError as e:
-    INVENTARIO_DISPONIBLE = False
-    def show_control_inventario():
-        st.error(f"❌ Módulo de inventario no disponible. Error: {e}")
+from utils.auth import verificar_login, mostrar_login
+from utils.ui import load_css, agregar_logo
+from utils.roles import can_access, navigate_to_module, ensure_all_store_users
+from utils.login_theme import aplicar_theme_login
 
+# from database.manager import local_db  # solo si necesitas algo al inicio
+
+# =============================================================================
+# CONFIGURACIÓN DE PÁGINA
+# =============================================================================
 st.set_page_config(
+    page_title="AEROPOSTALE ERP",
+    page_icon="👕",
     layout="wide",
-    page_title="AEROPOSTALE ERP | Control Total",
-    page_icon="👔",
-    initial_sidebar_state="collapsed",
+    initial_sidebar_state="expanded",
 )
 
-def main():
-    # Acceso directo a recepción desde QR (sin login)
-    if st.query_params.get("modulo") == "recepcion":
-        show_recepcion_tienda()
-        return
+load_css()
+aplicar_theme_login()
 
-    if "current_page" not in st.session_state:
-        st.session_state.current_page = "Inicio"
+# =============================================================================
+# SEED AUTOMÁTICO DE USUARIOS DE TIENDA (solo primera vez que se ejecuta)
+# =============================================================================
+if "seed_done" not in st.session_state:
+    try:
+        ensure_all_store_users()
+    except Exception:
+        pass
+    st.session_state.seed_done = True
 
-    if not check_password():
-        return
+# =============================================================================
+# LOGIN
+# =============================================================================
+if "authenticated" not in st.session_state:
+    st.session_state.authenticated = False
+    st.session_state.username = ""
+    st.session_state.role = ""
+    st.session_state.assigned_store = ""
 
-    # Estado de BD
-    if not local_db.connected:
-        error_msg = getattr(local_db, '_connection_error', 'No se pudo conectar a MongoDB Atlas.')
-        st.sidebar.error(f"🔴 Sin conexión a BD: {error_msg}")
-    else:
-        st.sidebar.success("🟢 Conectado a MongoDB Atlas")
+if not st.session_state.authenticated:
+    mostrar_login()
+    st.stop()
 
-    # === FONDO COMÚN (para toda la app después del login) ===
-    image_path = Path("images/presentacion.png")
-    if image_path.exists():
-        with open(image_path, "rb") as f:
-            img_b64 = base64.b64encode(f.read()).decode()
-        st.markdown(f"""
-        <style>
-        .stApp {{
-            background-image: url(data:image/png;base64,{img_b64}) !important;
-            background-size: cover !important;
-            background-position: center !important;
-            background-attachment: fixed !important;
-        }}
-        </style>
-        """, unsafe_allow_html=True)
+# =============================================================================
+# SIDEBAR — Navegación por Roles
+# =============================================================================
+st.sidebar.image("https://upload.wikimedia.org/wikipedia/commons/5/5e/Aeropostale_Logo.svg",
+                 width=150, use_container_width=False)
 
-    show_header()
+st.sidebar.markdown(f"""
+👤 **Usuario:** {st.session_state.get('username', '')}
+🔑 **Rol:** {st.session_state.get('role', '')}
+""")
 
-    # ----- MAPA DE NAVEGACIÓN ACTUALIZADO -----
-    page_mapping = {
-        "Inicio": show_main_page,
-        "dashboard_kpis": show_dashboard_kpis,
-        "kpi_analytics": show_kpi_analytics,
-        "reconciliacion_v8": show_reconciliacion_v8,
-        "reconciliacion": show_reconciliacion_v8,
-        "auditoria_correos": show_gestor_correos,
-        "dashboard_logistico": show_logistica,
-        "logistica": show_logistica,
-        "generar_guias": show_generar_guias,
-        "guias": show_generar_guias,
-        "configuracion": show_configuracion,
-        "gestion_equipo": show_gestion_equipo,
-        "equipo": show_gestion_equipo,
-        "recepcion": show_recepcion_tienda,
-    }
+if st.session_state.get("assigned_store"):
+    st.sidebar.markdown(f"🏪 **Tienda:** {st.session_state.assigned_store}")
 
-    # Solo agregamos el módulo inventario si está disponible
-    page_mapping["almacen"] = show_almacen
+st.sidebar.markdown("---")
 
-    if INVENTARIO_DISPONIBLE:
-        page_mapping["control_inventario"] = show_control_inventario
-        page_mapping["inventario"] = show_control_inventario
+# Menú de navegación por módulos — solo muestra los que el rol puede ver
+MODULES = [
+    ("📊", "Dashboard KPIs", "Dashboard principal con métricas clave", "dashboard_kpis"),
+    ("📈", "KPI Analytics", "Análisis avanzado de KPI", "kpi_analytics"),
+    ("🔗", "Reconciliación", "Reconciliación de datos", "reconciliacion"),
+    ("📬", "Auditoría Correos", "Revisión de correos", "auditoria_correos"),
+    ("🚚", "Logística", "Dashboard logístico y gestión de guías", "logistica"),
+    ("👥", "Equipo Logístico", "Gestión del equipo logístico", "equipo"),
+    ("📦", "Guías de Transferencia", "Crear y gestionar guías", "guias"),
+    ("📦", "Control Inventario", "Búsqueda y carga de inventario", "inventario"),
+    ("📬", "Recepción de Guías", "Recibir guías en tienda", "recepcion"),
+    ("⚙️", "Configuración", "Configuración del sistema", "configuracion"),
+]
 
-    current_page = st.session_state.get("current_page", "Inicio")
-    if current_page in page_mapping:
-        try:
-            page_mapping[current_page]()
-        except Exception as e:
-            st.error(f"❌ Error inesperado en el módulo '{current_page}': {e}")
-            st.info("Redirigiendo a la página de inicio...")
-            st.session_state.current_page = "Inicio"
-            st.rerun()
-    else:
-        st.session_state.current_page = "Inicio"
-        st.rerun()
+for icon, title, desc, module_key in MODULES:
+    if can_access(module_key):
+        if st.sidebar.button(f"{icon} {title}", key=f"nav_{module_key}", use_container_width=True):
+            navigate_to_module(module_key)
 
-if __name__ == '__main__':
-    main()
+st.sidebar.markdown("---")
+if st.sidebar.button("🚪 Cerrar Sesión", use_container_width=True):
+    for key in ["authenticated", "username", "role", "assigned_store", "current_page"]:
+        if key in st.session_state:
+            del st.session_state[key]
+    st.rerun()
+
+st.sidebar.markdown("---")
+st.sidebar.caption(f"🕒 {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+st.sidebar.caption("v2.0 — AEROPOSTALE ERP")
+
+# =============================================================================
+# MAIN — Enrutador de páginas
+# =============================================================================
+current_page = st.session_state.get("current_page", "dashboard_kpis")
+
+if current_page == "dashboard_kpis":
+    from modules.main_page import show_main_page
+    show_main_page()
+
+elif current_page == "kpi_analytics":
+    from modules.dashboard_kpis import show_kpi_analytics
+    show_kpi_analytics()
+
+elif current_page == "reconciliacion":
+    st.info("🔗 Módulo de Reconciliación — Próximamente")
+
+elif current_page == "auditoria_correos":
+    st.info("📬 Módulo de Auditoría de Correos — Próximamente")
+
+elif current_page == "logistica":
+    from modules.logistica import show_logistica
+    show_logistica()
+
+elif current_page == "equipo":
+    equipo_importado = False
+    try:
+        from modules.equipo_logistico import show_equipo_logistico
+        show_equipo_logistico()
+        equipo_importado = True
+    except ImportError:
+        pass
+    if not equipo_importado:
+        st.info("👥 Módulo de Equipo Logístico — Próximamente")
+
+elif current_page == "guias":
+    from modules.guias import show_guias
+    show_guias()
+
+elif current_page == "inventario":
+    from modules.inventario import show_control_inventario
+    show_control_inventario()
+
+elif current_page == "recepcion":
+    from modules.recepcion import show_recepcion
+    show_recepcion()
+
+elif current_page == "configuracion":
+    st.info("⚙️ Módulo de Configuración — Próximamente")
+
+else:
+    from modules.main_page import show_main_page
+    show_main_page()

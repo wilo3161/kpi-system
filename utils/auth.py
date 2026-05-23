@@ -1,9 +1,18 @@
-# utils/auth.py
+"""
+utils/auth.py — LOGIN Y AUTENTICACIÓN AEROPOSTALE ERP (v2 CORREGIDA)
+=====================================================================
+- Función check_password() y mostrar_login() correctamente implementadas
+- Login con fondo personalizado
+- Roles: Administrador, Bodega, Tienda, Ventas (NO "admin" o "tienda" en minúscula)
+- assigned_store para usuarios Tienda
+"""
+
 import streamlit as st
 import base64
 import os
 from utils.login_theme import inject_login_css
 from utils.common import hash_password
+
 
 def get_background_base64():
     """Busca la imagen de fondo local; retorna bytes en base64 o None."""
@@ -16,16 +25,28 @@ def get_background_base64():
             pass
     return None
 
+
 def get_db():
     """Importación diferida para evitar errores de inicio."""
     from database.manager import get_db_v2
     return get_db_v2()
 
+
+def mostrar_login():
+    """
+    Muestra el formulario de login y detiene la ejecución hasta que
+    el usuario se autentique.
+    Se usa en app.py cuando no hay sesión activa.
+    """
+    check_password()
+    st.stop()
+
+
 def check_password():
+    """Verifica y muestra login si no hay sesión activa."""
     if "authenticated" in st.session_state and st.session_state.authenticated:
         return True
 
-    # Inyectar estilos base del login (fondo general y estilos de columnas)
     inject_login_css()
 
     bg_base64 = get_background_base64()
@@ -33,9 +54,7 @@ def check_password():
 
     st.markdown(f"""
     <style>
-    /* Importar las fuentes personalizadas desde Google Fonts */
     @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600&display=swap');
-    
     [data-testid="stAppViewContainer"] {{
         background-image: {bg_css} !important;
         background-size: cover !important;
@@ -47,60 +66,27 @@ def check_password():
         background: transparent !important;
         backdrop-filter: none !important;
     }}
-    
-    /* Ajuste para el pie de formulario */
     .login-footer {{
-        text-align: center;
-        margin-top: 2rem;
-        font-family: 'Outfit', sans-serif;
-        font-size: 0.85rem;
-        color: #AAAAAA;
-        letter-spacing: 0.5px;
-    }}
-    .login-footer p {{
-        margin: 0.2rem 0;
+        text-align: center; margin-top: 2rem;
+        font-family: 'Outfit', sans-serif; font-size: 0.85rem;
+        color: #AAAAAA; letter-spacing: 0.5px;
     }}
     .login-footer .est {{
-        font-family: 'Bebas Neue', sans-serif;
-        font-size: 0.9rem;
-        letter-spacing: 1px;
-        color: #CF0A2C;
+        font-family: 'Bebas Neue', sans-serif; font-size: 0.9rem;
+        letter-spacing: 1px; color: #CF0A2C;
     }}
-    
-    /* --- Estilos específicos para el título principal y subtítulo --- */
     .aeropostale-title {{
-        text-align: center;
-        margin-bottom: 0.5rem;
-        font-family: 'Bebas Neue', sans-serif;
-        font-size: 3.2rem;
-        letter-spacing: 0.05em;
-        color: #FFFFFF;
-        /* Simular el efecto de sombra sutil y borde de la imagen */
+        text-align: center; margin-bottom: 0.5rem;
+        font-family: 'Bebas Neue', sans-serif; font-size: 3.2rem;
+        letter-spacing: 0.05em; color: #FFFFFF;
         text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
-        /* Pequeño truco para que las letras se vean más gruesas */
         -webkit-text-stroke: 0.5px rgba(255,255,255,0.2);
     }}
     .live-subtitle {{
-        text-align: center;
-        font-family: 'Outfit', sans-serif;
-        font-size: 1rem;
-        color: #DDDDDD;
-        letter-spacing: 0.1em;
-        margin-top: -0.5rem;
-        margin-bottom: 2rem;
-        text-transform: uppercase;
-        font-weight: 300;
-    }}
-    /* Ajuste para la primera columna, para que TODO su contenido esté centrado */
-    div[data-testid="column"]:first-of-type {{
-        /* ... (Mantén el resto de estilos que ya tenías aquí) ... */
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-    }}
-    /* Asegurar que el formulario también ocupe el ancho completo de la columna centrada */
-    div[data-testid="stForm"] {{
-        width: 100%;
+        text-align: center; font-family: 'Outfit', sans-serif;
+        font-size: 1rem; color: #DDDDDD; letter-spacing: 0.1em;
+        margin-top: -0.5rem; margin-bottom: 2rem;
+        text-transform: uppercase; font-weight: 300;
     }}
     </style>
     """, unsafe_allow_html=True)
@@ -108,15 +94,12 @@ def check_password():
     col_left, col_right = st.columns([1, 2])
     with col_left:
         st.markdown('<div style="margin-top: 20vh;"></div>', unsafe_allow_html=True)
-
-        # ---- BLOQUE DEL TÍTULO EXACTAMENTE COMO EN LA IMAGEN ----
         st.markdown("""
         <div style="text-align: center;">
             <div class="aeropostale-title">AEROPOSTALE</div>
             <div class="live-subtitle">Live Original. Live Aeropostale.</div>
         </div>
         """, unsafe_allow_html=True)
-        # -------------------------------------------------------
 
         with st.form("login_form", clear_on_submit=False):
             username = st.text_input("👤 Usuario", key="login_user")
@@ -131,11 +114,11 @@ def check_password():
                     st.session_state.username = username
                     st.session_state.role = user_data.get("role", "Usuario")
                     st.session_state.user_name = user_data.get("name", username)
+                    st.session_state.assigned_store = user_data.get("assigned_store", "")
                     st.rerun()
                 else:
                     st.error("❌ Usuario o contraseña incorrectos")
 
-        # Pie de formulario
         st.markdown("""
         <div class="login-footer">
             <p>Designed by Wilson Pérez</p>
@@ -144,3 +127,14 @@ def check_password():
         """, unsafe_allow_html=True)
 
     return False
+
+
+def verificar_login():
+    """
+    Verifica si hay sesión activa; si no, fuerza login.
+    Retorna True si está autenticado.
+    """
+    if "authenticated" not in st.session_state or not st.session_state.authenticated:
+        mostrar_login()
+        return False
+    return True
