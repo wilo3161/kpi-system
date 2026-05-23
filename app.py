@@ -12,7 +12,6 @@ from datetime import datetime
 from utils.auth import verificar_login, mostrar_login
 from utils.ui import load_css
 from utils.roles import can_access, navigate_to_module, ensure_all_store_users
-from utils.login_theme import aplicar_theme_login
 
 st.set_page_config(
     page_title="AEROPOSTALE ERP",
@@ -22,7 +21,6 @@ st.set_page_config(
 )
 
 load_css()
-aplicar_theme_login()
 
 # Seed automático de usuarios de tienda + datos demo (solo primera vez)
 if "seed_done" not in st.session_state:
