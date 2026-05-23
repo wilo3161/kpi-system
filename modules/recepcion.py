@@ -550,6 +550,14 @@ def _proceso_recepcion_completo(guia_doc: dict) -> None:
     usuario = st.session_state.get("user_name", "receptor")
     creador_guia = guia_doc.get("usuario_genera", "")
     
+    # Validar que la tienda coincida (si el usuario es tipo Tienda)
+    rol_actual = st.session_state.get("role", "")
+    tienda_asignada = st.session_state.get("assigned_store", "")
+    if rol_actual == "Tienda" and guia_doc.get("tienda_destino") != tienda_asignada:
+        st.error(f"❌ Acceso denegado: Esta guía pertenece a {guia_doc.get('tienda_destino')} y tu tienda asignada es {tienda_asignada}.")
+        return
+
+    
     # Validar estado previo
     estado_actual = guia_doc.get("estado", "")
     if estado_actual in (EstadoGuia.RECIBIDA_CONFORME, EstadoGuia.CERRADA, EstadoGuia.CONCILIADA):
@@ -730,7 +738,12 @@ def _panel_busqueda_manual():
 def _panel_guias_pendientes():
     st.subheader("📋 Guías Pendientes")
     estados = list(ESTADOS_RECEPCIONABLES) + [EstadoGuia.RECEPCION_PARCIAL]
-    guias = local_db.find("guias", {"estado": {"$in": estados}, "anulada": False}, sort=[("fecha", -1)], limit=50)
+    query = {"estado": {"$in": estados}, "anulada": False}
+    
+    if st.session_state.get("role") == "Tienda":
+        query["tienda_destino"] = st.session_state.get("assigned_store")
+        
+    guias = local_db.find("guias", query, sort=[("fecha", -1)], limit=50)
     if not guias:
         st.info("No hay guías pendientes")
         return
@@ -744,7 +757,12 @@ def _panel_guias_pendientes():
 
 def _panel_historial():
     st.subheader("📜 Historial de Recepciones")
-    guias = local_db.find("guias", {"estado": {"$in": [EstadoGuia.RECIBIDA_CONFORME, EstadoGuia.RECIBIDA_NOVEDAD, EstadoGuia.CONCILIADA, EstadoGuia.CERRADA]}}, sort=[("fecha", -1)], limit=100)
+    query = {"estado": {"$in": [EstadoGuia.RECIBIDA_CONFORME, EstadoGuia.RECIBIDA_NOVEDAD, EstadoGuia.CONCILIADA, EstadoGuia.CERRADA]}}
+    
+    if st.session_state.get("role") == "Tienda":
+        query["tienda_destino"] = st.session_state.get("assigned_store")
+        
+    guias = local_db.find("guias", query, sort=[("fecha", -1)], limit=100)
     if not guias:
         st.info("Sin recepciones")
         return
