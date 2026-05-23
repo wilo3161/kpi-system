@@ -10,7 +10,7 @@ import streamlit as st
 from datetime import datetime
 
 from utils.auth import verificar_login, mostrar_login
-from utils.ui import load_css, agregar_logo
+from utils.ui import load_css
 from utils.roles import can_access, navigate_to_module, ensure_all_store_users
 from utils.login_theme import aplicar_theme_login
 
