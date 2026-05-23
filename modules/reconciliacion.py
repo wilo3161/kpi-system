@@ -10,9 +10,6 @@ from io import BytesIO
 from openpyxl import Workbook
 from openpyxl.styles import Border, Side, PatternFill, Font, Alignment
 from openpyxl.utils import get_column_letter
-import re
-import unicodedata
-
 from database.manager import local_db, guardar_historico
 from utils.common import normalizar_texto, procesar_subtotal, identificar_tipo_tienda, obtener_columna_piezas, obtener_columna_fecha
 from utils.ui import add_back_button, show_module_header
@@ -22,18 +19,7 @@ from core.event_bus import emitir
 # FUNCIONES DE NORMALIZACIÓN Y UTILIDADES (versiones mejoradas)
 # =============================================================================
 
-def normalizar_texto(texto):
-    """Normaliza texto eliminando acentos, caracteres especiales y espacios extra"""
-    if pd.isna(texto) or texto == "":
-        return ""
-    texto = str(texto)
-    try:
-        texto = unicodedata.normalize("NFKD", texto).encode("ASCII", "ignore").decode("ASCII")
-    except Exception:
-        texto = texto.upper()
-    texto = re.sub(r"[^A-Za-z0-9\s]", " ", texto.upper())
-    texto = re.sub(r"\s+", " ", texto).strip()
-    return texto
+
 
 def identificar_tipo_tienda(nombre):
     """Identifica el tipo de tienda basado en el nombre normalizado"""
@@ -69,25 +55,7 @@ def identificar_tipo_tienda(nombre):
     except Exception:
         return "DESCONOCIDO"
 
-def procesar_subtotal(valor):
-    """Convierte valores de subtotal a numérico de forma robusta"""
-    if pd.isna(valor):
-        return 0.0
-    try:
-        if isinstance(valor, (int, float, np.number)):
-            return float(valor)
-        valor_str = str(valor).strip()
-        valor_str = re.sub(r"[^\d.,-]", "", valor_str)
-        if "," in valor_str and "." in valor_str:
-            if valor_str.rfind(",") > valor_str.rfind("."):
-                valor_str = valor_str.replace(".", "").replace(",", ".")
-            else:
-                valor_str = valor_str.replace(",", "")
-        elif "," in valor_str:
-            valor_str = valor_str.replace(",", ".")
-        return float(valor_str) if valor_str else 0.0
-    except Exception:
-        return 0.0
+
 
 def obtener_columna_piezas(manifesto):
     posibles = ["PIEZAS","CANTIDAD","UNIDADES","QTY","CANT","PZS","BULTOS"]
