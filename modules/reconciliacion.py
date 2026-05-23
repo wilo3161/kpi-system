@@ -743,3 +743,58 @@ def show_reconciliacion():
 
 def show_reconciliacion_v8():
     show_reconciliacion()
+
+
+# =============================================================================
+# MÓDULO DE AUDITORÍA DE CORREOS
+# =============================================================================
+def show_auditoria_correos():
+    """Panel de auditoría de correos y comunicaciones logísticas."""
+    from utils.roles import can_access
+    if not can_access("auditoria_correos"):
+        st.error("⛔ No tienes permisos para acceder")
+        return
+
+    add_back_button(key="back_auditoria")
+    show_module_header("📬 Auditoría de Correos", "Registro de comunicaciones y alertas automáticas")
+
+    tab1, tab2 = st.tabs(["📬 Alertas Recientes", "📜 Historial Completo"])
+
+    with tab1:
+        st.markdown("### 🔔 Notificaciones y Alertas")
+        notificaciones = local_db.find(
+            "notificaciones",
+            {"leida": False},
+            sort=[("fecha", -1)],
+            limit=30
+        )
+        if notificaciones:
+            df_not = pd.DataFrame(notificaciones)
+            cols_show = ["fecha", "mensaje", "modulo", "tipo"]
+            cols_exist = [c for c in cols_show if c in df_not.columns]
+            df_show = df_not[cols_exist].copy()
+            if "fecha" in df_show.columns:
+                df_show["fecha"] = df_show["fecha"].astype(str).str[:19]
+            st.dataframe(df_show, use_container_width=True)
+
+            if st.button("✅ Marcar todas como leídas"):
+                local_db.update("notificaciones", {"leida": False}, {"$set": {"leida": True}})
+                st.success("Todas las notificaciones marcadas como leídas")
+                st.rerun()
+        else:
+            st.info("✅ No hay notificaciones pendientes")
+
+    with tab2:
+        st.markdown("### 📜 Registro de Auditoría")
+        auditoria = local_db.find("auditoria", {}, sort=[("timestamp", -1)], limit=100)
+        if auditoria:
+            df_aud = pd.DataFrame(auditoria)
+            cols_show = ["timestamp", "usuario", "accion", "modulo", "detalle"]
+            cols_exist = [c for c in cols_show if c in df_aud.columns]
+            df_show = df_aud[cols_exist].copy()
+            if "timestamp" in df_show.columns:
+                df_show["timestamp"] = df_show["timestamp"].astype(str).str[:19]
+            st.dataframe(df_show, use_container_width=True)
+            st.caption(f"Total: {len(auditoria)} registros de auditoría")
+        else:
+            st.info("No hay registros de auditoría aún")
