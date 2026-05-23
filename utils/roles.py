@@ -46,9 +46,9 @@ def can_access(module_key: str) -> bool:
 
 
 def navigate_to_module(module_key: str):
+    from utils.navigation import navigate_to
     if can_access(module_key):
-        st.session_state.current_page = module_key
-        st.rerun()
+        navigate_to(module_key)
     else:
         st.error("⛔ No tienes permisos para acceder a este módulo")
 

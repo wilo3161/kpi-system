@@ -15,8 +15,7 @@ def navigate_to(page: str) -> None:
         page: Clave de la página destino (ej: "Inicio", "dashboard_kpis", etc.)
     """
     st.session_state.current_page = page
-    # Streamlit re-renderiza automáticamente al cambiar session_state
-    # NO llamar st.rerun() aquí para evitar doble-trigger
+    st.rerun()
 
 
 def go_home() -> None:
