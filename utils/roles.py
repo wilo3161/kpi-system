@@ -16,7 +16,7 @@ from config.stores_data import TIENDAS_DATA
 # =============================================================================
 ROLE_PERMISSIONS = {
     "Administrador": [
-        "dashboard_kpis", "kpi_analytics", "reconciliacion", "auditoria_correos",
+        "monitor_errores", "dashboard_kpis", "kpi_analytics", "reconciliacion", "auditoria_correos",
         "logistica", "equipo", "guias", "inventario", "recepcion", "configuracion",
     ],
     "Bodega": [

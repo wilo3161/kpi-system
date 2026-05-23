@@ -12,6 +12,8 @@ from datetime import datetime
 from utils.auth import verificar_login, mostrar_login
 from utils.ui import load_css
 from utils.roles import can_access, navigate_to_module, ensure_all_store_users
+from utils.error_handler import setup_global_error_handler
+setup_global_error_handler()
 
 st.set_page_config(
     page_title="AEROPOSTALE ERP",
@@ -59,6 +61,7 @@ if st.session_state.get("assigned_store"):
 st.sidebar.markdown("---")
 
 MODULES = [
+    ("🛡️", "Monitor IA", "monitor_errores"),
     ("📊", "Dashboard Principal", "dashboard_kpis"),
     ("📈", "KPI Analytics", "kpi_analytics"),
     ("🔗", "Reconciliación", "reconciliacion"),
@@ -100,6 +103,7 @@ PAGES = {
     "inventario": ("modules.inventario", "show_control_inventario"),
     "recepcion": ("modules.recepcion", "show_recepcion"),
     "configuracion": ("modules.configuracion", "show_configuracion"),
+    "monitor_errores": ("modules.monitor_errores", "show_monitor"),
 }
 
 if current_page in PAGES:
