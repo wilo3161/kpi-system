@@ -54,14 +54,8 @@ def parse_producto_color_talla(descripcion):
             sub = ' '.join(tokens[i:j])
             if sub in TALLAS_VALIDAS:
                 talla_raw = sub
-                # CORREGIDO: validar que i > 0 antes de acceder a tokens[i-1]
-                if i > 0:
-                    color_raw = tokens[i - 1]
-                    producto_base = tokens[:i - 1]
-                else:
-                    color_raw = ''
-                    producto_base = tokens[:i]
-                producto = ' '.join(producto_base)
+                color_raw = tokens[i - 1] if i > 0 else ''
+                producto = ' '.join(tokens[:i - 1]) if i > 0 else ' '.join(tokens[:i])
                 break
         if talla_raw != 'ÚNICA':
             break

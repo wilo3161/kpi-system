@@ -1,4 +1,4 @@
-# MODIFIED: 2026-05-21 - Unified cache TTL to 300s, added cobertura_inventario, added batch_otif_evolution
+# core/kpi_engine.py
 """
 Motor de KPIs del ERP Aeropostale.
 Proporciona indicadores en tiempo real sobre la operación logística.
@@ -58,7 +58,7 @@ class KPIEngine:
         hoy = datetime.now().strftime("%Y-%m-%d")
         return _self.db.count("guias", {"fecha": {"$regex": f"^{hoy}"}})
 
-    @st.cache_data(ttl=300)
+    @st.cache_data(ttl=3600)
     def otif(_self, dias=30):
         desde = (datetime.now() - timedelta(days=dias)).isoformat()
         total = _self.db.count("guias", {"fecha": {"$gte": desde}})
@@ -86,55 +86,7 @@ class KPIEngine:
 
         return (recibidas_ok / total) * 100
 
-    @st.cache_data(ttl=300)
-    def otif_evolution_batch(_self, dias=30):
-        """
-        Obtiene la evolución OTIF para los últimos N días en UNA sola consulta,
-        agrupando por día. Retorna (fechas, valores_otif).
-        """
-        desde = (datetime.now() - timedelta(days=dias)).isoformat()
-        # Agregación: grup por día de fecha de guía para total y día de recepción conforme
-        pipeline = [
-            {"$match": {"fecha": {"$gte": desde}, "anulada": {"$ne": True}}},
-            {"$group": {
-                "_id": {"$substr": ["$fecha", 0, 10]},
-                "total": {"$sum": 1},
-                "conformes": {
-                    "$sum": {
-                        "$cond": [
-                            {"$and": [
-                                {"$eq": ["$recepcion.estado_recepcion", "CONFORME"]},
-                                {"$ne": ["$recepcion.fecha_recepcion", None]}
-                            ]},
-                            1, 0
-                        ]
-                    }
-                }
-            }},
-            {"$sort": {"_id": 1}}
-        ]
-        result = _self._aggregate_fallback("guias", pipeline, [])
-        if result:
-            fechas = []
-            valores = []
-            for r in result:
-                total = sanitize_for_mongo(r.get("total", 0))
-                conformes = sanitize_for_mongo(r.get("conformes", 0))
-                fechas.append(r["_id"])
-                valores.append((conformes / total * 100) if total > 0 else 0.0)
-            return fechas, valores
-
-        # Fallback: iterar días manualmente
-        fechas = []
-        valores = []
-        for i in range(1, dias + 1):
-            d = (datetime.now() - timedelta(days=dias - i)).strftime("%Y-%m-%d")
-            fechas.append(d)
-            v = _self.otif(dias=i)
-            valores.append(v if i > 0 else 0)
-        return fechas, valores
-
-    @st.cache_data(ttl=300)
+    @st.cache_data(ttl=3600)
     def tiempo_promedio_recepcion(_self, dias=30):
         desde = (datetime.now() - timedelta(days=dias)).isoformat()
         pipeline = [
@@ -163,7 +115,7 @@ class KPIEngine:
             return round(sanitize_for_mongo(result[0]["prom_horas"]), 1)
         return 0.0
 
-    @st.cache_data(ttl=300)
+    @st.cache_data(ttl=3600)
     def tasa_faltantes(_self, dias=30):
         desde = (datetime.now() - timedelta(days=dias)).isoformat()
         pipeline = [
@@ -182,43 +134,7 @@ class KPIEngine:
             return (result[0]["total_faltantes"] / result[0]["total_esperado"]) * 100
         return 0.0
 
-    @st.cache_data(ttl=300)
-    def cobertura_inventario(_self):
-        """
-        Tasa de Cobertura de Inventario = (stock disponible / ventas promedio diarias) * 30
-        Calculado desde la colección 'inventario' e 'historico'.
-        """
-        try:
-            # Obtener stock disponible total de inventario
-            inv_pipeline = [
-                {"$group": {
-                    "_id": None,
-                    "stock_total": {"$sum": "$cantidad"}
-                }}
-            ]
-            inv_result = _self._aggregate_fallback("inventario", inv_pipeline, [])
-            if inv_result and inv_result[0].get("stock_total", 0) > 0:
-                stock_total = sanitize_for_mongo(inv_result[0]["stock_total"])
-            else:
-                # Fallback: sumar desde find
-                inventarios = _self.db.find("inventario", {})
-                stock_total = sum(i.get("cantidad", 0) for i in inventarios)
-
-            # Obtener ventas promedio diarias desde histórico (últimos 30 días)
-            desde = (datetime.now() - timedelta(days=30)).isoformat()
-            hist = _self.db.find("historico", {"fecha_archivo": {"$gte": desde}})
-            total_ventas = 0
-            for h in hist:
-                met = h.get("metricas", {})
-                total_ventas += met.get("total_unidades", 0) if isinstance(met, dict) else 0
-
-            ventas_prom_diarias = total_ventas / 30.0 if total_ventas > 0 else 1
-            cobertura = (stock_total / ventas_prom_diarias) * 30
-            return round(cobertura, 1)
-        except Exception:
-            return 0.0
-
-    @st.cache_data(ttl=300)
+    @st.cache_data(ttl=3600)
     def top_tiendas_incidencias(_self, dias=30, limit=10):
         desde = (datetime.now() - timedelta(days=dias)).isoformat()
         pipeline = [
@@ -242,7 +158,7 @@ class KPIEngine:
         top = cnt.most_common(limit)
         return [{"_id": k, "count": v} for k, v in top]
 
-    @st.cache_data(ttl=300)
+    @st.cache_data(ttl=3600)
     def distribucion_incidencias(_self, dias=30):
         desde = (datetime.now() - timedelta(days=dias)).isoformat()
         pipeline = [
@@ -271,5 +187,4 @@ class KPIEngine:
             "otif_30d": self.otif(30),
             "tiempo_promedio_30d": self.tiempo_promedio_recepcion(30),
             "tasa_faltantes_30d": self.tasa_faltantes(30),
-            "cobertura_inventario": self.cobertura_inventario(),
         }
