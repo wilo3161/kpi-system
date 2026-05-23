@@ -24,10 +24,12 @@ st.set_page_config(
 load_css()
 aplicar_theme_login()
 
-# Seed automático de usuarios de tienda (solo primera vez)
+# Seed automático de usuarios de tienda + datos demo (solo primera vez)
 if "seed_done" not in st.session_state:
     try:
         ensure_all_store_users()
+        from scripts.seed_demo_data import seed_demo_all
+        seed_demo_all()
     except Exception:
         pass
     st.session_state.seed_done = True

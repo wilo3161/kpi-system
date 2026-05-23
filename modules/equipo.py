@@ -325,3 +325,8 @@ def show_gestion_equipo():
         st.info("📋 **Nota:** Los mensajes generados son texto listo para copiar y pegar en WhatsApp o correo. Si hay número registrado, se incluye un enlace wa.me.")
 
     st.markdown('</div>', unsafe_allow_html=True)
+
+
+def show_equipo():
+    """Alias para mantener compatibilidad con app.py router."""
+    show_gestion_equipo()
