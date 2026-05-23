@@ -174,6 +174,23 @@ def show_dashboard_kpis():
                 logger.exception(e)
 
             st.divider()
+            st.subheader("🌐 Visión Global del ERP (Logística y Finanzas)")
+            try:
+                # LOGISTICA
+                guias_activas = local_db.count("guias", {"anulada": False, "estado": {"$ne": "CERRADA"}})
+                guias_recibidas = local_db.count("guias", {"anulada": False, "estado": {"$in": ["RECIBIDA_CONFORME", "RECIBIDA_CON_NOVEDAD", "CONCILIADA"]}})
+                
+                # FINANZAS / RECONCILIACION
+                facturas_conciliadas = local_db.count("reconciliacion", {"estado": "CONCILIADA"})
+                
+                c_log1, c_log2, c_fin1 = st.columns(3)
+                c_log1.metric("🚚 Guías Activas/Tránsito", guias_activas)
+                c_log2.metric("📦 Guías Recibidas", guias_recibidas)
+                c_fin1.metric("💰 Facturas Conciliadas", facturas_conciliadas)
+            except Exception as e:
+                logger.error(f"Error cargando visión global: {e}")
+
+            st.divider()
             st.subheader("Distribución de incidencias (últimos 30 días)")
             try:
                 incidencias = kpi_engine.distribucion_incidencias(30)

@@ -218,9 +218,32 @@ def show_main_page():
         {"icon": "⚙️", "title": "Configuración",          "description": "Personalización del sistema ERP",            "key": "configuracion",      "image": "configuracion"},
     ]
 
+    # Filtrar módulos según el rol del usuario
+    rol_activo = st.session_state.get("role", "")
+    filtered_modules = []
+    
+    for mod in all_modules:
+        if rol_activo == "Administrador":
+            filtered_modules.append(mod)
+        elif rol_activo in ["Bodega", "Logística"]:
+            # Equipo de trabajo: solo inventario, guías y logística
+            if mod["key"] in ["inventario", "guias", "logistica"]:
+                filtered_modules.append(mod)
+        elif rol_activo == "Ventas":
+            # Ventas: solo KPIs (Dashboard y Analytics)
+            if mod["key"] in ["dashboard_kpis", "kpi_analytics"]:
+                filtered_modules.append(mod)
+        elif rol_activo == "Tienda":
+            # Tiendas: solo recepción
+            if mod["key"] == "recepcion":
+                filtered_modules.append(mod)
+        else:
+            # Fallback para roles no definidos
+            filtered_modules.append(mod)
+
     # Mostrar tarjetas en columnas de 3
     cols = st.columns(3)
-    for idx, module in enumerate(all_modules):
+    for idx, module in enumerate(filtered_modules):
         with cols[idx % 3]:
             create_module_card(
                 icon=module["icon"],
