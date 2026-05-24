@@ -824,6 +824,7 @@ def show_recepcion_tienda():
     with tab2:
         _panel_busqueda_manual()
     with tab3:
+        _panel_historial()
     
     if st.session_state.get("role") == "Administrador":
         st.divider()
