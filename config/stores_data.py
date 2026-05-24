@@ -16,8 +16,7 @@ if _private_data_path.exists():
         except Exception:
             TIENDAS_DATA = []
 else:
-    TIENDAS_DATA = []ntacto": "Silvia Urcuango", "Dirección": "Av. Victor Gómez Jurado y Rodrigo Miño junto a la cancha La Bombonera", "Teléfono": "0982649058"},
-]
+    TIENDAS_DATA = []
 
 # Constantes derivadas
 PRICE_CLUBS = [t["Nombre de Tienda"] for t in TIENDAS_DATA if "Price Club" in t["Nombre de Tienda"]]
