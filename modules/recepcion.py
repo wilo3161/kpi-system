@@ -469,7 +469,7 @@ def generar_acta_recepcion_pdf(guia_doc: dict, recepcion_data: dict, diferencias
             ])
         t = Table(tbl_data, repeatRows=1, colWidths=[2.5*cm, 2.5*cm, 5*cm, 1.5*cm, 1.5*cm, 2*cm])
         t.setStyle(TableStyle([
-            ('BACKGROUND', (0,0), (-1,0), HexColor('#1E293B')), ('TEXTCOLOR', (0,0), (-1,0), (255,255,255)),
+            ('BACKGROUND', (0,0), (-1,0), HexColor('#1E293B')), ('TEXTCOLOR', (0,0), (-1,0), HexColor('#FFFFFF')),
             ('GRID', (0,0), (-1,-1), 0.5, HexColor('#CBD5E1')), ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
             ('FONTSIZE', (0,0), (-1,-1), 8), ('ALIGN', (0,0), (-1,-1), 'LEFT'), ('VALIGN', (0,0), (-1,-1), 'TOP')
         ]))
