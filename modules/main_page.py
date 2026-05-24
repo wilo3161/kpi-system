@@ -67,125 +67,8 @@ def create_module_card(icon, title, description, module_key, image_name=None):
         args=(module_key,)
     )
 
-def inject_erp_styles():
-    st.markdown("""
-    <style>
-    @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&display=swap');
-
-    /* Variables globales */
-    :root {
-      --color-module-teal:       #26C6DA;
-      --color-module-dark-green: #43A047;
-      --color-badge-info:        #26C6DA;
-      --color-badge-warn:        #F5A623;
-      --color-card-title:        #7F8C8D;
-      --border-radius-card:      6px;
-    }
-
-    /* Tarjeta de módulo */
-    .erp-module-card {
-      display: flex;
-      height: 80px;
-      border-radius: 6px;
-      overflow: hidden;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.08);
-      margin-bottom: 4px;
-      text-decoration: none;
-      transition: box-shadow .2s, transform .15s;
-      background: #fff;
-    }
-    .erp-module-card:hover {
-      box-shadow: 0 4px 16px rgba(0,0,0,0.14);
-      transform: translateY(-1px);
-    }
-    .card-icon-block {
-      width: 110px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 32px;
-      color: #fff;
-    }
-    .module-guias    .card-icon-block { background: #26C6DA; }
-    .module-recepcion .card-icon-block { background: #43A047; }
-    .card-content {
-      flex: 1;
-      padding: 10px 14px;
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      gap: 4px;
-    }
-    .card-title {
-      font-size: 11px;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: .5px;
-      color: #7F8C8D;
-      margin: 0 0 4px;
-    }
-    .card-item-row {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-    }
-    .card-item-label { font-size: 13px; color: #2C3E50; }
-    .erp-badge {
-      display: inline-flex; align-items: center; justify-content: center;
-      height: 18px; min-width: 22px; padding: 0 5px;
-      border-radius: 3px; font-size: 11px; font-weight: 600; color: #fff;
-    }
-    .badge-info { background: #26C6DA; }
-    .badge-warn { background: #F5A623; }
-    .badge-warn::before {
-      content: '▲'; font-size: 8px; margin-right: 2px; line-height: 1;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
-def card_modulo_guias(pendientes: int, alertas: int, generadas_hoy: int) -> str:
-    return f"""
-    <div class="erp-module-card module-guias">
-      <div class="card-icon-block">🏷️</div>
-      <div class="card-content">
-        <p class="card-title">Generar Guías</p>
-        <div class="card-item-row">
-          <span class="card-item-label">Pendientes</span>
-          <span>
-            <span class="erp-badge badge-info">{pendientes}</span>
-            <span class="erp-badge badge-warn">{alertas}</span>
-          </span>
-        </div>
-        <div class="card-item-row">
-          <span class="card-item-label">Generadas hoy</span>
-          <span class="erp-badge badge-info">{generadas_hoy}</span>
-        </div>
-      </div>
-    </div>"""
-
-def card_modulo_recepcion(por_recibir: int, alertas: int, recibidos_hoy: int) -> str:
-    return f"""
-    <div class="erp-module-card module-recepcion">
-      <div class="card-icon-block">📦</div>
-      <div class="card-content">
-        <p class="card-title">Recepción</p>
-        <div class="card-item-row">
-          <span class="card-item-label">Por recibir</span>
-          <span>
-            <span class="erp-badge badge-info">{por_recibir}</span>
-            <span class="erp-badge badge-warn">{alertas}</span>
-          </span>
-        </div>
-        <div class="card-item-row">
-          <span class="card-item-label">Recibidos hoy</span>
-          <span class="erp-badge badge-info">{recibidos_hoy}</span>
-        </div>
-      </div>
-    </div>"""
-
 def show_main_page():
     load_css()
-    inject_erp_styles()
 
     if st.session_state.get("_navigate_to"):
         target = st.session_state.pop("_navigate_to")
@@ -359,35 +242,16 @@ def show_main_page():
             filtered_modules.append(mod)
 
     # Mostrar tarjetas en columnas de 3
-    from database.manager import local_db
-    from datetime import datetime
-    
-    guias_activas = local_db.find("guias", {"anulada": False}) or []
-    pendientes_guias = len([g for g in guias_activas if g.get("estado") not in ["RECIBIDA_CONFORME", "RECIBIDA_CON_NOVEDAD", "CERRADA", "CONCILIADA"]])
-    alertas_guias = len([g for g in guias_activas if g.get("estado") == "RECIBIDA_CON_NOVEDAD"])
-    hoy_str = datetime.now().strftime("%d/%m/%Y")
-    generadas_hoy_guias = len([g for g in guias_activas if str(g.get("fecha_emision") or "").startswith(hoy_str)])
-    
-    hoy_iso = datetime.now().strftime("%Y-%m-%d")
-    recibidos_hoy_rec = len([g for g in guias_activas if str((g.get("recepcion") or {}).get("fecha_recepcion") or "").startswith(hoy_iso)])
-    
     cols = st.columns(3)
     for idx, module in enumerate(filtered_modules):
         with cols[idx % 3]:
-            if module["key"] == "guias":
-                st.markdown(card_modulo_guias(pendientes_guias, alertas_guias, generadas_hoy_guias), unsafe_allow_html=True)
-                st.button(f"Ingresar a {module['title']}", key=f"btn_{module['key']}", use_container_width=True, on_click=navigate_to_module, args=(module['key'],))
-            elif module["key"] == "recepcion":
-                st.markdown(card_modulo_recepcion(pendientes_guias, alertas_guias, recibidos_hoy_rec), unsafe_allow_html=True)
-                st.button(f"Ingresar a {module['title']}", key=f"btn_{module['key']}", use_container_width=True, on_click=navigate_to_module, args=(module['key'],))
-            else:
-                create_module_card(
-                    icon=module["icon"],
-                    title=module["title"],
-                    description=module["description"],
-                    module_key=module["key"],
-                    image_name=module["image"]
-                )
+            create_module_card(
+                icon=module["icon"],
+                title=module["title"],
+                description=module["description"],
+                module_key=module["key"],
+                image_name=module["image"]
+            )
 
     st.markdown("""
     <div class="footer-text fade-in">
