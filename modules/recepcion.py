@@ -169,52 +169,55 @@ def _actualizar_guia_recepcion(
             {"$push": {"timeline": evento, "incidencias": {"$each": incidencias}}}
         )
         
-        # 3. Registrar faltantes / sobrantes / stock bloqueado (con manejo de errores parcial)
+        # 3. Registrar faltantes / sobrantes / stock bloqueado (con insert_many para mejor rendimiento)
+        docs_faltantes = []
         for falt in diferencias_detalle.get("faltantes", []):
-            try:
-                local_db.insert("discrepancias", {
-                    "numero_guia": numero_guia,
-                    "tipo": "FALTANTE",
-                    "codigo": falt.get("codigo"),
-                    "descripcion": falt.get("descripcion"),
-                    "cantidad": falt.get("faltante"),
-                    "fecha": ahora_str,
-                    "usuario": usuario,
-                    "estado": "PENDIENTE_RECLAMO"
-                })
-            except Exception as e:
-                logger.error(f"Error insertando faltante: {e}")
+            docs_faltantes.append({
+                "numero_guia": numero_guia,
+                "tipo": "FALTANTE",
+                "codigo": falt.get("codigo"),
+                "descripcion": falt.get("descripcion"),
+                "cantidad": falt.get("faltante"),
+                "fecha": ahora_str,
+                "usuario": usuario,
+                "estado": "PENDIENTE_RECLAMO"
+            })
+        if docs_faltantes:
+            try: local_db.insert_many("discrepancias", docs_faltantes)
+            except Exception as e: logger.error(f"Error insert_many faltantes: {e}")
         
+        docs_sobrantes = []
         for sob in diferencias_detalle.get("sobrantes", []):
-            try:
-                local_db.insert("ingresos_no_esperados", {
-                    "numero_guia": numero_guia,
-                    "codigo": sob.get("codigo"),
-                    "descripcion": sob.get("descripcion"),
-                    "cantidad": sob.get("sobrante"),
-                    "fecha": ahora_str,
-                    "usuario": usuario,
-                    "estado": "PENDIENTE_AJUSTE"
-                })
-            except Exception as e:
-                logger.error(f"Error insertando sobrante: {e}")
+            docs_sobrantes.append({
+                "numero_guia": numero_guia,
+                "codigo": sob.get("codigo"),
+                "descripcion": sob.get("descripcion"),
+                "cantidad": sob.get("sobrante"),
+                "fecha": ahora_str,
+                "usuario": usuario,
+                "estado": "PENDIENTE_AJUSTE"
+            })
+        if docs_sobrantes:
+            try: local_db.insert_many("ingresos_no_esperados", docs_sobrantes)
+            except Exception as e: logger.error(f"Error insert_many sobrantes: {e}")
         
         estados_bloqueo = ["DAÑADO", "MANCHA", "COSTURA", "ETIQUETA_INCORRECTA", "PRODUCTO_DIFERENTE"]
+        docs_bloqueados = []
         for it in recepcion_data.get("items_received", []):
             if it.get("estado_item") in estados_bloqueo:
-                try:
-                    local_db.insert("stock_bloqueado", {
-                        "numero_guia": numero_guia,
-                        "codigo": it.get("codigo"),
-                        "descripcion": it.get("descripcion"),
-                        "cantidad": it.get("cantidad_recibida"),
-                        "motivo": it.get("estado_item"),
-                        "fecha": ahora_str,
-                        "usuario": usuario,
-                        "estado": "BLOQUEADO"
-                    })
-                except Exception as e:
-                    logger.error(f"Error insertando stock bloqueado: {e}")
+                docs_bloqueados.append({
+                    "numero_guia": numero_guia,
+                    "codigo": it.get("codigo"),
+                    "descripcion": it.get("descripcion"),
+                    "cantidad": it.get("cantidad_recibida"),
+                    "motivo": it.get("estado_item"),
+                    "fecha": ahora_str,
+                    "usuario": usuario,
+                    "estado": "BLOQUEADO"
+                })
+        if docs_bloqueados:
+            try: local_db.insert_many("stock_bloqueado", docs_bloqueados)
+            except Exception as e: logger.error(f"Error insert_many stock bloqueado: {e}")
         
         # Invalidar caché de la guía
         st.cache_data.clear()

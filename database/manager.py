@@ -44,6 +44,12 @@ def _sanitize_document(doc):
     if isinstance(doc, list): return [_sanitize_document(item) for item in doc]
     if isinstance(doc, str):
         return doc.strip()  # Fix: Eliminar conversión automática a int/float que corrompe IDs
+    try:
+        from bson.objectid import ObjectId
+        if isinstance(doc, ObjectId):
+            return str(doc)
+    except ImportError:
+        pass
     return doc
 
 if PYDANTIC_AVAILABLE:
@@ -126,7 +132,7 @@ class MongoDBAtlas:
             self.db["guias"].create_index("fecha")
             self.db["guias"].create_index("tienda_destino")
             self.db["guias"].create_index("recepcion.fecha_recepcion")
-            self.db["historico"].create_index([("modulo", ASCENDING), ("fecha_archivo", DESCENDING)])
+            self.db["historico"].create_index([("modulo", ASCENDING), ("pestaña", ASCENDING), ("fecha_archivo", DESCENDING)])
             self.db["contadores"].create_index("nombre", unique=True)
             self.db["users"].create_index("username", unique=True)
             self.db["stock_consolidado"].create_index("codigo")
@@ -157,6 +163,18 @@ class MongoDBAtlas:
         if collection == "historico": doc = self._validate_historico(doc)
         doc["_created"] = datetime.utcnow()
         return self.db[collection].insert_one(doc).inserted_id
+
+    def insert_many(self, collection, docs):
+        """Inserción masiva de documentos."""
+        if not self.connected or not docs: return []
+        if collection == "historico": docs = [self._validate_historico(d) for d in docs]
+        now = datetime.utcnow()
+        for doc in docs:
+            doc["_created"] = now
+        try:
+            return self.db[collection].insert_many(docs).inserted_ids
+        except Exception as e:
+            return []
 
     def find(self, collection, query={}, projection=None, sort=None, limit=0, skip=0):
         """
@@ -334,6 +352,17 @@ class MockLocalDBFallback:
             data[collection] = []
         doc["_created"] = datetime.utcnow()
         data[collection].append(doc)
+
+    def insert_many(self, collection, docs):
+        if not docs: return []
+        data = self._get_data()
+        if collection not in data:
+            data[collection] = []
+        now = datetime.utcnow()
+        for doc in docs:
+            doc["_created"] = now
+        data[collection].extend(docs)
+        return list(range(len(docs)))
 
     def find(self, collection, query={}, projection=None, sort=None, limit=0, skip=0):
         data = self._get_data()
