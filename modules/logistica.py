@@ -7,6 +7,7 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+import re
 from datetime import date, timedelta
 import logging
 from utils.backgrounds import set_module_background
@@ -84,66 +85,51 @@ def _sanitize_metrics(raw_reg):
 # =============================================================================
 # PARSER DE PRODUCTOS - CLASIFICACIÓN AVANZADA
 # =============================================================================
+TALLAS_TEXTIL = ['XXS', 'XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL', 'XSMALL', 'SMALL', 'MEDIUM', 'LARGE', 'X-LARGE', 'XX-LARGE', 'UNICA']
+GENEROS_TEXTIL = ['GUYS', 'GIRLS', 'KIDS', 'BOYS', 'MENS', 'WOMENS', 'LADIES', 'YOUTH', 'UNISEX']
+COLORES_TEXTIL = ['DARK BLACK', 'BLACK', 'WHITE', 'NAVY', 'RED', 'BLUE', 'GREEN', 'YELLOW', 'PINK', 'PURPLE', 'ORANGE', 'BROWN', 'GREY', 'GRAY', 'HEATHER', 'CHARCOAL', 'CREAM', 'BEIGE', 'KHAKI', 'OLIVE', 'MAROON', 'BURGUNDY', 'TEAL', 'MINT', 'CORAL']
+TIPOS_PRENDA_TEXTIL = ['TEES', 'CAPS', 'WOVENS', 'PANTA', 'JEANS', 'SHORTS', 'HOODIES', 'JACKETS', 'SWEATERS', 'POLOS', 'SOCKS', 'UNDERWEAR', 'ACTIVE', 'SWIM', 'ACCESSORIES', 'BAGS', 'SHOES', 'DRESSES', 'SKIRTS']
+
 def clasificar_producto_avanzado(nombre_producto, codigo_producto=None):
-    """Extrae género, color, talla, tipo de prenda de forma segura."""
     if pd.isna(nombre_producto) or not isinstance(nombre_producto, str):
-        return None, None, None, None, None
+        return None, "OTROS", None, None, None
     nombre_upper = nombre_producto.upper().strip()
-    palabras = nombre_upper.split()
-
-    # Género
+    
+    talla = "ND"
     genero = "OTROS"
-    if any(g in nombre_upper for g in ['GUYS', 'HOMBRE', 'MEN', 'MASCULINO']):
-        genero = "GUYS"
-    elif any(g in nombre_upper for g in ['GIRLS', 'MUJER', 'WOMEN', 'FEMENINO', 'LADIES']):
-        genero = "GIRLS"
-    elif any(g in nombre_upper for g in ['KIDS', 'NIÑO', 'NIÑA', 'JUNIOR', 'YOUTH']):
-        genero = "KIDS"
-    elif any(g in nombre_upper for g in ['ACCESORIO', 'ACCESORIES', 'COMPLEMENTO']):
-        genero = "ACCESORIOS"
-
-    # Tallas
-    tallas_ref = {'XS','S','M','L','XL','XXL','XXXL','2XL','3XL','UNICA','ÚNICA','ONE-SIZE','ONESIZE'}
-    tallas_adicionales = {'XSMALL':'XS', 'SMALL':'S', 'MEDIUM':'M', 'LARGE':'L', 'X-LARGE':'XL', 'XX-LARGE':'XXL'}
-    talla = None
-    for p in palabras:
-        p_clean = p.replace('-','').replace('.','')
-        if p_clean in tallas_ref:
-            talla = p_clean
+    color = "ND"
+    tipo = "ND"
+    
+    for t in sorted(TALLAS_TEXTIL, key=len, reverse=True):
+        if re.search(r'\b' + t + r'\b', nombre_upper):
+            talla = t
+            nombre_upper = re.sub(r'\b' + t + r'\b', '', nombre_upper)
             break
-        if p_clean in tallas_adicionales:
-            talla = tallas_adicionales[p_clean]
+            
+    for g in sorted(GENEROS_TEXTIL, key=len, reverse=True):
+        if re.search(r'\b' + g + r'\b', nombre_upper):
+            genero = g
             break
-
-    # Colores
-    colores_ref = {'BLACK','WHITE','RED','BLUE','GREEN','YELLOW','PINK','PURPLE','ORANGE','BROWN','GRAY','GREY',
-                   'NAVY','KHAKI','BEIGE','CREAM','EGRET','IVORY','TEAL','CORAL','MINT','LAVENDER','BURGUNDY','OLIVE',
-                   'CHARCOAL','HEATHER','ASH','DENIM','INDIGO','VIOLET','MAGENTA','FUCHSIA','TURQUOISE','AQUA',
-                   'MAROON','CRIMSON','SCARLET','RUBY','SILVER','GOLD','BRONZE','COPPER'}
-    color = None
-    color_words = []
-    for i, p in enumerate(palabras):
-        if p in colores_ref or (i > 0 and palabras[i-1] in colores_ref):
-            color_words.append(p)
-    if color_words:
-        color = ' '.join(color_words)
-
-    # Tipo de prenda
-    palabras_excluir = {'GUYS','GIRLS','KIDS','BOYS','GIRLS','MEN','WOMEN','LADIES','YOUTH',
-                        'XS','S','M','L','XL','XXL','XXXL','2XL','3XL','UNICA','ÚNICA',
-                        'XSMALL','SMALL','MEDIUM','LARGE','X-LARGE','XX-LARGE',
-                        'REGULAR','SLIM','FIT','STRETCH'}
-    palabras_excluir.update(colores_ref)
-    tipo_prenda_words = [p for p in palabras if p not in palabras_excluir and p not in color_words]
-    tipo_prenda = ' '.join(tipo_prenda_words) if tipo_prenda_words else nombre_producto
-
-    # Código base
+            
+    for c in sorted(COLORES_TEXTIL, key=len, reverse=True):
+        if re.search(r'\b' + c + r'\b', nombre_upper):
+            color = c
+            nombre_upper = re.sub(r'\b' + c + r'\b', '', nombre_upper)
+            break
+            
+    for tp in sorted(TIPOS_PRENDA_TEXTIL, key=len, reverse=True):
+        if re.search(r'\b' + tp + r'\b', nombre_upper):
+            tipo = tp
+            break
+            
+    producto_base = re.sub(r'\s+', ' ', nombre_upper).strip()
+    
     codigo_base = None
     if codigo_producto and not pd.isna(codigo_producto):
         codigo_str = str(codigo_producto)
         codigo_base = codigo_str[:7] if len(codigo_str) >= 7 else codigo_str
 
-    return tipo_prenda.strip(), genero, color, talla, codigo_base
+    return producto_base, genero, color, talla, codigo_base
 
 # =============================================================================
 # RENDERIZADO KPIs
@@ -318,9 +304,9 @@ def mostrar_dashboard_transferencias():
                 existe = existe_historico_dia(st.session_state.fecha_d_logistica, "Transferencias Diarias")
                 if existe:
                     st.warning(f"⚠️ Ya existe información para **{st.session_state.fecha_d_logistica.strftime('%Y-%m-%d')}**")
-                    acc = st.radio("¿Qué deseas hacer?", ["🔄 Fusionar", "♻️ Reemplazar", "🗑️ Eliminar y guardar nuevo"], key="accion_guardado")
+                    acc = st.radio("¿Qué deseas hacer?", ["♻️ Reemplazar", "🗑️ Eliminar y guardar nuevo"], key="accion_guardado")
                     if st.button("Confirmar guardado", type="primary"):
-                        ac = "fusionar" if "Fusionar" in acc else ("reemplazar" if "Reemplazar" in acc else "eliminar")
+                        ac = "reemplazar" if "Reemplazar" in acc else "eliminar"
                         _, _, estado = guardar_historico_diario(st.session_state.df_cruce, st.session_state.df_detalle_enr, st.session_state.archT_name, st.session_state.get("username", "admin"), accion=ac)
                         st.success(f"✅ {estado.replace('_',' ').capitalize()} correctamente.")
                         st.session_state.procesado_archivos_logistica = False
@@ -444,69 +430,99 @@ def mostrar_dashboard_transferencias():
 
         # ==================== TAB 4 ====================
         with tab4:
-            if 'df_detalle_enr' not in st.session_state:
-                st.info("🔄 Procesa archivos primero.")
-            else:
-                det = st.session_state['df_detalle_enr']
-                st.subheader("🎽 Análisis Quirúrgico de Productos")
-                st.markdown("Desglose por **tipo, talla y color**. *Fundas excluidas.*")
-                catA = st.selectbox("Categoría", CATEGORIAS_SIN_FUNDAS, key="tab4_cat_principal")
-                detC = det[(det['CATEGORIA_FINAL']==catA) & (~det['ES_FUNDA'])]
-                if detC.empty:
-                    st.warning(f"⚠️ Sin datos para **{DISPLAY_NAMES.get(catA,catA)}**.")
-                else:
-                    colorCat = COLORS.get(COLOR_KEYS.get(catA,''),'#64748b')
-                    nombreCat = DISPLAY_NAMES.get(catA, catA.upper())
-                    st.markdown(f"""<div style="background: rgba(15,23,42,0.7); backdrop-filter: blur(12px); padding: 16px 24px; border-radius: 12px; border-left: 6px solid {colorCat}; margin-bottom: 20px;">
-                        <span style="font-size: 18px; font-weight: 700; color: #ffffff;">{nombreCat}</span>
-                        <span style="float: right; color: {colorCat}; font-weight: 600;">{detC['TIENDA'].nunique()} tiendas</span>
-                    </div>""", unsafe_allow_html=True)
-                    c1,c2,c3,c4 = st.columns(4)
-                    c1.metric("Ítems únicos", detC['PRODUCTO_BASE'].nunique())
-                    c2.metric("Total Unidades", f"{_safe_int(detC['CANTIDAD'].sum()):,}")
-                    c3.metric("Tipos de Prenda", detC['TIPO_PRENDA_ES'].nunique())
-                    c4.metric("Colores Distintos", detC['COLOR_NORM'].nunique())
-                    st.markdown("---")
-                    tipoS = detC.groupby('TIPO_PRENDA_ES').agg(Unidades=('CANTIDAD','sum'), Productos=('PRODUCTO_BASE','nunique'), Tiendas=('TIENDA','nunique')).sort_values('Unidades', ascending=False).reset_index()
-                    ct1,ct2 = st.columns([2,2])
-                    with ct1:
-                        figTipo = px.bar(tipoS.head(15), x='Unidades', y='TIPO_PRENDA_ES', orientation='h', text='Unidades', color='Unidades', color_continuous_scale='Viridis')
-                        figTipo.update_traces(texttemplate='%{text:,}', textposition='outside')
-                        figTipo.update_layout(template="plotly_dark", height=500)
-                        st.plotly_chart(figTipo, use_container_width=True)
-                    with ct2: st.dataframe(tipoS.style.background_gradient(subset=['Unidades'], cmap='Blues'), use_container_width=True, height=500)
-                    st.markdown("---")
-                    st.markdown("#### 📏 Por **Tallas**")
-                    tOrder = ['XS','S','M','L','XL','XXL','ÚNICA','XSMALL','SMALL','MEDIUM','LARGE']
-                    detCT = detC.copy()
-                    detCT['TALLA_FINAL'] = pd.Categorical(detCT['TALLA'], categories=tOrder, ordered=True)
-                    tallaS = detCT.groupby('TALLA_FINAL').agg(Unidades=('CANTIDAD','sum'), Productos=('PRODUCTO_BASE','nunique')).reset_index()
-                    tallaS['% Total'] = (tallaS['Unidades']/tallaS['Unidades'].sum()*100).round(1)
-                    ct1,ct2 = st.columns(2)
-                    with ct1:
-                        figTalla = px.bar(tallaS, x='TALLA_FINAL', y='Unidades', text='Unidades', color='Unidades', color_continuous_scale='Plasma')
-                        figTalla.update_traces(texttemplate='%{text:,}', textposition='outside')
-                        figTalla.update_layout(template="plotly_dark")
-                        st.plotly_chart(figTalla, use_container_width=True)
-                    with ct2: st.dataframe(tallaS.style.background_gradient(subset=['Unidades'], cmap='Greens'), use_container_width=True, height=400)
-                    figLine = px.line(tallaS, x='TALLA_FINAL', y='Unidades', markers=True, title="Curva de Tallas")
-                    figLine.update_layout(template="plotly_dark")
-                    st.plotly_chart(figLine, use_container_width=True)
-                    st.markdown("---")
-                    st.markdown("#### 🎨 Por **Colores**")
-                    colorS = detC.groupby('COLOR_NORM').agg(Unidades=('CANTIDAD','sum'), Productos=('PRODUCTO_BASE','nunique')).sort_values('Unidades', ascending=False).reset_index()
-                    cc1,cc2 = st.columns(2)
-                    with cc1:
-                        figColor = px.bar(colorS.head(15), x='Unidades', y='COLOR_NORM', orientation='h', text='Unidades', color='Unidades', color_continuous_scale='Rainbow')
-                        figColor.update_traces(texttemplate='%{text:,}', textposition='outside')
-                        figColor.update_layout(template="plotly_dark", height=500)
-                        st.plotly_chart(figColor, use_container_width=True)
-                    with cc2: st.dataframe(colorS.head(20).style.background_gradient(subset=['Unidades'], cmap='Reds'), use_container_width=True, height=500)
-                    with st.expander("📋 Detalle completo"):
-                        colsShow = ['TIENDA','PRODUCTO_BASE','COLOR_NORM','TALLA','TIPO_PRENDA_ES','CANTIDAD','COSTO']
-                        st.dataframe(detC[colsShow], use_container_width=True)
-                        csv = detC[colsShow].to_csv(index=False).encode('utf-8')
-                        st.download_button("📥 Exportar CSV", csv, f"productos_{catA.lower().replace(' ','_')}.csv", "text/csv")
+            st.subheader("🎽 Análisis Quirúrgico de Productos")
+            st.info("Sube el archivo Excel con las columnas: fecha, secuencial factura, Bodega recibe, cantidad, costo, total, producto")
+            archivo_analisis = st.file_uploader("Sube el Excel de Productos", type=['xlsx', 'xls'], key="file_analisis_prod")
+            
+            if archivo_analisis:
+                try:
+                    df_an = pd.read_excel(archivo_analisis)
+                    
+                    renames = {
+                        "secuencial factura": "numero de transferencia",
+                        "bodega recibe": "tienda"
+                    }
+                    df_an.rename(columns=lambda x: str(x).strip().lower(), inplace=True)
+                    df_an.rename(columns=renames, inplace=True)
+                    
+                    if "producto" in df_an.columns:
+                        st.success("Archivo cargado correctamente. Procesando productos...")
+                        parsed = df_an["producto"].apply(lambda x: clasificar_producto_avanzado(x))
+                        df_an['producto_base'] = [p[0] for p in parsed]
+                        df_an['genero'] = [p[1] for p in parsed]
+                        df_an['color'] = [p[2] for p in parsed]
+                        df_an['talla'] = [p[3] for p in parsed]
+                        
+                        st.dataframe(df_an.head(20))
+                        
+                        if st.button("💾 Guardar Análisis de Productos", type="primary"):
+                            df_save = df_an.copy()
+                            if 'fecha' in df_save.columns:
+                                df_save['fecha'] = pd.to_datetime(df_save['fecha'], errors='coerce').dt.strftime('%Y-%m-%d')
+                            df_save.fillna("", inplace=True)
+                            records = df_save.to_dict(orient='records')
+                            local_db.insert("analisis_productos_historico", {"registros": records, "fecha_subida": str(date.today())})
+                            st.success("✅ Datos guardados en la base de datos.")
+                            
+                        st.markdown("### Resumen Rápido (Archivo Actual)")
+                        if "cantidad" in df_an.columns:
+                            res_prenda = df_an.groupby('producto_base')['cantidad'].sum().sort_values(ascending=False).reset_index()
+                            figTipo = px.bar(res_prenda.head(20), x='cantidad', y='producto_base', orientation='h', title='Top Productos Enviados', color='cantidad')
+                            st.plotly_chart(figTipo, use_container_width=True)
+                    else:
+                        st.error("El archivo no contiene la columna 'producto'.")
+                except Exception as e:
+                    st.error(f"Error procesando el archivo: {e}")
+            
+            st.markdown("---")
+            st.subheader("📊 Consulta Dinámica de Análisis Guardados")
+            col1, col2 = st.columns(2)
+            with col1: query_ini = st.date_input("Fecha Inicio", value=date.today() - timedelta(days=7), key="q_ini_prod")
+            with col2: query_fin = st.date_input("Fecha Fin", value=date.today(), key="q_fin_prod")
+            
+            if st.button("🔍 Consultar Productos Guardados", type="primary", use_container_width=True):
+                with st.spinner("Buscando en base de datos..."):
+                    all_docs = local_db.find("analisis_productos_historico")
+                    all_regs = []
+                    for doc in all_docs:
+                        all_regs.extend(doc.get("registros", []))
+                    
+                    if not all_regs:
+                        st.info("No hay datos históricos guardados.")
+                    else:
+                        df_dash = pd.DataFrame(all_regs)
+                        if 'fecha' in df_dash.columns:
+                            df_dash['fecha_dt'] = pd.to_datetime(df_dash['fecha'], errors='coerce')
+                            # Filtrar por fechas
+                            df_f = df_dash[(df_dash['fecha_dt'].dt.date >= query_ini) & (df_dash['fecha_dt'].dt.date <= query_fin)]
+                            
+                            if df_f.empty:
+                                st.warning("No hay registros en el rango seleccionado.")
+                            else:
+                                st.success(f"Se encontraron {len(df_f)} registros de productos.")
+                                m1, m2, m3 = st.columns(3)
+                                if 'cantidad' in df_f.columns: m1.metric("Unidades Enviadas", f"{df_f['cantidad'].sum():,.0f}")
+                                if 'total' in df_f.columns: m2.metric("Monto Total", f"${df_f['total'].sum():,.2f}")
+                                if 'tienda' in df_f.columns: m3.metric("Tiendas Impactadas", df_f['tienda'].nunique())
+                                
+                                st.markdown("#### Top Productos")
+                                if 'producto_base' in df_f.columns and 'cantidad' in df_f.columns:
+                                    agrupado = df_f.groupby('producto_base')['cantidad'].sum().reset_index().sort_values('cantidad', ascending=False)
+                                    fig = px.bar(agrupado.head(20), x='cantidad', y='producto_base', orientation='h', color='cantidad', color_continuous_scale='Viridis')
+                                    st.plotly_chart(fig, use_container_width=True)
+                                
+                                c1, c2 = st.columns(2)
+                                with c1:
+                                    if 'genero' in df_f.columns:
+                                        fig_g = px.pie(df_f, names='genero', values='cantidad', title="Por Género")
+                                        st.plotly_chart(fig_g, use_container_width=True)
+                                with c2:
+                                    if 'talla' in df_f.columns:
+                                        fig_t = px.pie(df_f, names='talla', values='cantidad', title="Por Talla")
+                                        st.plotly_chart(fig_t, use_container_width=True)
+                                        
+                                st.markdown("#### Detalle (Tabla Dinámica)")
+                                st.dataframe(df_f.drop(columns=['fecha_dt'], errors='ignore'))
 
         # ==================== TAB 5 ====================
         with tab5:
@@ -525,28 +541,14 @@ def mostrar_dashboard_transferencias():
                             st.success(f"✅ {estado.replace('_',' ').capitalize()}.")
                         except Exception as e: st.error(f"❌ Error: {str(e)}")
             st.markdown("---")
-            st.markdown("**⚡ Presets:**")
-            pCols = st.columns(len(DATE_PRESETS))
-            for idx,(lab,d) in enumerate(DATE_PRESETS.items()):
-                if pCols[idx].button(lab, key=f"pre_{lab}", use_container_width=True):
-                    st.session_state.hist_inicio = date.today()-timedelta(days=d)
-                    st.session_state.hist_fin = date.today()
-                    st.session_state.hist_regs = None
-                    st.session_state.hist_periodo_sel = "Día"
-            st.markdown("---")
-            c1,c2,c3 = st.columns([2,1,1])
-            with c1:
-                periodo_options = ["Día", "Semana", "Mes"]
-                periodo_default = st.session_state.hist_periodo_sel if st.session_state.hist_periodo_sel in periodo_options else "Día"
-                periodo = st.selectbox("Agrupar", periodo_options, key="hist_periodo", index=periodo_options.index(periodo_default))
-            with c2: inicio = st.date_input("Desde", value=st.session_state.hist_inicio, key="hist_ini")
-            with c3: fin = st.date_input("Hasta", value=st.session_state.hist_fin, key="hist_fin")
+            c1,c2 = st.columns(2)
+            with c1: inicio = st.date_input("Desde", value=st.session_state.hist_inicio, key="hist_ini")
+            with c2: fin = st.date_input("Hasta", value=st.session_state.hist_fin, key="hist_fin")
             if inicio > fin: st.error("⚠️ 'Desde' no puede ser posterior a 'Hasta'.")
             else:
                 if st.button("🔍 Consultar histórico", use_container_width=True, type="primary", key="btn_consultar"):
                     st.session_state.hist_inicio = inicio
                     st.session_state.hist_fin = fin
-                    st.session_state.hist_periodo_sel = periodo
                     st.session_state.hist_regs = None
                     try:
                         with st.spinner("Consultando base de datos..."):
@@ -556,7 +558,6 @@ def mostrar_dashboard_transferencias():
                     if not regs: st.warning("⚠️ Sin datos. Procesa archivos en Tab 1.")
                     else: st.session_state.hist_regs = regs; st.success(f"✅ {len(regs)} registros encontrados")
             regs = st.session_state.get('hist_regs', None)
-            pUsado = st.session_state.get('hist_periodo_sel', "Día")
             if regs:
                 st.markdown("---")
                 st.subheader("📊 Acumulado Histórico")
@@ -602,12 +603,10 @@ def mostrar_dashboard_transferencias():
                 if filasV:
                     dfH = pd.DataFrame(filasV).dropna(subset=['fecha'])
                     if not dfH.empty:
-                        if pUsado=="Semana": dfH['per'] = dfH['fecha'].apply(lambda d: d-timedelta(days=d.weekday()))
-                        elif pUsado=="Mes": dfH['per'] = dfH['fecha'].apply(lambda d: d.replace(day=1))
-                        else: dfH['per'] = dfH['fecha']
-                        agg = dfH.groupby('per')['und'].sum().reset_index().rename(columns={'per':'periodo'})
+                        dfH['periodo'] = dfH['fecha']
+                        agg = dfH.groupby('periodo')['und'].sum().reset_index()
                         st.markdown(f"**{inicio.strftime('%d/%m/%Y')} – {fin.strftime('%d/%m/%Y')}**")
-                        figD = px.bar(agg, x='periodo', y='und', text='und', title=f"Despachos por {pUsado}")
+                        figD = px.bar(agg, x='periodo', y='und', text='und', title=f"Despachos por Día")
                         figD.update_traces(texttemplate='%{text:,}', textposition='outside', marker_color='#f59e0b')
                         figD.update_layout(template="plotly_dark")
                         st.plotly_chart(figD, use_container_width=True)
