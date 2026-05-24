@@ -134,14 +134,19 @@ def clasificar_producto_avanzado(nombre_producto, codigo_producto=None):
 # =============================================================================
 # RENDERIZADO KPIs
 # =============================================================================
-def _render_kpi_cards_historico(cat_agg: dict, total_unidades: int) -> None:
+def _render_kpi_cards_historico(cat_agg: dict, total_unidades: int, tiendas_agg: dict = None) -> None:
+    if tiendas_agg is None: tiendas_agg = {}
     cols = st.columns(3)
     for i, cat in enumerate(CATEGORIAS_LIST):
         unidades = _safe_int(cat_agg.get(cat, 0))
+        t_act = _safe_int(tiendas_agg.get(cat, 0))
         color_key = COLOR_KEYS.get(cat, '')
         color = COLORS.get(color_key, '#64748b')
         nombre = DISPLAY_NAMES.get(cat, cat.upper())
         pct = round(unidades / total_unidades * 100, 1) if total_unidades > 0 else 0.0
+        esp = len(PRICE_CLUBS) if cat=='Price Club' else (len(TIENDAS_REGULARES) if cat=='Tiendas' else 0)
+        prog = min(100, int((t_act/esp)*100)) if esp else 100
+        
         with cols[i % 3]:
             st.markdown(f'''
             <div style="background: rgba(15,23,42,0.7); backdrop-filter: blur(12px); padding: 24px; border-radius: 16px; border-left: 6px solid {color}; box-shadow: 0 10px 25px rgba(0,0,0,0.2); margin-bottom: 20px;">
@@ -154,9 +159,10 @@ def _render_kpi_cards_historico(cat_agg: dict, total_unidades: int) -> None:
                     <span style="font-size: 14px; font-weight: 500; color: {color};">unidades</span>
                 </div>
                 <div style="display: flex; justify-content: space-between; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 12px;">
-                    <div style="display: flex; flex-direction: column;"> <span style="font-size: 11px; color: #64748b; margin-bottom: 2px;">% del Total</span> <span style="font-size: 14px; font-weight: 600; color: #e2e8f0;">{pct}%</span> </div>
+                    <div style="display: flex; flex-direction: column;"> <span style="font-size: 11px; color: #64748b; margin-bottom: 2px;">Suc. Activas Históricas</span> <span style="font-size: 14px; font-weight: 600; color: #e2e8f0;">{t_act if t_act>0 else 'N/A'}</span> </div>
+                    <div style="display: flex; flex-direction: column; text-align: right;"> <span style="font-size: 11px; color: #64748b; margin-bottom: 2px;">Meta / Esperadas</span> <span style="font-size: 14px; font-weight: 600; color: #e2e8f0;">{esp if esp else 'N/A'}</span> </div>
                 </div>
-                <div style="margin-top: 12px; width: 100%; background: rgba(255,255,255,0.1); height: 6px; border-radius: 3px; overflow: hidden;"> <div style="width: {pct}%; background: {color}; height: 100%; border-radius: 3px;"></div> </div>
+                <div style="margin-top: 12px; width: 100%; background: rgba(255,255,255,0.1); height: 6px; border-radius: 3px; overflow: hidden;"> <div style="width: {prog}%; background: {color}; height: 100%; border-radius: 3px;"></div> </div>
             </div>
             ''', unsafe_allow_html=True)
         if i % 3 == 2:
@@ -180,6 +186,7 @@ def guardar_historico_diario(df_cruce, df_det, archivo_nombre, usuario, accion="
             "transferencias_unicas": _safe_int(df_cruce['SECUENCIAL'].nunique()),
             "costo_total": round(float(df_cruce['COSTO_TOTAL'].sum()), 2),
             "por_categoria": {},
+            "tiendas_activas_por_categoria": {},
             "por_tipo_prenda": prendas.groupby('TIPO_PRENDA_ES')['CANTIDAD'].sum().to_dict() if not prendas.empty else {},
             "por_color": prendas.groupby('COLOR_NORM')['CANTIDAD'].sum().nlargest(10).to_dict() if not prendas.empty else {},
             "por_talla": prendas.groupby('TALLA')['CANTIDAD'].sum().to_dict() if not prendas.empty else {},
@@ -188,6 +195,7 @@ def guardar_historico_diario(df_cruce, df_det, archivo_nombre, usuario, accion="
         for cat in CATEGORIAS_LIST:
             sub = df_cruce[df_cruce['CATEGORIA_FINAL'] == cat]
             met['por_categoria'][cat] = _safe_int(sub['FUNDAS'].sum()) if cat == 'Fundas' and not sub.empty else (_safe_int(sub['PRENDAS'].sum()) if not sub.empty else 0)
+            met['tiendas_activas_por_categoria'][cat] = int(sub['TIENDA'].nunique()) if not sub.empty else 0
         met_san = sanitize_for_mongo(met)
         existe = existe_historico_dia(dia, "Transferencias Diarias")
         try:
@@ -631,15 +639,19 @@ def mostrar_dashboard_transferencias():
                         st.markdown("---")
                         st.subheader("KPIs por Categoría")
                         cAgg = {c:0 for c in CATEGORIAS_LIST}
+                        tAgg = {c:0 for c in CATEGORIAS_LIST}
                         tP=tF=tU=rSin = 0
                         for _,row in dfH.iterrows():
                             met = row.get('met',{})
                             if not isinstance(met,dict): rSin+=1; continue
                             pc = met.get('por_categoria',{})
+                            pt = met.get('tiendas_activas_por_categoria',{})
                             if not isinstance(pc,dict) or not pc: rSin+=1
                             else:
                                 for c in CATEGORIAS_LIST:
-                                    try: cAgg[c] += _safe_numeric(pc.get(c,0))
+                                    try: 
+                                        cAgg[c] += _safe_numeric(pc.get(c,0))
+                                        tAgg[c] += _safe_numeric(pt.get(c,0))
                                     except: pass
                             tP += _safe_numeric(met.get('total_prendas',0))
                             tF += _safe_numeric(met.get('total_fundas',0))
@@ -651,7 +663,7 @@ def mostrar_dashboard_transferencias():
                         m3.metric("🛍️ Fundas", f"{tF:,.0f}")
                         m4.metric("📅 Días", dfH['fecha'].nunique())
                         st.markdown("##### Detalle")
-                        _render_kpi_cards_historico(cAgg, tU)
+                        _render_kpi_cards_historico(cAgg, tU, tAgg)
                         st.markdown("---")
                         st.subheader("⚠️ Anomalías")
                         dAn = detectar_anomalias(dfH.rename(columns={'und':'unidades'}), col='unidades')
