@@ -34,7 +34,8 @@ def _inicializar_modelo():
 
     api_key = "sk-30bc78262939431db715aab9b6d845b7"
     try:
-        _cliente_openai = openai.OpenAI(api_key=api_key, base_url="https://api.deepseek.com/v1")
+        from openai import OpenAI
+        _cliente_openai = OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
         return _cliente_openai
     except Exception as e:
         logger.error("Error configurando OpenAI: %s", e)
@@ -62,22 +63,8 @@ def _ejecutar_prompt(prompt: str, fallback: str = "⚠️ wilo IA no disponible.
 
 
 def transcribir_audio(audio_bytes: bytes) -> str | None:
-    """Transcribe un audio (WAV) usando Gemini. Retorna el texto o None."""
-    modelo = _inicializar_modelo()
-    if not modelo:
-        return None
-
-    import base64
-    audio_b64 = base64.b64encode(audio_bytes).decode("utf-8")
-    try:
-        respuesta = modelo.generate_content([
-            {"mime_type": "audio/wav", "data": audio_b64},
-            "Transcribe el audio en español. Solo devuelve el texto."
-        ])
-        return respuesta.text.strip()
-    except Exception as e:
-        logger.error("Error transcribiendo audio: %s", e)
-        return None
+    """DeepSeek no soporta transcripción de audio nativamente."""
+    return "La transcripción de audio no está disponible con el modelo actual (DeepSeek)."
 
 
 # -----------------------------------------------------------------------------

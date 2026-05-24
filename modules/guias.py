@@ -729,29 +729,45 @@ def show_generar_guias():
             k4.markdown(f"<div class='metric-card' style='border-left-color: #6366f1;'><h4>Recibidas</h4><h2>{recibidas}</h2></div>", unsafe_allow_html=True)
             st.write("")
             
-            # Gráfico Acumulativo Semanal
-            df_dash = pd.DataFrame(docs)
-            if "fecha" in df_dash.columns:
-                df_dash['fecha_dt'] = pd.to_datetime(df_dash['fecha'], errors='coerce')
-                df_dash['semana'] = df_dash['fecha_dt'].dt.strftime('%Y-W%V')
-                resumen_semanal = df_dash.groupby('semana').agg(
-                    Total_Guias=('numero_guia', 'count'),
-                    Prendas=('total_prendas', 'sum')
-                ).reset_index()
-                
-                if not resumen_semanal.empty:
-                    st.markdown("### 📊 Tendencia Semanal (Guías Emitidas vs Prendas)")
-                    col_chart1, col_chart2 = st.columns(2)
-                    with col_chart1:
-                        st.line_chart(resumen_semanal.set_index('semana')['Total_Guias'])
-                    with col_chart2:
-                        st.bar_chart(resumen_semanal.set_index('semana')['Prendas'])
-            
+            # Panel de Alertas de Recepción
             st.divider()
-            st.subheader("📋 Detalle de Guías")
-            cols = ["numero_guia", "tienda_destino", "fecha_emision", "estado", "total_prendas", "usuario_genera", "anulada"]
-            df_tabla = pd.DataFrame([{c: d.get(c) for c in cols} for d in docs[:100]])
-            st.dataframe(df_tabla, use_container_width=True)
+            st.subheader("🚨 Panel de Recepciones (Alertas)")
+            query_rec = {"recepcion.estado_recepcion": {"$exists": True}}
+            if rol_activo == "Tienda":
+                query_rec["tienda_destino"] = st.session_state.get("assigned_store")
+            recepciones = local_db.find("guias", query_rec, sort=[("recepcion.fecha_recepcion", -1)], limit=20)
+            
+            if not recepciones:
+                st.info("No hay recepciones recientes.")
+            else:
+                for doc in recepciones:
+                    rec = doc.get("recepcion", {})
+                    tienda = doc.get("tienda_destino", "Desconocida")
+                    transf = doc.get("numero_transferencia", "N/A")
+                    esperado = doc.get("total_prendas", 0)
+                    recibido = rec.get("prendas_recibidas", 0)
+                    dif = recibido - esperado
+                    
+                    estado = rec.get("estado_recepcion", "N/A")
+                    color_bg = "rgba(16, 185, 129, 0.15)" if estado == "CONFORME" else "rgba(239, 68, 68, 0.15)"
+                    border_color = "#10b981" if estado == "CONFORME" else "#ef4444"
+                    
+                    st.markdown(f"""
+                    <div style="background-color: {color_bg}; border-left: 4px solid {border_color}; padding: 15px; border-radius: 8px; margin-bottom: 10px;">
+                        <h4 style="margin-top: 0; color: #e2e8f0;">🏪 {tienda} - Transf: {transf}</h4>
+                        <p style="margin-bottom: 0; color: #cbd5e1; font-size: 1.1em;">
+                            <b>Esperado:</b> {esperado} &nbsp;|&nbsp; 
+                            <b>Recibido:</b> {recibido} &nbsp;|&nbsp; 
+                            <b>Diferencia:</b> <span style="color: {border_color}; font-weight: bold;">{dif}</span>
+                        </p>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    incidencias = doc.get("incidencias", [])
+                    if incidencias:
+                        with st.expander(f"Ver incidencias ({len(incidencias)})"):
+                            for inc in incidencias:
+                                st.write(f"- **{inc.get('codigo_item', 'N/A')}**: {inc.get('descripcion', '')} ({inc.get('estado_reportado', '')})")
             
             st.divider()
             with st.expander("🗑️ Anular Guía"):

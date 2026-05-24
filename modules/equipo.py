@@ -97,16 +97,20 @@ def show_gestion_equipo():
         st.session_state.prompt_rapido = ""
 
     # ───────────── PESTAÑAS ─────────────
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
-        "📇 Directorio del Equipo", "🌳 Organigrama",
-        "⚙️ Administrar Personal", "🤖 Asistente IA",
-        "📝 Registro Diario"
-    ])
+    is_admin = st.session_state.get("role") == "Administrador"
+    if is_admin:
+        tabs = st.tabs([
+            "📇 Directorio del Equipo", "🌳 Organigrama",
+            "⚙️ Administrar Personal", "🤖 Asistente IA",
+            "📝 Registro Diario"
+        ])
+    else:
+        tabs = st.tabs(["📇 Directorio del Equipo", "🌳 Organigrama", "📝 Registro Diario"])
 
     # =====================================================================
     # PESTAÑA 1 – DIRECTORIO DEL EQUIPO
     # =====================================================================
-    with tab1:
+    with tabs[0]:
         st.markdown("### 📋 Directorio de Contactos")
         total_personas = sum(len(miembros) for miembros in EQUIPO_LOGISTICO.values())
         total_areas = len(EQUIPO_LOGISTICO)
@@ -187,7 +191,7 @@ def show_gestion_equipo():
     # =====================================================================
     # PESTAÑA 2 – ORGANIGRAMA
     # =====================================================================
-    with tab2:
+    with tabs[1]:
         st.markdown("### 🌳 Organigrama del Centro de Distribución")
         
         org_css = """
@@ -236,7 +240,8 @@ def show_gestion_equipo():
     # =====================================================================
     # PESTAÑA 3 – ADMINISTRAR PERSONAL
     # =====================================================================
-    with tab3:
+    if is_admin:
+        with tabs[2]:
         st.markdown("### ⚙️ Administrar Personal")
         col_form, col_list = st.columns([1, 1])
         with col_form:
@@ -282,7 +287,7 @@ def show_gestion_equipo():
     # =====================================================================
     # PESTAÑA 4 – ASISTENTE IA (wilo IA)
     # =====================================================================
-    with tab4:
+        with tabs[3]:
         st.markdown("### 🤖 Asistente Inteligente — wilo IA")
         if len(st.session_state.chat_gemini) == 0:
             st.session_state.chat_gemini.append({"role": "assistant", "content": "¡Hola! Soy wilo IA. ¿En qué puedo ayudarte a gestionar el equipo hoy?"})
@@ -328,7 +333,7 @@ def show_gestion_equipo():
     # =====================================================================
     # PESTAÑA 5 – REGISTRO DIARIO DE ACTIVIDADES
     # =====================================================================
-    with tab5:
+    with tabs[4] if is_admin else tabs[2]:
         st.markdown("### 📝 Registro de Actividades Diarias (Formulario Web)")
         miembros_lista = [m.get("nombre") for m in db_equipo]
         

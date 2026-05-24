@@ -294,30 +294,38 @@ def mostrar_dashboard_transferencias():
                 with colB:
                     archD = st.file_uploader("Archivo detalle (.xlsx)", type=['xlsx'], key="det_uploader")
                 procesar_click = st.form_submit_button("🔀 Procesar cruce", type="primary", use_container_width=True)
-                if procesar_click and archT and archD:
-                    try:
-                        dfT, dfD = pd.read_excel(archT), pd.read_excel(archD)
-                        dfC, dfDE = procesar_archivos(dfT, dfD)
-                        if dfC is not None and dfDE is not None:
-                            st.session_state.update({'df_cruce': dfC, 'df_detalle_enr': dfDE})
-                            fecha_d = date.today()
-                            if 'FECHA' in dfC.columns:
-                                f_clean = dfC['FECHA'].dropna()
-                                if not f_clean.empty:
-                                    fecha_d = f_clean.iloc[0]
-                            existe = existe_historico_dia(fecha_d, "Transferencias Diarias")
-                            if existe:
-                                st.warning(f"⚠️ Ya existe información para **{fecha_d.strftime('%Y-%m-%d')}**")
-                                acc = st.radio("¿Qué deseas hacer?", ["🔄 Fusionar", "♻️ Reemplazar", "🗑️ Eliminar y guardar nuevo"], key="accion_guardado")
-                                if st.button("Confirmar", type="primary"):
-                                    ac = "fusionar" if "Fusionar" in acc else ("reemplazar" if "Reemplazar" in acc else "eliminar")
-                                    _, _, estado = guardar_historico_diario(dfC, dfDE, archT.name, st.session_state.get("username", "admin"), accion=ac)
-                                    st.success(f"✅ {estado.replace('_',' ').capitalize()} correctamente.")
-                            else:
-                                guardar_historico_diario(dfC, dfDE, archT.name, st.session_state.get("username", "admin"))
-                                st.success("✅ Procesado y guardado.")
-                    except Exception as e:
-                        st.error(f"Error: {e}")
+
+            if procesar_click and archT and archD:
+                try:
+                    dfT, dfD = pd.read_excel(archT), pd.read_excel(archD)
+                    dfC, dfDE = procesar_archivos(dfT, dfD)
+                    if dfC is not None and dfDE is not None:
+                        st.session_state.update({'df_cruce': dfC, 'df_detalle_enr': dfDE})
+                        st.session_state.procesado_archivos_logistica = True
+                        st.session_state.archT_name = archT.name
+                        fecha_d = date.today()
+                        if 'FECHA' in dfC.columns:
+                            f_clean = dfC['FECHA'].dropna()
+                            if not f_clean.empty:
+                                fecha_d = f_clean.iloc[0]
+                        st.session_state.fecha_d_logistica = fecha_d
+                except Exception as e:
+                    st.error(f"Error procesando archivos: {e}")
+
+            if st.session_state.get('procesado_archivos_logistica'):
+                existe = existe_historico_dia(st.session_state.fecha_d_logistica, "Transferencias Diarias")
+                if existe:
+                    st.warning(f"⚠️ Ya existe información para **{st.session_state.fecha_d_logistica.strftime('%Y-%m-%d')}**")
+                    acc = st.radio("¿Qué deseas hacer?", ["🔄 Fusionar", "♻️ Reemplazar", "🗑️ Eliminar y guardar nuevo"], key="accion_guardado")
+                    if st.button("Confirmar guardado", type="primary"):
+                        ac = "fusionar" if "Fusionar" in acc else ("reemplazar" if "Reemplazar" in acc else "eliminar")
+                        _, _, estado = guardar_historico_diario(st.session_state.df_cruce, st.session_state.df_detalle_enr, st.session_state.archT_name, st.session_state.get("username", "admin"), accion=ac)
+                        st.success(f"✅ {estado.replace('_',' ').capitalize()} correctamente.")
+                        st.session_state.procesado_archivos_logistica = False
+                else:
+                    guardar_historico_diario(st.session_state.df_cruce, st.session_state.df_detalle_enr, st.session_state.archT_name, st.session_state.get("username", "admin"))
+                    st.success("✅ Procesado y guardado correctamente.")
+                    st.session_state.procesado_archivos_logistica = False
                 elif procesar_click:
                     st.warning("Selecciona ambos archivos antes de procesar.")
 
