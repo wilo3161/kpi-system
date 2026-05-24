@@ -430,7 +430,7 @@ def mostrar_dashboard_transferencias():
 
         # ==================== TAB 4 ====================
         with tab4:
-            st.subheader("🎽 Análisis Quirúrgico de Productos")
+            st.subheader("🎽 Análisis de Productos")
             st.info("Sube el archivo Excel con las columnas: fecha, secuencial factura, Bodega recibe, cantidad, costo, total, producto")
             archivo_analisis = st.file_uploader("Sube el Excel de Productos", type=['xlsx', 'xls'], key="file_analisis_prod")
             
@@ -459,7 +459,7 @@ def mostrar_dashboard_transferencias():
                             df_save = df_an.copy()
                             if 'fecha' in df_save.columns:
                                 df_save['fecha'] = pd.to_datetime(df_save['fecha'], errors='coerce').dt.strftime('%Y-%m-%d')
-                            df_save.fillna("", inplace=True)
+                            df_save = df_save.where(pd.notnull(df_save), None)
                             records = df_save.to_dict(orient='records')
                             local_db.insert("analisis_productos_historico", {"registros": records, "fecha_subida": str(date.today())})
                             st.success("✅ Datos guardados en la base de datos.")
@@ -469,6 +469,18 @@ def mostrar_dashboard_transferencias():
                             res_prenda = df_an.groupby('producto_base')['cantidad'].sum().sort_values(ascending=False).reset_index()
                             figTipo = px.bar(res_prenda.head(20), x='cantidad', y='producto_base', orientation='h', title='Top Productos Enviados', color='cantidad')
                             st.plotly_chart(figTipo, use_container_width=True)
+                            
+                            c_a, c_b = st.columns(2)
+                            with c_a:
+                                if 'genero' in df_an.columns:
+                                    fig_g = px.pie(df_an, names='genero', values='cantidad', title="Distribución por Género", hole=0.4)
+                                    fig_g.update_traces(textinfo='percent+label')
+                                    st.plotly_chart(fig_g, use_container_width=True)
+                            with c_b:
+                                if 'talla' in df_an.columns:
+                                    fig_t = px.pie(df_an, names='talla', values='cantidad', title="Distribución por Talla", hole=0.4)
+                                    fig_t.update_traces(textinfo='percent+label')
+                                    st.plotly_chart(fig_t, use_container_width=True)
                     else:
                         st.error("El archivo no contiene la columna 'producto'.")
                 except Exception as e:
@@ -542,8 +554,8 @@ def mostrar_dashboard_transferencias():
                         except Exception as e: st.error(f"❌ Error: {str(e)}")
             st.markdown("---")
             c1,c2 = st.columns(2)
-            with c1: inicio = st.date_input("Desde", value=st.session_state.hist_inicio, key="hist_ini")
-            with c2: fin = st.date_input("Hasta", value=st.session_state.hist_fin, key="hist_fin")
+            with c1: inicio = st.date_input("Desde", value=st.session_state.hist_inicio, key="hist_ini_wdg")
+            with c2: fin = st.date_input("Hasta", value=st.session_state.hist_fin, key="hist_fin_wdg")
             if inicio > fin: st.error("⚠️ 'Desde' no puede ser posterior a 'Hasta'.")
             else:
                 if st.button("🔍 Consultar histórico", use_container_width=True, type="primary", key="btn_consultar"):
