@@ -362,13 +362,14 @@ def show_main_page():
     from database.manager import local_db
     from datetime import datetime
     
-    guias_activas = local_db.find("guias", {"anulada": False})
+    guias_activas = local_db.find("guias", {"anulada": False}) or []
     pendientes_guias = len([g for g in guias_activas if g.get("estado") not in ["RECIBIDA_CONFORME", "RECIBIDA_CON_NOVEDAD", "CERRADA", "CONCILIADA"]])
     alertas_guias = len([g for g in guias_activas if g.get("estado") == "RECIBIDA_CON_NOVEDAD"])
     hoy_str = datetime.now().strftime("%d/%m/%Y")
-    generadas_hoy_guias = len([g for g in guias_activas if g.get("fecha_emision", "").startswith(hoy_str)])
+    generadas_hoy_guias = len([g for g in guias_activas if str(g.get("fecha_emision") or "").startswith(hoy_str)])
     
-    recibidos_hoy_rec = len([g for g in guias_activas if g.get("recepcion", {}).get("fecha_recepcion", "").startswith(datetime.now().strftime("%Y-%m-%d"))])
+    hoy_iso = datetime.now().strftime("%Y-%m-%d")
+    recibidos_hoy_rec = len([g for g in guias_activas if str((g.get("recepcion") or {}).get("fecha_recepcion") or "").startswith(hoy_iso)])
     
     cols = st.columns(3)
     for idx, module in enumerate(filtered_modules):
