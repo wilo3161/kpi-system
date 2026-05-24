@@ -66,7 +66,7 @@ def check_password():
 
             if submitted:
                 db = get_db()
-                user_data = db.authenticate(username, hash_password(password))
+                user_data = db.authenticate(username, password)
                 if user_data:
                     st.session_state.authenticated = True
                     st.session_state.username = username

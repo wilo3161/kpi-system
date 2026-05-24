@@ -32,7 +32,13 @@ def _inicializar_modelo():
     if not _OPENAI_OK:
         return None
 
-    api_key = "sk-30bc78262939431db715aab9b6d845b7"
+    from utils.secrets_helper import obtener_credencial
+    api_key = obtener_credencial("deepseek", "api_key")
+    
+    if not api_key:
+        logger.error("API Key de DeepSeek no configurada.")
+        return None
+
     try:
         from openai import OpenAI
         _cliente_openai = OpenAI(api_key=api_key, base_url="https://api.deepseek.com")

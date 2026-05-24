@@ -9,18 +9,22 @@ from ai.supply_chain_ai import _ejecutar_prompt  # wilo IA (OpenAI)
 # ------------------------------------------------------------------------------
 # DATOS INICIALES DEL EQUIPO (fuente única de verdad)
 # ------------------------------------------------------------------------------
-EQUIPO_INICIAL = [
-    {"nombre": "Wilson Pérez", "cargo": "Jefe de Logística / Centro de Distribución", "area": "Liderazgo", "email": "wperez@fashionclub.com.ec", "whatsapp": "0993052744", "telegram": "0993052744"},
-    {"nombre": "Andrés Yépez", "cargo": "Transferencias Fashion", "area": "Transferencias", "email": "cyepez@fashionclub.com.ec", "whatsapp": "0995529505", "telegram": "0995529505"},
-    {"nombre": "Luis Perugachi", "cargo": "Pivote de Transferencias y Distribución", "area": "Transferencias", "email": "lperugachi@fashionclub.com.ec", "whatsapp": "0993012238", "telegram": "0993012238"},
-    {"nombre": "Josué Imbacúan", "cargo": "Transferencias Tempo", "area": "Transferencias", "email": "jimbacuan@fashionclub.com.ec", "whatsapp": "0988856682", "telegram": "0988856682"},
-    {"nombre": "Jessica Suarez", "cargo": "Distribución", "area": "Distribución", "email": "jsuarez@fashionclub.com.ec", "whatsapp": "0981951052", "telegram": "0981951052"},
-    {"nombre": "Jhonny Villa", "cargo": "Encargado de Empaque y Gestión de Guías", "area": "Empaque", "email": "jvilla@fashionclub.com.ec", "whatsapp": "0968491147", "telegram": "0968491147"},
-    {"nombre": "Simón Vera", "cargo": "Apoyo en Guías y Envíos", "area": "Empaque", "email": "bodega@fashionclub.com.ec", "whatsapp": "0969341528", "telegram": "0969341528"},
-    {"nombre": "Jhonny Guadalupe", "cargo": "Ventas al Por Mayor", "area": "Ventas Mayoristas", "email": "jguadalupe@fashionclub.com.ec", "whatsapp": "0985603835", "telegram": "0985603835"},
-    {"nombre": "Rocio Cadena", "cargo": "Ventas al Por Mayor", "area": "Ventas Mayoristas", "email": "jcadena@fashionclub.com.ec", "whatsapp": "0992062862", "telegram": "0992062862"},
-    {"nombre": "Diana García", "cargo": "Reprocesado de Prendas en Cuarentena", "area": "Cuarentena", "email": "dgarcia@fashionclub.com.ec", "whatsapp": "0980837688", "telegram": "0980837688"},
-]
+import json
+import os
+from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+_private_data_path = BASE_DIR / "config" / "private_data.json"
+
+if _private_data_path.exists():
+    with open(_private_data_path, "r", encoding="utf-8") as f:
+        try:
+            _private_data = json.load(f)
+            EQUIPO_INICIAL = _private_data.get("equipo", [])
+        except Exception:
+            EQUIPO_INICIAL = []
+else:
+    EQUIPO_INICIAL = []
 
 def seed_equipo_if_empty():
     """Inserta los datos del equipo si la colección está vacía."""

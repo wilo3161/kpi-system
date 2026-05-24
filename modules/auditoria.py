@@ -77,6 +77,10 @@ def _listar_correos(gestor: GestorCorreo, carpeta: str = "INBOX", limite: int = 
             correos.append({"id": "err", "asunto": f"Error: {e}"})
         finally:
             try:
+                mail.close()
+            except:
+                pass
+            try:
                 mail.logout()
             except:
                 pass
@@ -190,7 +194,10 @@ def show_gestor_correos():
                         st.error("Completa todos los campos.")
                     else:
                         try:
-                            exito = gestor.enviar_correo([para], asunto, f"<div>{cuerpo}</div>")
+                            import html
+                            cuerpo_seguro = html.escape(cuerpo).replace('\n', '<br>')
+                            destinatarios_lista = [p.strip() for p in para.split(',') if p.strip()]
+                            exito = gestor.enviar_correo(destinatarios_lista, asunto, f"<div>{cuerpo_seguro}</div>")
                             if exito:
                                 st.success("Correo enviado correctamente.")
                             else:

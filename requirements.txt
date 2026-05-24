@@ -18,6 +18,9 @@ pymongo>=4.17.0
 dnspython>=2.8.0
 certifi>=2026.4.22
 
+# --- Seguridad ---
+bcrypt>=4.2.0
+
 # --- APIs y Servicios Externos (opcional, pero sin errores de cuota) ---
 requests>=2.34.2
 beautifulsoup4>=4.14.3
@@ -29,6 +32,6 @@ pydantic>=2.13.4
 
 # --- Testing (solo desarrollo, no afecta producción) ---
 pytest>=9.0.3
-openai
+openai>=1.0.0
 scikit-learn>=1.0.0
 matplotlib>=3.8.0

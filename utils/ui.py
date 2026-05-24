@@ -373,10 +373,13 @@ def show_header():
             st.session_state.current_page = "Inicio"
             st.rerun()
     with col2:
+        import html
+        s_user = html.escape(str(st.session_state.get('user_name', '')))
+        s_role = html.escape(str(st.session_state.get('role', '')))
         st.markdown(f"""
         <div style='text-align: center; padding: 8px; background: rgba(255,255,255,0.05); border-radius: 12px; border: 1px solid rgba(207,10,44,0.1);'>
-            <span style='color: #CF0A2C; font-weight: bold; font-family: var(--font-heading);'>{st.session_state.user_name}</span> 
-            <span style='color: #94A3B8; font-size: 0.85rem;'> | {st.session_state.role}</span>
+            <span style='color: #CF0A2C; font-weight: bold; font-family: var(--font-heading);'>{s_user}</span> 
+            <span style='color: #94A3B8; font-size: 0.85rem;'> | {s_role}</span>
         </div>
         """, unsafe_allow_html=True)
     with col3:
@@ -388,11 +391,14 @@ def show_header():
 
 def show_module_header(title, subtitle):
     """Hero de módulo con animaciones Bebas Neue."""
+    import html
+    title_esc = html.escape(str(title))
+    sub_esc = html.escape(str(subtitle))
     st.markdown(f"""
     <div class="module-hero">
         <div class="module-kicker">▸ MÓDULO ACTIVO</div>
-        <h1 class="module-title">{title}</h1>
-        <div style="color: var(--aero-muted); font-family: var(--font-body); font-size: 1.1rem; max-width: 600px; margin: 0 auto;">{subtitle}</div>
+        <h1 class="module-title">{title_esc}</h1>
+        <div style="color: var(--aero-muted); font-family: var(--font-body); font-size: 1.1rem; max-width: 600px; margin: 0 auto;">{sub_esc}</div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -407,23 +413,31 @@ def kpi_card(col, titulo, valor, meta=None, unidad="", frecuencia=""):
         barra = ""
         meta_txt = ""
 
+    import html
+    t_esc = html.escape(str(titulo))
+    f_esc = html.escape(str(frecuencia))
+    u_esc = html.escape(str(unidad))
     col.markdown(f"""
     <div class="kpi-card">
-        <div style="font-family:var(--font-ui);font-size:.75rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--aero-muted);margin-bottom:.5rem;">{titulo}</div>
-        <div style="font-family:var(--font-data);font-size:clamp(1.8rem,3vw,2.6rem);font-weight:700;color:#f8fafc;line-height:1;">{valor:,.1f}{unidad}</div>
+        <div style="font-family:var(--font-ui);font-size:.75rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--aero-muted);margin-bottom:.5rem;">{t_esc}</div>
+        <div style="font-family:var(--font-data);font-size:clamp(1.8rem,3vw,2.6rem);font-weight:700;color:#f8fafc;line-height:1;">{valor:,.1f}{u_esc}</div>
         {barra}
         {meta_txt}
-        <div style="font-family:var(--font-ui);font-size:.68rem;color:var(--aero-muted);margin-top:8px;letter-spacing:.05em;">{frecuencia}</div>
+        <div style="font-family:var(--font-ui);font-size:.68rem;color:var(--aero-muted);margin-top:8px;letter-spacing:.05em;">{f_esc}</div>
     </div>
     """, unsafe_allow_html=True)
 
 def create_module_card(icon, title, description, module_key):
     """Tarjeta de acceso a módulo en la página principal (estilo legacy)."""
+    import html
+    i_esc = html.escape(str(icon))
+    t_esc = html.escape(str(title))
+    d_esc = html.escape(str(description))
     st.markdown(f"""
     <div class="kpi-card" style="height: 180px; display: flex; flex-direction: column; justify-content: center;">
-        <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">{icon}</div>
-        <div style="font-family: var(--font-heading); font-size: 1.4rem; font-weight: 700; color: #fff; margin-bottom: 0.3rem;">{title}</div>
-        <div style="font-family: var(--font-body); font-size: 0.85rem; color: var(--aero-muted); line-height: 1.3;">{description}</div>
+        <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">{i_esc}</div>
+        <div style="font-family: var(--font-heading); font-size: 1.4rem; font-weight: 700; color: #fff; margin-bottom: 0.3rem;">{t_esc}</div>
+        <div style="font-family: var(--font-body); font-size: 0.85rem; color: var(--aero-muted); line-height: 1.3;">{d_esc}</div>
     </div>
     """, unsafe_allow_html=True)
     if st.button(f"Entrar a {title}", key=f"btn_{module_key}", use_container_width=True):

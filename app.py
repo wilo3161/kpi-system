@@ -80,7 +80,10 @@ st.set_page_config(
 )
 
 def main():
-    # Acceso directo a recepción desde QR
+    if not check_password():
+        return
+
+    # Acceso directo a recepción desde QR (ahora requiere autenticación previa)
     if st.query_params.get("modulo") == "recepcion":
         if show_recepcion_tienda:
             show_recepcion_tienda()
@@ -90,9 +93,6 @@ def main():
 
     if "current_page" not in st.session_state:
         st.session_state.current_page = "Inicio"
-
-    if not check_password():
-        return
 
     # Mostrar rol y página actual para depuración
     st.sidebar.info(f"👤 Rol: {st.session_state.get('role', '?')}")
@@ -159,10 +159,13 @@ def main():
             # Ejecutar el módulo
             page_mapping[current_page]()
         except Exception as e:
-            # Mostrar error detallado en la página (NO redirigir automáticamente)
-            st.error(f"❌ **Error en el módulo '{current_page}'**")
-            st.code(traceback.format_exc(), language="python")
-            st.warning("El módulo no se pudo cargar correctamente. Revisa el error arriba.")
+            # Registrar el error internamente (ocultar el stack trace al usuario por seguridad)
+            import logging
+            logging.error(f"Error en {current_page}: {str(e)}")
+            logging.error(traceback.format_exc())
+            
+            st.error(f"❌ **Ha ocurrido un error inesperado en el módulo '{current_page}'**")
+            st.warning("Por favor, contacta al administrador del sistema si el problema persiste.")
             # Opcional: botón para volver al inicio
             if st.button("🏠 Volver al inicio"):
                 st.session_state.current_page = "Inicio"

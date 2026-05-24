@@ -43,13 +43,7 @@ def _sanitize_document(doc):
     if isinstance(doc, dict): return {k: _sanitize_document(v) for k, v in doc.items()}
     if isinstance(doc, list): return [_sanitize_document(item) for item in doc]
     if isinstance(doc, str):
-        stripped = doc.strip()
-        if stripped:
-            try: return int(stripped)
-            except ValueError:
-                try: return float(stripped)
-                except ValueError: return doc
-        return doc
+        return doc.strip()  # Fix: Eliminar conversión automática a int/float que corrompe IDs
     return doc
 
 if PYDANTIC_AVAILABLE:
@@ -209,6 +203,13 @@ class MongoDBAtlas:
         else:
             self.db[collection].update_one(query, {"$set": update_doc}, upsert=upsert)
 
+    def update_many(self, collection, query, update_doc, upsert=False):
+        if not self.connected: return
+        if any(k.startswith("$") for k in update_doc.keys()):
+            self.db[collection].update_many(query, update_doc, upsert=upsert)
+        else:
+            self.db[collection].update_many(query, {"$set": update_doc}, upsert=upsert)
+
     def delete(self, collection, query):
         if not self.connected: return
         self.db[collection].delete_many(query)
@@ -237,8 +238,16 @@ class MongoDBAtlas:
             return st.session_state.contadores_mock[nombre_contador]
 
     # ---------- AUTENTICACIÓN ----------
-    def authenticate(self, username, password_hash):
-        return self.find_one("users", {"username": username, "password": password_hash})
+    def authenticate(self, username, password):
+        from utils.common import verify_password, hash_password
+        import re
+        user = self.find_one("users", {"username": username})
+        if user and verify_password(password, user.get("password", "")):
+            # Migración transparente de SHA-256 a Bcrypt
+            if len(user["password"]) == 64 and re.match(r'^[0-9a-f]{64}$', user["password"]):
+                self.update_password(username, hash_password(password))
+            return user
+        return None
     
     def update_password(self, username, new_hash):
         self.update("users", {"username": username}, {"password": new_hash})
@@ -265,15 +274,28 @@ class MockLocalDBFallback:
     def _init_mock_data(self):
         data = self._get_data()
         if not data.get("users"):
-            data["users"] = [
-                {"username": "admin", "password": hash_password("wilo3161"), "role": "Administrador", "name": "Administrador General"},
-                {"username": "logistica", "password": hash_password("log123"), "role": "Logística", "name": "Coordinador Logístico"},
-                {"username": "ventas", "password": hash_password("ven123"), "role": "Ventas", "name": "Ejecutivo de Ventas"},
-                {"username": "Andres", "password": hash_password("Andres145"), "role": "Bodega", "name": "Andrés Yépez"},
-                {"username": "Luis", "password": hash_password("luis230499"), "role": "Bodega", "name": "Luis Perugachi"},
-                {"username": "Jessica", "password": hash_password("bod123"), "role": "Bodega", "name": "Jessica Suárez"},
-                {"username": "Josue", "password": hash_password("bod123"), "role": "Bodega", "name": "Josué Imbacúan"}
-            ]
+            import json
+            from pathlib import Path
+            base_dir = Path(__file__).resolve().parent.parent
+            private_file = base_dir / "config" / "private_data.json"
+            mock_users = []
+            if private_file.exists():
+                with open(private_file, "r", encoding="utf-8") as f:
+                    try:
+                        pdata = json.load(f)
+                        mock_users = pdata.get("mock_users", [])
+                    except: pass
+            
+            data["users"] = []
+            for u in mock_users:
+                u["password"] = hash_password(u.get("password", "default_test"))
+                data["users"].append(u)
+                
+            if not data["users"]:
+                data["users"] = [
+                    {"username": "admin", "password": hash_password("admin_test"), "role": "Administrador", "name": "Administrador General"},
+                ]
+
             # Tiendas mock limitadas a 10 para ahorrar memoria
             for tienda in TIENDAS_DATA[:10]:
                 nombre = tienda.get("Nombre de Tienda", "")
@@ -377,6 +399,31 @@ class MockLocalDBFallback:
                 new_doc.update(update_doc)
             self.insert(collection, new_doc)
 
+    def update_many(self, collection, query, update_doc, upsert=False):
+        data = self._get_data()
+        updated = False
+        for doc in data.get(collection, []):
+            if all(doc.get(k) == v for k, v in query.items()):
+                if any(k.startswith("$") for k in update_doc.keys()):
+                    for op, fields in update_doc.items():
+                        if op == "$set":
+                            doc.update(fields)
+                        elif op == "$inc":
+                            for f, inc in fields.items():
+                                doc[f] = doc.get(f, 0) + inc
+                        else:
+                            doc.update(update_doc)
+                else:
+                    doc.update(update_doc)
+                updated = True
+        if upsert and not updated:
+            new_doc = query.copy()
+            if "$set" in update_doc:
+                new_doc.update(update_doc["$set"])
+            else:
+                new_doc.update(update_doc)
+            self.insert(collection, new_doc)
+
     def delete(self, collection, query):
         data = self._get_data()
         data[collection] = [d for d in data.get(collection, []) if not all(d.get(k) == v for k, v in query.items())]
@@ -384,8 +431,16 @@ class MockLocalDBFallback:
     def count(self, collection, query={}):
         return len(self.find(collection, query))
 
-    def authenticate(self, username, password_hash):
-        return self.find_one("users", {"username": username, "password": password_hash})
+    def authenticate(self, username, password):
+        from utils.common import verify_password, hash_password
+        import re
+        user = self.find_one("users", {"username": username})
+        if user and verify_password(password, user.get("password", "")):
+            # Migración transparente de SHA-256 a Bcrypt
+            if len(user["password"]) == 64 and re.match(r'^[0-9a-f]{64}$', user["password"]):
+                self.update_password(username, hash_password(password))
+            return user
+        return None
 
     def update_password(self, username, new_hash):
         self.update("users", {"username": username}, {"password": new_hash})
@@ -402,6 +457,7 @@ class MockLocalDBFallback:
 # ============================================================================
 # FUNCIONES GLOBALES (sin cambios, pero optimizadas internamente)
 # ============================================================================
+@st.cache_resource
 def get_db_v2():
     try:
         mongo_db = MongoDBAtlas()

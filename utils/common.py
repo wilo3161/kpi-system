@@ -137,8 +137,30 @@ def to_excel(df: pd.DataFrame) -> bytes:
 
 
 def hash_password(password: str) -> str:
-    """Genera un hash SHA-256 de una contraseña."""
-    return hashlib.sha256(str(password).encode()).hexdigest()
+    """Genera un hash bcrypt de una contraseña."""
+    try:
+        import bcrypt
+        salt = bcrypt.gensalt()
+        return bcrypt.hashpw(str(password).encode('utf-8'), salt).decode('utf-8')
+    except ImportError:
+        # Fallback de desarrollo si bcrypt no está instalado
+        import hashlib
+        return hashlib.sha256(str(password).encode()).hexdigest()
+
+def verify_password(password: str, hashed: str) -> bool:
+    """Verifica una contraseña contra su hash (soporta bcrypt y legacy sha256)."""
+    password_bytes = str(password).encode('utf-8')
+    # Detección de Legacy SHA-256 (64 caracteres hex)
+    if len(hashed) == 64 and re.match(r'^[0-9a-f]{64}$', hashed):
+        import hashlib
+        return hashlib.sha256(password_bytes).hexdigest() == hashed
+    
+    # Verificación Bcrypt
+    try:
+        import bcrypt
+        return bcrypt.checkpw(password_bytes, hashed.encode('utf-8'))
+    except Exception:
+        return False
 
 
 def sanitize_for_mongo(value):

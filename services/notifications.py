@@ -36,7 +36,7 @@ class CentroNotificaciones:
 
     @staticmethod
     def marcar_todas_leidas(usuario):
-        local_db.update("notificaciones", {"usuario_destino": usuario}, {"leida": True})
+        local_db.update_many("notificaciones", {"usuario_destino": usuario}, {"leida": True})
 
 
 # ---------------------------------------------------------------------------
@@ -118,12 +118,17 @@ class GestorCorreo:
         Retorna True si se envió correctamente, False en caso de error.
         """
         try:
+            # Sanitizar headers para evitar CRLF/Header Injection
+            asunto_seguro = "".join(asunto.splitlines())
+            dest_seguros = [d.replace('\r', '').replace('\n', '').strip() for d in destinatarios]
+            
             msg = MIMEMultipart()
             msg['From'] = self.config["email_user"]
-            msg['To'] = ", ".join(destinatarios)
-            msg['Subject'] = asunto
+            msg['To'] = ", ".join(dest_seguros)
+            msg['Subject'] = asunto_seguro
             if cc:
-                msg['Cc'] = ", ".join(cc)
+                cc_seguros = [c.replace('\r', '').replace('\n', '').strip() for c in cc]
+                msg['Cc'] = ", ".join(cc_seguros)
             msg.attach(MIMEText(cuerpo_html, 'html'))
 
             if adjuntos:

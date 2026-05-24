@@ -49,25 +49,39 @@ class LogisticsMLModel:
         df_hist = pd.DataFrame(hist)
         if 'metricas' in df_hist.columns:
             df_hist['total_unidades'] = df_hist['metricas'].apply(lambda x: x.get('total_unidades', 0) if isinstance(x, dict) else 0)
+        df_hist['fecha'] = pd.to_datetime(df_hist['fecha_archivo'])
+        df_hist = df_hist.sort_values('fecha')
+        
+        recent_values = df_hist['total_unidades'].tail(14).tolist()
+        if len(recent_values) < 14: return pd.DataFrame()
+        
         features = self.prepare_features(df_hist)
         if features.empty: return pd.DataFrame()
-        last_row = features.iloc[-1]
+        
+        current_date = features.iloc[-1]['fecha'] + timedelta(days=1)
         preds = []
-        current_date = last_row['fecha'] + timedelta(days=1)
+        
         for i in range(7):
+            lag_7 = recent_values[-7]
+            lag_14 = recent_values[-14]
+            rolling_mean_7 = np.mean(recent_values[-7:])
+            
             next_row = {
                 'dia_semana': current_date.dayofweek,
                 'semana': current_date.isocalendar().week,
                 'mes': current_date.month,
                 'año': current_date.year,
-                'lag_7': last_row['total_unidades'] if i < 7 else ((preds[i-7][1] if i>=7 else last_row['total_unidades'])),
-                'lag_14': last_row['lag_7'] if i < 14 else ((preds[i-14][1] if i>=14 else 0)),
-                'rolling_mean_7': np.mean([p[1] for p in preds[-7:]]) if i>=7 else last_row['rolling_mean_7']
+                'lag_7': lag_7,
+                'lag_14': lag_14,
+                'rolling_mean_7': rolling_mean_7
             }
             X = pd.DataFrame([next_row])
             yp = self.rf_model.predict(X)[0]
             preds.append((current_date, yp))
+            
+            recent_values.append(yp)
             current_date += timedelta(days=1)
+            
         df_pred = pd.DataFrame(preds, columns=['fecha', 'prediccion'])
         df_pred['anomalia'] = (df_pred['prediccion'] > 1.5 * df_pred['prediccion'].mean()).astype(int)
         return df_pred
