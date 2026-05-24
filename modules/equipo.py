@@ -242,93 +242,93 @@ def show_gestion_equipo():
     # =====================================================================
     if is_admin:
         with tabs[2]:
-        st.markdown("### ⚙️ Administrar Personal")
-        col_form, col_list = st.columns([1, 1])
-        with col_form:
-            st.subheader("➕ Añadir Miembro")
-            with st.form("form_add_miembro"):
-                new_nombre = st.text_input("Nombre Completo")
-                new_area = st.selectbox("Área", ["Liderazgo", "Transferencias", "Distribución", "Empaque", "Ventas Mayoristas", "Cuarentena", "Otras Áreas"])
-                new_cargo = st.text_input("Cargo")
-                new_email = st.text_input("Email", placeholder="ejemplo@fashionclub.com.ec")
-                new_whatsapp = st.text_input("WhatsApp", placeholder="09XXXXXXXX")
-                
-                if st.form_submit_button("Guardar Miembro", use_container_width=True):
-                    if new_nombre and new_cargo:
-                        local_db.insert("equipo_logistico", {
-                            "nombre": new_nombre.strip(),
-                            "area": new_area,
-                            "cargo": new_cargo.strip(),
-                            "email": new_email.strip(),
-                            "whatsapp": new_whatsapp.strip()
-                        })
-                        st.success(f"✅ {new_nombre} añadido correctamente.")
-                        st.rerun()
-                    else:
-                        st.error("El nombre y el cargo son obligatorios.")
-                        
-        with col_list:
-            st.subheader("🗑️ Eliminar Miembro")
-            for area, miembros in EQUIPO_LOGISTICO.items():
-                if miembros:
-                    st.markdown(f"**{area}**")
-                    for m in miembros:
-                        col_name, col_btn = st.columns([3, 1])
-                        col_name.write(m.get("nombre",""))
-                        if col_btn.button("Eliminar", key=f"del_{m.get('_id', m.get('nombre'))}"):
-                            # Para MockLocalDBFallback (si existe el atributo data)
-                            if hasattr(local_db, 'data') and 'equipo_logistico' in local_db.data:
-                                local_db.data["equipo_logistico"] = [x for x in local_db.data["equipo_logistico"] if x.get("nombre") != m.get("nombre")]
-                            else:
-                                local_db.delete("equipo_logistico", {"nombre": m.get("nombre")})
+            st.markdown("### ⚙️ Administrar Personal")
+            col_form, col_list = st.columns([1, 1])
+            with col_form:
+                st.subheader("➕ Añadir Miembro")
+                with st.form("form_add_miembro"):
+                    new_nombre = st.text_input("Nombre Completo")
+                    new_area = st.selectbox("Área", ["Liderazgo", "Transferencias", "Distribución", "Empaque", "Ventas Mayoristas", "Cuarentena", "Otras Áreas"])
+                    new_cargo = st.text_input("Cargo")
+                    new_email = st.text_input("Email", placeholder="ejemplo@fashionclub.com.ec")
+                    new_whatsapp = st.text_input("WhatsApp", placeholder="09XXXXXXXX")
+                    
+                    if st.form_submit_button("Guardar Miembro", use_container_width=True):
+                        if new_nombre and new_cargo:
+                            local_db.insert("equipo_logistico", {
+                                "nombre": new_nombre.strip(),
+                                "area": new_area,
+                                "cargo": new_cargo.strip(),
+                                "email": new_email.strip(),
+                                "whatsapp": new_whatsapp.strip()
+                            })
+                            st.success(f"✅ {new_nombre} añadido correctamente.")
                             st.rerun()
-                    st.divider()
+                        else:
+                            st.error("El nombre y el cargo son obligatorios.")
+                            
+            with col_list:
+                st.subheader("🗑️ Eliminar Miembro")
+                for area, miembros in EQUIPO_LOGISTICO.items():
+                    if miembros:
+                        st.markdown(f"**{area}**")
+                        for m in miembros:
+                            col_name, col_btn = st.columns([3, 1])
+                            col_name.write(m.get("nombre",""))
+                            if col_btn.button("Eliminar", key=f"del_{m.get('_id', m.get('nombre'))}"):
+                                # Para MockLocalDBFallback (si existe el atributo data)
+                                if hasattr(local_db, 'data') and 'equipo_logistico' in local_db.data:
+                                    local_db.data["equipo_logistico"] = [x for x in local_db.data["equipo_logistico"] if x.get("nombre") != m.get("nombre")]
+                                else:
+                                    local_db.delete("equipo_logistico", {"nombre": m.get("nombre")})
+                                st.rerun()
+                        st.divider()
 
     # =====================================================================
     # PESTAÑA 4 – ASISTENTE IA (wilo IA)
     # =====================================================================
         with tabs[3]:
-        st.markdown("### 🤖 Asistente Inteligente — wilo IA")
-        if len(st.session_state.chat_gemini) == 0:
-            st.session_state.chat_gemini.append({"role": "assistant", "content": "¡Hola! Soy wilo IA. ¿En qué puedo ayudarte a gestionar el equipo hoy?"})
+            st.markdown("### 🤖 Asistente Inteligente — wilo IA")
+            if len(st.session_state.chat_gemini) == 0:
+                st.session_state.chat_gemini.append({"role": "assistant", "content": "¡Hola! Soy wilo IA. ¿En qué puedo ayudarte a gestionar el equipo hoy?"})
 
-        col_izq, col_der = st.columns([0.3, 0.7])
-        with col_izq:
-            st.subheader("⚡ Acciones rápidas")
-            if st.button("📋 Solicitar actividades diarias al equipo", use_container_width=True):
-                st.session_state.prompt_rapido = "Envía un mensaje a todo mi equipo pidiéndoles un resumen de las actividades realizadas hoy."
-                st.rerun()
-            if st.button("🗑️ Limpiar conversación", use_container_width=True):
-                st.session_state.chat_gemini = []
-                st.session_state.prompt_rapido = ""
-                st.rerun()
+            col_izq, col_der = st.columns([0.3, 0.7])
+            with col_izq:
+                st.subheader("⚡ Acciones rápidas")
+                if st.button("📋 Solicitar actividades diarias al equipo", use_container_width=True):
+                    st.session_state.prompt_rapido = "Envía un mensaje a todo mi equipo pidiéndoles un resumen de las actividades realizadas hoy."
+                    st.rerun()
+                if st.button("🗑️ Limpiar conversación", use_container_width=True):
+                    st.session_state.chat_gemini = []
+                    st.session_state.prompt_rapido = ""
+                    st.rerun()
 
-        with col_der:
-            chat_container = st.container(height=400)
-            with chat_container:
-                for msg in st.session_state.chat_gemini:
-                    with st.chat_message(msg["role"]):
-                        st.markdown(msg["content"])
+            with col_der:
+                chat_container = st.container(height=400)
+                with chat_container:
+                    for msg in st.session_state.chat_gemini:
+                        with st.chat_message(msg["role"]):
+                            st.markdown(msg["content"])
 
-            # Procesar prompt rápido si existe
-            if st.session_state.prompt_rapido:
-                prompt = st.session_state.prompt_rapido
-                st.session_state.prompt_rapido = ""
-                st.session_state.chat_gemini.append({"role": "user", "content": prompt})
-                with st.spinner("🤖 Pensando..."):
-                    respuesta = llamar_asistente_ia(prompt, EQUIPO_LOGISTICO)
-                st.session_state.chat_gemini.append({"role": "assistant", "content": respuesta})
-                st.rerun()
+                # Procesar prompt rápido si existe
+                if st.session_state.prompt_rapido:
+                    prompt = st.session_state.prompt_rapido
+                    st.session_state.prompt_rapido = ""
+                    st.session_state.chat_gemini.append({"role": "user", "content": prompt})
+                    with st.spinner("🤖 Pensando..."):
+                        respuesta = llamar_asistente_ia(prompt, EQUIPO_LOGISTICO)
+                    st.session_state.chat_gemini.append({"role": "assistant", "content": respuesta})
+                    st.rerun()
 
-            user_input = st.chat_input("Escribe tu mensaje o comando...")
-            if user_input:
-                st.session_state.chat_gemini.append({"role": "user", "content": user_input})
-                with st.spinner("🤖 Pensando..."):
-                    respuesta = llamar_asistente_ia(user_input, EQUIPO_LOGISTICO)
-                st.session_state.chat_gemini.append({"role": "assistant", "content": respuesta})
-                st.rerun()
+                user_input = st.chat_input("Escribe tu mensaje o comando...")
+                if user_input:
+                    st.session_state.chat_gemini.append({"role": "user", "content": user_input})
+                    with st.spinner("🤖 Pensando..."):
+                        respuesta = llamar_asistente_ia(user_input, EQUIPO_LOGISTICO)
+                    st.session_state.chat_gemini.append({"role": "assistant", "content": respuesta})
+                    st.rerun()
 
-        st.info("📋 **Nota:** Los mensajes generados son texto listo para copiar y pegar en WhatsApp o correo. Si hay número registrado, se incluye un enlace wa.me.")
+            st.info("📋 **Nota:** Los mensajes generados son texto listo para copiar y pegar en WhatsApp o correo. Si hay número registrado, se incluye un enlace wa.me.")
 
     # =====================================================================
     # PESTAÑA 5 – REGISTRO DIARIO DE ACTIVIDADES

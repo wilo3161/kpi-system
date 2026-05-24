@@ -311,6 +311,8 @@ def mostrar_dashboard_transferencias():
                         st.session_state.fecha_d_logistica = fecha_d
                 except Exception as e:
                     st.error(f"Error procesando archivos: {e}")
+            elif procesar_click:
+                st.warning("Selecciona ambos archivos antes de procesar.")
 
             if st.session_state.get('procesado_archivos_logistica'):
                 existe = existe_historico_dia(st.session_state.fecha_d_logistica, "Transferencias Diarias")
@@ -326,8 +328,6 @@ def mostrar_dashboard_transferencias():
                     guardar_historico_diario(st.session_state.df_cruce, st.session_state.df_detalle_enr, st.session_state.archT_name, st.session_state.get("username", "admin"))
                     st.success("✅ Procesado y guardado correctamente.")
                     st.session_state.procesado_archivos_logistica = False
-                elif procesar_click:
-                    st.warning("Selecciona ambos archivos antes de procesar.")
 
             if 'df_cruce' in st.session_state:
                 df = st.session_state['df_cruce']

@@ -30,3 +30,4 @@ pydantic>=2.13.4
 # --- Testing (solo desarrollo, no afecta producción) ---
 pytest>=9.0.3
 openai
+scikit-learn>=1.0.0
