@@ -90,7 +90,7 @@ def _analizar_con_gemini(asunto: str, cuerpo: str, accion: str = "resumir") -> s
     """Usa el servicio centralizado de IA para analizar o redactar respuesta (robustecido)."""
     try:
         if accion == "resumir":
-            prompt = f"""Eres un asistente ejecutivo de Fashion Club Ecuador (Centro de Distribución Aeropostale).
+            prompt = f"""Eres 'wilo IA', el asistente ejecutivo de Fashion Club Ecuador (Centro de Distribución Aeropostale).
 Analiza este correo y proporciona:
 1. Resumen en 2-3 líneas
 2. Prioridad: ALTA / MEDIA / BAJA
@@ -99,7 +99,7 @@ Analiza este correo y proporciona:
 Asunto: {asunto}
 Contenido: {cuerpo[:1500]}"""
         elif accion == "responder":
-            prompt = f"""Eres el asistente de Wilson Pérez, Jefe de Logística de Fashion Club Ecuador.
+            prompt = f"""Eres 'wilo IA', el asistente exclusivo de Wilson Pérez, Jefe de Logística de Fashion Club Ecuador.
 Redacta una respuesta profesional, cordial y concisa (máx 200 palabras) para este correo.
 Firma como: Wilson Pérez | Jefe de Logística | Fashion Club Ecuador | wperez@fashionclub.com.ec
 
@@ -144,16 +144,39 @@ def show_gestor_correos():
 
         with tab1:
             if st.session_state.correos_lista:
-                for i, c in enumerate(st.session_state.correos_lista):
-                    if c.get("id") == "err":
-                        st.error(c["asunto"])
+                col_lista, col_detalle = st.columns([1, 2])
+                
+                with col_lista:
+                    st.subheader("Bandeja de Entrada")
+                    for i, c in enumerate(st.session_state.correos_lista):
+                        if c.get("id") == "err":
+                            st.error(c["asunto"])
+                        else:
+                            # Botón tipo lista de correo
+                            label = f"**{c.get('de', 'Desconocido')[:20]}**\n{c.get('asunto')[:30]}..."
+                            if st.button(label, key=f"v_{i}", use_container_width=True):
+                                st.session_state.correo_seleccionado = c
+                                st.session_state.sugerencia_wilo = None # Resetear la sugerencia al cambiar
+                
+                with col_detalle:
+                    sel = st.session_state.correo_seleccionado
+                    if sel:
+                        st.markdown(f"### 📨 {sel['asunto']}")
+                        st.markdown(f"**De:** {sel['de']}")
+                        st.markdown(f"**Fecha:** {sel['fecha']}")
+                        st.divider()
+                        st.text_area("Mensaje Original", sel['cuerpo'][:2000], height=200, disabled=True)
+                        
+                        st.divider()
+                        st.subheader("🤖 Análisis y Respuesta de wilo IA")
+                        
+                        if st.session_state.get("sugerencia_wilo") is None:
+                            with st.spinner("wilo IA está analizando este correo..."):
+                                st.session_state.sugerencia_wilo = _analizar_con_gemini(sel['asunto'], sel['cuerpo'], "responder")
+                        
+                        st.info(st.session_state.sugerencia_wilo)
                     else:
-                        if st.button(f"👁 {c.get('asunto')}", key=f"v_{i}"):
-                            st.session_state.correo_seleccionado = c
-                sel = st.session_state.correo_seleccionado
-                if sel:
-                    st.markdown(f"### {sel['asunto']}")
-                    st.text(sel['cuerpo'][:2000])
+                        st.info("👈 Selecciona un correo de la lista para leerlo y que wilo IA sugiera una respuesta.")
             else:
                 st.info("Presiona 'Conectar / Actualizar' para cargar correos.")
 

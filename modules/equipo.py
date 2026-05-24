@@ -4,7 +4,7 @@ import pandas as pd
 from datetime import datetime
 from database.manager import local_db
 from utils.ui import add_back_button, show_module_header
-from ai.supply_chain_ai import _ejecutar_prompt  # Gemini centralizado
+from ai.supply_chain_ai import _ejecutar_prompt  # wilo IA (OpenAI)
 
 # ------------------------------------------------------------------------------
 # DATOS INICIALES DEL EQUIPO (fuente única de verdad)
@@ -30,12 +30,12 @@ def seed_equipo_if_empty():
 
 
 # ------------------------------------------------------------------------------
-# ASISTENTE IA (Gemini, usando el módulo centralizado)
+# ASISTENTE IA (wilo IA)
 # ------------------------------------------------------------------------------
 def llamar_asistente_ia(prompt_usuario: str, contexto_equipo: dict) -> str:
     """
     Prepara un prompt con el contexto del equipo y la consulta del usuario,
-    y lo envía a Gemini a través del servicio centralizado de IA.
+    y lo envía a wilo IA a través del servicio centralizado.
     """
     # Construir descripción textual del equipo
     equipo_txt = "EQUIPO DE TRABAJO DEL CENTRO DE DISTRIBUCIÓN AEROPOSTALE:\n"
@@ -97,9 +97,10 @@ def show_gestion_equipo():
         st.session_state.prompt_rapido = ""
 
     # ───────────── PESTAÑAS ─────────────
-    tab1, tab2, tab3, tab4 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([
         "📇 Directorio del Equipo", "🌳 Organigrama",
-        "⚙️ Administrar Personal", "🤖 Asistente IA"
+        "⚙️ Administrar Personal", "🤖 Asistente IA",
+        "📝 Registro Diario"
     ])
 
     # =====================================================================
@@ -279,12 +280,12 @@ def show_gestion_equipo():
                     st.divider()
 
     # =====================================================================
-    # PESTAÑA 4 – ASISTENTE IA (Gemini)
+    # PESTAÑA 4 – ASISTENTE IA (wilo IA)
     # =====================================================================
     with tab4:
-        st.markdown("### 🤖 Asistente Inteligente — Gemini")
+        st.markdown("### 🤖 Asistente Inteligente — wilo IA")
         if len(st.session_state.chat_gemini) == 0:
-            st.session_state.chat_gemini.append({"role": "assistant", "content": "¡Hola! Soy tu asistente IA. ¿En qué puedo ayudarte a gestionar el equipo hoy?"})
+            st.session_state.chat_gemini.append({"role": "assistant", "content": "¡Hola! Soy wilo IA. ¿En qué puedo ayudarte a gestionar el equipo hoy?"})
 
         col_izq, col_der = st.columns([0.3, 0.7])
         with col_izq:
@@ -323,5 +324,59 @@ def show_gestion_equipo():
                 st.rerun()
 
         st.info("📋 **Nota:** Los mensajes generados son texto listo para copiar y pegar en WhatsApp o correo. Si hay número registrado, se incluye un enlace wa.me.")
+
+    # =====================================================================
+    # PESTAÑA 5 – REGISTRO DIARIO DE ACTIVIDADES
+    # =====================================================================
+    with tab5:
+        st.markdown("### 📝 Registro de Actividades Diarias (Formulario Web)")
+        miembros_lista = [m.get("nombre") for m in db_equipo]
+        
+        with st.form("form_actividades"):
+            st.subheader("Ingresar Actividad")
+            empleado = st.selectbox("Selecciona tu nombre", [""] + miembros_lista)
+            actividad = st.text_area("Describe tus actividades (ej. Transferencias: Ejecución de transferencias de 2,000 prendas...)")
+            
+            if st.form_submit_button("Guardar Actividad", use_container_width=True):
+                if empleado and actividad:
+                    local_db.insert("actividades_diarias", {
+                        "fecha": datetime.now().strftime("%Y-%m-%d"),
+                        "empleado": empleado,
+                        "actividad": actividad
+                    })
+                    st.success(f"✅ Actividad registrada con éxito para {empleado}!")
+                else:
+                    st.error("Por favor, selecciona tu nombre y describe la actividad.")
+        
+        st.divider()
+        st.subheader("📊 Reporte de Actividades del Día")
+        st.info("💡 Este reporte consolida automáticamente la información de todos los miembros del equipo.")
+        if st.button("Generar Reporte del Día (8:00 PM)", type="primary", use_container_width=True):
+            hoy_str = datetime.now().strftime("%Y-%m-%d")
+            acts = local_db.find("actividades_diarias", {"fecha": hoy_str})
+            if acts:
+                meses = ["", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
+                hoy_dt = datetime.now()
+                fecha_formateada = f"{hoy_dt.day:02d} de {meses[hoy_dt.month]} de {hoy_dt.year}"
+                
+                reporte = f"**Reporte de actividades - {fecha_formateada}**\n\n"
+                
+                # Agrupar por empleado
+                acts_por_emp = {}
+                for a in acts:
+                    emp = a.get("empleado", "Desconocido")
+                    if emp not in acts_por_emp:
+                        acts_por_emp[emp] = []
+                    acts_por_emp[emp].append(a.get("actividad", ""))
+                
+                for emp, textos in acts_por_emp.items():
+                    reporte += f"{emp}:\n"
+                    for t in textos:
+                        reporte += f"{t}\n"
+                    reporte += "\n"
+                
+                st.code(reporte, language="markdown")
+            else:
+                st.warning("Aún no hay actividades registradas el día de hoy.")
 
     st.markdown('</div>', unsafe_allow_html=True)

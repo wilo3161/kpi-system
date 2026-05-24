@@ -501,6 +501,16 @@ def _render_timeline(timeline: list) -> None:
 def show_generar_guias():
     show_module_header("🚚 Guías de Remisión", "Sistema logístico con trazabilidad completa")
     set_module_background("guias")
+    
+    # CSS Futurista Odoo/SAP
+    st.markdown("""
+    <style>
+    .stApp { background-color: #0f172a; color: #f8fafc; }
+    .stExpander { border: 1px solid #334155; border-radius: 8px; background-color: #1e293b !important; }
+    .stButton>button { border-radius: 6px; font-weight: 600; }
+    .metric-card { background: #1e293b; padding: 15px; border-radius: 10px; border-left: 4px solid #3b82f6; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
+    </style>
+    """, unsafe_allow_html=True)
 
     # Mostrar notificaciones internas
     usuario_actual = st.session_state.get("username", "")
@@ -695,54 +705,77 @@ def show_generar_guias():
                     st.rerun()
 
     # =========================================================================
-    # TAB 3 — DASHBOARD DE GUÍAS (con anulación condicional)
+    # TAB 3 — DASHBOARD SEMANAL Y DE GUÍAS
     # =========================================================================
     with tab3:
-        st.subheader("📊 Panel de Guías")
-        docs = local_db.find("guias", {}, sort=[("fecha", -1)], limit=100)
+        st.subheader("📈 Dashboard de Guías y Acumulado Semanal")
+        docs = local_db.find("guias", {}, sort=[("fecha", -1)], limit=500)
         if not docs:
             st.info("No hay guías registradas.")
         else:
+            # Métricas Generales
             total = len(docs)
             activas = sum(1 for d in docs if not d.get("anulada"))
-            recibidas = sum(1 for d in docs if d.get("estado") in (EstadoGuia.RECIBIDA_CONFORME,
-                                                                    EstadoGuia.RECIBIDA_NOVEDAD,
-                                                                    EstadoGuia.CONCILIADA, EstadoGuia.CERRADA))
+            recibidas = sum(1 for d in docs if d.get("estado") in (EstadoGuia.RECIBIDA_CONFORME, EstadoGuia.RECIBIDA_NOVEDAD, EstadoGuia.CONCILIADA, EstadoGuia.CERRADA))
             pendientes = activas - recibidas
+            
             k1, k2, k3, k4 = st.columns(4)
-            k1.metric("Total Guías", total)
-            k2.metric("Activas", activas)
-            k3.metric("Recibidas", recibidas)
-            k4.metric("Pendientes", pendientes)
-            cols = ["numero_guia", "tienda_destino", "fecha_emision", "estado", "total_prendas", "usuario_genera", "anulada"]
-            df_dash = pd.DataFrame([{c: d.get(c) for c in cols} for d in docs])
-            st.dataframe(df_dash, use_container_width=True)
+            k1.markdown(f"<div class='metric-card'><h4>Total Guías</h4><h2>{total}</h2></div>", unsafe_allow_html=True)
+            k2.markdown(f"<div class='metric-card' style='border-left-color: #10b981;'><h4>Activas</h4><h2>{activas}</h2></div>", unsafe_allow_html=True)
+            k3.markdown(f"<div class='metric-card' style='border-left-color: #f59e0b;'><h4>Pendientes</h4><h2>{pendientes}</h2></div>", unsafe_allow_html=True)
+            k4.markdown(f"<div class='metric-card' style='border-left-color: #6366f1;'><h4>Recibidas</h4><h2>{recibidas}</h2></div>", unsafe_allow_html=True)
+            st.write("")
+            
+            # Gráfico Acumulativo Semanal
+            df_dash = pd.DataFrame(docs)
+            if "fecha" in df_dash.columns:
+                df_dash['fecha_dt'] = pd.to_datetime(df_dash['fecha'], errors='coerce')
+                df_dash['semana'] = df_dash['fecha_dt'].dt.strftime('%Y-W%V')
+                resumen_semanal = df_dash.groupby('semana').agg(
+                    Total_Guias=('numero_guia', 'count'),
+                    Prendas=('total_prendas', 'sum')
+                ).reset_index()
+                
+                if not resumen_semanal.empty:
+                    st.markdown("### 📊 Tendencia Semanal (Guías Emitidas vs Prendas)")
+                    col_chart1, col_chart2 = st.columns(2)
+                    with col_chart1:
+                        st.line_chart(resumen_semanal.set_index('semana')['Total_Guias'])
+                    with col_chart2:
+                        st.bar_chart(resumen_semanal.set_index('semana')['Prendas'])
+            
             st.divider()
-            st.subheader("🗑️ Anular Guía")
-            no_anuladas = [d for d in docs if not d.get("anulada") and not _guia_blindada(d)]
-            if no_anuladas:
-                opciones = {str(d["numero_guia"]): d for d in no_anuladas}
-                sel = st.selectbox("Guía a anular", list(opciones.keys()))
-                doc_sel = opciones.get(sel)
-                if doc_sel:
-                    generador = doc_sel.get("usuario_genera", "") or doc_sel.get("header", {}).get("usuario_genera", "")
-                    puede = (generador == usuario_activo or rol_activo == "Administrador")
-                    if puede:
-                        motivo = st.text_input("Motivo de anulación")
-                        if st.button("❌ Confirmar Anulación", type="secondary"):
-                            ok = _cambiar_estado(str(sel), EstadoGuia.ANULADA, usuario_activo,
-                                                descripcion=f"Guía anulada. Motivo: {motivo}",
-                                                metadata={"motivo": motivo})
-                            if ok:
-                                local_db.update("guias", {"numero_guia": str(sel)}, {"$set": {"anulada": True}})
-                                st.success(f"Guía {sel} anulada.")
-                                st.rerun()
-                            else:
-                                st.error("No se puede anular desde el estado actual.")
-                    else:
-                        st.warning("Solo el generador o Administrador puede anular.")
-            else:
-                st.info("No hay guías activas y no blindadas para anular.")
+            st.subheader("📋 Detalle de Guías")
+            cols = ["numero_guia", "tienda_destino", "fecha_emision", "estado", "total_prendas", "usuario_genera", "anulada"]
+            df_tabla = pd.DataFrame([{c: d.get(c) for c in cols} for d in docs[:100]])
+            st.dataframe(df_tabla, use_container_width=True)
+            
+            st.divider()
+            with st.expander("🗑️ Anular Guía"):
+                no_anuladas = [d for d in docs if not d.get("anulada") and not _guia_blindada(d)]
+                if no_anuladas:
+                    opciones = {str(d["numero_guia"]): d for d in no_anuladas}
+                    sel = st.selectbox("Guía a anular", list(opciones.keys()))
+                    doc_sel = opciones.get(sel)
+                    if doc_sel:
+                        generador = doc_sel.get("usuario_genera", "") or doc_sel.get("header", {}).get("usuario_genera", "")
+                        puede = (generador == usuario_activo or rol_activo == "Administrador")
+                        if puede:
+                            motivo = st.text_input("Motivo de anulación")
+                            if st.button("❌ Confirmar Anulación", type="secondary"):
+                                ok = _cambiar_estado(str(sel), EstadoGuia.ANULADA, usuario_activo,
+                                                    descripcion=f"Guía anulada. Motivo: {motivo}",
+                                                    metadata={"motivo": motivo})
+                                if ok:
+                                    local_db.update("guias", {"numero_guia": str(sel)}, {"$set": {"anulada": True}})
+                                    st.success(f"Guía {sel} anulada.")
+                                    st.rerun()
+                                else:
+                                    st.error("No se puede anular desde el estado actual.")
+                        else:
+                            st.warning("Solo el generador o Administrador puede anular.")
+                else:
+                    st.info("No hay guías activas y no blindadas para anular.")
 
     # =========================================================================
     # TAB 4 — DETALLE Y TIMELINE

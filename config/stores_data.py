@@ -77,6 +77,16 @@ GRADIENTS = {
 # Búsqueda rápida por nombre exacto
 TIENDAS_DICT = {t["Nombre de Tienda"]: t for t in TIENDAS_DATA}
 
+# Solución al Bug de Importación Logística
+COLOR_KEYS = {
+    'PRICE CLUB': 'PRICE CLUB',
+    'TIENDAS AEROPOSTALE': 'TIENDAS AEROPOSTALE',
+    'VENTAS POR MAYOR': 'VENTAS POR MAYOR',
+    'TIENDA WEB': 'TIENDA WEB',
+    'FALLAS': 'FALLAS',
+    'FUNDAS': 'FUNDAS'
+}
+
 # Mapeo inverso: código de destino → lista de nombres de tienda
 DESTINO_A_TIENDAS = {}
 for t in TIENDAS_DATA:

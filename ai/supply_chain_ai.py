@@ -7,56 +7,57 @@ Centraliza toda la comunicación con la IA generativa.
 import streamlit as st
 from datetime import datetime, timedelta
 from database.manager import local_db
-from utils.secrets_helper import obtener_api_key_gemini
 import json
 import logging
 
 logger = logging.getLogger(__name__)
 
 try:
-    import google.generativeai as genai
-    _GEMINI_OK = True
+    import openai
+    _OPENAI_OK = True
 except ImportError:
-    _GEMINI_OK = False
+    _OPENAI_OK = False
 
 # -----------------------------------------------------------------------------
-# Singleton del modelo Gemini
+# Singleton del modelo OpenAI (Wilo IA)
 # -----------------------------------------------------------------------------
-_modelo_gemini = None
+_cliente_openai = None
 
 def _inicializar_modelo():
-    """Configura Gemini y retorna el modelo listo para usar, o None si no está disponible."""
-    global _modelo_gemini
-    if _modelo_gemini is not None:
-        return _modelo_gemini
+    """Configura OpenAI y retorna el cliente listo para usar."""
+    global _cliente_openai
+    if _cliente_openai is not None:
+        return _cliente_openai
 
-    if not _GEMINI_OK:
+    if not _OPENAI_OK:
         return None
 
-    api_key = obtener_api_key_gemini()
-    if not api_key:
-        logger.warning("API key de Gemini no encontrada.")
-        return None
-
+    api_key = "sk-30bc78262939431db715aab9b6d845b7"
     try:
-        genai.configure(api_key=api_key)
-        _modelo_gemini = genai.GenerativeModel("gemini-2.0-flash")
-        return _modelo_gemini
+        _cliente_openai = openai.OpenAI(api_key=api_key)
+        return _cliente_openai
     except Exception as e:
-        logger.error("Error configurando Gemini: %s", e)
+        logger.error("Error configurando OpenAI: %s", e)
         return None
 
-
-def _ejecutar_prompt(prompt: str, fallback: str = "⚠️ IA no disponible.") -> str:
-    """Ejecuta un prompt en Gemini y retorna la respuesta, o un fallback si falla."""
-    modelo = _inicializar_modelo()
-    if not modelo:
+def _ejecutar_prompt(prompt: str, fallback: str = "⚠️ wilo IA no disponible.") -> str:
+    """Ejecuta un prompt en OpenAI y retorna la respuesta."""
+    cliente = _inicializar_modelo()
+    if not cliente:
         return fallback
     try:
-        respuesta = modelo.generate_content(prompt)
-        return respuesta.text.strip()
+        response = cliente.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": "Eres 'wilo IA', el asistente exclusivo de inteligencia artificial del ERP de Fashion Club Ecuador y Aeropostale. Nunca debes mencionar que eres de OpenAI o ChatGPT, tu nombre es únicamente wilo IA."},
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=800,
+            temperature=0.7
+        )
+        return response.choices[0].message.content.strip()
     except Exception as e:
-        logger.error("Error en Gemini: %s", e)
+        logger.error("Error en wilo IA (OpenAI): %s", e)
         return f"Error: {e}"
 
 
@@ -121,7 +122,7 @@ def generar_resumen_diario() -> str:
     incidencias_hoy = local_db.find("guias", {"incidencias.fecha": {"$regex": f"^{hoy}"}})
     total_inc = sum(len(g.get("incidencias", [])) for g in incidencias_hoy)
 
-    prompt = f"""Eres asistente de supply chain de Aeropostale Ecuador. Genera un resumen ejecutivo breve (máx 5 líneas) para el día {hoy}.
+    prompt = f"""Eres 'wilo IA', asistente de supply chain de Aeropostale Ecuador. Genera un resumen ejecutivo breve (máx 5 líneas) para el día {hoy}.
 Datos: Guías emitidas: {total_emitidas}, Recepciones: {recepciones_hoy}, Incidencias: {total_inc}.
 Tono profesional, recomienda acciones si hay muchas incidencias."""
     return _ejecutar_prompt(prompt, "⚠️ No se pudo generar el resumen.")
@@ -186,7 +187,7 @@ Incluye saludo, cuerpo conciso (máx 150 palabras) y firma de Wilson Pérez, Jef
 
 def consulta_interactiva(pregunta: str) -> str:
     contexto = _obtener_contexto_operacional()
-    prompt = f"""Eres un asistente de supply chain de Aeropostale Ecuador. Con base en los siguientes datos actuales:
+    prompt = f"""Eres 'wilo IA', asistente de supply chain de Aeropostale Ecuador. Con base en los siguientes datos actuales:
 {json.dumps(contexto, default=str)}
 Responde la siguiente pregunta de manera concisa: {pregunta}"""
     return _ejecutar_prompt(prompt, "No se pudo procesar la consulta.")

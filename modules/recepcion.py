@@ -583,40 +583,30 @@ def _proceso_recepcion_completo(guia_doc: dict) -> None:
         st.info(f"Total declarado: {total_esperado} prendas. Sin detalle por ítem.")
     
     st.subheader("📋 Registro de Recepción")
-    edicion_items = []
-    tiene_novedad = False
     
     if items_expected:
-        # Tabla editable con +/-
-        for i, item in enumerate(items_expected):
-            cols = st.columns([2, 2, 3, 1, 1, 1.5])
-            codigo = item.get("codigo", "")
-            estilo = item.get("estilo", "")
-            desc = item.get("descripcion", "")
-            esperado = item.get("cantidad_esperada", 0)
-            
-            cols[0].markdown(f"**{codigo}**")
-            cols[1].markdown(estilo)
-            cols[2].markdown(desc)
-            cols[3].markdown(esperado)
-            
-            recibido = cols[4].number_input(
-                "Recibido", min_value=0, value=esperado, step=1,
-                key=f"rec_{numero_guia}_{i}", label_visibility="collapsed"
-            )
-            estado = cols[5].selectbox(
-                "Estado", ["CONFORME", "FALTANTE", "SOBRANTE", "DAÑADO", "MANCHA", "COSTURA", "ETIQUETA_INCORRECTA", "PRODUCTO_DIFERENTE"],
-                key=f"est_{numero_guia}_{i}", label_visibility="collapsed"
-            )
-            
-            edicion_items.append({
-                "codigo": codigo, "estilo": estilo, "descripcion": desc,
-                "cantidad_esperada": esperado, "cantidad_recibida": recibido,
-                "estado_item": estado, "faltante": max(0, esperado - recibido),
-                "sobrante": max(0, recibido - esperado),
-            })
+        # Usamos data_editor para evitar re-runs en cada cambio
+        st.info("💡 Puedes modificar las cantidades recibidas y el estado directamente en la tabla.")
+        df_edit = pd.DataFrame(items_expected)[["codigo", "estilo", "descripcion", "cantidad_esperada"]]
+        df_edit["cantidad_recibida"] = df_edit["cantidad_esperada"]
+        df_edit["estado_item"] = "CONFORME"
+        
+        # Configurar columnas para edición
+        column_config = {
+            "codigo": st.column_config.TextColumn("Código", disabled=True),
+            "estilo": st.column_config.TextColumn("Estilo", disabled=True),
+            "descripcion": st.column_config.TextColumn("Descripción", disabled=True),
+            "cantidad_esperada": st.column_config.NumberColumn("Esperado", disabled=True),
+            "cantidad_recibida": st.column_config.NumberColumn("Recibido", min_value=0, step=1),
+            "estado_item": st.column_config.SelectboxColumn("Estado", options=["CONFORME", "FALTANTE", "SOBRANTE", "DAÑADO", "MANCHA", "COSTURA", "ETIQUETA_INCORRECTA", "PRODUCTO_DIFERENTE"])
+        }
+        
+        edited_df = st.data_editor(df_edit, column_config=column_config, use_container_width=True, hide_index=True, key=f"editor_{numero_guia}")
+        edicion_items = edited_df.to_dict('records')
+        
         total_recibido = sum(it["cantidad_recibida"] for it in edicion_items)
         tiene_novedad = any(it["cantidad_recibida"] != it["cantidad_esperada"] or it["estado_item"] != "CONFORME" for it in edicion_items)
+
     else:
         tipo = st.radio("¿Cómo recibiste la mercadería?", ["✅ Todo completo", "⚠️ Con novedad"], key=f"tipo_{numero_guia}")
         tiene_novedad = tipo == "⚠️ Con novedad"
@@ -629,7 +619,10 @@ def _proceso_recepcion_completo(guia_doc: dict) -> None:
     
     observaciones = st.text_area("Observaciones adicionales", key=f"obs_{numero_guia}")
     
-    if st.button("✅ Confirmar Recepción", type="primary", use_container_width=True):
+    st.markdown("---")
+    confirmacion = st.checkbox("Declaro que la información ingresada es correcta y procedo a confirmar la recepción.", key=f"chk_conf_{numero_guia}")
+    
+    if st.button("✅ Confirmar Recepción", type="primary", use_container_width=True, disabled=not confirmacion):
         items_received = edicion_items
         diferencias = _calcular_diferencias(items_expected, items_received)
         
@@ -747,13 +740,21 @@ def _panel_guias_pendientes():
     if not guias:
         st.info("No hay guías pendientes")
         return
-    df = pd.DataFrame([{"N°": g["numero_guia"], "Tienda": g["tienda_destino"], "Estado": g["estado"], "Prendas": g["total_prendas"]} for g in guias])
-    st.dataframe(df, use_container_width=True)
-    seleccion = st.selectbox("Seleccionar guía", [str(g["numero_guia"]) for g in guias])
-    if st.button("Iniciar Recepción"):
-        guia = next((g for g in guias if str(g["numero_guia"]) == seleccion), None)
-        if guia:
-            _proceso_recepcion_completo(guia)
+        
+    st.markdown(f"### 🔔 Tienes {len(guias)} transferencias pendientes de recibir")
+    st.markdown("<hr/>", unsafe_allow_html=True)
+    
+    for g in guias:
+        transferencia = g.get('numero_transferencia', 'N/A')
+        guia_num = g.get('numero_guia', 'N/A')
+        remitente = g.get('usuario_genera', 'Desconocido')
+        
+        with st.expander(f"📦 Transferencia: {transferencia} | Guía: {guia_num} | Remitente: {remitente}"):
+            st.write(f"**Tienda Destino:** {g.get('tienda_destino')}")
+            st.write(f"**Total Prendas Esperadas:** {g.get('total_prendas')}")
+            if st.button("Iniciar Recepción", key=f"btn_init_{guia_num}", type="primary"):
+                st.session_state["guia_activa_recepcion"] = g
+                st.rerun()
 
 def _panel_historial():
     st.subheader("📜 Historial de Recepciones")
@@ -785,6 +786,16 @@ def show_recepcion_tienda():
         load_css()
     except:
         pass
+    
+    # CSS Futurista Odoo/SAP
+    st.markdown("""
+    <style>
+    .stApp { background-color: #0f172a; color: #f8fafc; }
+    .stExpander { border: 1px solid #334155; border-radius: 8px; background-color: #1e293b !important; }
+    .stButton>button { border-radius: 6px; font-weight: 600; }
+    </style>
+    """, unsafe_allow_html=True)
+    
     st.markdown('<div style="text-align:center;"><h1>AEROPOSTALE</h1><p>Sistema de Recepción Logística</p></div>', unsafe_allow_html=True)
     st.markdown("---")
     
@@ -793,22 +804,26 @@ def show_recepcion_tienda():
     if usuario_actual:
         _mostrar_notificaciones_usuario(usuario_actual)
     
+    if "guia_activa_recepcion" in st.session_state:
+        if st.button("⬅️ Volver al listado"):
+            del st.session_state["guia_activa_recepcion"]
+            st.rerun()
+        _proceso_recepcion_completo(st.session_state["guia_activa_recepcion"])
+        return
+    
     guia_qr = st.query_params.get("guia")
     if guia_qr:
         guia = local_db.find_one("guias", {"numero_guia": str(guia_qr)})
         if guia:
             _proceso_recepcion_completo(guia)
-        else:
-            st.error("Guía no encontrada")
-        return
-    
-    tab1, tab2, tab3 = st.tabs(["📋 Pendientes", "🔍 Buscar", "📜 Historial"])
+            return
+            
+    tab1, tab2, tab3 = st.tabs(["📋 Guías Pendientes", "🔍 Buscar", "📜 Historial"])
     with tab1:
         _panel_guias_pendientes()
     with tab2:
         _panel_busqueda_manual()
     with tab3:
-        _panel_historial()
     
     if st.session_state.get("role") == "Administrador":
         st.divider()
