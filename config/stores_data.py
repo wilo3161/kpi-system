@@ -79,12 +79,12 @@ TIENDAS_DICT = {t["Nombre de Tienda"]: t for t in TIENDAS_DATA}
 
 # Solución al Bug de Importación Logística
 COLOR_KEYS = {
-    'PRICE CLUB': 'PRICE CLUB',
-    'TIENDAS AEROPOSTALE': 'TIENDAS AEROPOSTALE',
-    'VENTAS POR MAYOR': 'VENTAS POR MAYOR',
-    'TIENDA WEB': 'TIENDA WEB',
-    'FALLAS': 'FALLAS',
-    'FUNDAS': 'FUNDAS'
+    'Price Club': 'PRICE CLUB',
+    'Tiendas': 'TIENDAS AEROPOSTALE',
+    'Ventas por Mayor': 'VENTAS POR MAYOR',
+    'Tienda Web': 'TIENDA WEB',
+    'Fallas': 'FALLAS',
+    'Fundas': 'FUNDAS'
 }
 
 # Mapeo inverso: código de destino → lista de nombres de tienda

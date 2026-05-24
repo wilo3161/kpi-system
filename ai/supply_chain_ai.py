@@ -34,7 +34,7 @@ def _inicializar_modelo():
 
     api_key = "sk-30bc78262939431db715aab9b6d845b7"
     try:
-        _cliente_openai = openai.OpenAI(api_key=api_key)
+        _cliente_openai = openai.OpenAI(api_key=api_key, base_url="https://api.deepseek.com/v1")
         return _cliente_openai
     except Exception as e:
         logger.error("Error configurando OpenAI: %s", e)
@@ -47,7 +47,7 @@ def _ejecutar_prompt(prompt: str, fallback: str = "⚠️ wilo IA no disponible.
         return fallback
     try:
         response = cliente.chat.completions.create(
-            model="gpt-4o-mini",
+            model="deepseek-chat",
             messages=[
                 {"role": "system", "content": "Eres 'wilo IA', el asistente exclusivo de inteligencia artificial del ERP de Fashion Club Ecuador y Aeropostale. Nunca debes mencionar que eres de OpenAI o ChatGPT, tu nombre es únicamente wilo IA."},
                 {"role": "user", "content": prompt}

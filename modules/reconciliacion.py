@@ -603,7 +603,7 @@ def show_reconciliacion_v8():
         guias_anuladas = st.session_state.gastos_datos["guias_anuladas"]
         manifesto_original = st.session_state.gastos_datos["manifesto"]
 
-        tabs = st.tabs(["📊 Resumen", "✅ Validación", "🏪 Todas las Tiendas", "🚫 Guías Anuladas", "🌎 Geografía", "📋 Datos", "💾 Exportar", "📄 Reporte PDF"])
+        tabs = st.tabs(["📊 Resumen", "✅ Validación", "🏪 Todas las Tiendas", "🚫 Guías Anuladas", "🌎 Geografía", "📦 Peso Volumétrico", "📋 Datos", "💾 Exportar"])
 
         with tabs[0]:
             st.header("📊 Resumen Ejecutivo")
@@ -664,10 +664,23 @@ def show_reconciliacion_v8():
                 st.info("No hay datos geográficos disponibles.")
 
         with tabs[5]:
+            st.header("📦 Peso Volumétrico por Tienda")
+            if 'DESTINATARIO' in resultado.columns and 'PIEZAS' in resultado.columns:
+                vol_data = resultado[resultado["ESTADO"]=="FACTURADA"].groupby("DESTINATARIO")["PIEZAS"].sum().reset_index().sort_values("PIEZAS", ascending=False)
+                if not vol_data.empty:
+                    fig = px.bar(vol_data.head(20), x='PIEZAS', y='DESTINATARIO', orientation='h', title="Peso Volumétrico (Piezas) por Destinatario", color='PIEZAS', color_continuous_scale='Sunset')
+                    st.plotly_chart(fig, use_container_width=True)
+                    st.dataframe(vol_data.rename(columns={'DESTINATARIO': 'Tienda', 'PIEZAS': 'Total Piezas'}), use_container_width=True)
+                else:
+                    st.info("No hay datos volumétricos para mostrar.")
+            else:
+                st.warning("Las columnas DESTINATARIO o PIEZAS no están mapeadas.")
+
+        with tabs[6]:
             st.header("📋 Datos Detallados")
             st.dataframe(resultado.head(100), use_container_width=True)
 
-        with tabs[6]:
+        with tabs[7]:
             st.header("💾 Exportar Resultados")
             excel_data = generar_excel_con_formato_exacto(metricas, resultado, guias_anuladas, manifesto_original)
             if excel_data:
@@ -676,10 +689,6 @@ def show_reconciliacion_v8():
             if pdf_path:
                 with open(pdf_path, "rb") as f:
                     st.download_button("📄 Descargar PDF", data=f, file_name=f"reporte_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf", mime="application/pdf")
-
-        with tabs[7]:
-            st.header("📄 Reporte PDF")
-            st.info("Usa la pestaña Exportar para generar el PDF.")
 
     else:
         st.info("👆 Carga los archivos desde el panel lateral y selecciona las columnas correctas.")

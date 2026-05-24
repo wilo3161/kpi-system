@@ -44,6 +44,14 @@ def inject_css_libraries():
                 }
             }
         }, true);
+        doc.addEventListener('keydown', function(e) {
+            if ((e.key === 'c' || e.key === 'C') && !e.ctrlKey && !e.altKey && !e.metaKey) {
+                const tag = e.target.tagName;
+                if (tag !== 'INPUT' && tag !== 'TEXTAREA') {
+                    e.stopPropagation();
+                }
+            }
+        }, true);
     })();
     </script>
     """, unsafe_allow_html=True)
@@ -423,10 +431,8 @@ def create_module_card(icon, title, description, module_key):
         st.rerun()
 
 def add_back_button(key: str = "back"):
-    """Botón para volver al inicio. Acepta un parámetro 'key' para identificar el botón."""
-    if st.button("⬅️ VOLVER AL INICIO", key=key):
-        st.session_state.current_page = "Inicio"
-        st.rerun()
+    """Botón para volver al inicio. Eliminado por petición del usuario."""
+    pass
 
 def apply_plotly_theme(fig):
     """Aplica el tema Aeropostale a un gráfico de Plotly."""

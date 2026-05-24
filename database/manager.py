@@ -69,7 +69,14 @@ if PYDANTIC_AVAILABLE:
         @classmethod
         def ensure_dict_of_ints(cls, v):
             if not isinstance(v, dict): return {}
-            return {k: int(float(val)) for k, val in v.items()}
+            res = {}
+            for k, val in v.items():
+                if isinstance(val, dict):
+                    res[k] = 0
+                else:
+                    try: res[k] = int(float(val))
+                    except (ValueError, TypeError): res[k] = 0
+            return res
     class HistoricoModel(BaseModel):
         modulo: str; pestaña: str; archivo_nombre: str; fecha_archivo: datetime
         fecha_carga: Optional[datetime] = None; usuario: str; metricas: MetricasModel

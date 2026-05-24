@@ -529,12 +529,12 @@ def show_generar_guias():
     usuario_activo = st.session_state.get("user_name", "Usuario")
     rol_activo = st.session_state.get("role", "")
 
-    tab1, tab2, tab3, tab4 = st.tabs(["📄 Nueva Guía", "📋 Manifiesto", "📊 Dashboard", "🔍 Detalle & Timeline"])
+    tab_dash, tab_nueva, tab_man, tab_det = st.tabs(["📊 Dashboard", "📄 Nueva Guía", "📋 Manifiesto", "🔍 Detalle & Timeline"])
 
     # =========================================================================
     # TAB 1 — NUEVA GUÍA
     # =========================================================================
-    with tab1:
+    with tab_nueva:
         st.subheader("Nueva Guía de Remisión")
         col_m, col_t = st.columns(2)
         with col_m:
@@ -665,7 +665,7 @@ def show_generar_guias():
     # =========================================================================
     # TAB 2 — MANIFIESTO (sin cambios)
     # =========================================================================
-    with tab2:
+    with tab_man:
         st.subheader("📋 Manifiesto de Envíos")
         manifiesto = local_db.find_one("manifiesto", {"activo": True})
         if manifiesto:
@@ -707,9 +707,12 @@ def show_generar_guias():
     # =========================================================================
     # TAB 3 — DASHBOARD SEMANAL Y DE GUÍAS
     # =========================================================================
-    with tab3:
+    with tab_dash:
         st.subheader("📈 Dashboard de Guías y Acumulado Semanal")
-        docs = local_db.find("guias", {}, sort=[("fecha", -1)], limit=500)
+        query = {}
+        if rol_activo == "Tienda":
+            query["tienda_destino"] = st.session_state.get("assigned_store")
+        docs = local_db.find("guias", query, sort=[("fecha", -1)], limit=500)
         if not docs:
             st.info("No hay guías registradas.")
         else:
@@ -780,7 +783,7 @@ def show_generar_guias():
     # =========================================================================
     # TAB 4 — DETALLE Y TIMELINE
     # =========================================================================
-    with tab4:
+    with tab_det:
         st.subheader("🔍 Detalle y Timeline de Guía")
         docs_sel = local_db.find("guias", {}, sort=[("fecha", -1)], limit=100)
         if not docs_sel:
