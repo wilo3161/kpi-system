@@ -56,6 +56,54 @@ def inject_css_libraries():
     </script>
     """, unsafe_allow_html=True)
 
+def inject_acumatica_css():
+    st.markdown("""
+    <style>
+    /* Acumatica Flat Dashboard Styles */
+    .acu-kpi-card {
+        display: flex;
+        justify-content: space-between;
+        padding: 15px 20px;
+        color: white;
+        font-family: 'Segoe UI', Arial, sans-serif;
+        height: 110px;
+        box-sizing: border-box;
+        margin-bottom: 15px;
+        border-radius: 2px;
+    }
+    .acu-kpi-icon { font-size: 3.5em; display: flex; align-items: center; opacity: 0.9; }
+    .acu-kpi-data { text-align: right; display: flex; flex-direction: column; justify-content: center; }
+    .acu-kpi-number { font-size: 3em; line-height: 1; margin-bottom: 5px; font-weight: normal; }
+    .acu-kpi-label { font-size: 0.75em; text-transform: uppercase; letter-spacing: 0.5px; opacity: 0.9; }
+    
+    .acu-bg-green { background-color: #27ae60; }
+    .acu-bg-red { background-color: #e74c3c; }
+    .acu-bg-yellow { background-color: #f39c12; }
+    .acu-bg-blue { background-color: #2980b9; }
+
+    .acu-panel {
+        background-color: white;
+        border: 1px solid #e0e0e0;
+        margin-bottom: 20px;
+        color: #333;
+        border-radius: 2px;
+    }
+    .acu-panel-header {
+        text-transform: uppercase;
+        font-size: 0.9em;
+        color: #555;
+        border-bottom: 1px solid #eee;
+        padding: 12px 15px;
+        background-color: transparent;
+        font-weight: 600;
+    }
+    .acu-panel table { width: 100%; border-collapse: collapse; font-size: 0.85em; }
+    .acu-panel table th { padding: 10px 15px; border-bottom: 1px solid #eee; text-align: left; text-transform: uppercase; color: #777;}
+    .acu-panel table td { padding: 10px 15px; border-bottom: 1px solid #f9f9f9; color: #333; }
+    .acu-panel table tr:hover { background-color: #f5f5f5; }
+    </style>
+    """, unsafe_allow_html=True)
+
 def acu_metric(label, value, color="blue", icon="📊"):
     bg_class = f"acu-bg-{color}"
     return f'''
