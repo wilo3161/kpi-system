@@ -199,17 +199,17 @@ def guardar_historico_diario(df_cruce, df_det, archivo_nombre, usuario, accion="
         met_san = sanitize_for_mongo(met)
         existe = existe_historico_dia(dia, "Transferencias Diarias")
         try:
-            from database.manager import eliminar_historico_dia
+            from database.manager import borrar_historico_dia
         except ImportError:
-            eliminar_historico_dia = None
+            borrar_historico_dia = None
         if accion == "eliminar":
-            if existe and eliminar_historico_dia:
-                eliminar_historico_dia(dia, "Transferencias Diarias")
+            if existe and borrar_historico_dia:
+                borrar_historico_dia(dia, "Transferencias Diarias")
             guardar_historico("dashboard_logistico", "Transferencias Diarias", pd.DataFrame(), met_san, archivo_nombre, dia, usuario)
             return True, dia, "eliminado_y_guardado"
         elif accion == "reemplazar":
-            if existe and eliminar_historico_dia:
-                eliminar_historico_dia(dia, "Transferencias Diarias")
+            if existe and borrar_historico_dia:
+                borrar_historico_dia(dia, "Transferencias Diarias")
             guardar_historico("dashboard_logistico", "Transferencias Diarias", pd.DataFrame(), met_san, archivo_nombre, dia, usuario)
             return True, dia, "reemplazado"
         else:
