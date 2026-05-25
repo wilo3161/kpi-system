@@ -709,9 +709,9 @@ def _proceso_recepcion_completo(guia_doc: dict) -> None:
         
         st.subheader("Resumen de la Recepción")
         c1, c2, c3 = st.columns(3)
-        c1.markdown(f"<div class='erp-kpi-card'><div class='kpi-icon' style='color:#3498DB'>📦</div><div class='kpi-data'><span class='kpi-label'>Esperado</span><span class='kpi-number'>{diferencias['total_esperado']}</span></div></div>", unsafe_allow_html=True)
-        c2.markdown(f"<div class='erp-kpi-card'><div class='kpi-icon' style='color:#2ECC71'>✅</div><div class='kpi-data'><span class='kpi-label'>Recibido</span><span class='kpi-number'>{diferencias['total_recibido']}</span></div></div>", unsafe_allow_html=True)
-        c3.markdown(f"<div class='erp-kpi-card'><div class='kpi-icon' style='color:#E74C3C'>⚠️</div><div class='kpi-data'><span class='kpi-label'>Diferencia</span><span class='kpi-number'>{diferencias['diferencia_neta']}</span></div></div>", unsafe_allow_html=True)
+        c1.markdown(f"<div class='acu-kpi-card acu-bg-blue'><div class='acu-kpi-icon'>📦</div><div class='acu-kpi-data'><span class='acu-kpi-number'>{diferencias['total_esperado']}</span><span class='acu-kpi-label'>Esperado</span></div></div>", unsafe_allow_html=True)
+        c2.markdown(f"<div class='acu-kpi-card acu-bg-green'><div class='acu-kpi-icon'>✅</div><div class='acu-kpi-data'><span class='acu-kpi-number'>{diferencias['total_recibido']}</span><span class='acu-kpi-label'>Recibido</span></div></div>", unsafe_allow_html=True)
+        c3.markdown(f"<div class='acu-kpi-card acu-bg-red'><div class='acu-kpi-icon'>⚠️</div><div class='acu-kpi-data'><span class='acu-kpi-number'>{diferencias['diferencia_neta']}</span><span class='acu-kpi-label'>Diferencia</span></div></div>", unsafe_allow_html=True)
         if incidencias:
             with st.expander("Ver incidencias"):
                 for inc in incidencias:
@@ -790,47 +790,8 @@ def show_recepcion_tienda():
     except:
         pass
     
-    st.markdown("""
-    <style>
-    :root {
-      --color-card-bg:          #FFFFFF;
-      --color-card-border:      #E8ECF0;
-      --color-card-shadow:      rgba(0, 0, 0, 0.08);
-      --color-card-title:       #7F8C8D;
-      --color-card-text:        #2C3E50;
-      --color-panel-header-bg:  #5C7ABA;
-      --color-panel-header-text:#FFFFFF;
-      --color-panel-bg:         #FFFFFF;
-      --color-panel-row-alt:    #F8F9FA;
-      --color-panel-border:     #DEE2E6;
-      --font-size-kpi-number:   26px;
-      --border-radius-card:     6px;
-      --card-height:            80px;
-    }
-    .erp-kpi-card {
-      background: var(--color-card-bg);
-      border: 1px solid var(--color-card-border);
-      border-radius: var(--border-radius-card);
-      box-shadow: 0 2px 6px var(--color-card-shadow);
-      padding: 16px 20px;
-      display: flex;
-      align-items: center;
-      gap: 16px;
-      height: var(--card-height);
-    }
-    .erp-kpi-card .kpi-icon { font-size: 28px; }
-    .erp-kpi-card .kpi-data { display: flex; flex-direction: column; gap: 2px; }
-    .erp-kpi-card .kpi-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--color-card-title); font-weight: 600; }
-    .erp-kpi-card .kpi-number { font-size: var(--font-size-kpi-number); font-weight: 700; color: var(--color-card-text); line-height: 1.1; }
-    
-    .erp-panel { background: var(--color-panel-bg); border: 1px solid var(--color-panel-border); border-radius: var(--border-radius-card); box-shadow: 0 2px 6px var(--color-card-shadow); overflow: hidden; margin-bottom: 15px;}
-    .erp-panel .panel-header { background-color: var(--color-panel-header-bg); color: var(--color-panel-header-text); padding: 8px 12px; display: flex; align-items: center; justify-content: space-between; font-size: 12px; font-weight: 500; }
-    .erp-panel table { width: 100%; border-collapse: collapse; font-size: 12px; }
-    .erp-panel table tr { border-bottom: 1px solid var(--color-panel-border); }
-    .erp-panel table tr:nth-child(even) { background-color: var(--color-panel-row-alt); }
-    .erp-panel table td { padding: 8px 12px; color: var(--color-card-text); vertical-align: middle; }
-    </style>
-    """, unsafe_allow_html=True)
+    from utils.ui import inject_acumatica_css
+    inject_acumatica_css()
     
     st.markdown('<div style="text-align:center;"><h1>AEROPOSTALE</h1><p>Sistema de Recepción Logística</p></div>', unsafe_allow_html=True)
     st.markdown("---")

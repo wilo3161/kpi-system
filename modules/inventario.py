@@ -54,13 +54,14 @@ def calcular_dias_inventario(df, fecha_col):
 
 def mostrar_metricas_seguras(titulo, valor):
     """Evita errores con fechas o NaNs en st.metric"""
-    if pd.isna(valor):
-        valor = "N/A"
-    elif isinstance(valor, (pd.Timestamp, datetime)):
-        valor = valor.strftime("%d/%m/%Y")
-    elif isinstance(valor, (int, float)):
-        valor = f"{valor:,.0f}"
-    st.metric(titulo, valor)
+    from utils.ui import acu_metric
+    try:
+        val_str = str(valor)
+        if isinstance(valor, float) and math.isnan(valor):
+            val_str = "0"
+        st.markdown(acu_metric(titulo, val_str, color="blue", icon="📊"), unsafe_allow_html=True)
+    except Exception as e:
+        st.markdown(acu_metric(titulo, "N/A", color="red", icon="⚠️"), unsafe_allow_html=True)
 
 # ========== PÁGINA PRINCIPAL ==========
 def show_control_inventario():
@@ -68,7 +69,9 @@ def show_control_inventario():
     from utils.backgrounds import set_module_background
 
     add_back_button(key="back_inventario")
-    show_module_header("📦 Control de Inventario", "Stock consolidado - Carga, consulta y KPIs")
+    from utils.ui import inject_acumatica_css
+    inject_acumatica_css()
+    show_module_header("📦 Control de Inventario", "Gestión de stock en tiempo real")
     set_module_background("inventario")
 
     # Estado de sesión
@@ -201,7 +204,7 @@ def show_control_inventario():
                     st.warning(f"No hay productos con {atributo} = {valor_sel}")
                 else:
                     st.markdown(f"### Resultados para {atributo} = **{valor_sel}**")
-                    st.metric("SKUs encontrados", len(df_filt))
+                    st.markdown(acu_metric("SKUs encontrados", len(df_filt), color="green", icon="🔍"), unsafe_allow_html=True)
                     if tiendas:
                         stock_agg = df_filt[tiendas].sum()
                         stock_agg = stock_agg[stock_agg > 0]

@@ -502,48 +502,8 @@ def show_generar_guias():
     show_module_header("🚚 Guías de Remisión", "Sistema logístico con trazabilidad completa")
     set_module_background("guias")
     
-    # CSS Futurista Odoo/SAP
-    st.markdown("""
-    <style>
-    :root {
-      --color-card-bg:          #FFFFFF;
-      --color-card-border:      #E8ECF0;
-      --color-card-shadow:      rgba(0, 0, 0, 0.08);
-      --color-card-title:       #7F8C8D;
-      --color-card-text:        #2C3E50;
-      --color-panel-header-bg:  #5C7ABA;
-      --color-panel-header-text:#FFFFFF;
-      --color-panel-bg:         #FFFFFF;
-      --color-panel-row-alt:    #F8F9FA;
-      --color-panel-border:     #DEE2E6;
-      --font-size-kpi-number:   26px;
-      --border-radius-card:     6px;
-      --card-height:            80px;
-    }
-    .erp-kpi-card {
-      background: var(--color-card-bg);
-      border: 1px solid var(--color-card-border);
-      border-radius: var(--border-radius-card);
-      box-shadow: 0 2px 6px var(--color-card-shadow);
-      padding: 16px 20px;
-      display: flex;
-      align-items: center;
-      gap: 16px;
-      height: var(--card-height);
-    }
-    .erp-kpi-card .kpi-icon { font-size: 28px; }
-    .erp-kpi-card .kpi-data { display: flex; flex-direction: column; gap: 2px; }
-    .erp-kpi-card .kpi-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--color-card-title); font-weight: 600; }
-    .erp-kpi-card .kpi-number { font-size: var(--font-size-kpi-number); font-weight: 700; color: var(--color-card-text); line-height: 1.1; }
-    
-    .erp-panel { background: var(--color-panel-bg); border: 1px solid var(--color-panel-border); border-radius: var(--border-radius-card); box-shadow: 0 2px 6px var(--color-card-shadow); overflow: hidden; margin-bottom: 15px;}
-    .erp-panel .panel-header { background-color: var(--color-panel-header-bg); color: var(--color-panel-header-text); padding: 8px 12px; display: flex; align-items: center; justify-content: space-between; font-size: 12px; font-weight: 500; }
-    .erp-panel table { width: 100%; border-collapse: collapse; font-size: 12px; }
-    .erp-panel table tr { border-bottom: 1px solid var(--color-panel-border); }
-    .erp-panel table tr:nth-child(even) { background-color: var(--color-panel-row-alt); }
-    .erp-panel table td { padding: 8px 12px; color: var(--color-card-text); vertical-align: middle; }
-    </style>
-    """, unsafe_allow_html=True)
+    from utils.ui import inject_acumatica_css
+    inject_acumatica_css()
 
     # Mostrar notificaciones internas
     usuario_actual = st.session_state.get("username", "")
@@ -756,10 +716,10 @@ def show_generar_guias():
             pendientes = activas - recibidas
             
             k1, k2, k3, k4 = st.columns(4)
-            k1.markdown(f"<div class='erp-kpi-card'><div class='kpi-icon' style='color:#3498DB'>🏷️</div><div class='kpi-data'><span class='kpi-label'>Total Guías</span><span class='kpi-number'>{total}</span></div></div>", unsafe_allow_html=True)
-            k2.markdown(f"<div class='erp-kpi-card'><div class='kpi-icon' style='color:#2ECC71'>⚡</div><div class='kpi-data'><span class='kpi-label'>Activas</span><span class='kpi-number'>{activas}</span></div></div>", unsafe_allow_html=True)
-            k3.markdown(f"<div class='erp-kpi-card'><div class='kpi-icon' style='color:#F39C12'>⏳</div><div class='kpi-data'><span class='kpi-label'>Pendientes</span><span class='kpi-number'>{pendientes}</span></div></div>", unsafe_allow_html=True)
-            k4.markdown(f"<div class='erp-kpi-card'><div class='kpi-icon' style='color:#9B59B6'>📦</div><div class='kpi-data'><span class='kpi-label'>Recibidas</span><span class='kpi-number'>{recibidas}</span></div></div>", unsafe_allow_html=True)
+            k1.markdown(f"<div class='acu-kpi-card acu-bg-blue'><div class='acu-kpi-icon'>🏷️</div><div class='acu-kpi-data'><span class='acu-kpi-number'>{total}</span><span class='acu-kpi-label'>Total Guías</span></div></div>", unsafe_allow_html=True)
+            k2.markdown(f"<div class='acu-kpi-card acu-bg-green'><div class='acu-kpi-icon'>⚡</div><div class='acu-kpi-data'><span class='acu-kpi-number'>{activas}</span><span class='acu-kpi-label'>Activas</span></div></div>", unsafe_allow_html=True)
+            k3.markdown(f"<div class='acu-kpi-card acu-bg-yellow'><div class='acu-kpi-icon'>⏳</div><div class='acu-kpi-data'><span class='acu-kpi-number'>{pendientes}</span><span class='acu-kpi-label'>Pendientes</span></div></div>", unsafe_allow_html=True)
+            k4.markdown(f"<div class='acu-kpi-card acu-bg-red'><div class='acu-kpi-icon'>📦</div><div class='acu-kpi-data'><span class='acu-kpi-number'>{recibidas}</span><span class='acu-kpi-label'>Recibidas</span></div></div>", unsafe_allow_html=True)
             st.write("")
             
             # Panel de Alertas de Recepción
@@ -788,15 +748,20 @@ def show_generar_guias():
                     color_icon = "✅" if estado == "CONFORME" else "⚠️"
                     
                     st.markdown(f"""
-                    <div class="erp-panel">
-                        <div class="panel-header" style="background-color: {'#66BB6A' if estado == 'CONFORME' else '#EF5350'}">
-                            <span>{color_icon} {tienda} - Transferencia: {transf}</span>
+                    <div class="acu-panel">
+                        <div class="acu-panel-header">
+                            <span>{color_icon} {tienda} - TRANSFERENCIA: {transf}</span>
                         </div>
                         <table>
                             <tr>
-                                <td><b>Esperado:</b> {esperado}</td>
-                                <td><b>Recibido:</b> {recibido}</td>
-                                <td><b>Diferencia:</b> <strong>{dif}</strong></td>
+                                <th>Esperado</th>
+                                <th>Recibido</th>
+                                <th>Diferencia</th>
+                            </tr>
+                            <tr>
+                                <td>{esperado}</td>
+                                <td>{recibido}</td>
+                                <td><strong>{dif}</strong></td>
                             </tr>
                         </table>
                     </div>

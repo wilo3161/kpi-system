@@ -56,6 +56,18 @@ def inject_css_libraries():
     </script>
     """, unsafe_allow_html=True)
 
+def acu_metric(label, value, color="blue", icon="📊"):
+    bg_class = f"acu-bg-{color}"
+    return f'''
+    <div class="acu-kpi-card {bg_class}">
+        <div class="acu-kpi-icon">{icon}</div>
+        <div class="acu-kpi-data">
+            <span class="acu-kpi-number">{value}</span>
+            <span class="acu-kpi-label">{label}</span>
+        </div>
+    </div>
+    '''
+
 def inject_global_styles():
     st.markdown("""
     <style>

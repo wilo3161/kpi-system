@@ -273,8 +273,10 @@ def transcribir_audio(audio_bytes): return transcribir_audio_central(audio_bytes
 # INTERFAZ PRINCIPAL CORREGIDA (FileUploader en formulario)
 # =============================================================================
 def mostrar_dashboard_transferencias():
+    from utils.ui import inject_acumatica_css, acu_metric
     try:
-        st.markdown("<div class='main-header'><h1 class='header-title'>📊 Dashboard de Logística</h1><div class='header-subtitle'>Análisis inteligente de distribución</div></div>", unsafe_allow_html=True)
+        inject_acumatica_css()
+        st.markdown("<div class='main-header'><h1 class='header-title'>🚚 Dashboard de Logística</h1><div class='header-subtitle'>Análisis inteligente de distribución</div></div>", unsafe_allow_html=True)
 
         tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["📂 Carga y Cruce", "📈 KPIs por Categoría", "🏪 Desglose por Tienda", "🎽 Análisis de Productos", "📅 Histórico + Forecast", "🤖 Asistente IA"])
 
@@ -369,9 +371,9 @@ def mostrar_dashboard_transferencias():
                     tot = df['PRENDAS'].sum()+df['FUNDAS'].sum()
                     st.subheader("TOTAL GENERAL")
                     st.markdown(f"<div style='text-align:center;font-size:36px;font-weight:bold;'>{tot:,}</div>", unsafe_allow_html=True)
-                    st.metric("PROMEDIO X TRANSFERENCIA", f"{tot/max(df['SECUENCIAL'].nunique(),1):,.0f}")
-                    st.metric("CATEGORÍAS ACTIVAS", f"{sum(1 for c in CATEGORIAS_LIST if df[df['CATEGORIA_FINAL']==c].shape[0] >0)}/6")
-                    st.metric("% FUNDAS", f"{df['FUNDAS'].sum()/tot*100 if tot else 0:.1f}%")
+                    st.markdown(acu_metric("PROMEDIO X TRANSFERENCIA", f"{tot/max(df['SECUENCIAL'].nunique(),1):,.0f}", color="blue", icon="📈"), unsafe_allow_html=True)
+                    st.markdown(acu_metric("CATEGORÍAS ACTIVAS", f"{sum(1 for c in CATEGORIAS_LIST if df[df['CATEGORIA_FINAL']==c].shape[0] >0)}/6", color="green", icon="✅"), unsafe_allow_html=True)
+                    st.markdown(acu_metric("% FUNDAS", f"{df['FUNDAS'].sum()/tot*100 if tot else 0:.1f}%", color="yellow", icon="🛍️"), unsafe_allow_html=True)
 
         # ==================== TAB 3 ====================
         with tab3:
@@ -388,9 +390,9 @@ def mostrar_dashboard_transferencias():
                     tU['Unidades'] = tU['Prendas']+tU['Fundas']
                     tU = tU.sort_values('Unidades', ascending=False)
                     c1,c2,c3 = st.columns(3)
-                    c1.metric("Total Tiendas", len(tU))
-                    c2.metric("Total Unidades", f"{tU['Unidades'].sum():,}")
-                    c3.metric("Total Costo", f"${tU['Costo'].sum():,.2f}")
+                    c1.markdown(acu_metric("Total Tiendas", len(tU), color="blue", icon="🏪"), unsafe_allow_html=True)
+                    c2.markdown(acu_metric("Total Unidades", f"{tU['Unidades'].sum():,}", color="green", icon="📦"), unsafe_allow_html=True)
+                    c3.markdown(acu_metric("Total Costo", f"${tU['Costo'].sum():,.2f}", color="yellow", icon="💲"), unsafe_allow_html=True)
                     st.markdown("---")
                     st.markdown("### 📊 Peso Relativo por Tienda (Treemap)")
                     if not tU.empty:
@@ -606,9 +608,10 @@ def mostrar_dashboard_transferencias():
                                 figAc.update_layout(template="plotly_dark", title="Acumulado Histórico", height=400)
                                 st.plotly_chart(figAc, use_container_width=True)
                             with ca2:
-                                st.metric("Total", f"{daily['und'].sum():,.0f}")
-                                st.metric("Días", daily['fecha'].nunique())
-                                st.metric("Promedio/Día", f"{daily['und'].sum()/max(daily['fecha'].nunique(),1):,.0f}")
+                                c1, c2, c3 = st.columns(3)
+                                c1.markdown(acu_metric("Total", f"{daily['und'].sum():,.0f}", color="blue", icon="📦"), unsafe_allow_html=True)
+                                c2.markdown(acu_metric("Días", daily['fecha'].nunique(), color="green", icon="📅"), unsafe_allow_html=True)
+                                c3.markdown(acu_metric("Promedio/Día", f"{daily['und'].sum()/max(daily['fecha'].nunique(),1):,.0f}", color="yellow", icon="⚡"), unsafe_allow_html=True)
                             with st.expander("Últimos 30 días"): st.dataframe(daily.tail(30).rename(columns={'fecha':'Fecha','und':'Unidades','acum':'Acumulado'}).sort_values('Fecha',ascending=False), use_container_width=True)
                 else: st.info("📭 Sin registros históricos.")
                 st.markdown("---")

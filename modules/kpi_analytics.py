@@ -91,6 +91,8 @@ def predecir_proximos_7_dias(model, last_row, start_date):
 # =============================================================================
 def show_kpi_analytics():
     add_back_button(key="back_kpi")
+    from utils.ui import inject_acumatica_css, acu_metric
+    inject_acumatica_css()
     show_module_header("📊 KPI Analytics", "Indicadores clave de rendimiento operacional")
 
     def kpi_color(val, meta, invert=False):
@@ -100,18 +102,17 @@ def show_kpi_analytics():
     def kpi_card(col, titulo, valor, meta, unidad="%", formula="", frecuencia=""):
         color = kpi_color(valor, meta)
         delta = valor - meta
+        bg_class = "acu-bg-green" if color == "#10b981" else ("acu-bg-yellow" if color == "#f59e0b" else "acu-bg-red")
+        icon = "✅" if color == "#10b981" else ("⚠️" if color == "#f59e0b" else "🚨")
+        
         col.markdown(f"""
-        <div style='background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-left:4px solid {color};border-radius:10px;padding:16px;margin-bottom:10px;'>
-            <div style='font-size:.75em;color:#94a3b8;margin-bottom:4px;'>{frecuencia}</div>
-            <div style='font-weight:700;color:#e2e8f0;font-size:1em;margin-bottom:8px;'>{titulo}</div>
-            <div style='font-size:2em;font-weight:800;color:{color};'>{valor:.1f}{unidad}</div>
-            <div style='font-size:.75em;color:#94a3b8;margin-top:4px;'>
-                Meta: {meta}{unidad} &nbsp;|&nbsp;
-                <span style="color:{'#10b981' if delta>=0 else '#ef4444'}">
-                    {"▲" if delta>=0 else "▼"} {abs(delta):.1f}{unidad}
-                </span>
+        <div class="acu-kpi-card {bg_class}">
+            <div class="acu-kpi-icon">{icon}</div>
+            <div class="acu-kpi-data" style="align-items: flex-end;">
+                <span class="acu-kpi-number">{valor:.1f}{unidad}</span>
+                <span class="acu-kpi-label">{titulo}</span>
+                <span style="font-size: 0.7em; margin-top: 4px; opacity: 0.85;">Meta: {meta}{unidad} | Dif: {delta:+.1f}{unidad}</span>
             </div>
-            {f"<div style='font-size:.7em;color:#64748b;margin-top:6px;font-style:italic;'>{formula}</div>" if formula else ""}
         </div>
         """, unsafe_allow_html=True)
 
@@ -311,7 +312,7 @@ def show_kpi_analytics():
                          use_container_width=True)
             total_semana = df_pred['prediccion'].sum()
             dia_pico = df_pred.loc[df_pred['prediccion'].idxmax()]
-            st.metric("Total proyectado semana", f"{total_semana:,}")
+            st.markdown(acu_metric("Total proyectado semana", f"{total_semana:,}", color="blue", icon="📊"), unsafe_allow_html=True)
             st.info(f"📌 Día pico: **{dia_pico['fecha'].strftime('%A %d/%m')}** con **{dia_pico['prediccion']:,}** unidades.")
 
     # ==================== NUEVA TAB 7: ABC ====================

@@ -147,6 +147,8 @@ def show_dashboard_kpis():
         show_module_header("📊 Dashboard KPIs", "Indicadores clave de rendimiento y predicciones")
         set_module_background("dashboard_kpis")
 
+        from utils.ui import inject_acumatica_css, acu_metric
+        inject_acumatica_css()
         st.markdown('<div class="module-content">', unsafe_allow_html=True)
 
         # Inicializar motor de KPIs
@@ -165,10 +167,10 @@ def show_dashboard_kpis():
                 tasa_faltantes = kpi_engine.tasa_faltantes(30)
                 recepciones_hoy = kpi_engine.recepciones_hoy()
 
-                col1.metric("OTIF 30 días", f"{otif:.1f}%", delta=f"{otif-95:.1f}%")
-                col2.metric("Tiempo promedio recepción", f"{tiempo_prom} hrs")
-                col3.metric("Tasa de faltantes 30d", f"{tasa_faltantes:.1f}%")
-                col4.metric("Recepciones hoy", recepciones_hoy)
+                col1.markdown(acu_metric("OTIF 30 días", f"{otif:.1f}%", color="blue", icon="🎯"), unsafe_allow_html=True)
+                col2.markdown(acu_metric("Tiempo prom. recepción", f"{tiempo_prom} hrs", color="yellow", icon="⏱️"), unsafe_allow_html=True)
+                col3.markdown(acu_metric("Tasa faltantes 30d", f"{tasa_faltantes:.1f}%", color="red", icon="📉"), unsafe_allow_html=True)
+                col4.markdown(acu_metric("Recepciones hoy", recepciones_hoy, color="green", icon="📦"), unsafe_allow_html=True)
             except Exception as e:
                 st.error(f"Error cargando KPIs: {e}")
                 logger.exception(e)
@@ -184,9 +186,9 @@ def show_dashboard_kpis():
                 facturas_conciliadas = local_db.count("reconciliacion", {"estado": "CONCILIADA"})
                 
                 c_log1, c_log2, c_fin1 = st.columns(3)
-                c_log1.metric("🚚 Guías Activas/Tránsito", guias_activas)
-                c_log2.metric("📦 Guías Recibidas", guias_recibidas)
-                c_fin1.metric("💰 Facturas Conciliadas", facturas_conciliadas)
+                c_log1.markdown(acu_metric("Guías Activas/Tránsito", guias_activas, color="blue", icon="🚚"), unsafe_allow_html=True)
+                c_log2.markdown(acu_metric("Guías Recibidas", guias_recibidas, color="green", icon="📦"), unsafe_allow_html=True)
+                c_fin1.markdown(acu_metric("Facturas Conciliadas", facturas_conciliadas, color="yellow", icon="💰"), unsafe_allow_html=True)
             except Exception as e:
                 logger.error(f"Error cargando visión global: {e}")
 
@@ -345,7 +347,7 @@ def show_dashboard_kpis():
                                  use_container_width=True)
                     total_semana = df_pred['prediccion'].sum()
                     dia_pico = df_pred.loc[df_pred['prediccion'].idxmax()]
-                    st.metric("Total proyectado semana", f"{total_semana:,}")
+                    st.markdown(acu_metric("Total proyectado semana", f"{total_semana:,}", color="blue", icon="📊"), unsafe_allow_html=True)
                     st.info(f"📌 Día pico: **{dia_pico['fecha'].strftime('%A %d/%m')}** con **{dia_pico['prediccion']:,}** unidades.")
 
         st.markdown('</div>', unsafe_allow_html=True)
