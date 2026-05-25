@@ -57,6 +57,7 @@ if PYDANTIC_AVAILABLE:
         total_unidades: int = 0; total_prendas: int = 0; total_fundas: int = 0
         transferencias_unicas: int = 0; costo_total: float = 0.0
         por_categoria: Dict[str, int] = {}; por_tipo_prenda: Dict[str, int] = {}
+        tiendas_activas_por_categoria: Dict[str, int] = {}
         por_color: Dict[str, int] = {}; por_talla: Dict[str, int] = {}; por_genero: Dict[str, int] = {}
         @field_validator('*', mode='before')
         @classmethod
@@ -65,7 +66,7 @@ if PYDANTIC_AVAILABLE:
                 try: return float(v) if '.' in v else int(v)
                 except (ValueError, TypeError): return v
             return v
-        @field_validator('por_categoria', 'por_tipo_prenda', 'por_color', 'por_talla', 'por_genero', mode='before')
+        @field_validator('por_categoria', 'por_tipo_prenda', 'tiendas_activas_por_categoria', 'por_color', 'por_talla', 'por_genero', mode='before')
         @classmethod
         def ensure_dict_of_ints(cls, v):
             if not isinstance(v, dict): return {}

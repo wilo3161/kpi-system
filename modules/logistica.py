@@ -649,17 +649,27 @@ def mostrar_dashboard_transferencias():
                             if not isinstance(met,dict): rSin+=1; continue
                             pc = met.get('por_categoria',{})
                             pt = met.get('tiendas_activas_por_categoria',{})
-                            if not isinstance(pc,dict) or not pc: rSin+=1
-                            else:
-                                for c in CATEGORIAS_LIST:
-                                    try: 
-                                        cAgg[c] += _safe_numeric(pc.get(c,0))
-                                        tAgg[c] += _safe_numeric(pt.get(c,0))
-                                    except: pass
+                            
+                            # Fallback: if 'por_categoria' is empty but we have data, we might be reading old records
+                            if not isinstance(pc,dict): pc = {}
+                            if not isinstance(pt,dict): pt = {}
+                            if not pc: rSin+=1
+                            
+                            for c in CATEGORIAS_LIST:
+                                try:
+                                    # Case insensitive key search
+                                    v_pc = next((v for k,v in pc.items() if str(k).strip().lower() == str(c).strip().lower()), 0)
+                                    v_pt = next((v for k,v in pt.items() if str(k).strip().lower() == str(c).strip().lower()), 0)
+                                    cAgg[c] += _safe_numeric(v_pc)
+                                    tAgg[c] += _safe_numeric(v_pt)
+                                except: pass
+                                
                             tP += _safe_numeric(met.get('total_prendas',0))
                             tF += _safe_numeric(met.get('total_fundas',0))
                             tU += _safe_numeric(met.get('total_unidades',0))
-                        if rSin >0: st.warning(f"⚠️ {rSin} registros sin desglose.")
+                        
+                        if rSin > 0: 
+                            st.warning(f"⚠️ {rSin} registros históricos antiguos no contienen desglose por categoría. Por favor, vuelve a procesar (Reemplazar) esos días en la pestaña 1.")
                         m1,m2,m3,m4 = st.columns(4)
                         m1.metric("📦 Unidades", f"{tU:,.0f}")
                         m2.metric("🎽 Prendas", f"{tP:,.0f}")
