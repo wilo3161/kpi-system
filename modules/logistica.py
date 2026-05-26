@@ -85,7 +85,7 @@ def _sanitize_metrics(raw_reg):
 # =============================================================================
 # PARSER DE PRODUCTOS - CLASIFICACIÓN AVANZADA
 # =============================================================================
-TALLAS_TEXTIL = ['XXS', 'XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL', '4XL', '5XL', 'XSMALL', 'SMALL', 'MEDIUM', 'LARGE', 'X-LARGE', 'XX-LARGE', 'UNICA', 'ONESZ', 'ONE ZICE', 'ONE SIZE', 'OSFA', 'XSMALL REGULAR', 'SMALL REGULAR', 'MEDIUM REGULAR', 'LARGE REGULAR', 'XLARGE REGULAR', 'XXLARGE REGULAR', 'XSMALL LONG', 'SMALL LONG', 'MEDIUM LONG', 'LARGE LONG', 'XLARGE LONG', 'XXLARGE LONG', 'XSMALL SHORT', 'SMALL SHORT', 'MEDIUM SHORT', 'LARGE SHORT', 'XLARGE SHORT', 'XXLARGE SHORT']
+TALLAS_TEXTIL = ['XXS', 'XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL', '4XL', '5XL', 'XSMALL', 'SMALL', 'MEDIUM', 'LARGE', 'X-LARGE', 'XX-LARGE', 'XLARGE', 'XXLARGE', 'UNICA', 'ONESZ', 'ONE ZICE', 'ONE SIZE', 'ONEZ', 'OSFA', 'XSMALL REGULAR', 'SMALL REGULAR', 'MEDIUM REGULAR', 'LARGE REGULAR', 'XLARGE REGULAR', 'XXLARGE REGULAR', 'XSMALL LONG', 'SMALL LONG', 'MEDIUM LONG', 'LARGE LONG', 'XLARGE LONG', 'XXLARGE LONG', 'XSMALL SHORT', 'SMALL SHORT', 'MEDIUM SHORT', 'LARGE SHORT', 'XLARGE SHORT', 'XXLARGE SHORT', '28X30', '28X32', '30X30', '30X32', '32X30', '32X32', '32X34', '34X30', '34X32', '34X34', '36X30', '36X32', '36X34', '38X32', '40X32']
 GENEROS_TEXTIL = ['AERO GUYS', 'AERO GIRLS', 'AERO KIDS', 'AERO BOYS', 'AERO MENS', 'AERO WOMENS', 'AERO LADIES', 'AERO YOUTH', 'AERO UNISEX', 'GUYS', 'GIRLS', 'KIDS', 'BOYS', 'MENS', 'WOMENS', 'LADIES', 'YOUTH', 'UNISEX', 'HOMBRE', 'MUJER', 'NINO', 'NINA']
 COLORES_TEXTIL = ['DARK BLACK', 'BLACK', 'TRUE BLACK', 'JET BLACK', 'CHARCOAL', 'GREY', 'GRAY', 'HEATHER', 'LIGHT HEATHER', 'DARK HEATHER', 'ASH', 'WHITE', 'OFF WHITE', 'CREAM', 'IVORY', 'BONE', 'BEIGE', 'KHAKI', 'SAND', 'TAN', 'NAVY', 'CADET NAVY', 'DARK NAVY', 'TRUE NAVY', 'BLUE', 'ROYAL BLUE', 'SKY BLUE', 'LIGHT BLUE', 'KENTUCKY BLUE', 'COBALT', 'CYAN', 'TRUE RED', 'RED', 'DARK RED', 'CRIMSON', 'MAROON', 'BURGUNDY', 'WINE', 'GREEN', 'OLIVE', 'MINT', 'LIME', 'FOREST GREEN', 'HUNTER GREEN', 'SAGE', 'YELLOW', 'MUSTARD', 'GOLD', 'LEMON', 'PINK', 'HOT PINK', 'LIGHT PINK', 'PRIMROSE PINK', 'ROSE', 'MAGENTA', 'FUCHSIA', 'PURPLE', 'LAVENDER', 'VIOLET', 'PLUM', 'EGGPLANT', 'ORANGE', 'PEACH', 'CORAL', 'RUST', 'BROWN', 'CHOCOLATE', 'COFFEE', 'MOCHA', 'BLEACH', 'WASHED', 'DENIM', 'INDIGO', 'CHAMBRAY', 'MULTI', 'ASSORTED']
 TIPOS_PRENDA_TEXTIL = ['TEES', 'TEE', 'T-SHIRT', 'T-SHIRTS', 'CAMISETA', 'CAMISETAS', 'CAPS', 'CAP', 'GORRA', 'GORRAS', 'HATS', 'HAT', 'WOVENS', 'WOVEN', 'SHIRT', 'SHIRTS', 'CAMISA', 'CAMISAS', 'PANTA', 'PANTALON', 'PANTALONES', 'PANTS', 'PANT', 'JOGGER', 'JOGGERS', 'SWEATPANTS', 'JEANS', 'JEAN', 'DENIM', 'SHORTS', 'SHORT', 'HOODIES', 'HOODIE', 'SWEATSHIRTS', 'SWEATSHIRT', 'BUZO', 'BUZOS', 'JACKETS', 'JACKET', 'CHAQUETA', 'CHAQUETAS', 'COAT', 'COATS', 'SWEATERS', 'SWEATER', 'SUETER', 'PULLOVER', 'POLOS', 'POLO', 'CHOMPA', 'CHOMPAS', 'SOCKS', 'SOCK', 'MEDIAS', 'CALCETINES', 'UNDERWEAR', 'BOXERS', 'BOXER', 'BRIEFS', 'PANTIES', 'BRAS', 'BRA', 'ACTIVE', 'ACTIVEWEAR', 'SPORT', 'LEGGINGS', 'LEGGING', 'SWIM', 'SWIMWEAR', 'BOARDSHORTS', 'BIKINI', 'ACCESSORIES', 'BELTS', 'BELT', 'WALLETS', 'WALLET', 'WATCHES', 'WATCH', 'BAGS', 'BAG', 'BACKPACKS', 'BACKPACK', 'MOCHILA', 'MOCHILAS', 'SHOES', 'SHOE', 'SNEAKERS', 'SNEAKER', 'ZAPATOS', 'ZAPATO', 'SANDALS', 'SANDAL', 'DRESSES', 'DRESS', 'VESTIDO', 'VESTIDOS', 'SKIRTS', 'SKIRT', 'FALDA', 'FALDAS', 'PERFUMES', 'PERFUME', 'FRAGRANCE', 'BODY SPRAY', 'COLOGNE']
@@ -131,15 +131,19 @@ def renderizar_grafico_ux(df, categoria, titulo, color_base="#1f77b4"):
         fig.update_traces(textinfo='percent+label')
     elif N <= 15:
         df_agrupado = df_agrupado.sort_values('cantidad', ascending=False)
-        fig = px.bar(df_agrupado, x=categoria, y='cantidad', title=titulo, text='cantidad', color_discrete_sequence=[color_base])
+        df_agrupado['pct'] = (df_agrupado['cantidad'] / df_agrupado['cantidad'].sum()) * 100
+        df_agrupado['text_label'] = df_agrupado.apply(lambda r: f"{int(r['cantidad'])} ({r['pct']:.1f}%)", axis=1)
+        fig = px.bar(df_agrupado, x=categoria, y='cantidad', title=titulo, text='text_label', color_discrete_sequence=[color_base])
         fig.update_traces(textposition='outside')
         fig.update_layout(xaxis={'categoryorder':'total descending'}, yaxis_title="Unidades")
     else:
         df_agrupado = df_agrupado.sort_values('cantidad', ascending=True)
+        df_agrupado['pct'] = (df_agrupado['cantidad'] / df_agrupado['cantidad'].sum()) * 100
+        df_agrupado['text_label'] = df_agrupado.apply(lambda r: f"{int(r['cantidad'])} ({r['pct']:.1f}%)", axis=1)
         alto_dinamico = max(400, N * 25)
-        fig = px.bar(df_agrupado, x='cantidad', y=categoria, orientation='h', title=titulo, text='cantidad', color_discrete_sequence=[color_base], height=alto_dinamico)
+        fig = px.bar(df_agrupado, x='text_label', y=categoria, orientation='h', title=titulo, text='text_label', color_discrete_sequence=[color_base], height=alto_dinamico)
         fig.update_traces(textposition='outside')
-        fig.update_layout(yaxis={'categoryorder':'total ascending'}, xaxis_title="Unidades")
+        fig.update_layout(yaxis={'categoryorder':'total ascending'}, xaxis_title="Unidades y %")
         
     fig.update_layout(template="plotly_dark", margin=dict(t=40, l=10, r=10, b=10))
     return fig
@@ -618,7 +622,12 @@ def mostrar_dashboard_transferencias():
                                     fig_p = renderizar_grafico_ux(df_prendas, 'producto_base', "Distribución por Producto", color_base="#EF553B")
                                     if fig_p: st.plotly_chart(fig_p, use_container_width=True)
                                 with c_b:
-                                    fig_t = renderizar_grafico_ux(df_prendas, 'talla', "Distribución por Talla", color_base="#00CC96")
+                                    if 'talla' in df_prendas.columns:
+                                        fig_tm_t = px.treemap(df_prendas, path=[px.Constant("Tallas"), 'talla'], values='cantidad', title="Peso Relativo por Talla (%)", color_discrete_sequence=px.colors.qualitative.Safe)
+                                        fig_tm_t.update_layout(template="plotly_dark", margin=dict(t=30, l=10, r=10, b=10))
+                                        st.plotly_chart(fig_tm_t, use_container_width=True)
+                                        
+                                    fig_t = renderizar_grafico_ux(df_prendas, 'talla', "Distribución por Talla (Cantidades y %)", color_base="#00CC96")
                                     if fig_t: st.plotly_chart(fig_t, use_container_width=True)
                                         
                                     fig_c = renderizar_grafico_ux(df_prendas, 'color', "Distribución por Color", color_base="#AB63FA")
@@ -710,7 +719,12 @@ def mostrar_dashboard_transferencias():
                                         fig_p_f = renderizar_grafico_ux(df_prendas_f, 'producto_base', "Distribución Histórica: Producto", color_base="#EF553B")
                                         if fig_p_f: st.plotly_chart(fig_p_f, use_container_width=True)
                                     with c2:
-                                        fig_t_f = renderizar_grafico_ux(df_prendas_f, 'talla', "Distribución Histórica: Talla", color_base="#00CC96")
+                                        if 'talla' in df_prendas_f.columns:
+                                            fig_tm_t_f = px.treemap(df_prendas_f, path=[px.Constant("Tallas"), 'talla'], values='cantidad', title="Peso Relativo Histórico: Talla (%)", color_discrete_sequence=px.colors.qualitative.Safe)
+                                            fig_tm_t_f.update_layout(template="plotly_dark", margin=dict(t=30, l=10, r=10, b=10))
+                                            st.plotly_chart(fig_tm_t_f, use_container_width=True)
+                                            
+                                        fig_t_f = renderizar_grafico_ux(df_prendas_f, 'talla', "Distribución Histórica: Talla (Cantidades y %)", color_base="#00CC96")
                                         if fig_t_f: st.plotly_chart(fig_t_f, use_container_width=True)
                                             
                                         fig_c_f = renderizar_grafico_ux(df_prendas_f, 'color', "Distribución Histórica: Color", color_base="#AB63FA")
