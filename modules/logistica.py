@@ -85,10 +85,27 @@ def _sanitize_metrics(raw_reg):
 # =============================================================================
 # PARSER DE PRODUCTOS - CLASIFICACIÓN AVANZADA
 # =============================================================================
-TALLAS_TEXTIL = ['XXS', 'XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL', 'XSMALL', 'SMALL', 'MEDIUM', 'LARGE', 'X-LARGE', 'XX-LARGE', 'UNICA', 'ONESZ', 'ONE ZICE', 'XSMALL REGULAR', 'SMALL REGULAR', 'MEDIUM REGULAR', 'LARGE REGULAR', 'XLARGE REGULAR']
-GENEROS_TEXTIL = ['AERO GUYS', 'AERO GIRLS', 'AERO KIDS', 'AERO BOYS', 'AERO MENS', 'AERO WOMENS', 'AERO LADIES', 'AERO YOUTH', 'GUYS', 'GIRLS', 'KIDS', 'BOYS', 'MENS', 'WOMENS', 'LADIES', 'YOUTH', 'UNISEX']
-COLORES_TEXTIL = ['DARK BLACK', 'BLACK', 'WHITE', 'NAVY', 'RED', 'BLUE', 'KENTUCKY BLUE', 'GREEN', 'YELLOW', 'PINK', 'PURPLE', 'ORANGE', 'BROWN', 'GREY', 'GRAY', 'HEATHER', 'CHARCOAL', 'CREAM', 'BEIGE', 'KHAKI', 'OLIVE', 'MAROON', 'BURGUNDY', 'TEAL', 'MINT', 'CORAL', 'BLEACH']
-TIPOS_PRENDA_TEXTIL = ['TEES', 'CAPS', 'WOVENS', 'PANTA', 'JEANS', 'SHORTS', 'HOODIES', 'JACKETS', 'SWEATERS', 'POLOS', 'SOCKS', 'UNDERWEAR', 'ACTIVE', 'SWIM', 'ACCESSORIES', 'BAGS', 'SHOES', 'DRESSES', 'SKIRTS']
+TALLAS_TEXTIL = ['XXS', 'XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL', '4XL', '5XL', 'XSMALL', 'SMALL', 'MEDIUM', 'LARGE', 'X-LARGE', 'XX-LARGE', 'UNICA', 'ONESZ', 'ONE ZICE', 'ONE SIZE', 'OSFA', 'XSMALL REGULAR', 'SMALL REGULAR', 'MEDIUM REGULAR', 'LARGE REGULAR', 'XLARGE REGULAR', 'XXLARGE REGULAR', 'XSMALL LONG', 'SMALL LONG', 'MEDIUM LONG', 'LARGE LONG', 'XLARGE LONG', 'XXLARGE LONG', 'XSMALL SHORT', 'SMALL SHORT', 'MEDIUM SHORT', 'LARGE SHORT', 'XLARGE SHORT', 'XXLARGE SHORT']
+GENEROS_TEXTIL = ['AERO GUYS', 'AERO GIRLS', 'AERO KIDS', 'AERO BOYS', 'AERO MENS', 'AERO WOMENS', 'AERO LADIES', 'AERO YOUTH', 'AERO UNISEX', 'GUYS', 'GIRLS', 'KIDS', 'BOYS', 'MENS', 'WOMENS', 'LADIES', 'YOUTH', 'UNISEX', 'HOMBRE', 'MUJER', 'NINO', 'NINA']
+COLORES_TEXTIL = ['DARK BLACK', 'BLACK', 'TRUE BLACK', 'JET BLACK', 'CHARCOAL', 'GREY', 'GRAY', 'HEATHER', 'LIGHT HEATHER', 'DARK HEATHER', 'ASH', 'WHITE', 'OFF WHITE', 'CREAM', 'IVORY', 'BONE', 'BEIGE', 'KHAKI', 'SAND', 'TAN', 'NAVY', 'CADET NAVY', 'DARK NAVY', 'TRUE NAVY', 'BLUE', 'ROYAL BLUE', 'SKY BLUE', 'LIGHT BLUE', 'KENTUCKY BLUE', 'COBALT', 'CYAN', 'TRUE RED', 'RED', 'DARK RED', 'CRIMSON', 'MAROON', 'BURGUNDY', 'WINE', 'GREEN', 'OLIVE', 'MINT', 'LIME', 'FOREST GREEN', 'HUNTER GREEN', 'SAGE', 'YELLOW', 'MUSTARD', 'GOLD', 'LEMON', 'PINK', 'HOT PINK', 'LIGHT PINK', 'PRIMROSE PINK', 'ROSE', 'MAGENTA', 'FUCHSIA', 'PURPLE', 'LAVENDER', 'VIOLET', 'PLUM', 'EGGPLANT', 'ORANGE', 'PEACH', 'CORAL', 'RUST', 'BROWN', 'CHOCOLATE', 'COFFEE', 'MOCHA', 'BLEACH', 'WASHED', 'DENIM', 'INDIGO', 'CHAMBRAY', 'MULTI', 'ASSORTED']
+TIPOS_PRENDA_TEXTIL = ['TEES', 'TEE', 'T-SHIRT', 'T-SHIRTS', 'CAMISETA', 'CAMISETAS', 'CAPS', 'CAP', 'GORRA', 'GORRAS', 'HATS', 'HAT', 'WOVENS', 'WOVEN', 'SHIRT', 'SHIRTS', 'CAMISA', 'CAMISAS', 'PANTA', 'PANTALON', 'PANTALONES', 'PANTS', 'PANT', 'JOGGER', 'JOGGERS', 'SWEATPANTS', 'JEANS', 'JEAN', 'DENIM', 'SHORTS', 'SHORT', 'HOODIES', 'HOODIE', 'SWEATSHIRTS', 'SWEATSHIRT', 'BUZO', 'BUZOS', 'JACKETS', 'JACKET', 'CHAQUETA', 'CHAQUETAS', 'COAT', 'COATS', 'SWEATERS', 'SWEATER', 'SUETER', 'PULLOVER', 'POLOS', 'POLO', 'CHOMPA', 'CHOMPAS', 'SOCKS', 'SOCK', 'MEDIAS', 'CALCETINES', 'UNDERWEAR', 'BOXERS', 'BOXER', 'BRIEFS', 'PANTIES', 'BRAS', 'BRA', 'ACTIVE', 'ACTIVEWEAR', 'SPORT', 'LEGGINGS', 'LEGGING', 'SWIM', 'SWIMWEAR', 'BOARDSHORTS', 'BIKINI', 'ACCESSORIES', 'BELTS', 'BELT', 'WALLETS', 'WALLET', 'WATCHES', 'WATCH', 'BAGS', 'BAG', 'BACKPACKS', 'BACKPACK', 'MOCHILA', 'MOCHILAS', 'SHOES', 'SHOE', 'SNEAKERS', 'SNEAKER', 'ZAPATOS', 'ZAPATO', 'SANDALS', 'SANDAL', 'DRESSES', 'DRESS', 'VESTIDO', 'VESTIDOS', 'SKIRTS', 'SKIRT', 'FALDA', 'FALDAS', 'PERFUMES', 'PERFUME', 'FRAGRANCE', 'BODY SPRAY', 'COLOGNE']
+
+# INICIAR DICCIONARIO ML
+try:
+    _dict_ml = list(local_db.find("ml_dictionary"))
+    _doc = _dict_ml[0] if _dict_ml else {}
+except Exception:
+    _doc = {}
+
+_tallas_full = list(set(TALLAS_TEXTIL + _doc.get("tallas", [])))
+_generos_full = list(set(GENEROS_TEXTIL + _doc.get("generos", [])))
+_colores_full = list(set(COLORES_TEXTIL + _doc.get("colores", [])))
+_tipos_full = list(set(TIPOS_PRENDA_TEXTIL + _doc.get("tipos", [])))
+
+TALLAS_SORTED = sorted(_tallas_full, key=len, reverse=True)
+GENEROS_SORTED = sorted(_generos_full, key=len, reverse=True)
+COLORES_SORTED = sorted(_colores_full, key=len, reverse=True)
+TIPOS_SORTED = sorted(_tipos_full, key=len, reverse=True)
 
 def clasificar_producto_avanzado(nombre_producto, codigo_producto=None):
     if pd.isna(nombre_producto) or not isinstance(nombre_producto, str):
@@ -117,24 +134,24 @@ def clasificar_producto_avanzado(nombre_producto, codigo_producto=None):
         producto_base = "PLASTIG BAG" if "PLASTIG BAG" in nombre_upper else "FUNDAS LENTES DE SOL"
         return producto_base, "ND", "ND", talla, tipo, codigo_base
     
-    for t in sorted(TALLAS_TEXTIL, key=len, reverse=True):
+    for t in TALLAS_SORTED:
         if re.search(r'\b' + t + r'\b', nombre_upper):
             talla = t
             nombre_upper = re.sub(r'\b' + t + r'\b', '', nombre_upper)
             break
             
-    for g in sorted(GENEROS_TEXTIL, key=len, reverse=True):
+    for g in GENEROS_SORTED:
         if re.search(r'\b' + g + r'\b', nombre_upper):
             genero = g
             break
             
-    for c in sorted(COLORES_TEXTIL, key=len, reverse=True):
+    for c in COLORES_SORTED:
         if re.search(r'\b' + c + r'\b', nombre_upper):
             color = c
             nombre_upper = re.sub(r'\b' + c + r'\b', '', nombre_upper)
             break
             
-    for tp in sorted(TIPOS_PRENDA_TEXTIL, key=len, reverse=True):
+    for tp in TIPOS_SORTED:
         if re.search(r'\b' + tp + r'\b', nombre_upper):
             tipo = tp
             break
@@ -493,33 +510,37 @@ def mostrar_dashboard_transferencias():
                             df_fundas = df_an[df_an['tipo'] == 'FUNDAS']
                             
                             if not df_prendas.empty:
-                                st.markdown("#### 👕 Prendas")
+                                st.markdown("#### 👕 Prendas y Análisis de Distribución")
                                 res_prenda = df_prendas.groupby('producto_base')['cantidad'].sum().sort_values(ascending=False).reset_index()
-                                figTipo = px.bar(res_prenda.head(20), x='cantidad', y='producto_base', orientation='h', title='Top Prendas Enviadas', color='cantidad')
+                                figTipo = px.bar(res_prenda.head(15), x='cantidad', y='producto_base', orientation='h', title='Top 15 Prendas Enviadas', color='cantidad')
+                                figTipo.update_layout(template="plotly_dark", yaxis={'categoryorder':'total ascending'})
                                 st.plotly_chart(figTipo, use_container_width=True)
                                 
-                                c_a, c_b, c_c = st.columns(3)
-                                with c_a:
-                                    if 'genero' in df_prendas.columns:
-                                        fig_g = px.pie(df_prendas, names='genero', values='cantidad', title="Por Género", hole=0.4)
-                                        fig_g.update_traces(textinfo='percent+label')
-                                        st.plotly_chart(fig_g, use_container_width=True)
-                                with c_b:
-                                    if 'talla' in df_prendas.columns:
-                                        fig_t = px.pie(df_prendas, names='talla', values='cantidad', title="Por Talla", hole=0.4)
-                                        fig_t.update_traces(textinfo='percent+label')
-                                        st.plotly_chart(fig_t, use_container_width=True)
-                                with c_c:
-                                    if 'color' in df_prendas.columns:
-                                        fig_c = px.pie(df_prendas, names='color', values='cantidad', title="Por Color", hole=0.4)
-                                        fig_c.update_traces(textinfo='percent+label')
-                                        st.plotly_chart(fig_c, use_container_width=True)
+                                st.markdown("##### 🗂️ Composición de Inventario (Género y Tipo)")
+                                if 'genero' in df_prendas.columns and 'tipo' in df_prendas.columns:
+                                    tree_df = df_prendas.groupby(['genero', 'tipo'])['cantidad'].sum().reset_index()
+                                    tree_df = tree_df[tree_df['cantidad'] > 0]
+                                    fig_tree = px.treemap(tree_df, path=[px.Constant("Prendas"), 'genero', 'tipo'], values='cantidad', color='cantidad', color_continuous_scale='Blues')
+                                    fig_tree.update_layout(template="plotly_dark")
+                                    st.plotly_chart(fig_tree, use_container_width=True)
                                 
-                                st.markdown("##### Agrupación por Grupo de Prenda")
-                                if 'tipo' in df_prendas.columns:
-                                    fig_tipo = px.pie(df_prendas, names='tipo', values='cantidad', title="Porcentaje por Grupo (Caps, Tees, Wovens, Pants, etc.)", hole=0.4)
-                                    fig_tipo.update_traces(textinfo='percent+label')
-                                    st.plotly_chart(fig_tipo, use_container_width=True)
+                                c_a, c_b = st.columns(2)
+                                with c_a:
+                                    st.markdown("##### 📏 Curva de Tallas")
+                                    if 'talla' in df_prendas.columns:
+                                        tallas_agrup = df_prendas.groupby('talla')['cantidad'].sum().reset_index()
+                                        fig_t = px.bar(tallas_agrup, x='talla', y='cantidad', text='cantidad', color='cantidad', color_continuous_scale='Teal')
+                                        fig_t.update_traces(textposition='outside')
+                                        fig_t.update_layout(template="plotly_dark", xaxis={'categoryorder':'array', 'categoryarray': ['XXS','XS','S','M','L','XL','XXL','XSMALL','SMALL','MEDIUM','LARGE','XLARGE','ONESZ']})
+                                        st.plotly_chart(fig_t, use_container_width=True)
+                                with c_b:
+                                    st.markdown("##### 🎨 Paleta de Colores (Top 10)")
+                                    if 'color' in df_prendas.columns:
+                                        colores_agrup = df_prendas.groupby('color')['cantidad'].sum().nlargest(10).reset_index()
+                                        fig_c = px.bar(colores_agrup, x='cantidad', y='color', orientation='h', text='cantidad', color='cantidad', color_continuous_scale='Sunset')
+                                        fig_c.update_traces(textposition='outside')
+                                        fig_c.update_layout(template="plotly_dark", yaxis={'categoryorder':'total ascending'})
+                                        st.plotly_chart(fig_c, use_container_width=True)
                                     
                             if not df_fundas.empty:
                                 st.markdown("---")
@@ -576,33 +597,38 @@ def mostrar_dashboard_transferencias():
                                 df_fundas_f = df_f[df_f['tipo'] == 'FUNDAS'] if 'tipo' in df_f.columns else pd.DataFrame()
                                 
                                 if not df_prendas_f.empty:
-                                    st.markdown("#### 👕 Top Prendas")
+                                    st.markdown("#### 👕 Prendas y Análisis Histórico")
                                     if 'producto_base' in df_prendas_f.columns and 'cantidad' in df_prendas_f.columns:
                                         agrupado = df_prendas_f.groupby('producto_base')['cantidad'].sum().reset_index().sort_values('cantidad', ascending=False)
-                                        fig = px.bar(agrupado.head(20), x='cantidad', y='producto_base', orientation='h', color='cantidad', color_continuous_scale='Viridis')
+                                        fig = px.bar(agrupado.head(15), x='cantidad', y='producto_base', orientation='h', color='cantidad', color_continuous_scale='Viridis', title="Top 15 Prendas")
+                                        fig.update_layout(template="plotly_dark", yaxis={'categoryorder':'total ascending'})
                                         st.plotly_chart(fig, use_container_width=True)
+                                        
+                                    st.markdown("##### 🗂️ Composición de Inventario (Género y Tipo)")
+                                    if 'genero' in df_prendas_f.columns and 'tipo' in df_prendas_f.columns:
+                                        tree_df_f = df_prendas_f.groupby(['genero', 'tipo'])['cantidad'].sum().reset_index()
+                                        tree_df_f = tree_df_f[tree_df_f['cantidad'] > 0]
+                                        fig_tree_f = px.treemap(tree_df_f, path=[px.Constant("Prendas"), 'genero', 'tipo'], values='cantidad', color='cantidad', color_continuous_scale='Blues')
+                                        fig_tree_f.update_layout(template="plotly_dark")
+                                        st.plotly_chart(fig_tree_f, use_container_width=True)
                                     
-                                    c1, c2, c3, c4 = st.columns(4)
+                                    c1, c2 = st.columns(2)
                                     with c1:
-                                        if 'genero' in df_prendas_f.columns:
-                                            fig_g = px.pie(df_prendas_f, names='genero', values='cantidad', title="Por Género")
-                                            fig_g.update_traces(textinfo='percent+label')
-                                            st.plotly_chart(fig_g, use_container_width=True)
-                                    with c2:
+                                        st.markdown("##### 📏 Curva de Tallas")
                                         if 'talla' in df_prendas_f.columns:
-                                            fig_t = px.pie(df_prendas_f, names='talla', values='cantidad', title="Por Talla")
-                                            fig_t.update_traces(textinfo='percent+label')
-                                            st.plotly_chart(fig_t, use_container_width=True)
-                                    with c3:
+                                            tallas_agrup_f = df_prendas_f.groupby('talla')['cantidad'].sum().reset_index()
+                                            fig_t_f = px.bar(tallas_agrup_f, x='talla', y='cantidad', text='cantidad', color='cantidad', color_continuous_scale='Teal')
+                                            fig_t_f.update_traces(textposition='outside')
+                                            fig_t_f.update_layout(template="plotly_dark", xaxis={'categoryorder':'array', 'categoryarray': ['XXS','XS','S','M','L','XL','XXL','XSMALL','SMALL','MEDIUM','LARGE','XLARGE','ONESZ']})
+                                            st.plotly_chart(fig_t_f, use_container_width=True)
+                                    with c2:
+                                        st.markdown("##### 🎨 Paleta de Colores (Top 10)")
                                         if 'color' in df_prendas_f.columns:
-                                            fig_c_f = px.pie(df_prendas_f, names='color', values='cantidad', title="Por Color")
-                                            fig_c_f.update_traces(textinfo='percent+label')
+                                            colores_agrup_f = df_prendas_f.groupby('color')['cantidad'].sum().nlargest(10).reset_index()
+                                            fig_c_f = px.bar(colores_agrup_f, x='cantidad', y='color', orientation='h', text='cantidad', color='cantidad', color_continuous_scale='Sunset')
+                                            fig_c_f.update_traces(textposition='outside')
+                                            fig_c_f.update_layout(template="plotly_dark", yaxis={'categoryorder':'total ascending'})
                                             st.plotly_chart(fig_c_f, use_container_width=True)
-                                    with c4:
-                                        if 'tipo' in df_prendas_f.columns:
-                                            fig_tipo_f = px.pie(df_prendas_f, names='tipo', values='cantidad', title="Por Grupo (Tipo)")
-                                            fig_tipo_f.update_traces(textinfo='percent+label')
-                                            st.plotly_chart(fig_tipo_f, use_container_width=True)
                                             
                                 if not df_fundas_f.empty:
                                     st.markdown("---")
