@@ -92,7 +92,7 @@ TIPOS_PRENDA_TEXTIL = ['TEES', 'CAPS', 'WOVENS', 'PANTA', 'JEANS', 'SHORTS', 'HO
 
 def clasificar_producto_avanzado(nombre_producto, codigo_producto=None):
     if pd.isna(nombre_producto) or not isinstance(nombre_producto, str):
-        return None, "OTROS", None, None, None
+        return None, "OTROS", None, None, "ND", None
     nombre_upper = nombre_producto.upper().strip()
     
     talla = "ND"
@@ -129,7 +129,7 @@ def clasificar_producto_avanzado(nombre_producto, codigo_producto=None):
         codigo_str = str(codigo_producto)
         codigo_base = codigo_str[:7] if len(codigo_str) >= 7 else codigo_str
 
-    return producto_base, genero, color, talla, codigo_base
+    return producto_base, genero, color, talla, tipo, codigo_base
 
 # =============================================================================
 # RENDERIZADO KPIs
@@ -462,6 +462,7 @@ def mostrar_dashboard_transferencias():
                         df_an['genero'] = [p[1] for p in parsed]
                         df_an['color'] = [p[2] for p in parsed]
                         df_an['talla'] = [p[3] for p in parsed]
+                        df_an['tipo'] = [p[4] for p in parsed]
                         
                         st.dataframe(df_an.head(20))
                         
@@ -491,6 +492,12 @@ def mostrar_dashboard_transferencias():
                                     fig_t = px.pie(df_an, names='talla', values='cantidad', title="Distribución por Talla", hole=0.4)
                                     fig_t.update_traces(textinfo='percent+label')
                                     st.plotly_chart(fig_t, use_container_width=True)
+                            
+                            st.markdown("#### Agrupación por Grupo de Prenda")
+                            if 'tipo' in df_an.columns:
+                                fig_tipo = px.pie(df_an, names='tipo', values='cantidad', title="Porcentaje por Grupo (Caps, Tees, Wovens, Pants, etc.)", hole=0.4)
+                                fig_tipo.update_traces(textinfo='percent+label')
+                                st.plotly_chart(fig_tipo, use_container_width=True)
                     else:
                         st.error("El archivo no contiene la columna 'producto'.")
                 except Exception as e:
@@ -533,7 +540,7 @@ def mostrar_dashboard_transferencias():
                                     fig = px.bar(agrupado.head(20), x='cantidad', y='producto_base', orientation='h', color='cantidad', color_continuous_scale='Viridis')
                                     st.plotly_chart(fig, use_container_width=True)
                                 
-                                c1, c2 = st.columns(2)
+                                c1, c2, c3 = st.columns(3)
                                 with c1:
                                     if 'genero' in df_f.columns:
                                         fig_g = px.pie(df_f, names='genero', values='cantidad', title="Por Género")
@@ -542,6 +549,10 @@ def mostrar_dashboard_transferencias():
                                     if 'talla' in df_f.columns:
                                         fig_t = px.pie(df_f, names='talla', values='cantidad', title="Por Talla")
                                         st.plotly_chart(fig_t, use_container_width=True)
+                                with c3:
+                                    if 'tipo' in df_f.columns:
+                                        fig_tipo_f = px.pie(df_f, names='tipo', values='cantidad', title="Por Grupo (Tipo)")
+                                        st.plotly_chart(fig_tipo_f, use_container_width=True)
                                         
                                 st.markdown("#### Detalle (Tabla Dinámica)")
                                 st.dataframe(df_f.drop(columns=['fecha_dt'], errors='ignore'))
