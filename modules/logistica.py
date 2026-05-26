@@ -493,7 +493,9 @@ def mostrar_dashboard_transferencias():
                         df_an['talla'] = [p[3] for p in parsed]
                         df_an['tipo'] = [p[4] for p in parsed]
                         
-                        st.dataframe(df_an.head(20))
+                        if st.checkbox("Mostrar Data sin procesar", value=False):
+                            st.dataframe(df_an.head(20))
+
                         
                         if st.button("💾 Guardar Análisis de Productos", type="primary"):
                             df_save = df_an.copy()
@@ -510,38 +512,47 @@ def mostrar_dashboard_transferencias():
                             df_fundas = df_an[df_an['tipo'] == 'FUNDAS']
                             
                             if not df_prendas.empty:
-                                st.markdown("#### 👕 Prendas y Análisis de Distribución")
-                                res_prenda = df_prendas.groupby('producto_base')['cantidad'].sum().sort_values(ascending=False).reset_index()
-                                figTipo = px.bar(res_prenda.head(15), x='cantidad', y='producto_base', orientation='h', title='Top 15 Prendas Enviadas', color='cantidad')
-                                figTipo.update_layout(template="plotly_dark", yaxis={'categoryorder':'total ascending'})
-                                st.plotly_chart(figTipo, use_container_width=True)
+                                st.markdown("#### 👕 Inventario Completo (Vista Ejecutiva)")
+                                res_prenda = df_prendas.groupby(['producto_base', 'tipo', 'genero', 'color', 'talla'])['cantidad'].sum().reset_index().sort_values('cantidad', ascending=False)
                                 
-                                st.markdown("##### 🗂️ Composición de Inventario (Género y Tipo)")
-                                if 'genero' in df_prendas.columns and 'tipo' in df_prendas.columns:
-                                    tree_df = df_prendas.groupby(['genero', 'tipo'])['cantidad'].sum().reset_index()
-                                    tree_df = tree_df[tree_df['cantidad'] > 0]
-                                    fig_tree = px.treemap(tree_df, path=[px.Constant("Prendas"), 'genero', 'tipo'], values='cantidad', color='cantidad', color_continuous_scale='Blues')
-                                    fig_tree.update_layout(template="plotly_dark")
-                                    st.plotly_chart(fig_tree, use_container_width=True)
+                                st.dataframe(
+                                    res_prenda,
+                                    column_config={
+                                        "cantidad": st.column_config.ProgressColumn(
+                                            "Volumen (Cant)",
+                                            help="Volumen de prendas",
+                                            format="%d",
+                                            min_value=0,
+                                            max_value=int(res_prenda['cantidad'].max()) if not res_prenda.empty else 100,
+                                        ),
+                                    },
+                                    use_container_width=True,
+                                    hide_index=True,
+                                    height=250
+                                )
+                                
+                                st.markdown("##### 🗂️ Composición Jerárquica (Sunburst: Género > Tipo > Talla)")
+                                if 'genero' in df_prendas.columns and 'tipo' in df_prendas.columns and 'talla' in df_prendas.columns:
+                                    sun_df = df_prendas.groupby(['genero', 'tipo', 'talla'])['cantidad'].sum().reset_index()
+                                    sun_df = sun_df[sun_df['cantidad'] > 0]
+                                    fig_sun = px.sunburst(sun_df, path=['genero', 'tipo', 'talla'], values='cantidad', color='cantidad', color_continuous_scale='Blues', title='Distribución Radiante')
+                                    fig_sun.update_layout(template="plotly_dark")
+                                    st.plotly_chart(fig_sun, use_container_width=True)
                                 
                                 c_a, c_b = st.columns(2)
                                 with c_a:
-                                    st.markdown("##### 📏 Curva de Tallas")
-                                    if 'talla' in df_prendas.columns:
-                                        tallas_agrup = df_prendas.groupby('talla')['cantidad'].sum().reset_index()
-                                        fig_t = px.bar(tallas_agrup, x='talla', y='cantidad', text='cantidad', color='cantidad', color_continuous_scale='Teal')
-                                        fig_t.update_traces(textposition='outside')
-                                        fig_t.update_layout(template="plotly_dark", xaxis={'categoryorder':'array', 'categoryarray': ['XXS','XS','S','M','L','XL','XXL','XSMALL','SMALL','MEDIUM','LARGE','XLARGE','ONESZ']})
-                                        st.plotly_chart(fig_t, use_container_width=True)
+                                    st.markdown("##### 🔥 Matriz de Calor (Talla vs Color)")
+                                    if 'talla' in df_prendas.columns and 'color' in df_prendas.columns:
+                                        fig_heat = px.density_heatmap(df_prendas, x='talla', y='color', z='cantidad', histfunc='sum', color_continuous_scale='Viridis', title='Concentración de Inventario')
+                                        fig_heat.update_layout(template="plotly_dark", xaxis={'categoryorder':'array', 'categoryarray': ['XXS','XS','S','M','L','XL','XXL','XSMALL','SMALL','MEDIUM','LARGE','XLARGE','ONESZ']})
+                                        st.plotly_chart(fig_heat, use_container_width=True)
                                 with c_b:
-                                    st.markdown("##### 🎨 Paleta de Colores (Top 10)")
-                                    if 'color' in df_prendas.columns:
-                                        colores_agrup = df_prendas.groupby('color')['cantidad'].sum().nlargest(10).reset_index()
-                                        fig_c = px.bar(colores_agrup, x='cantidad', y='color', orientation='h', text='cantidad', color='cantidad', color_continuous_scale='Sunset')
-                                        fig_c.update_traces(textposition='outside')
-                                        fig_c.update_layout(template="plotly_dark", yaxis={'categoryorder':'total ascending'})
-                                        st.plotly_chart(fig_c, use_container_width=True)
-                                    
+                                    st.markdown("##### 🔀 Flujo de Categorías (Sankey)")
+                                    if 'genero' in df_prendas.columns and 'tipo' in df_prendas.columns:
+                                        fig_par = px.parallel_categories(df_prendas[['genero', 'tipo', 'talla', 'cantidad']].dropna(), dimensions=['genero', 'tipo', 'talla'], color="cantidad", color_continuous_scale=px.colors.sequential.Inferno, title='Rutas de Clasificación')
+                                        fig_par.update_layout(template="plotly_dark")
+                                        st.plotly_chart(fig_par, use_container_width=True)
+                                        
                             if not df_fundas.empty:
                                 st.markdown("---")
                                 st.markdown("#### 🛍️ Fundas y Lentes de Sol")
@@ -597,38 +608,46 @@ def mostrar_dashboard_transferencias():
                                 df_fundas_f = df_f[df_f['tipo'] == 'FUNDAS'] if 'tipo' in df_f.columns else pd.DataFrame()
                                 
                                 if not df_prendas_f.empty:
-                                    st.markdown("#### 👕 Prendas y Análisis Histórico")
+                                    st.markdown("#### 👕 Inventario Histórico (Vista Ejecutiva)")
                                     if 'producto_base' in df_prendas_f.columns and 'cantidad' in df_prendas_f.columns:
-                                        agrupado = df_prendas_f.groupby('producto_base')['cantidad'].sum().reset_index().sort_values('cantidad', ascending=False)
-                                        fig = px.bar(agrupado.head(15), x='cantidad', y='producto_base', orientation='h', color='cantidad', color_continuous_scale='Viridis', title="Top 15 Prendas")
-                                        fig.update_layout(template="plotly_dark", yaxis={'categoryorder':'total ascending'})
-                                        st.plotly_chart(fig, use_container_width=True)
+                                        res_prenda_f = df_prendas_f.groupby(['producto_base', 'tipo', 'genero', 'color', 'talla'])['cantidad'].sum().reset_index().sort_values('cantidad', ascending=False)
+                                        st.dataframe(
+                                            res_prenda_f,
+                                            column_config={
+                                                "cantidad": st.column_config.ProgressColumn(
+                                                    "Volumen (Cant)",
+                                                    help="Volumen de prendas",
+                                                    format="%d",
+                                                    min_value=0,
+                                                    max_value=int(res_prenda_f['cantidad'].max()) if not res_prenda_f.empty else 100,
+                                                ),
+                                            },
+                                            use_container_width=True,
+                                            hide_index=True,
+                                            height=250
+                                        )
                                         
-                                    st.markdown("##### 🗂️ Composición de Inventario (Género y Tipo)")
-                                    if 'genero' in df_prendas_f.columns and 'tipo' in df_prendas_f.columns:
-                                        tree_df_f = df_prendas_f.groupby(['genero', 'tipo'])['cantidad'].sum().reset_index()
-                                        tree_df_f = tree_df_f[tree_df_f['cantidad'] > 0]
-                                        fig_tree_f = px.treemap(tree_df_f, path=[px.Constant("Prendas"), 'genero', 'tipo'], values='cantidad', color='cantidad', color_continuous_scale='Blues')
-                                        fig_tree_f.update_layout(template="plotly_dark")
-                                        st.plotly_chart(fig_tree_f, use_container_width=True)
+                                    st.markdown("##### 🗂️ Composición Jerárquica (Sunburst: Género > Tipo > Talla)")
+                                    if 'genero' in df_prendas_f.columns and 'tipo' in df_prendas_f.columns and 'talla' in df_prendas_f.columns:
+                                        sun_df_f = df_prendas_f.groupby(['genero', 'tipo', 'talla'])['cantidad'].sum().reset_index()
+                                        sun_df_f = sun_df_f[sun_df_f['cantidad'] > 0]
+                                        fig_sun_f = px.sunburst(sun_df_f, path=['genero', 'tipo', 'talla'], values='cantidad', color='cantidad', color_continuous_scale='Blues', title='Distribución Radiante')
+                                        fig_sun_f.update_layout(template="plotly_dark")
+                                        st.plotly_chart(fig_sun_f, use_container_width=True)
                                     
                                     c1, c2 = st.columns(2)
                                     with c1:
-                                        st.markdown("##### 📏 Curva de Tallas")
-                                        if 'talla' in df_prendas_f.columns:
-                                            tallas_agrup_f = df_prendas_f.groupby('talla')['cantidad'].sum().reset_index()
-                                            fig_t_f = px.bar(tallas_agrup_f, x='talla', y='cantidad', text='cantidad', color='cantidad', color_continuous_scale='Teal')
-                                            fig_t_f.update_traces(textposition='outside')
-                                            fig_t_f.update_layout(template="plotly_dark", xaxis={'categoryorder':'array', 'categoryarray': ['XXS','XS','S','M','L','XL','XXL','XSMALL','SMALL','MEDIUM','LARGE','XLARGE','ONESZ']})
-                                            st.plotly_chart(fig_t_f, use_container_width=True)
+                                        st.markdown("##### 🔥 Matriz de Calor (Talla vs Color)")
+                                        if 'talla' in df_prendas_f.columns and 'color' in df_prendas_f.columns:
+                                            fig_heat_f = px.density_heatmap(df_prendas_f, x='talla', y='color', z='cantidad', histfunc='sum', color_continuous_scale='Viridis', title='Concentración Histórica')
+                                            fig_heat_f.update_layout(template="plotly_dark", xaxis={'categoryorder':'array', 'categoryarray': ['XXS','XS','S','M','L','XL','XXL','XSMALL','SMALL','MEDIUM','LARGE','XLARGE','ONESZ']})
+                                            st.plotly_chart(fig_heat_f, use_container_width=True)
                                     with c2:
-                                        st.markdown("##### 🎨 Paleta de Colores (Top 10)")
-                                        if 'color' in df_prendas_f.columns:
-                                            colores_agrup_f = df_prendas_f.groupby('color')['cantidad'].sum().nlargest(10).reset_index()
-                                            fig_c_f = px.bar(colores_agrup_f, x='cantidad', y='color', orientation='h', text='cantidad', color='cantidad', color_continuous_scale='Sunset')
-                                            fig_c_f.update_traces(textposition='outside')
-                                            fig_c_f.update_layout(template="plotly_dark", yaxis={'categoryorder':'total ascending'})
-                                            st.plotly_chart(fig_c_f, use_container_width=True)
+                                        st.markdown("##### 🔀 Flujo de Categorías (Sankey)")
+                                        if 'genero' in df_prendas_f.columns and 'tipo' in df_prendas_f.columns:
+                                            fig_par_f = px.parallel_categories(df_prendas_f[['genero', 'tipo', 'talla', 'cantidad']].dropna(), dimensions=['genero', 'tipo', 'talla'], color="cantidad", color_continuous_scale=px.colors.sequential.Inferno, title='Rutas de Clasificación Histórica')
+                                            fig_par_f.update_layout(template="plotly_dark")
+                                            st.plotly_chart(fig_par_f, use_container_width=True)
                                             
                                 if not df_fundas_f.empty:
                                     st.markdown("---")
