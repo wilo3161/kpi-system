@@ -146,7 +146,7 @@ def renderizar_grafico_ux(df, categoria, titulo, color_base="#1f77b4"):
 
 def clasificar_producto_avanzado(nombre_producto, codigo_producto=None):
     if pd.isna(nombre_producto) or not isinstance(nombre_producto, str):
-        return None, "OTROS", None, None, "ND", None
+        return None, "OTROS", None, None, "ND", "OTROS", None
         
     codigo_base = None
     if codigo_producto and not pd.isna(codigo_producto):
@@ -169,7 +169,7 @@ def clasificar_producto_avanzado(nombre_producto, codigo_producto=None):
         elif "ONE ZICE" in nombre_upper or "ONESZ" in nombre_upper: talla = "ONESZ"
         
         producto_base = "PLASTIG BAG" if "PLASTIG BAG" in nombre_upper else "FUNDAS LENTES DE SOL"
-        return producto_base, "ND", "ND", talla, tipo, codigo_base
+        return producto_base, "ND", "ND", talla, tipo, "FUNDAS", codigo_base
     
     for t in TALLAS_SORTED:
         if re.search(r'\b' + t + r'\b', nombre_upper):
@@ -195,7 +195,40 @@ def clasificar_producto_avanzado(nombre_producto, codigo_producto=None):
             
     producto_base = re.sub(r'\s+', ' ', nombre_upper).strip()
 
-    return producto_base, genero, color, talla, tipo, codigo_base
+    # Normalizar Talla (quitar modificadores de fit)
+    if "REGULAR" in talla and talla != "REGULAR": talla = talla.replace("REGULAR", "").strip()
+    if "LONG" in talla and talla != "LONG": talla = talla.replace("LONG", "").strip()
+    if "SHORT" in talla and talla != "SHORT": talla = talla.replace("SHORT", "").strip()
+
+    # Mapear Grupo Macro
+    MACRO_GRUPOS = {
+        'WOVENS': ['WOVENS', 'WOVEN', 'SHIRT', 'SHIRTS', 'CAMISA', 'CAMISAS'],
+        'PANTS': ['PANTA', 'PANTALON', 'PANTALONES', 'PANTS', 'PANT', 'JOGGER', 'JOGGERS', 'SWEATPANTS', 'JEANS', 'JEAN', 'DENIM', 'BOTTOMS'],
+        'SHORTS': ['SHORTS', 'SHORT'],
+        'TEES': ['TEES', 'TEE', 'T-SHIRT', 'T-SHIRTS', 'CAMISETA', 'CAMISETAS'],
+        'POLOS': ['POLOS', 'POLO'],
+        'CAPS': ['CAPS', 'CAP', 'GORRA', 'GORRAS', 'HATS', 'HAT'],
+        'SWEATERS': ['SWEATERS', 'SWEATER', 'SUETER', 'PULLOVER', 'CHOMPA', 'CHOMPAS'],
+        'HOODIES': ['HOODIES', 'HOODIE', 'SWEATSHIRTS', 'SWEATSHIRT', 'BUZO', 'BUZOS'],
+        'JACKETS': ['JACKETS', 'JACKET', 'CHAQUETA', 'CHAQUETAS', 'COAT', 'COATS'],
+        'UNDERWEAR': ['UNDERWEAR', 'BOXERS', 'BOXER', 'BRIEFS', 'PANTIES', 'BRAS', 'BRA'],
+        'SOCKS': ['SOCKS', 'SOCK', 'MEDIAS', 'CALCETINES'],
+        'ACTIVEWEAR': ['ACTIVE', 'ACTIVEWEAR', 'SPORT', 'LEGGINGS', 'LEGGING'],
+        'SWIMWEAR': ['SWIM', 'SWIMWEAR', 'BOARDSHORTS', 'BIKINI'],
+        'ACCESSORIES': ['ACCESSORIES', 'BELTS', 'BELT', 'WALLETS', 'WALLET', 'WATCHES', 'WATCH', 'BAGS', 'BAG', 'BACKPACKS', 'BACKPACK', 'MOCHILA', 'MOCHILAS'],
+        'SHOES': ['SHOES', 'SHOE', 'SNEAKERS', 'SNEAKER', 'ZAPATOS', 'ZAPATO', 'SANDALS', 'SANDAL'],
+        'DRESSES': ['DRESSES', 'DRESS', 'VESTIDO', 'VESTIDOS', 'SKIRTS', 'SKIRT', 'FALDA', 'FALDAS'],
+        'FRAGRANCE': ['PERFUMES', 'PERFUME', 'FRAGRANCE', 'BODY SPRAY', 'COLOGNE'],
+        'FUNDAS': ['FUNDAS']
+    }
+    
+    grupo = "OTROS"
+    for g_name, g_list in MACRO_GRUPOS.items():
+        if tipo in g_list:
+            grupo = g_name
+            break
+
+    return producto_base, genero, color, talla, tipo, grupo, codigo_base
 
 # =============================================================================
 # RENDERIZADO KPIs
@@ -532,6 +565,8 @@ def mostrar_dashboard_transferencias():
                         df_an['color'] = [p[2] for p in parsed]
                         df_an['talla'] = [p[3] for p in parsed]
                         df_an['tipo'] = [p[4] for p in parsed]
+                        df_an['grupo'] = [p[5] for p in parsed]
+                        df_an['codigo_base'] = [p[6] for p in parsed]
                         
                         if st.checkbox("Mostrar Data sin procesar", value=False):
                             st.dataframe(df_an.head(20))
@@ -571,9 +606,12 @@ def mostrar_dashboard_transferencias():
                                     height=250
                                 )
                                 
-                                st.markdown("##### 🗂️ Análisis Dinámico UX (Género, Producto, Talla, Color)")
+                                st.markdown("##### 🗂️ Análisis Dinámico UX (Grupos, Género, Producto, Talla, Color)")
                                 c_a, c_b = st.columns(2)
                                 with c_a:
+                                    fig_gr = renderizar_grafico_ux(df_prendas, 'grupo', "Distribución por Grupo de Producto", color_base="#19D3F3")
+                                    if fig_gr: st.plotly_chart(fig_gr, use_container_width=True)
+                                    
                                     fig_g = renderizar_grafico_ux(df_prendas, 'genero', "Distribución por Género", color_base="#636EFA")
                                     if fig_g: st.plotly_chart(fig_g, use_container_width=True)
                                         
@@ -663,6 +701,9 @@ def mostrar_dashboard_transferencias():
                                     st.markdown("##### 🗂️ Análisis Dinámico UX Histórico")
                                     c1, c2 = st.columns(2)
                                     with c1:
+                                        fig_gr_f = renderizar_grafico_ux(df_prendas_f, 'grupo', "Distribución Histórica: Grupo", color_base="#19D3F3")
+                                        if fig_gr_f: st.plotly_chart(fig_gr_f, use_container_width=True)
+                                        
                                         fig_g_f = renderizar_grafico_ux(df_prendas_f, 'genero', "Distribución Histórica: Género", color_base="#636EFA")
                                         if fig_g_f: st.plotly_chart(fig_g_f, use_container_width=True)
                                             
