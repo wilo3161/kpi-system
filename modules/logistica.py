@@ -484,6 +484,9 @@ def mostrar_dashboard_transferencias():
                     df_an.rename(columns=lambda x: str(x).strip().lower(), inplace=True)
                     df_an.rename(columns=renames, inplace=True)
                     
+                    if "cantidad" in df_an.columns:
+                        df_an['cantidad'] = pd.to_numeric(df_an['cantidad'], errors='coerce').fillna(0)
+                        
                     if "producto" in df_an.columns:
                         st.success("Archivo cargado correctamente. Procesando productos...")
                         parsed = df_an["producto"].apply(lambda x: clasificar_producto_avanzado(x))
@@ -523,7 +526,7 @@ def mostrar_dashboard_transferencias():
                                             help="Volumen de prendas",
                                             format="%d",
                                             min_value=0,
-                                            max_value=int(res_prenda['cantidad'].max()) if not res_prenda.empty else 100,
+                                            max_value=int(res_prenda['cantidad'].max()) if not res_prenda.empty and pd.notnull(res_prenda['cantidad'].max()) else 100,
                                         ),
                                     },
                                     use_container_width=True,
@@ -619,7 +622,7 @@ def mostrar_dashboard_transferencias():
                                                     help="Volumen de prendas",
                                                     format="%d",
                                                     min_value=0,
-                                                    max_value=int(res_prenda_f['cantidad'].max()) if not res_prenda_f.empty else 100,
+                                                    max_value=int(res_prenda_f['cantidad'].max()) if not res_prenda_f.empty and pd.notnull(res_prenda_f['cantidad'].max()) else 100,
                                                 ),
                                             },
                                             use_container_width=True,
