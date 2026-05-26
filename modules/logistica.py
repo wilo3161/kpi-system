@@ -107,6 +107,43 @@ GENEROS_SORTED = sorted(_generos_full, key=len, reverse=True)
 COLORES_SORTED = sorted(_colores_full, key=len, reverse=True)
 TIPOS_SORTED = sorted(_tipos_full, key=len, reverse=True)
 
+def renderizar_grafico_ux(df, categoria, titulo, color_base="#1f77b4"):
+    """
+    Motor dinámico de gráficos basado en UX.
+    Reglas:
+    - N <= 5: Pie/Donut Chart
+    - 6 <= N <= 15: Vertical Bar Chart
+    - N >= 16: Horizontal Bar Chart con height dinámico
+    """
+    if df.empty or categoria not in df.columns:
+        return None
+        
+    df_agrupado = df.groupby(categoria)['cantidad'].sum().reset_index()
+    df_agrupado = df_agrupado[df_agrupado['cantidad'] > 0]
+    
+    if df_agrupado.empty:
+        return None
+        
+    N = len(df_agrupado[categoria].unique())
+    
+    if N <= 5:
+        fig = px.pie(df_agrupado, names=categoria, values='cantidad', title=titulo, hole=0.4, color_discrete_sequence=[color_base, '#ff7f0e', '#2ca02c', '#d62728', '#9467bd'])
+        fig.update_traces(textinfo='percent+label')
+    elif N <= 15:
+        df_agrupado = df_agrupado.sort_values('cantidad', ascending=False)
+        fig = px.bar(df_agrupado, x=categoria, y='cantidad', title=titulo, text='cantidad', color_discrete_sequence=[color_base])
+        fig.update_traces(textposition='outside')
+        fig.update_layout(xaxis={'categoryorder':'total descending'}, yaxis_title="Unidades")
+    else:
+        df_agrupado = df_agrupado.sort_values('cantidad', ascending=True)
+        alto_dinamico = max(400, N * 25)
+        fig = px.bar(df_agrupado, x='cantidad', y=categoria, orientation='h', title=titulo, text='cantidad', color_discrete_sequence=[color_base], height=alto_dinamico)
+        fig.update_traces(textposition='outside')
+        fig.update_layout(yaxis={'categoryorder':'total ascending'}, xaxis_title="Unidades")
+        
+    fig.update_layout(template="plotly_dark", margin=dict(t=40, l=10, r=10, b=10))
+    return fig
+
 def clasificar_producto_avanzado(nombre_producto, codigo_producto=None):
     if pd.isna(nombre_producto) or not isinstance(nombre_producto, str):
         return None, "OTROS", None, None, "ND", None
@@ -534,28 +571,20 @@ def mostrar_dashboard_transferencias():
                                     height=250
                                 )
                                 
-                                st.markdown("##### 🗂️ Pesos Relativos (Treemaps por Categoría)")
+                                st.markdown("##### 🗂️ Análisis Dinámico UX (Género, Producto, Talla, Color)")
                                 c_a, c_b = st.columns(2)
                                 with c_a:
-                                    if 'genero' in df_prendas.columns:
-                                        fig_tm_g = px.treemap(df_prendas, path=[px.Constant("Géneros"), 'genero'], values='cantidad', title="Peso Relativo por Género", color_discrete_sequence=px.colors.qualitative.Pastel)
-                                        fig_tm_g.update_layout(template="plotly_dark", margin=dict(t=30, l=10, r=10, b=10))
-                                        st.plotly_chart(fig_tm_g, use_container_width=True)
+                                    fig_g = renderizar_grafico_ux(df_prendas, 'genero', "Distribución por Género", color_base="#636EFA")
+                                    if fig_g: st.plotly_chart(fig_g, use_container_width=True)
                                         
-                                    if 'producto_base' in df_prendas.columns:
-                                        fig_tm_p = px.treemap(df_prendas, path=[px.Constant("Productos"), 'producto_base'], values='cantidad', title="Peso Relativo por Producto", color_discrete_sequence=px.colors.qualitative.Set3)
-                                        fig_tm_p.update_layout(template="plotly_dark", margin=dict(t=30, l=10, r=10, b=10))
-                                        st.plotly_chart(fig_tm_p, use_container_width=True)
+                                    fig_p = renderizar_grafico_ux(df_prendas, 'producto_base', "Distribución por Producto", color_base="#EF553B")
+                                    if fig_p: st.plotly_chart(fig_p, use_container_width=True)
                                 with c_b:
-                                    if 'talla' in df_prendas.columns:
-                                        fig_tm_t = px.treemap(df_prendas, path=[px.Constant("Tallas"), 'talla'], values='cantidad', title="Peso Relativo por Talla", color_discrete_sequence=px.colors.qualitative.Safe)
-                                        fig_tm_t.update_layout(template="plotly_dark", margin=dict(t=30, l=10, r=10, b=10))
-                                        st.plotly_chart(fig_tm_t, use_container_width=True)
+                                    fig_t = renderizar_grafico_ux(df_prendas, 'talla', "Distribución por Talla", color_base="#00CC96")
+                                    if fig_t: st.plotly_chart(fig_t, use_container_width=True)
                                         
-                                    if 'color' in df_prendas.columns:
-                                        fig_tm_c = px.treemap(df_prendas, path=[px.Constant("Colores"), 'color'], values='cantidad', title="Peso Relativo por Color", color_discrete_sequence=px.colors.qualitative.Vivid)
-                                        fig_tm_c.update_layout(template="plotly_dark", margin=dict(t=30, l=10, r=10, b=10))
-                                        st.plotly_chart(fig_tm_c, use_container_width=True)
+                                    fig_c = renderizar_grafico_ux(df_prendas, 'color', "Distribución por Color", color_base="#AB63FA")
+                                    if fig_c: st.plotly_chart(fig_c, use_container_width=True)
                                         
                             if not df_fundas.empty:
                                 st.markdown("---")
@@ -631,28 +660,20 @@ def mostrar_dashboard_transferencias():
                                             height=250
                                         )
                                         
-                                    st.markdown("##### 🗂️ Pesos Relativos Históricos (Treemaps por Categoría)")
+                                    st.markdown("##### 🗂️ Análisis Dinámico UX Histórico")
                                     c1, c2 = st.columns(2)
                                     with c1:
-                                        if 'genero' in df_prendas_f.columns:
-                                            fig_tm_g_f = px.treemap(df_prendas_f, path=[px.Constant("Géneros"), 'genero'], values='cantidad', title="Peso Relativo Histórico: Género", color_discrete_sequence=px.colors.qualitative.Pastel)
-                                            fig_tm_g_f.update_layout(template="plotly_dark", margin=dict(t=30, l=10, r=10, b=10))
-                                            st.plotly_chart(fig_tm_g_f, use_container_width=True)
+                                        fig_g_f = renderizar_grafico_ux(df_prendas_f, 'genero', "Distribución Histórica: Género", color_base="#636EFA")
+                                        if fig_g_f: st.plotly_chart(fig_g_f, use_container_width=True)
                                             
-                                        if 'producto_base' in df_prendas_f.columns:
-                                            fig_tm_p_f = px.treemap(df_prendas_f, path=[px.Constant("Productos"), 'producto_base'], values='cantidad', title="Peso Relativo Histórico: Producto", color_discrete_sequence=px.colors.qualitative.Set3)
-                                            fig_tm_p_f.update_layout(template="plotly_dark", margin=dict(t=30, l=10, r=10, b=10))
-                                            st.plotly_chart(fig_tm_p_f, use_container_width=True)
+                                        fig_p_f = renderizar_grafico_ux(df_prendas_f, 'producto_base', "Distribución Histórica: Producto", color_base="#EF553B")
+                                        if fig_p_f: st.plotly_chart(fig_p_f, use_container_width=True)
                                     with c2:
-                                        if 'talla' in df_prendas_f.columns:
-                                            fig_tm_t_f = px.treemap(df_prendas_f, path=[px.Constant("Tallas"), 'talla'], values='cantidad', title="Peso Relativo Histórico: Talla", color_discrete_sequence=px.colors.qualitative.Safe)
-                                            fig_tm_t_f.update_layout(template="plotly_dark", margin=dict(t=30, l=10, r=10, b=10))
-                                            st.plotly_chart(fig_tm_t_f, use_container_width=True)
+                                        fig_t_f = renderizar_grafico_ux(df_prendas_f, 'talla', "Distribución Histórica: Talla", color_base="#00CC96")
+                                        if fig_t_f: st.plotly_chart(fig_t_f, use_container_width=True)
                                             
-                                        if 'color' in df_prendas_f.columns:
-                                            fig_tm_c_f = px.treemap(df_prendas_f, path=[px.Constant("Colores"), 'color'], values='cantidad', title="Peso Relativo Histórico: Color", color_discrete_sequence=px.colors.qualitative.Vivid)
-                                            fig_tm_c_f.update_layout(template="plotly_dark", margin=dict(t=30, l=10, r=10, b=10))
-                                            st.plotly_chart(fig_tm_c_f, use_container_width=True)
+                                        fig_c_f = renderizar_grafico_ux(df_prendas_f, 'color', "Distribución Histórica: Color", color_base="#AB63FA")
+                                        if fig_c_f: st.plotly_chart(fig_c_f, use_container_width=True)
                                             
                                 if not df_fundas_f.empty:
                                     st.markdown("---")
