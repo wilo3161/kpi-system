@@ -805,16 +805,18 @@ def mostrar_dashboard_transferencias():
                         if not dfA.empty:
                             daily = dfA.groupby('fecha')['und'].sum().sort_index().reset_index()
                             daily['acum'] = daily['und'].cumsum()
-                            ca1,ca2 = st.columns([3,1])
-                            with ca1:
-                                figAc = go.Figure(go.Scatter(x=daily['fecha'], y=daily['acum'], mode='lines+markers', fill='tozeroy', fillcolor='rgba(59,130,246,0.15)', line=dict(color='#3b82f6',width=3)))
-                                figAc.update_layout(template="plotly_dark", title="Acumulado Histórico", height=400)
-                                st.plotly_chart(figAc, use_container_width=True)
-                            with ca2:
-                                c1, c2, c3 = st.columns(3)
-                                c1.markdown(acu_metric("Total", f"{daily['und'].sum():,.0f}", color="blue", icon="📦"), unsafe_allow_html=True)
-                                c2.markdown(acu_metric("Días", daily['fecha'].nunique(), color="green", icon="📅"), unsafe_allow_html=True)
-                                c3.markdown(acu_metric("Promedio/Día", f"{daily['und'].sum()/max(daily['fecha'].nunique(),1):,.0f}", color="yellow", icon="⚡"), unsafe_allow_html=True)
+                            # KPIs Verticales (Arriba)
+                            c1, c2, c3 = st.columns(3)
+                            c1.markdown(acu_metric("Total Unidades", f"{daily['und'].sum():,.0f}", color="blue", icon="📦"), unsafe_allow_html=True)
+                            c2.markdown(acu_metric("Días Procesados", daily['fecha'].nunique(), color="green", icon="📅"), unsafe_allow_html=True)
+                            c3.markdown(acu_metric("Promedio/Día", f"{daily['und'].sum()/max(daily['fecha'].nunique(),1):,.0f}", color="yellow", icon="⚡"), unsafe_allow_html=True)
+                            
+                            st.write("") # Espaciador
+                            
+                            # Gráfico (Abajo, ancho completo)
+                            figAc = go.Figure(go.Scatter(x=daily['fecha'], y=daily['acum'], mode='lines+markers', fill='tozeroy', fillcolor='rgba(59,130,246,0.15)', line=dict(color='#3b82f6',width=3)))
+                            figAc.update_layout(template="plotly_dark", title="Acumulado Histórico (Evolución)", height=400)
+                            st.plotly_chart(figAc, use_container_width=True)
                             with st.expander("Últimos 30 días"): st.dataframe(daily.tail(30).rename(columns={'fecha':'Fecha','und':'Unidades','acum':'Acumulado'}).sort_values('Fecha',ascending=False), use_container_width=True)
                 else: st.info("📭 Sin registros históricos.")
                 st.markdown("---")
