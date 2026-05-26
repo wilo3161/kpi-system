@@ -534,27 +534,28 @@ def mostrar_dashboard_transferencias():
                                     height=250
                                 )
                                 
-                                st.markdown("##### 🗂️ Composición Jerárquica (Sunburst: Género > Tipo > Talla)")
-                                if 'genero' in df_prendas.columns and 'tipo' in df_prendas.columns and 'talla' in df_prendas.columns:
-                                    sun_df = df_prendas.groupby(['genero', 'tipo', 'talla'])['cantidad'].sum().reset_index()
-                                    sun_df = sun_df[sun_df['cantidad'] > 0]
-                                    fig_sun = px.sunburst(sun_df, path=['genero', 'tipo', 'talla'], values='cantidad', color='cantidad', color_continuous_scale='Blues', title='Distribución Radiante')
-                                    fig_sun.update_layout(template="plotly_dark")
-                                    st.plotly_chart(fig_sun, use_container_width=True)
-                                
+                                st.markdown("##### 🗂️ Pesos Relativos (Treemaps por Categoría)")
                                 c_a, c_b = st.columns(2)
                                 with c_a:
-                                    st.markdown("##### 🔥 Matriz de Calor (Talla vs Color)")
-                                    if 'talla' in df_prendas.columns and 'color' in df_prendas.columns:
-                                        fig_heat = px.density_heatmap(df_prendas, x='talla', y='color', z='cantidad', histfunc='sum', color_continuous_scale='Viridis', title='Concentración de Inventario')
-                                        fig_heat.update_layout(template="plotly_dark", xaxis={'categoryorder':'array', 'categoryarray': ['XXS','XS','S','M','L','XL','XXL','XSMALL','SMALL','MEDIUM','LARGE','XLARGE','ONESZ']})
-                                        st.plotly_chart(fig_heat, use_container_width=True)
+                                    if 'genero' in df_prendas.columns:
+                                        fig_tm_g = px.treemap(df_prendas, path=[px.Constant("Géneros"), 'genero'], values='cantidad', title="Peso Relativo por Género", color_discrete_sequence=px.colors.qualitative.Pastel)
+                                        fig_tm_g.update_layout(template="plotly_dark", margin=dict(t=30, l=10, r=10, b=10))
+                                        st.plotly_chart(fig_tm_g, use_container_width=True)
+                                        
+                                    if 'producto_base' in df_prendas.columns:
+                                        fig_tm_p = px.treemap(df_prendas, path=[px.Constant("Productos"), 'producto_base'], values='cantidad', title="Peso Relativo por Producto", color_discrete_sequence=px.colors.qualitative.Set3)
+                                        fig_tm_p.update_layout(template="plotly_dark", margin=dict(t=30, l=10, r=10, b=10))
+                                        st.plotly_chart(fig_tm_p, use_container_width=True)
                                 with c_b:
-                                    st.markdown("##### 🔀 Flujo de Categorías (Sankey)")
-                                    if 'genero' in df_prendas.columns and 'tipo' in df_prendas.columns:
-                                        fig_par = px.parallel_categories(df_prendas[['genero', 'tipo', 'talla', 'cantidad']].dropna(), dimensions=['genero', 'tipo', 'talla'], color="cantidad", color_continuous_scale=px.colors.sequential.Inferno, title='Rutas de Clasificación')
-                                        fig_par.update_layout(template="plotly_dark")
-                                        st.plotly_chart(fig_par, use_container_width=True)
+                                    if 'talla' in df_prendas.columns:
+                                        fig_tm_t = px.treemap(df_prendas, path=[px.Constant("Tallas"), 'talla'], values='cantidad', title="Peso Relativo por Talla", color_discrete_sequence=px.colors.qualitative.Safe)
+                                        fig_tm_t.update_layout(template="plotly_dark", margin=dict(t=30, l=10, r=10, b=10))
+                                        st.plotly_chart(fig_tm_t, use_container_width=True)
+                                        
+                                    if 'color' in df_prendas.columns:
+                                        fig_tm_c = px.treemap(df_prendas, path=[px.Constant("Colores"), 'color'], values='cantidad', title="Peso Relativo por Color", color_discrete_sequence=px.colors.qualitative.Vivid)
+                                        fig_tm_c.update_layout(template="plotly_dark", margin=dict(t=30, l=10, r=10, b=10))
+                                        st.plotly_chart(fig_tm_c, use_container_width=True)
                                         
                             if not df_fundas.empty:
                                 st.markdown("---")
@@ -630,27 +631,28 @@ def mostrar_dashboard_transferencias():
                                             height=250
                                         )
                                         
-                                    st.markdown("##### 🗂️ Composición Jerárquica (Sunburst: Género > Tipo > Talla)")
-                                    if 'genero' in df_prendas_f.columns and 'tipo' in df_prendas_f.columns and 'talla' in df_prendas_f.columns:
-                                        sun_df_f = df_prendas_f.groupby(['genero', 'tipo', 'talla'])['cantidad'].sum().reset_index()
-                                        sun_df_f = sun_df_f[sun_df_f['cantidad'] > 0]
-                                        fig_sun_f = px.sunburst(sun_df_f, path=['genero', 'tipo', 'talla'], values='cantidad', color='cantidad', color_continuous_scale='Blues', title='Distribución Radiante')
-                                        fig_sun_f.update_layout(template="plotly_dark")
-                                        st.plotly_chart(fig_sun_f, use_container_width=True)
-                                    
+                                    st.markdown("##### 🗂️ Pesos Relativos Históricos (Treemaps por Categoría)")
                                     c1, c2 = st.columns(2)
                                     with c1:
-                                        st.markdown("##### 🔥 Matriz de Calor (Talla vs Color)")
-                                        if 'talla' in df_prendas_f.columns and 'color' in df_prendas_f.columns:
-                                            fig_heat_f = px.density_heatmap(df_prendas_f, x='talla', y='color', z='cantidad', histfunc='sum', color_continuous_scale='Viridis', title='Concentración Histórica')
-                                            fig_heat_f.update_layout(template="plotly_dark", xaxis={'categoryorder':'array', 'categoryarray': ['XXS','XS','S','M','L','XL','XXL','XSMALL','SMALL','MEDIUM','LARGE','XLARGE','ONESZ']})
-                                            st.plotly_chart(fig_heat_f, use_container_width=True)
+                                        if 'genero' in df_prendas_f.columns:
+                                            fig_tm_g_f = px.treemap(df_prendas_f, path=[px.Constant("Géneros"), 'genero'], values='cantidad', title="Peso Relativo Histórico: Género", color_discrete_sequence=px.colors.qualitative.Pastel)
+                                            fig_tm_g_f.update_layout(template="plotly_dark", margin=dict(t=30, l=10, r=10, b=10))
+                                            st.plotly_chart(fig_tm_g_f, use_container_width=True)
+                                            
+                                        if 'producto_base' in df_prendas_f.columns:
+                                            fig_tm_p_f = px.treemap(df_prendas_f, path=[px.Constant("Productos"), 'producto_base'], values='cantidad', title="Peso Relativo Histórico: Producto", color_discrete_sequence=px.colors.qualitative.Set3)
+                                            fig_tm_p_f.update_layout(template="plotly_dark", margin=dict(t=30, l=10, r=10, b=10))
+                                            st.plotly_chart(fig_tm_p_f, use_container_width=True)
                                     with c2:
-                                        st.markdown("##### 🔀 Flujo de Categorías (Sankey)")
-                                        if 'genero' in df_prendas_f.columns and 'tipo' in df_prendas_f.columns:
-                                            fig_par_f = px.parallel_categories(df_prendas_f[['genero', 'tipo', 'talla', 'cantidad']].dropna(), dimensions=['genero', 'tipo', 'talla'], color="cantidad", color_continuous_scale=px.colors.sequential.Inferno, title='Rutas de Clasificación Histórica')
-                                            fig_par_f.update_layout(template="plotly_dark")
-                                            st.plotly_chart(fig_par_f, use_container_width=True)
+                                        if 'talla' in df_prendas_f.columns:
+                                            fig_tm_t_f = px.treemap(df_prendas_f, path=[px.Constant("Tallas"), 'talla'], values='cantidad', title="Peso Relativo Histórico: Talla", color_discrete_sequence=px.colors.qualitative.Safe)
+                                            fig_tm_t_f.update_layout(template="plotly_dark", margin=dict(t=30, l=10, r=10, b=10))
+                                            st.plotly_chart(fig_tm_t_f, use_container_width=True)
+                                            
+                                        if 'color' in df_prendas_f.columns:
+                                            fig_tm_c_f = px.treemap(df_prendas_f, path=[px.Constant("Colores"), 'color'], values='cantidad', title="Peso Relativo Histórico: Color", color_discrete_sequence=px.colors.qualitative.Vivid)
+                                            fig_tm_c_f.update_layout(template="plotly_dark", margin=dict(t=30, l=10, r=10, b=10))
+                                            st.plotly_chart(fig_tm_c_f, use_container_width=True)
                                             
                                 if not df_fundas_f.empty:
                                     st.markdown("---")
