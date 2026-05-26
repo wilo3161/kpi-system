@@ -165,14 +165,19 @@ def clasificar_producto_avanzado(nombre_producto, codigo_producto=None):
     tipo = "ND"
     
     # REGLA ESPECIAL: FUNDAS Y LENTES DE SOL
-    if "PLASTIG BAG" in nombre_upper or "FUNDAS LENTES DE SOL" in nombre_upper:
+    if "BAG" in nombre_upper or "FUNDAS" in nombre_upper or "PLASTIG" in nombre_upper:
         tipo = "FUNDAS"
+        talla = "ONESZ"
         if "SMALL" in nombre_upper: talla = "SMALL"
         elif "MEDIUM" in nombre_upper: talla = "MEDIUM"
         elif "LARGE" in nombre_upper: talla = "LARGE"
-        elif "ONE ZICE" in nombre_upper or "ONESZ" in nombre_upper: talla = "ONESZ"
+        elif "ONE" in nombre_upper or "ONESZ" in nombre_upper or "ONEZ" in nombre_upper: talla = "ONESZ"
         
-        producto_base = "PLASTIG BAG" if "PLASTIG BAG" in nombre_upper else "FUNDAS LENTES DE SOL"
+        if "LENTES" in nombre_upper or "LENTE" in nombre_upper or "SUNGLASSES" in nombre_upper:
+            producto_base = "FUNDAS LENTES DE SOL"
+        else:
+            producto_base = "AERO PLASTIC BAG"
+            
         return producto_base, "ND", "ND", talla, tipo, "FUNDAS", codigo_base
     
     for t in TALLAS_SORTED:
