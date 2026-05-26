@@ -639,19 +639,17 @@ def mostrar_dashboard_transferencias():
                                     if fig_c: st.plotly_chart(fig_c, use_container_width=True)
                                         
                             if not df_fundas.empty:
-                                st.markdown("---")
-                                st.markdown("#### 🛍️ Fundas y Lentes de Sol")
-                                res_fundas = df_fundas.groupby('producto_base')['cantidad'].sum().reset_index()
-                                f_col1, f_col2 = st.columns(2)
-                                with f_col1:
-                                    fig_f = px.pie(res_fundas, names='producto_base', values='cantidad', title="Distribución de Fundas/Lentes", hole=0.4)
-                                    fig_f.update_traces(textinfo='percent+label')
-                                    st.plotly_chart(fig_f, use_container_width=True)
-                                with f_col2:
-                                    if 'talla' in df_fundas.columns:
-                                        fig_ft = px.pie(df_fundas, names='talla', values='cantidad', title="Distribución de Tallas", hole=0.4)
-                                        fig_ft.update_traces(textinfo='percent+label')
-                                        st.plotly_chart(fig_ft, use_container_width=True)
+                                df_fundas_positivas = df_fundas[df_fundas['cantidad'] > 0]
+                                if not df_fundas_positivas.empty:
+                                    st.markdown("---")
+                                    st.markdown("#### 🛍️ Fundas y Lentes de Sol")
+                                    f_col1, f_col2 = st.columns(2)
+                                    with f_col1:
+                                        fig_f = renderizar_grafico_ux(df_fundas_positivas, 'producto_base', "Distribución de Fundas/Lentes", color_base="#FFA15A")
+                                        if fig_f: st.plotly_chart(fig_f, use_container_width=True)
+                                    with f_col2:
+                                        fig_ft = renderizar_grafico_ux(df_fundas_positivas, 'talla', "Distribución de Tallas", color_base="#00CC96")
+                                        if fig_ft: st.plotly_chart(fig_ft, use_container_width=True)
                     else:
                         st.error("El archivo no contiene la columna 'producto'.")
                 except Exception as e:
@@ -736,19 +734,17 @@ def mostrar_dashboard_transferencias():
                                         if fig_c_f: st.plotly_chart(fig_c_f, use_container_width=True)
                                             
                                 if not df_fundas_f.empty:
-                                    st.markdown("---")
-                                    st.markdown("#### 🛍️ Fundas y Lentes de Sol")
-                                    res_fundas_f = df_fundas_f.groupby('producto_base')['cantidad'].sum().reset_index()
-                                    f_col1, f_col2 = st.columns(2)
-                                    with f_col1:
-                                        fig_f = px.pie(res_fundas_f, names='producto_base', values='cantidad', title="Distribución de Fundas/Lentes")
-                                        fig_f.update_traces(textinfo='percent+label')
-                                        st.plotly_chart(fig_f, use_container_width=True)
-                                    with f_col2:
-                                        if 'talla' in df_fundas_f.columns:
-                                            fig_ft = px.pie(df_fundas_f, names='talla', values='cantidad', title="Distribución de Tallas")
-                                            fig_ft.update_traces(textinfo='percent+label')
-                                            st.plotly_chart(fig_ft, use_container_width=True)
+                                    df_fundas_f_positivas = df_fundas_f[df_fundas_f['cantidad'] > 0]
+                                    if not df_fundas_f_positivas.empty:
+                                        st.markdown("---")
+                                        st.markdown("#### 🛍️ Fundas y Lentes de Sol")
+                                        f_col1, f_col2 = st.columns(2)
+                                        with f_col1:
+                                            fig_f = renderizar_grafico_ux(df_fundas_f_positivas, 'producto_base', "Distribución Histórica: Fundas/Lentes", color_base="#FFA15A")
+                                            if fig_f: st.plotly_chart(fig_f, use_container_width=True)
+                                        with f_col2:
+                                            fig_ft_f = renderizar_grafico_ux(df_fundas_f_positivas, 'talla', "Distribución Histórica: Tallas", color_base="#00CC96")
+                                            if fig_ft_f: st.plotly_chart(fig_ft_f, use_container_width=True)
                                             
                                 st.markdown("#### Detalle (Tabla Dinámica)")
                                 st.dataframe(df_f.drop(columns=['fecha_dt'], errors='ignore'))
