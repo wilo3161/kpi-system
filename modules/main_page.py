@@ -226,8 +226,8 @@ def show_main_page():
         if rol_activo == "Administrador":
             filtered_modules.append(mod)
         elif rol_activo in ["Bodega", "Logística"]:
-            # Equipo de trabajo: solo inventario, guías y logística
-            if mod["key"] in ["inventario", "guias", "logistica"]:
+            # Equipo de trabajo: solo inventario, guías y dashboard_kpis
+            if mod["key"] in ["inventario", "guias", "dashboard_kpis"]:
                 filtered_modules.append(mod)
         elif rol_activo == "Ventas":
             # Ventas: solo KPIs (Dashboard y Analytics)

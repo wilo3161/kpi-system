@@ -588,25 +588,93 @@ def _proceso_recepcion_completo(guia_doc: dict) -> None:
     st.subheader("📋 Registro de Recepción")
     
     if items_expected:
-        # Usamos data_editor para evitar re-runs en cada cambio
-        st.info("💡 Puedes modificar las cantidades recibidas y el estado directamente en la tabla.")
-        df_edit = pd.DataFrame(items_expected)[["codigo", "estilo", "descripcion", "cantidad_esperada"]]
-        df_edit["cantidad_recibida"] = df_edit["cantidad_esperada"]
-        df_edit["estado_item"] = "CONFORME"
-        
-        # Configurar columnas para edición
-        column_config = {
-            "codigo": st.column_config.TextColumn("Código", disabled=True),
-            "estilo": st.column_config.TextColumn("Estilo", disabled=True),
-            "descripcion": st.column_config.TextColumn("Descripción", disabled=True),
-            "cantidad_esperada": st.column_config.NumberColumn("Esperado", disabled=True),
-            "cantidad_recibida": st.column_config.NumberColumn("Recibido", min_value=0, step=1),
-            "estado_item": st.column_config.SelectboxColumn("Estado", options=["CONFORME", "FALTANTE", "SOBRANTE", "DAÑADO", "MANCHA", "COSTURA", "ETIQUETA_INCORRECTA", "PRODUCTO_DIFERENTE"])
+        st.markdown("""
+        <style>
+        /* Contenedor tipo Formulario Blanco Impreso */
+        .reception-form-container {
+            background-color: #FFFFFF !important;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.15);
+            margin-bottom: 20px;
         }
+        /* Eliminar estilos oscuros por defecto en los inputs dentro del formulario */
+        .reception-form-container input, .reception-form-container select {
+            background-color: #F8FAFC !important;
+            color: #1E293B !important;
+            border: 1px solid #CBD5E1 !important;
+        }
+        </style>
+        """, unsafe_allow_html=True)
         
-        edited_df = st.data_editor(df_edit, column_config=column_config, use_container_width=True, hide_index=True, key=f"editor_{numero_guia}")
-        edicion_items = edited_df.to_dict('records')
+        st.markdown("<div class='reception-form-container'>", unsafe_allow_html=True)
+        st.markdown("""
+        <div style="text-align:center; margin-bottom: 20px; border-bottom: 2px solid #E2E8F0; padding-bottom:15px;">
+            <h3 style="color: #0F172A; margin:0; font-family: 'Bebas Neue', sans-serif; letter-spacing: 1px; font-size: 2rem;">HOJA DE RECEPCIÓN FÍSICA</h3>
+            <p style="color: #64748B; margin:0; font-size: 0.95rem;">Verifica las cantidades físicas. Usa los botones <b>+</b> o <b>-</b> para ajustes.</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+        edicion_items = []
+        estados_opciones = ["CONFORME", "FALTANTE", "SOBRANTE", "DAÑADO", "MANCHA", "COSTURA", "ETIQUETA_INCORRECTA", "PRODUCTO_DIFERENTE"]
         
+        # Headers del formulario
+        hc1, hc2, hc3, hc4, hc5 = st.columns([1.5, 3, 1, 1.5, 2])
+        hc1.markdown("<span style='color:#334155; font-weight:700;'>CÓDIGO / ESTILO</span>", unsafe_allow_html=True)
+        hc2.markdown("<span style='color:#334155; font-weight:700;'>DESCRIPCIÓN</span>", unsafe_allow_html=True)
+        hc3.markdown("<span style='color:#334155; font-weight:700;'>ESPERADO</span>", unsafe_allow_html=True)
+        hc4.markdown("<span style='color:#334155; font-weight:700;'>RECIBIDO (+/-)</span>", unsafe_allow_html=True)
+        hc5.markdown("<span style='color:#334155; font-weight:700;'>ESTADO</span>", unsafe_allow_html=True)
+        st.markdown("<hr style='margin-top:0px; margin-bottom:15px; border-color:#E2E8F0;'>", unsafe_allow_html=True)
+        
+        for i, item in enumerate(items_expected):
+            c1, c2, c3, c4, c5 = st.columns([1.5, 3, 1, 1.5, 2])
+            
+            with c1:
+                st.markdown(f"<div style='color:#0F172A; font-weight:600; font-size:1rem; margin-top:5px;'>{item.get('codigo', '')}</div><div style='color:#64748B; font-size:0.8rem;'>Estilo: {item.get('estilo', '')}</div>", unsafe_allow_html=True)
+            with c2:
+                st.markdown(f"<div style='color:#334155; font-size:0.9rem; margin-top:8px;'>{item.get('descripcion', '')}</div>", unsafe_allow_html=True)
+            
+            esp = item.get("cantidad_esperada", 1)
+            with c3:
+                st.markdown(f"<div style='color:#0F172A; font-weight:bold; font-size:1.2rem; text-align:center; margin-top:5px; background:#F1F5F9; border-radius:5px; padding:2px;'>{esp}</div>", unsafe_allow_html=True)
+            
+            with c4:
+                recibido = st.number_input(
+                    "Recibido",
+                    min_value=0,
+                    value=esp,
+                    step=1,
+                    key=f"rec_{numero_guia}_{i}",
+                    label_visibility="collapsed"
+                )
+            
+            with c5:
+                # Pre-seleccionar estado basado en diferencias matemáticas
+                def_estado = "CONFORME"
+                if recibido < esp: def_estado = "FALTANTE"
+                elif recibido > esp: def_estado = "SOBRANTE"
+                
+                estado_val = st.selectbox(
+                    "Estado",
+                    options=estados_opciones,
+                    index=estados_opciones.index(def_estado) if def_estado in estados_opciones else 0,
+                    key=f"est_{numero_guia}_{i}",
+                    label_visibility="collapsed"
+                )
+            
+            edicion_items.append({
+                "codigo": item.get("codigo"),
+                "estilo": item.get("estilo"),
+                "descripcion": item.get("descripcion"),
+                "cantidad_esperada": esp,
+                "cantidad_recibida": recibido,
+                "estado_item": estado_val
+            })
+            st.markdown("<hr style='margin-top:5px; margin-bottom:10px; opacity:0.15; border-color:#94A3B8;'>", unsafe_allow_html=True)
+            
+        st.markdown("</div>", unsafe_allow_html=True) # Cierra reception-form-container
+
         total_recibido = sum(it["cantidad_recibida"] for it in edicion_items)
         tiene_novedad = any(it["cantidad_recibida"] != it["cantidad_esperada"] or it["estado_item"] != "CONFORME" for it in edicion_items)
 
