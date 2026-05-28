@@ -529,7 +529,24 @@ def show_generar_guias():
     # =========================================================================
     with tab_nueva:
         with st.container(border=True):
-            # Se ha eliminado la inyección de JS para estilos (guia-marker-js) para prevenir conflictos con Streamlit Selectboxes
+            components.html("""
+            <script>
+            const doc = window.parent.document;
+            const markers = doc.querySelectorAll('.form-bg-white-js');
+            markers.forEach(marker => {
+                let container = marker.closest('div[data-testid="stVerticalBlock"]');
+                if (container) {
+                    container.style.setProperty("background-color", "#FFFFFF", "important");
+                    container.style.setProperty("border-radius", "15px", "important");
+                    container.style.setProperty("padding", "25px", "important");
+                    
+                    const texts = container.querySelectorAll('label p, div[data-testid="stMarkdownContainer"] p');
+                    texts.forEach(el => { el.style.setProperty("color", "#0F172A", "important"); });
+                }
+            });
+            </script>
+            """, height=0)
+            st.markdown("<div class='form-bg-white-js'></div>", unsafe_allow_html=True)
             st.markdown("""
             <div style="text-align:center; margin-bottom: 20px; border-bottom: 2px solid #CBD5E1; padding-bottom:15px;">
                 <h3 style="color: #0F172A; margin:0; font-family: 'Bebas Neue', sans-serif; letter-spacing: 1px; font-size: 2.2rem;">FORMULARIO DE NUEVA GUÍA</h3>

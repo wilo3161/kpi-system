@@ -20,7 +20,7 @@ def show_configuracion():
         show_module_header("⚙️ Configuración", "Personalización del sistema ERP")
         st.markdown('<div class="module-content">', unsafe_allow_html=True)
 
-        tab1, tab2, tab3 = st.tabs(["General", "Usuarios", "Seguridad"])
+        tab1, tab_tiendas, tab2, tab3 = st.tabs(["General", "Tiendas", "Usuarios", "Seguridad"])
 
         # =========================================================================
         # TAB 1 – CONFIGURACIÓN GENERAL (recarga dinámica)
@@ -85,6 +85,86 @@ def show_configuracion():
                     logger.exception(e)
 
         # =========================================================================
+        # TAB TIENDAS – GESTIÓN DE TIENDAS Y GENERACIÓN DE USUARIOS
+        # =========================================================================
+        with tab_tiendas:
+            st.header("Gestión de Tiendas")
+            db = get_db()
+            tiendas_docs = db.find("tiendas")
+            df_tiendas = pd.DataFrame(tiendas_docs)
+            if not df_tiendas.empty:
+                st.dataframe(df_tiendas[["Empresa", "Destino", "Nombre de Tienda", "Contacto", "Dirección", "Teléfono"]], use_container_width=True)
+            else:
+                st.info("No hay tiendas registradas.")
+            
+            with st.expander("➕ Agregar Nueva Tienda"):
+                with st.form("form_tienda"):
+                    col_t1, col_t2 = st.columns(2)
+                    with col_t1:
+                        n_empresa = st.text_input("Empresa (ej. Aeropostale)")
+                        n_origen = st.text_input("Origen (ej. MATRIZ)")
+                        n_destino = st.text_input("Ciudad/Destino (ej. QUITO)")
+                        n_nombre = st.text_input("Nombre de Tienda")
+                    with col_t2:
+                        n_contacto = st.text_input("Contacto")
+                        n_dir = st.text_input("Dirección")
+                        n_tel = st.text_input("Teléfono")
+                    
+                    if st.form_submit_button("Guardar Tienda"):
+                        if n_empresa and n_destino and n_nombre:
+                            db.insert("tiendas", {
+                                "Empresa": n_empresa,
+                                "Origen": n_origen,
+                                "Destino": n_destino,
+                                "Nombre de Tienda": n_nombre,
+                                "Contacto": n_contacto,
+                                "Dirección": n_dir,
+                                "Teléfono": n_tel
+                            })
+                            st.success(f"Tienda {n_nombre} agregada.")
+                            st.rerun()
+                        else:
+                            st.error("Campos Empresa, Ciudad y Nombre son obligatorios.")
+
+            st.divider()
+            st.subheader("Generar Usuarios de Tiendas")
+            st.write("Genera cuentas de usuario únicas para cada tienda que no tenga una.")
+            if st.button("Generar Usuarios para Tiendas", type="primary"):
+                import string
+                import random
+                import re
+                
+                users = db.find("users")
+                existing_usernames = [u.get("username") for u in users]
+                
+                generados = []
+                for t in tiendas_docs:
+                    tienda_name = t.get("Nombre de Tienda")
+                    if not tienda_name:
+                        continue
+                    clean_name = re.sub(r'[^a-zA-Z0-9]', '', tienda_name).lower()
+                    username = f"t_{clean_name}"
+                    
+                    if username not in existing_usernames:
+                        password = ''.join(random.choices(string.ascii_letters + string.digits, k=6))
+                        db.insert("users", {
+                            "username": username,
+                            "role": "Tienda",
+                            "password": hash_password(password),
+                            "name": tienda_name,
+                            "assigned_store": tienda_name,
+                            "_created": datetime.utcnow()
+                        })
+                        generados.append({"Tienda": tienda_name, "Usuario": username, "Contraseña": password})
+                        existing_usernames.append(username)
+                
+                if generados:
+                    st.success(f"Se generaron {len(generados)} usuarios nuevos. **Guarda estas contraseñas:**")
+                    st.dataframe(pd.DataFrame(generados), use_container_width=True)
+                else:
+                    st.info("Todas las tiendas ya tienen un usuario asignado.")
+
+        # =========================================================================
         # TAB 2 – GESTIÓN DE USUARIOS
         # =========================================================================
         with tab2:
@@ -93,7 +173,7 @@ def show_configuracion():
             usuarios = db.find("users")
             df_usuarios = pd.DataFrame(usuarios)
             if not df_usuarios.empty and "username" in df_usuarios.columns and "role" in df_usuarios.columns:
-                st.dataframe(df_usuarios[["username", "role"]], use_container_width=True)
+                st.dataframe(df_usuarios[["username", "role", "name"]], use_container_width=True)
             else:
                 st.info("No hay usuarios registrados.")
 

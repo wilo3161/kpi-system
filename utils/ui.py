@@ -454,9 +454,10 @@ def show_header():
     """Header minimalista compatible con el nuevo diseño."""
     col1, col2, col3 = st.columns([1, 2, 1])
     with col1:
-        if st.button("🏠 Inicio", use_container_width=True, key="__header_home__"):
-            st.session_state.current_page = "Inicio"
-            st.rerun()
+        if st.session_state.get("role") != "Tienda":
+            if st.button("🏠 Inicio", use_container_width=True, key="__header_home__"):
+                st.session_state.current_page = "Inicio"
+                st.rerun()
     with col2:
         import html
         s_user = html.escape(str(st.session_state.get('user_name', '')))

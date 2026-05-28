@@ -16,14 +16,25 @@ DESTINO_A_TIENDAS = {}
 
 def reload_stores_data():
     """Recarga los datos desde el JSON mutando las estructuras en memoria para actualizar referencias globales."""
-    if _private_data_path.exists():
-        with open(_private_data_path, "r", encoding="utf-8-sig") as f:
-            try:
-                _private_data = json.load(f)
-                TIENDAS_DATA.clear()
-                TIENDAS_DATA.extend(_private_data.get("tiendas", []))
-            except Exception:
-                pass
+    # Importación local para evitar dependencias circulares
+    from database.manager import local_db
+    
+    # Intentar cargar desde la base de datos
+    db_tiendas = local_db.find("tiendas", {})
+    if db_tiendas:
+        TIENDAS_DATA.clear()
+        # Asegurar que se limpian ObjectIds si existen y no son serializables, aunque no es necesario, solo pasamos la data
+        TIENDAS_DATA.extend(db_tiendas)
+    else:
+        # Si la base de datos está vacía, intentamos cargar del archivo (fallback)
+        if _private_data_path.exists():
+            with open(_private_data_path, "r", encoding="utf-8-sig") as f:
+                try:
+                    _private_data = json.load(f)
+                    TIENDAS_DATA.clear()
+                    TIENDAS_DATA.extend(_private_data.get("tiendas", []))
+                except Exception:
+                    pass
                 
     PRICE_CLUBS.clear()
     PRICE_CLUBS.extend([t["Nombre de Tienda"] for t in TIENDAS_DATA if "Price Club" in t["Nombre de Tienda"]])

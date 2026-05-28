@@ -29,7 +29,15 @@ def main():
         return
 
     if "current_page" not in st.session_state:
-        st.session_state.current_page = "Inicio"
+        if st.session_state.get("role") == "Tienda":
+            st.session_state.current_page = "recepcion"
+        else:
+            st.session_state.current_page = "Inicio"
+
+    # Forzar siempre a recepción si el rol es Tienda
+    if st.session_state.get("role") == "Tienda" and st.session_state.current_page != "recepcion":
+        st.session_state.current_page = "recepcion"
+        st.rerun()
 
     # Mostrar rol y página actual para depuración
     st.sidebar.info(f"👤 Rol: {st.session_state.get('role', '?')}")
