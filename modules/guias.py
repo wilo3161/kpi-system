@@ -558,6 +558,12 @@ def show_generar_guias():
                     selects.forEach(el => {
                         el.style.backgroundColor = "#FFFFFF";
                         el.style.border = "1px solid #94A3B8";
+                        el.style.color = "#0F172A";
+                    });
+                    
+                    const selectTexts = container.querySelectorAll('div[data-baseweb="select"] span');
+                    selectTexts.forEach(el => {
+                        el.style.color = "#0F172A";
                     });
                 }
             });
