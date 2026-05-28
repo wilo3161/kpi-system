@@ -437,9 +437,11 @@ def generar_acta_recepcion_pdf(guia_doc: dict, recepcion_data: dict, diferencias
     story.append(Spacer(1, 0.5*cm))
     
     # Datos generales
+    receptor_nombre = recepcion_data.get("nombre_receptor", "")
+    tienda_display = f"{guia_doc.get('tienda_destino')} - Recibe: {receptor_nombre}" if receptor_nombre else guia_doc.get('tienda_destino')
     data = [
         ["Número de Guía:", guia_doc.get("numero_guia")],
-        ["Tienda Destino:", guia_doc.get("tienda_destino")],
+        ["Tienda Destino:", tienda_display],
         ["Transferencia:", guia_doc.get("numero_transferencia")],
         ["Fecha Recepción:", recepcion_data.get("fecha_recepcion", "")[:16]],
         ["Receptor:", recepcion_data.get("usuario_recepcion", "")],
@@ -464,17 +466,21 @@ def generar_acta_recepcion_pdf(guia_doc: dict, recepcion_data: dict, diferencias
         story.append(Paragraph("Detalle de productos recibidos", style_heading))
         headers = ["Código", "Estilo", "Descripción", "Esperado", "Recibido", "Estado"]
         tbl_data = [headers]
+        style_cell = ParagraphStyle('Cell', parent=styles['Normal'], fontSize=7, leading=8)
         for it in items_received:
             tbl_data.append([
-                it.get("codigo", ""), it.get("estilo", ""), it.get("descripcion", ""),
-                str(it.get("cantidad_esperada", 0)), str(it.get("cantidad_recibida", 0)),
-                it.get("estado_item", "")
+                Paragraph(str(it.get("codigo", "")), style_cell), 
+                Paragraph(str(it.get("estilo", "")), style_cell), 
+                Paragraph(str(it.get("descripcion", "")), style_cell),
+                str(it.get("cantidad_esperada", 0)), 
+                str(it.get("cantidad_recibida", 0)),
+                Paragraph(str(it.get("estado_item", "")), style_cell)
             ])
-        t = Table(tbl_data, repeatRows=1, colWidths=[2.5*cm, 2.5*cm, 5*cm, 1.5*cm, 1.5*cm, 2*cm])
+        t = Table(tbl_data, repeatRows=1, colWidths=[2.2*cm, 1.8*cm, 7*cm, 1.6*cm, 1.6*cm, 2.5*cm])
         t.setStyle(TableStyle([
             ('BACKGROUND', (0,0), (-1,0), HexColor('#1E293B')), ('TEXTCOLOR', (0,0), (-1,0), HexColor('#FFFFFF')),
             ('GRID', (0,0), (-1,-1), 0.5, HexColor('#CBD5E1')), ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0,0), (-1,-1), 8), ('ALIGN', (0,0), (-1,-1), 'LEFT'), ('VALIGN', (0,0), (-1,-1), 'TOP')
+            ('FONTSIZE', (0,0), (-1,-1), 7), ('ALIGN', (0,0), (-1,-1), 'LEFT'), ('VALIGN', (0,0), (-1,-1), 'TOP')
         ]))
         story.append(t)
         story.append(Spacer(1, 0.5*cm))
@@ -734,6 +740,8 @@ def _proceso_recepcion_completo(guia_doc: dict) -> None:
             "estado_item": "CONFORME" if total_recibido == total_esperado else "FALTANTE",
         }]
     
+    st.markdown("---")
+    nombre_receptor = st.text_input("Nombre de quien recibe la mercadería", key=f"nom_rec_{numero_guia}")
     observaciones = st.text_area("Observaciones adicionales", key=f"obs_{numero_guia}")
     
     st.markdown("---")
@@ -763,6 +771,7 @@ def _proceso_recepcion_completo(guia_doc: dict) -> None:
         recepcion_doc = {
             "estado_recepcion": estado_recepcion, "fecha_recepcion": ahora_str,
             "usuario_recepcion": usuario, "observaciones": observaciones,
+            "nombre_receptor": nombre_receptor,
             "diferencias_detectadas": diferencias.get("tiene_diferencias", False),
             "diferencias": diferencias, "items_received": items_received, "evidencias": [],
         }
