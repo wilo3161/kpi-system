@@ -78,7 +78,10 @@ def _sanitize_metrics(raw_reg):
         return raw_reg
     clean_met = {}
     for k, v in met.items():
-        clean_met[k] = _safe_numeric(v) if isinstance(v, (dict, str, int, float)) else v
+        if isinstance(v, dict):
+            clean_met[k] = {sk: _safe_numeric(sv) for sk, sv in v.items()}
+        else:
+            clean_met[k] = _safe_numeric(v) if isinstance(v, (str, int, float)) else v
     raw_reg['metricas'] = clean_met
     return raw_reg
 
@@ -283,17 +286,23 @@ def _render_kpi_cards_historico(cat_agg: dict, total_unidades: int, tiendas_agg:
 def guardar_historico_diario(df_cruce, df_det, archivo_nombre, usuario, accion="fusionar"):
     fecha_hoy = date.today()
     fechas = df_cruce['FECHA'].unique() if 'FECHA' in df_cruce.columns and not df_cruce['FECHA'].isna().all() else [fecha_hoy]
-    for dia in fechas:
-        if pd.isna(dia): dia = fecha_hoy
-        secs = df_cruce[df_cruce['FECHA'] == dia]['SECUENCIAL'].unique() if 'FECHA' in df_cruce.columns else df_cruce['SECUENCIAL'].unique()
+    for orig_dia in fechas:
+        if pd.isna(orig_dia): 
+            dia = fecha_hoy
+            df_cruce_dia = df_cruce[df_cruce['FECHA'].isna()] if 'FECHA' in df_cruce.columns else df_cruce
+        else:
+            dia = orig_dia
+            df_cruce_dia = df_cruce[df_cruce['FECHA'] == orig_dia] if 'FECHA' in df_cruce.columns else df_cruce
+            
+        secs = df_cruce_dia['SECUENCIAL'].unique()
         det_dia = df_det[df_det['SECUENCIAL'].isin(secs)]
         prendas = det_dia[~det_dia['ES_FUNDA']]
         met = {
-            "total_unidades": _safe_int(df_cruce['PRENDAS'].sum() + df_cruce['FUNDAS'].sum()),
-            "total_prendas": _safe_int(df_cruce['PRENDAS'].sum()),
-            "total_fundas": _safe_int(df_cruce['FUNDAS'].sum()),
-            "transferencias_unicas": _safe_int(df_cruce['SECUENCIAL'].nunique()),
-            "costo_total": round(float(df_cruce['COSTO_TOTAL'].sum()), 2),
+            "total_unidades": _safe_int(df_cruce_dia['PRENDAS'].sum() + df_cruce_dia['FUNDAS'].sum()),
+            "total_prendas": _safe_int(df_cruce_dia['PRENDAS'].sum()),
+            "total_fundas": _safe_int(df_cruce_dia['FUNDAS'].sum()),
+            "transferencias_unicas": _safe_int(df_cruce_dia['SECUENCIAL'].nunique()),
+            "costo_total": round(float(df_cruce_dia['COSTO_TOTAL'].sum()), 2),
             "por_categoria": {},
             "tiendas_activas_por_categoria": {},
             "por_tipo_prenda": prendas.groupby('TIPO_PRENDA_ES')['CANTIDAD'].sum().to_dict() if not prendas.empty else {},
@@ -302,7 +311,7 @@ def guardar_historico_diario(df_cruce, df_det, archivo_nombre, usuario, accion="
             "por_genero": prendas.groupby('GENERO')['CANTIDAD'].sum().to_dict() if not prendas.empty else {}
         }
         for cat in CATEGORIAS_LIST:
-            sub = df_cruce[df_cruce['CATEGORIA_FINAL'] == cat]
+            sub = df_cruce_dia[df_cruce_dia['CATEGORIA_FINAL'] == cat]
             met['por_categoria'][cat] = _safe_int(sub['FUNDAS'].sum()) if cat == 'Fundas' and not sub.empty else (_safe_int(sub['PRENDAS'].sum()) if not sub.empty else 0)
             met['tiendas_activas_por_categoria'][cat] = int(sub['TIENDA'].nunique()) if not sub.empty else 0
         met_san = sanitize_for_mongo(met)
