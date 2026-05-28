@@ -735,9 +735,12 @@ def show_generar_guias():
             if guias_ids:
                 guias_man = local_db.find("guias", {"numero_guia": {"$in": [str(g) for g in guias_ids]}, "anulada": False})
                 if guias_man:
-                    cols_show = ["numero_guia", "tienda_destino", "fecha_emision", "estado", "bultos", "total_prendas", "usuario_genera"]
+                    for d in guias_man:
+                        d["observaciones_recepcion"] = d.get("recepcion", {}).get("observaciones", "")
+                    cols_show = ["numero_guia", "numero_transferencia", "tienda_destino", "fecha_emision", "estado", "bultos", "total_prendas", "usuario_genera", "observaciones_recepcion"]
                     cols_avail = [c for c in cols_show if any(c in d for d in guias_man)]
                     df_man = pd.DataFrame(guias_man)[cols_avail]
+                    df_man = df_man.rename(columns={"observaciones_recepcion": "observaciones de la recepcion"})
                     st.dataframe(df_man, use_container_width=True)
                     buf = io.BytesIO()
                     with pd.ExcelWriter(buf, engine="openpyxl") as w:

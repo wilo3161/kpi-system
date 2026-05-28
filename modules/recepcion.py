@@ -423,7 +423,7 @@ def generar_acta_recepcion_excel(guia_doc: dict, recepcion_data: dict, diferenci
     return output.getvalue()
 
 def generar_acta_recepcion_pdf(guia_doc: dict, recepcion_data: dict, diferencias: dict,
-                               incidencias: list, items_received: list) -> bytes:
+                               incidencias: list, items_received: list, imagen_transferencia=None) -> bytes:
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4, leftMargin=2*cm, rightMargin=2*cm,
                             topMargin=2*cm, bottomMargin=2*cm)
@@ -500,7 +500,18 @@ def generar_acta_recepcion_pdf(guia_doc: dict, recepcion_data: dict, diferencias
         for inc in incidencias:
             story.append(Paragraph(f"• <b>{inc.get('tipo')}</b>: {inc.get('descripcion')} (severidad {inc.get('severidad')})", style_normal))
         story.append(Spacer(1, 0.5*cm))
-    
+        
+    if imagen_transferencia is not None:
+        try:
+            story.append(Paragraph("Imagen de la Transferencia Firmada", style_heading))
+            imagen_transferencia.seek(0)
+            from reportlab.platypus import Image as RLImage
+            img = RLImage(imagen_transferencia, width=12*cm, height=12*cm, kind='proportional')
+            story.append(img)
+            story.append(Spacer(1, 0.5*cm))
+        except Exception as e:
+            logger.error(f"Error al agregar imagen al PDF: {e}")
+            
     story.append(Paragraph("Documento generado electrónicamente - Válido como acta de recepción", style_normal))
     doc.build(story)
     buffer.seek(0)
@@ -726,6 +737,10 @@ def _proceso_recepcion_completo(guia_doc: dict) -> None:
     observaciones = st.text_area("Observaciones adicionales", key=f"obs_{numero_guia}")
     
     st.markdown("---")
+    st.subheader("📎 Evidencia Documental")
+    imagen_transferencia = st.file_uploader("Cargar imagen de la transferencia firmada (necesario para informe)", type=["png", "jpg", "jpeg"], key=f"img_transf_{numero_guia}")
+    
+    st.markdown("---")
     confirmacion = st.checkbox("Declaro que la información ingresada es correcta y procedo a confirmar la recepción.", key=f"chk_conf_{numero_guia}")
     
     if st.button("✅ Confirmar Recepción", type="primary", use_container_width=True, disabled=not confirmacion):
@@ -801,7 +816,7 @@ def _proceso_recepcion_completo(guia_doc: dict) -> None:
             st.warning("⚠️ No se pudo generar el acta en Excel.")
             
         try:
-            pdf_bytes = generar_acta_recepcion_pdf(guia_doc, recepcion_doc, diferencias, incidencias, items_received)
+            pdf_bytes = generar_acta_recepcion_pdf(guia_doc, recepcion_doc, diferencias, incidencias, items_received, imagen_transferencia=imagen_transferencia)
         except Exception as e:
             logger.error(f"Error al generar acta PDF: {e}")
             st.warning("⚠️ No se pudo generar el acta en PDF.")
