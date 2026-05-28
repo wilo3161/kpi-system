@@ -705,6 +705,8 @@ def show_generar_guias():
         query = {}
         if rol_activo == "Tienda":
             query["tienda_destino"] = st.session_state.get("assigned_store")
+        elif rol_activo in ["Bodega", "Logística"]:
+            query["usuario_genera"] = usuario_activo
         docs = local_db.find("guias", query, sort=[("fecha", -1)], limit=500)
         if not docs:
             st.info("No hay guías registradas.")
@@ -728,11 +730,34 @@ def show_generar_guias():
             query_rec = {"recepcion.estado_recepcion": {"$exists": True}}
             if rol_activo == "Tienda":
                 query_rec["tienda_destino"] = st.session_state.get("assigned_store")
+            elif rol_activo in ["Bodega", "Logística"]:
+                query_rec["usuario_genera"] = usuario_activo
             recepciones = local_db.find("guias", query_rec, sort=[("recepcion.fecha_recepcion", -1)], limit=20)
             
             if not recepciones:
                 st.info("No hay recepciones recientes.")
             else:
+                st.markdown("""
+                <style>
+                .white-alert-panel {
+                    background-color: rgba(241, 245, 249, 0.98);
+                    border-radius: 16px;
+                    padding: 15px 20px;
+                    box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+                    border: 2px solid rgba(255,255,255,0.7);
+                    margin-bottom: 15px;
+                    color: #0F172A;
+                }
+                .white-alert-panel h4 { margin: 0 0 10px 0; color: #1E293B; font-weight: 800; border-bottom: 2px solid #CBD5E1; padding-bottom: 8px;}
+                .white-alert-panel .kpi-row { display: flex; justify-content: space-between; text-align: center; }
+                .white-alert-panel .kpi-box { background: #E2E8F0; border-radius: 8px; padding: 10px; width: 30%; border: 1px solid #CBD5E1;}
+                .white-alert-panel .kpi-box span { display: block; font-size: 0.8rem; color: #64748B; font-weight: bold; text-transform: uppercase;}
+                .white-alert-panel .kpi-box strong { font-size: 1.2rem; color: #0F172A; }
+                .white-alert-panel .kpi-box.dif-rojo { background: #FEE2E2; border-color: #FCA5A5;}
+                .white-alert-panel .kpi-box.dif-rojo strong { color: #DC2626; }
+                </style>
+                """, unsafe_allow_html=True)
+                
                 for doc in recepciones:
                     rec = doc.get("recepcion", {})
                     tienda = doc.get("tienda_destino", "Desconocida")
@@ -742,28 +767,26 @@ def show_generar_guias():
                     dif = recibido - esperado
                     
                     estado = rec.get("estado_recepcion", "N/A")
-                    color_bg = "rgba(16, 185, 129, 0.15)" if estado == "CONFORME" else "rgba(239, 68, 68, 0.15)"
-                    border_color = "#10b981" if estado == "CONFORME" else "#ef4444"
-                    
                     color_icon = "✅" if estado == "CONFORME" else "⚠️"
+                    dif_class = "dif-rojo" if dif != 0 else ""
                     
                     st.markdown(f"""
-                    <div class="acu-panel">
-                        <div class="acu-panel-header">
-                            <span>{color_icon} {tienda} - TRANSFERENCIA: {transf}</span>
+                    <div class="white-alert-panel">
+                        <h4>{color_icon} {tienda} — Transf: {transf}</h4>
+                        <div class="kpi-row">
+                            <div class="kpi-box">
+                                <span>Esperado</span>
+                                <strong>{esperado}</strong>
+                            </div>
+                            <div class="kpi-box">
+                                <span>Recibido</span>
+                                <strong>{recibido}</strong>
+                            </div>
+                            <div class="kpi-box {dif_class}">
+                                <span>Diferencia</span>
+                                <strong>{dif}</strong>
+                            </div>
                         </div>
-                        <table>
-                            <tr>
-                                <th>Esperado</th>
-                                <th>Recibido</th>
-                                <th>Diferencia</th>
-                            </tr>
-                            <tr>
-                                <td>{esperado}</td>
-                                <td>{recibido}</td>
-                                <td><strong>{dif}</strong></td>
-                            </tr>
-                        </table>
                     </div>
                     """, unsafe_allow_html=True)
                     

@@ -590,8 +590,8 @@ def _proceso_recepcion_completo(guia_doc: dict) -> None:
     if items_expected:
         st.markdown("""
         <style>
-        /* Target the specific container using the marker */
-        div[data-testid="stVerticalBlockBorderWrapper"]:has(.rec-marker) {
+        /* Aplicar estilo globalmente a los contenedores con borde en este módulo para evitar problemas de compatibilidad con :has() */
+        div[data-testid="stVerticalBlockBorderWrapper"] {
             background-color: rgba(241, 245, 249, 0.98) !important; /* Gris muy suave/blanco hueso */
             border-radius: 20px !important;
             padding: 10px 15px !important;
@@ -601,15 +601,15 @@ def _proceso_recepcion_completo(guia_doc: dict) -> None:
         }
         
         /* Forzar texto oscuro en todo el contenedor */
-        div[data-testid="stVerticalBlockBorderWrapper"]:has(.rec-marker) p,
-        div[data-testid="stVerticalBlockBorderWrapper"]:has(.rec-marker) span,
-        div[data-testid="stVerticalBlockBorderWrapper"]:has(.rec-marker) h3,
-        div[data-testid="stVerticalBlockBorderWrapper"]:has(.rec-marker) div[data-testid="stMarkdownContainer"] {
+        div[data-testid="stVerticalBlockBorderWrapper"] p,
+        div[data-testid="stVerticalBlockBorderWrapper"] span,
+        div[data-testid="stVerticalBlockBorderWrapper"] h3,
+        div[data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stMarkdownContainer"] {
             color: #0F172A !important;
         }
 
         /* Inputs y Selectbox */
-        div[data-testid="stVerticalBlockBorderWrapper"]:has(.rec-marker) input {
+        div[data-testid="stVerticalBlockBorderWrapper"] input {
             background-color: #FFFFFF !important;
             color: #0F172A !important;
             border: 1px solid #94A3B8 !important;
@@ -617,7 +617,7 @@ def _proceso_recepcion_completo(guia_doc: dict) -> None:
             border-radius: 6px !important;
         }
         
-        div[data-testid="stVerticalBlockBorderWrapper"]:has(.rec-marker) div[data-baseweb="select"] > div {
+        div[data-testid="stVerticalBlockBorderWrapper"] div[data-baseweb="select"] > div {
             background-color: #FFFFFF !important;
             color: #0F172A !important;
             border: 1px solid #94A3B8 !important;
@@ -625,19 +625,18 @@ def _proceso_recepcion_completo(guia_doc: dict) -> None:
         }
         
         /* Botones de incremento/decremento (+/-) */
-        div[data-testid="stVerticalBlockBorderWrapper"]:has(.rec-marker) button {
+        div[data-testid="stVerticalBlockBorderWrapper"] button {
             background-color: #E2E8F0 !important;
             color: #0F172A !important;
             border: none !important;
         }
-        div[data-testid="stVerticalBlockBorderWrapper"]:has(.rec-marker) button:hover {
+        div[data-testid="stVerticalBlockBorderWrapper"] button:hover {
             background-color: #CBD5E1 !important;
         }
         </style>
         """, unsafe_allow_html=True)
         
         with st.container(border=True):
-            st.markdown("<div class='rec-marker'></div>", unsafe_allow_html=True)
             st.markdown("""
             <div style="text-align:center; margin-bottom: 20px; border-bottom: 2px solid #CBD5E1; padding-bottom:15px;">
                 <h3 style="color: #0F172A; margin:0; font-family: 'Bebas Neue', sans-serif; letter-spacing: 1px; font-size: 2.2rem;">HOJA DE RECEPCIÓN FÍSICA</h3>
