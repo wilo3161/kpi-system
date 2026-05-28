@@ -128,41 +128,63 @@ def show_configuracion():
 
             st.divider()
             st.subheader("Generar Usuarios de Tiendas")
-            st.write("Genera cuentas de usuario únicas para cada tienda que no tenga una.")
-            if st.button("Generar Usuarios para Tiendas", type="primary"):
-                import string
-                import random
-                import re
-                
-                users = db.find("users")
-                existing_usernames = [u.get("username") for u in users]
-                
-                generados = []
-                for t in tiendas_docs:
-                    tienda_name = t.get("Nombre de Tienda")
-                    if not tienda_name:
-                        continue
-                    clean_name = re.sub(r'[^a-zA-Z0-9]', '', tienda_name).lower()
-                    username = f"t_{clean_name}"
+            st.write("Genera cuentas de usuario únicas para cada tienda (o regenera sus contraseñas si ya existen).")
+            
+            col_gen, col_down = st.columns([1, 1])
+            with col_gen:
+                if st.button("Regenerar Todas las Contraseñas", type="primary"):
+                    import string
+                    import random
+                    import re
                     
-                    if username not in existing_usernames:
+                    users = db.find("users")
+                    existing_usernames = [u.get("username") for u in users]
+                    
+                    generados = []
+                    for t in tiendas_docs:
+                        tienda_name = t.get("Nombre de Tienda")
+                        if not tienda_name:
+                            continue
+                        clean_name = re.sub(r'[^a-zA-Z0-9]', '', tienda_name).lower()
+                        username = f"t_{clean_name}"
+                        
                         password = ''.join(random.choices(string.ascii_letters + string.digits, k=6))
-                        db.insert("users", {
-                            "username": username,
-                            "role": "Tienda",
-                            "password": hash_password(password),
-                            "name": tienda_name,
-                            "assigned_store": tienda_name,
-                            "_created": datetime.utcnow()
-                        })
+                        hashed_pw = hash_password(password)
+                        
+                        if username in existing_usernames:
+                            # Update existing
+                            db.update("users", {"username": username}, {"password": hashed_pw, "assigned_store": tienda_name})
+                        else:
+                            # Insert new
+                            db.insert("users", {
+                                "username": username,
+                                "role": "Tienda",
+                                "password": hashed_pw,
+                                "name": tienda_name,
+                                "assigned_store": tienda_name,
+                                "_created": datetime.utcnow()
+                            })
+                            existing_usernames.append(username)
+                            
                         generados.append({"Tienda": tienda_name, "Usuario": username, "Contraseña": password})
-                        existing_usernames.append(username)
+                    
+                    st.session_state.usuarios_generados = pd.DataFrame(generados)
+                    st.success(f"Se generaron/actualizaron {len(generados)} usuarios.")
+
+            if "usuarios_generados" in st.session_state and not st.session_state.usuarios_generados.empty:
+                df_gen = st.session_state.usuarios_generados
+                st.dataframe(df_gen, use_container_width=True)
                 
-                if generados:
-                    st.success(f"Se generaron {len(generados)} usuarios nuevos. **Guarda estas contraseñas:**")
-                    st.dataframe(pd.DataFrame(generados), use_container_width=True)
-                else:
-                    st.info("Todas las tiendas ya tienen un usuario asignado.")
+                # Botón de descarga
+                csv_data = df_gen.to_csv(index=False).encode('utf-8-sig')
+                with col_down:
+                    st.download_button(
+                        label="📥 Descargar CSV de Usuarios",
+                        data=csv_data,
+                        file_name="usuarios_tiendas.csv",
+                        mime="text/csv",
+                        type="secondary"
+                    )
 
         # =========================================================================
         # TAB 2 – GESTIÓN DE USUARIOS
