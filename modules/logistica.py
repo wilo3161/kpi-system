@@ -850,7 +850,7 @@ def mostrar_dashboard_transferencias():
                         st.subheader("KPIs por Categoría")
                         cAgg = {c:0 for c in CATEGORIAS_LIST}
                         tAgg = {c:0 for c in CATEGORIAS_LIST}
-                        tP=tF=tU=rSin = 0
+                        tP=tF=tU=rSin=tTrans = 0
                         for _,row in dfH.iterrows():
                             met = row.get('met',{})
                             if not isinstance(met,dict): rSin+=1; continue
@@ -874,6 +874,7 @@ def mostrar_dashboard_transferencias():
                             tP += _safe_numeric(met.get('total_prendas',0))
                             tF += _safe_numeric(met.get('total_fundas',0))
                             tU += _safe_numeric(met.get('total_unidades',0))
+                            tTrans += _safe_numeric(met.get('transferencias_unicas',0))
                         
                         if rSin > 0: 
                             st.warning(f"⚠️ {rSin} registros históricos antiguos no contienen desglose por categoría. Por favor, vuelve a procesar (Reemplazar) esos días en la pestaña 1.")
@@ -884,6 +885,24 @@ def mostrar_dashboard_transferencias():
                         m4.metric("📅 Días", dfH['fecha'].nunique())
                         st.markdown("##### Detalle")
                         _render_kpi_cards_historico(cAgg, tU, tAgg)
+                        
+                        colI, colD = st.columns([2,1])
+                        with colI:
+                            dfP = pd.DataFrame([{"Categoria": DISPLAY_NAMES[c], "Unidades": cAgg[c]} for c in CATEGORIAS_LIST if cAgg.get(c, 0) > 0])
+                            if not dfP.empty:
+                                fig = px.pie(dfP, names='Categoria', values='Unidades', title="Distribución Histórica por Categoría", color='Categoria', color_discrete_map={DISPLAY_NAMES[k]: COLORS[COLOR_KEYS.get(k, 'Tiendas')] for k in CATEGORIAS_LIST})
+                                fig.update_traces(textposition='inside', textinfo='percent+label')
+                                fig.update_layout(template="plotly_dark")
+                                st.plotly_chart(fig, use_container_width=True)
+                            else:
+                                st.info("No hay datos de categoría desglosados en este rango de fechas para graficar el pastel.")
+                        with colD:
+                            st.subheader("TOTAL RANGO")
+                            st.markdown(f"<div style='text-align:center;font-size:36px;font-weight:bold;'>{sum(cAgg.values()):,}</div>", unsafe_allow_html=True)
+                            st.markdown(acu_metric("PROMEDIO X TRANSFERENCIA", f"{tU/max(tTrans,1):,.0f}", color="blue", icon="📈"), unsafe_allow_html=True)
+                            st.markdown(acu_metric("CATEGORÍAS ACTIVAS", f"{sum(1 for c in CATEGORIAS_LIST if cAgg.get(c, 0) > 0)}/6", color="green", icon="✅"), unsafe_allow_html=True)
+                            st.markdown(acu_metric("% FUNDAS HISTÓRICO", f"{(tF/tU)*100 if tU else 0:.1f}%", color="yellow", icon="🛍️"), unsafe_allow_html=True)
+                        
                         st.markdown("---")
                         st.subheader("⚠️ Anomalías")
                         dAn = detectar_anomalias(dfH.rename(columns={'und':'unidades'}), col='unidades')
