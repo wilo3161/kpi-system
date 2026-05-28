@@ -345,8 +345,17 @@ class MockLocalDBFallback:
                 ]
 
             # Tiendas mock limitadas a 10 para ahorrar memoria
-            from config.stores_data import TIENDAS_DATA
-            for tienda in TIENDAS_DATA[:10]:
+            import json
+            from pathlib import Path
+            base = Path(__file__).resolve().parent.parent
+            tiendas_list = []
+            try:
+                with open(base / "config" / "private_data.json", "r", encoding="utf-8-sig") as f:
+                    tiendas_list = json.load(f).get("tiendas", [])
+            except:
+                pass
+                
+            for tienda in tiendas_list[:10]:
                 nombre = tienda.get("Nombre de Tienda", "")
                 contacto = tienda.get("Contacto", "")
                 username = re.sub(r'[^a-z0-9_]', '', (contacto or nombre).lower().replace(' ', '_'))
