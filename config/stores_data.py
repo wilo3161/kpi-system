@@ -8,19 +8,38 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent.parent
 _private_data_path = BASE_DIR / "config" / "private_data.json"
 
-if _private_data_path.exists():
-    with open(_private_data_path, "r", encoding="utf-8-sig") as f:
-        try:
-            _private_data = json.load(f)
-            TIENDAS_DATA = _private_data.get("tiendas", [])
-        except Exception:
-            TIENDAS_DATA = []
-else:
-    TIENDAS_DATA = []
+TIENDAS_DATA = []
+PRICE_CLUBS = []
+TIENDAS_REGULARES = []
+TIENDAS_DICT = {}
+DESTINO_A_TIENDAS = {}
 
-# Constantes derivadas
-PRICE_CLUBS = [t["Nombre de Tienda"] for t in TIENDAS_DATA if "Price Club" in t["Nombre de Tienda"]]
-TIENDAS_REGULARES = [t["Nombre de Tienda"] for t in TIENDAS_DATA if "Aeropostale" in t["Empresa"] and "Price Club" not in t["Nombre de Tienda"]]
+def reload_stores_data():
+    """Recarga los datos desde el JSON mutando las estructuras en memoria para actualizar referencias globales."""
+    if _private_data_path.exists():
+        with open(_private_data_path, "r", encoding="utf-8-sig") as f:
+            try:
+                _private_data = json.load(f)
+                TIENDAS_DATA.clear()
+                TIENDAS_DATA.extend(_private_data.get("tiendas", []))
+            except Exception:
+                pass
+                
+    PRICE_CLUBS.clear()
+    PRICE_CLUBS.extend([t["Nombre de Tienda"] for t in TIENDAS_DATA if "Price Club" in t["Nombre de Tienda"]])
+    
+    TIENDAS_REGULARES.clear()
+    TIENDAS_REGULARES.extend([t["Nombre de Tienda"] for t in TIENDAS_DATA if "Aeropostale" in t["Empresa"] and "Price Club" not in t["Nombre de Tienda"]])
+    
+    TIENDAS_DICT.clear()
+    TIENDAS_DICT.update({t["Nombre de Tienda"]: t for t in TIENDAS_DATA})
+    
+    DESTINO_A_TIENDAS.clear()
+    for t in TIENDAS_DATA:
+        DESTINO_A_TIENDAS.setdefault(t["Destino"], []).append(t["Nombre de Tienda"])
+
+# Carga inicial
+reload_stores_data()
 
 VENTAS_POR_MAYOR = ["VENTAS POR MAYOR", "MAYORISTA"]
 TIENDA_WEB = ["TIENDA WEB", "WEB", "TIENDA MOVIL", "MOVIL"]
@@ -44,9 +63,6 @@ GRADIENTS = {
     'FUNDAS': 'linear-gradient(135deg, #EC489915, #EC489930)'
 }
 
-# Búsqueda rápida por nombre exacto
-TIENDAS_DICT = {t["Nombre de Tienda"]: t for t in TIENDAS_DATA}
-
 # Solución al Bug de Importación Logística
 COLOR_KEYS = {
     'Price Club': 'PRICE CLUB',
@@ -56,8 +72,3 @@ COLOR_KEYS = {
     'Fallas': 'FALLAS',
     'Fundas': 'FUNDAS'
 }
-
-# Mapeo inverso: código de destino → lista de nombres de tienda
-DESTINO_A_TIENDAS = {}
-for t in TIENDAS_DATA:
-    DESTINO_A_TIENDAS.setdefault(t["Destino"], []).append(t["Nombre de Tienda"])

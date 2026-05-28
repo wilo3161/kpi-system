@@ -585,6 +585,11 @@ def show_generar_guias():
                 marca_sel = st.selectbox("Marca", list(MARCAS.keys()))
             logo_bytes = cargar_logo_local(marca_sel)
             tiendas_opciones = [t["Nombre de Tienda"] for t in TIENDAS_DATA]
+            if not tiendas_opciones:
+                from config.stores_data import reload_stores_data
+                reload_stores_data()
+                tiendas_opciones = [t["Nombre de Tienda"] for t in TIENDAS_DATA]
+                
             tienda_sel = st.selectbox("Tienda Destino", tiendas_opciones)
             tienda_info = next((t for t in TIENDAS_DATA if t["Nombre de Tienda"] == tienda_sel), {})
             dest_nombre = tienda_info.get("Contacto", "")
