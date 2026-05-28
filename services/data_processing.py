@@ -2,6 +2,7 @@ import pandas as pd
 import re
 import unicodedata
 from typing import Optional, Tuple
+import streamlit as st
 
 TALLAS_VALIDAS = {
     'XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL', 'ÚNICA',
@@ -139,6 +140,7 @@ def clasificar_categoria(bodega_destino, categoria_detalle, grupo):
 def _safe_numeric_conversion(series):
     return pd.to_numeric(series, errors='coerce').fillna(0)
 
+@st.cache_data(show_spinner=False)
 def procesar_archivos(df_transferencias, df_detalle):
     # --- Detalle ---
     det_cols = {normalizar_para_mapeo(c): c for c in df_detalle.columns}

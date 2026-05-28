@@ -148,6 +148,7 @@ def renderizar_grafico_ux(df, categoria, titulo, color_base="#1f77b4"):
     fig.update_layout(template="plotly_dark", margin=dict(t=40, l=10, r=10, b=10))
     return fig
 
+@st.cache_data(show_spinner=False)
 def clasificar_producto_avanzado(nombre_producto, codigo_producto=None):
     if pd.isna(nombre_producto) or not isinstance(nombre_producto, str):
         return None, "OTROS", None, None, "ND", "OTROS", None
@@ -377,6 +378,26 @@ def _responder_ia(preg, df_c, df_d, regs):
 
 def transcribir_audio(audio_bytes): return transcribir_audio_central(audio_bytes)
 
+@st.cache_data(show_spinner="Procesando archivo de análisis...")
+def procesar_archivo_analisis(archivo_bytes):
+    import io
+    df_an = pd.read_excel(io.BytesIO(archivo_bytes))
+    renames = {"secuencial factura": "numero de transferencia", "bodega recibe": "tienda"}
+    df_an.rename(columns=lambda x: str(x).strip().lower(), inplace=True)
+    df_an.rename(columns=renames, inplace=True)
+    if "cantidad" in df_an.columns:
+        df_an['cantidad'] = pd.to_numeric(df_an['cantidad'], errors='coerce').fillna(0)
+    if "producto" in df_an.columns:
+        parsed = df_an["producto"].apply(lambda x: clasificar_producto_avanzado(x))
+        df_an['producto_base'] = [p[0] for p in parsed]
+        df_an['genero'] = [p[1] for p in parsed]
+        df_an['color'] = [p[2] for p in parsed]
+        df_an['talla'] = [p[3] for p in parsed]
+        df_an['tipo'] = [p[4] for p in parsed]
+        df_an['grupo'] = [p[5] for p in parsed]
+        df_an['codigo_base'] = [p[6] for p in parsed]
+    return df_an
+
 # =============================================================================
 # INTERFAZ PRINCIPAL CORREGIDA (FileUploader en formulario)
 # =============================================================================
@@ -554,28 +575,9 @@ def mostrar_dashboard_transferencias():
             
             if archivo_analisis:
                 try:
-                    df_an = pd.read_excel(archivo_analisis)
-                    
-                    renames = {
-                        "secuencial factura": "numero de transferencia",
-                        "bodega recibe": "tienda"
-                    }
-                    df_an.rename(columns=lambda x: str(x).strip().lower(), inplace=True)
-                    df_an.rename(columns=renames, inplace=True)
-                    
-                    if "cantidad" in df_an.columns:
-                        df_an['cantidad'] = pd.to_numeric(df_an['cantidad'], errors='coerce').fillna(0)
-                        
+                    df_an = procesar_archivo_analisis(archivo_analisis.getvalue())
                     if "producto" in df_an.columns:
-                        st.success("Archivo cargado correctamente. Procesando productos...")
-                        parsed = df_an["producto"].apply(lambda x: clasificar_producto_avanzado(x))
-                        df_an['producto_base'] = [p[0] for p in parsed]
-                        df_an['genero'] = [p[1] for p in parsed]
-                        df_an['color'] = [p[2] for p in parsed]
-                        df_an['talla'] = [p[3] for p in parsed]
-                        df_an['tipo'] = [p[4] for p in parsed]
-                        df_an['grupo'] = [p[5] for p in parsed]
-                        df_an['codigo_base'] = [p[6] for p in parsed]
+                        st.success("Archivo cargado y procesado exitosamente (desde caché).")
                         
                         if st.checkbox("Mostrar Data sin procesar", value=False):
                             st.dataframe(df_an.head(20))
