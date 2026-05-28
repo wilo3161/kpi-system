@@ -438,13 +438,14 @@ def generar_acta_recepcion_pdf(guia_doc: dict, recepcion_data: dict, diferencias
     
     # Datos generales
     receptor_nombre = recepcion_data.get("nombre_receptor", "")
-    tienda_display = f"{guia_doc.get('tienda_destino')} - Recibe: {receptor_nombre}" if receptor_nombre else guia_doc.get('tienda_destino')
+    receptor_display = f"{recepcion_data.get('usuario_recepcion', '')} - {receptor_nombre}" if receptor_nombre else recepcion_data.get('usuario_recepcion', '')
+    
     data = [
         ["Número de Guía:", guia_doc.get("numero_guia")],
-        ["Tienda Destino:", tienda_display],
+        ["Tienda Destino:", guia_doc.get("tienda_destino")],
         ["Transferencia:", guia_doc.get("numero_transferencia")],
         ["Fecha Recepción:", recepcion_data.get("fecha_recepcion", "")[:16]],
-        ["Receptor:", recepcion_data.get("usuario_recepcion", "")],
+        ["Receptor:", receptor_display],
         ["Estado:", recepcion_data.get("estado_recepcion", "")],
         ["Total Esperado:", str(diferencias.get("total_esperado", 0))],
         ["Total Recibido:", str(diferencias.get("total_recibido", 0))],
