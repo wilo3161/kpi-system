@@ -532,38 +532,40 @@ def show_generar_guias():
             components.html("""
             <script>
             const doc = window.parent.document;
+            const setStyle = (el, prop, val) => el.style.setProperty(prop, val, "important");
+            
             const markers = doc.querySelectorAll('.guia-marker-js');
             markers.forEach(marker => {
                 let container = marker.closest('div[data-testid="stVerticalBlock"]');
                 if (container) {
-                    container.style.backgroundColor = "rgba(241, 245, 249, 0.98)";
-                    container.style.borderRadius = "20px";
-                    container.style.padding = "25px";
-                    container.style.boxShadow = "0 20px 40px rgba(0,0,0,0.4)";
-                    container.style.border = "2px solid rgba(255,255,255,0.8)";
+                    setStyle(container, "background-color", "rgba(241, 245, 249, 0.98)");
+                    setStyle(container, "border-radius", "20px");
+                    setStyle(container, "padding", "25px");
+                    setStyle(container, "box-shadow", "0 20px 40px rgba(0,0,0,0.4)");
+                    setStyle(container, "border", "2px solid rgba(255,255,255,0.8)");
                     
                     const texts = container.querySelectorAll('p, span, h3, h4, label, div[data-testid="stMarkdownContainer"]');
-                    texts.forEach(el => { el.style.color = "#0F172A"; });
+                    texts.forEach(el => { setStyle(el, "color", "#0F172A"); });
                     
                     const inputs = container.querySelectorAll('input, textarea');
                     inputs.forEach(el => {
-                        el.style.backgroundColor = "#FFFFFF";
-                        el.style.color = "#0F172A";
-                        el.style.border = "1px solid #94A3B8";
-                        el.style.borderRadius = "6px";
-                        el.style.fontWeight = "600";
+                        setStyle(el, "background-color", "#FFFFFF");
+                        setStyle(el, "color", "#0F172A");
+                        setStyle(el, "border", "1px solid #94A3B8");
+                        setStyle(el, "border-radius", "6px");
+                        setStyle(el, "font-weight", "600");
                     });
                     
                     const selects = container.querySelectorAll('div[data-baseweb="select"] > div');
                     selects.forEach(el => {
-                        el.style.backgroundColor = "#FFFFFF";
-                        el.style.border = "1px solid #94A3B8";
-                        el.style.color = "#0F172A";
+                        setStyle(el, "background-color", "#FFFFFF");
+                        setStyle(el, "border", "1px solid #94A3B8");
+                        setStyle(el, "color", "#0F172A");
                     });
                     
                     const selectTexts = container.querySelectorAll('div[data-baseweb="select"] span');
                     selectTexts.forEach(el => {
-                        el.style.color = "#0F172A";
+                        setStyle(el, "color", "#0F172A");
                     });
                 }
             });

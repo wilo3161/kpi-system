@@ -593,49 +593,51 @@ def _proceso_recepcion_completo(guia_doc: dict) -> None:
             <script>
             // Forzar estilos del contenedor padre sin importar la versión de Streamlit
             const doc = window.parent.document;
+            const setStyle = (el, prop, val) => el.style.setProperty(prop, val, "important");
+
             const markers = doc.querySelectorAll('.rec-marker-js');
             markers.forEach(marker => {
                 let container = marker.closest('div[data-testid="stVerticalBlock"]');
                 if (container) {
-                    container.style.backgroundColor = "rgba(241, 245, 249, 0.98)";
-                    container.style.borderRadius = "20px";
-                    container.style.padding = "25px";
-                    container.style.boxShadow = "0 20px 40px rgba(0,0,0,0.4)";
-                    container.style.border = "2px solid rgba(255,255,255,0.8)";
+                    setStyle(container, "background-color", "rgba(241, 245, 249, 0.98)");
+                    setStyle(container, "border-radius", "20px");
+                    setStyle(container, "padding", "25px");
+                    setStyle(container, "box-shadow", "0 20px 40px rgba(0,0,0,0.4)");
+                    setStyle(container, "border", "2px solid rgba(255,255,255,0.8)");
                     
                     // Textos oscuros
                     const texts = container.querySelectorAll('p, span, h3, h4, label, div[data-testid="stMarkdownContainer"]');
-                    texts.forEach(el => { el.style.color = "#0F172A"; });
+                    texts.forEach(el => { setStyle(el, "color", "#0F172A"); });
                     
                     // Inputs
                     const inputs = container.querySelectorAll('input, textarea');
                     inputs.forEach(el => {
-                        el.style.backgroundColor = "#FFFFFF";
-                        el.style.color = "#0F172A";
-                        el.style.border = "1px solid #94A3B8";
-                        el.style.borderRadius = "6px";
-                        el.style.fontWeight = "700";
+                        setStyle(el, "background-color", "#FFFFFF");
+                        setStyle(el, "color", "#0F172A");
+                        setStyle(el, "border", "1px solid #94A3B8");
+                        setStyle(el, "border-radius", "6px");
+                        setStyle(el, "font-weight", "700");
                     });
                     
                     // Selects
                     const selects = container.querySelectorAll('div[data-baseweb="select"] > div');
                     selects.forEach(el => {
-                        el.style.backgroundColor = "#FFFFFF";
-                        el.style.border = "1px solid #94A3B8";
-                        el.style.color = "#0F172A";
+                        setStyle(el, "background-color", "#FFFFFF");
+                        setStyle(el, "border", "1px solid #94A3B8");
+                        setStyle(el, "color", "#0F172A");
                     });
                     
                     const selectTexts = container.querySelectorAll('div[data-baseweb="select"] span');
                     selectTexts.forEach(el => {
-                        el.style.color = "#0F172A";
+                        setStyle(el, "color", "#0F172A");
                     });
                     
                     // Botones
                     const btns = container.querySelectorAll('button');
                     btns.forEach(el => {
                         if(el.innerText === '+' || el.innerText === '-') {
-                            el.style.backgroundColor = "#E2E8F0";
-                            el.style.color = "#0F172A";
+                            setStyle(el, "background-color", "#E2E8F0");
+                            setStyle(el, "color", "#0F172A");
                         }
                     });
                 }
