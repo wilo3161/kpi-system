@@ -17,7 +17,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 _private_data_path = BASE_DIR / "config" / "private_data.json"
 
 if _private_data_path.exists():
-    with open(_private_data_path, "r", encoding="utf-8") as f:
+    with open(_private_data_path, "r", encoding="utf-8-sig") as f:
         try:
             _private_data = json.load(f)
             EQUIPO_INICIAL = _private_data.get("equipo", [])
