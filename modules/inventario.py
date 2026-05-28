@@ -6,6 +6,8 @@ import plotly.express as px
 from io import BytesIO
 from datetime import datetime
 import time
+import math
+from utils.ui import acu_metric
 
 # ========== FUNCIONES AUXILIARES ==========
 def detectar_columnas(df):
@@ -54,7 +56,6 @@ def calcular_dias_inventario(df, fecha_col):
 
 def mostrar_metricas_seguras(titulo, valor):
     """Evita errores con fechas o NaNs en st.metric"""
-    from utils.ui import acu_metric
     try:
         val_str = str(valor)
         if isinstance(valor, float) and math.isnan(valor):

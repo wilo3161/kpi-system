@@ -161,9 +161,13 @@ class MongoDBAtlas:
     # ---------- MÉTODOS CRUD CON PROYECCIÓN Y PAGINACIÓN ----------
     def insert(self, collection, doc):
         if not self.connected: return None
-        if collection == "historico": doc = self._validate_historico(doc)
-        doc["_created"] = datetime.utcnow()
-        return self.db[collection].insert_one(doc).inserted_id
+        try:
+            if collection == "historico": doc = self._validate_historico(doc)
+            doc["_created"] = datetime.utcnow()
+            return self.db[collection].insert_one(doc).inserted_id
+        except Exception as e:
+            print(f"Error insert {collection}: {e}")
+            return None
 
     def insert_many(self, collection, docs):
         """Inserción masiva de documentos."""
@@ -182,60 +186,85 @@ class MongoDBAtlas:
         Optimizado: permite especificar qué campos traer (projection) y paginación.
         """
         if not self.connected: return []
-        cursor = self.db[collection].find(query, projection)
-        if sort:
-            cursor = cursor.sort(sort)
-        if skip:
-            cursor = cursor.skip(skip)
-        if limit:
-            cursor = cursor.limit(limit)
-        docs = [_sanitize_document(doc) for doc in cursor]
-        if collection == "historico":
-            docs = [self._validate_historico(d) for d in docs]
-        return docs
+        try:
+            cursor = self.db[collection].find(query, projection)
+            if sort:
+                cursor = cursor.sort(sort)
+            if skip:
+                cursor = cursor.skip(skip)
+            if limit:
+                cursor = cursor.limit(limit)
+            docs = [_sanitize_document(doc) for doc in cursor]
+            if collection == "historico":
+                docs = [self._validate_historico(d) for d in docs]
+            return docs
+        except Exception as e:
+            print(f"Error find {collection}: {e}")
+            return []
 
     def find_one(self, collection, query, projection=None):
         if not self.connected: return None
-        doc = self.db[collection].find_one(query, projection)
-        if doc:
-            doc = _sanitize_document(doc)
-            if collection == "historico": doc = self._validate_historico(doc)
-            return doc
-        return None
+        try:
+            doc = self.db[collection].find_one(query, projection)
+            if doc:
+                doc = _sanitize_document(doc)
+                if collection == "historico": doc = self._validate_historico(doc)
+                return doc
+            return None
+        except Exception as e:
+            print(f"Error find_one {collection}: {e}")
+            return None
 
     def find_one_and_update(self, collection, filter, update, projection=None, upsert=False):
         if not self.connected: return None
-        doc = self.db[collection].find_one_and_update(
-            filter, update, upsert=upsert, return_document=ReturnDocument.AFTER,
-            projection=projection
-        )
-        if doc:
-            doc = _sanitize_document(doc)
-            if collection == "historico": doc = self._validate_historico(doc)
-            return doc
-        return None
+        try:
+            doc = self.db[collection].find_one_and_update(
+                filter, update, upsert=upsert, return_document=ReturnDocument.AFTER,
+                projection=projection
+            )
+            if doc:
+                doc = _sanitize_document(doc)
+                if collection == "historico": doc = self._validate_historico(doc)
+                return doc
+            return None
+        except Exception as e:
+            print(f"Error find_one_and_update {collection}: {e}")
+            return None
 
     def update(self, collection, query, update_doc, upsert=False):
         if not self.connected: return
-        if any(k.startswith("$") for k in update_doc.keys()):
-            self.db[collection].update_one(query, update_doc, upsert=upsert)
-        else:
-            self.db[collection].update_one(query, {"$set": update_doc}, upsert=upsert)
+        try:
+            if any(k.startswith("$") for k in update_doc.keys()):
+                self.db[collection].update_one(query, update_doc, upsert=upsert)
+            else:
+                self.db[collection].update_one(query, {"$set": update_doc}, upsert=upsert)
+        except Exception as e:
+            print(f"Error update {collection}: {e}")
 
     def update_many(self, collection, query, update_doc, upsert=False):
         if not self.connected: return
-        if any(k.startswith("$") for k in update_doc.keys()):
-            self.db[collection].update_many(query, update_doc, upsert=upsert)
-        else:
-            self.db[collection].update_many(query, {"$set": update_doc}, upsert=upsert)
+        try:
+            if any(k.startswith("$") for k in update_doc.keys()):
+                self.db[collection].update_many(query, update_doc, upsert=upsert)
+            else:
+                self.db[collection].update_many(query, {"$set": update_doc}, upsert=upsert)
+        except Exception as e:
+            print(f"Error update_many {collection}: {e}")
 
     def delete(self, collection, query):
         if not self.connected: return
-        self.db[collection].delete_many(query)
+        try:
+            self.db[collection].delete_many(query)
+        except Exception as e:
+            print(f"Error delete {collection}: {e}")
 
     def count(self, collection, query={}):
         if not self.connected: return 0
-        return self.db[collection].count_documents(query)
+        try:
+            return self.db[collection].count_documents(query)
+        except Exception as e:
+            print(f"Error count {collection}: {e}")
+            return 0
 
     # ---------- CONTADOR SEGURO ----------
     def obtener_siguiente_numero(self, nombre_contador="numero_guia", incremento=1) -> int:

@@ -689,14 +689,27 @@ def _proceso_recepcion_completo(guia_doc: dict) -> None:
             logger.warning(f"No se pudo emitir evento: {e}")
         
         # Generar acta
-        excel_bytes = generar_acta_recepcion_excel(guia_doc, recepcion_doc, diferencias, incidencias, items_received)
-        pdf_bytes = generar_acta_recepcion_pdf(guia_doc, recepcion_doc, diferencias, incidencias, items_received)
+        excel_bytes = None
+        pdf_bytes = None
+        try:
+            excel_bytes = generar_acta_recepcion_excel(guia_doc, recepcion_doc, diferencias, incidencias, items_received)
+        except Exception as e:
+            logger.error(f"Error al generar acta Excel: {e}")
+            st.warning("⚠️ No se pudo generar el acta en Excel.")
+            
+        try:
+            pdf_bytes = generar_acta_recepcion_pdf(guia_doc, recepcion_doc, diferencias, incidencias, items_received)
+        except Exception as e:
+            logger.error(f"Error al generar acta PDF: {e}")
+            st.warning("⚠️ No se pudo generar el acta en PDF.")
         
         col1, col2 = st.columns(2)
         with col1:
-            st.download_button("📥 Descargar Acta (Excel)", excel_bytes, f"acta_recepcion_{numero_guia}.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            if excel_bytes:
+                st.download_button("📥 Descargar Acta (Excel)", excel_bytes, f"acta_recepcion_{numero_guia}.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
         with col2:
-            st.download_button("📥 Descargar Acta (PDF)", pdf_bytes, f"acta_recepcion_{numero_guia}.pdf", "application/pdf")
+            if pdf_bytes:
+                st.download_button("📥 Descargar Acta (PDF)", pdf_bytes, f"acta_recepcion_{numero_guia}.pdf", "application/pdf")
         
         if GOOGLE_DRIVE_AVAILABLE and st.checkbox("📤 Subir acta a Google Drive", key=f"subir_drive_{numero_guia}"):
             try:
