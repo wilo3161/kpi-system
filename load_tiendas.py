@@ -49,20 +49,21 @@ tiendas_data = [
   {"Empresa": "Aeropostale", "Origen": "MATRIZ", "Destino": "IBARRA", "Contacto": "Silvia Urcuango", "Dirección": "Av. Victor Gómez Jurado y Rodrigo Miño junto a la cancha La Bombonera", "Teléfono": "0982649058", "Nombre de Tienda": "Aeropostale La Bombonera"}
 ]
 
-# Cargar a DB
-existentes = local_db.find("tiendas", {})
-if not existentes:
-    print("Cargando tiendas a la base de datos...")
-    for t in tiendas_data:
-        local_db.insert("tiendas", t)
-    print(f"Se cargaron {len(tiendas_data)} tiendas.")
-else:
-    print("Las tiendas ya existen en la BD.")
+if __name__ == "__main__":
+    # Cargar a DB
+    existentes = local_db.find("tiendas", {})
+    if not existentes:
+        print("Cargando tiendas a la base de datos...")
+        for t in tiendas_data:
+            local_db.insert("tiendas", t)
+        print(f"Se cargaron {len(tiendas_data)} tiendas.")
+    else:
+        print("Las tiendas ya existen en la BD.")
 
-# Generar usuarios base para el administrador (para que no pierda acceso si se resetea DB)
-admins = local_db.find("users", {"role": "Administrador"})
-if not admins:
-    import hashlib
-    pw_hash = hashlib.sha256("admin123".encode()).hexdigest()
-    local_db.insert("users", {"username": "admin", "password_hash": pw_hash, "role": "Administrador", "full_name": "Administrador General", "active": True})
-    print("Usuario admin creado.")
+    # Generar usuarios base para el administrador (para que no pierda acceso si se resetea DB)
+    admins = local_db.find("users", {"role": "Administrador"})
+    if not admins:
+        import hashlib
+        pw_hash = hashlib.sha256("admin123".encode()).hexdigest()
+        local_db.insert("users", {"username": "admin", "password": pw_hash, "role": "Administrador", "full_name": "Administrador General", "active": True})
+        print("Usuario admin creado.")
