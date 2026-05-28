@@ -528,44 +528,43 @@ def show_generar_guias():
     # TAB 1 — NUEVA GUÍA
     # =========================================================================
     with tab_nueva:
-        st.markdown("""
-        <style>
-        /* Estilo de Formulario Blanco para Contenedores con Borde en la pestaña Nueva Guía */
-        div[data-testid="stVerticalBlockBorderWrapper"] {
-            background-color: rgba(241, 245, 249, 0.98) !important;
-            border-radius: 20px !important;
-            padding: 20px 25px !important;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.4) !important;
-            border: 2px solid rgba(255,255,255,0.8) !important;
-            backdrop-filter: blur(10px);
-        }
-        
-        div[data-testid="stVerticalBlockBorderWrapper"] p,
-        div[data-testid="stVerticalBlockBorderWrapper"] span,
-        div[data-testid="stVerticalBlockBorderWrapper"] h3,
-        div[data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stMarkdownContainer"] {
-            color: #0F172A !important;
-        }
-
-        div[data-testid="stVerticalBlockBorderWrapper"] input, 
-        div[data-testid="stVerticalBlockBorderWrapper"] textarea {
-            background-color: #FFFFFF !important;
-            color: #0F172A !important;
-            border: 1px solid #94A3B8 !important;
-            font-weight: 600 !important;
-            border-radius: 6px !important;
-        }
-        
-        div[data-testid="stVerticalBlockBorderWrapper"] div[data-baseweb="select"] > div {
-            background-color: #FFFFFF !important;
-            color: #0F172A !important;
-            border: 1px solid #94A3B8 !important;
-            border-radius: 6px !important;
-        }
-        </style>
-        """, unsafe_allow_html=True)
-        
         with st.container(border=True):
+            components.html("""
+            <script>
+            const doc = window.parent.document;
+            const markers = doc.querySelectorAll('.guia-marker-js');
+            markers.forEach(marker => {
+                let container = marker.closest('div[data-testid="stVerticalBlock"]');
+                if (container) {
+                    container.style.backgroundColor = "rgba(241, 245, 249, 0.98)";
+                    container.style.borderRadius = "20px";
+                    container.style.padding = "25px";
+                    container.style.boxShadow = "0 20px 40px rgba(0,0,0,0.4)";
+                    container.style.border = "2px solid rgba(255,255,255,0.8)";
+                    
+                    const texts = container.querySelectorAll('p, span, h3, h4, label, div[data-testid="stMarkdownContainer"]');
+                    texts.forEach(el => { el.style.color = "#0F172A"; });
+                    
+                    const inputs = container.querySelectorAll('input, textarea');
+                    inputs.forEach(el => {
+                        el.style.backgroundColor = "#FFFFFF";
+                        el.style.color = "#0F172A";
+                        el.style.border = "1px solid #94A3B8";
+                        el.style.borderRadius = "6px";
+                        el.style.fontWeight = "600";
+                    });
+                    
+                    const selects = container.querySelectorAll('div[data-baseweb="select"] > div');
+                    selects.forEach(el => {
+                        el.style.backgroundColor = "#FFFFFF";
+                        el.style.border = "1px solid #94A3B8";
+                    });
+                }
+            });
+            </script>
+            """, height=0)
+            
+            st.markdown("<div class='guia-marker-js'></div>", unsafe_allow_html=True)
             st.markdown("""
             <div style="text-align:center; margin-bottom: 20px; border-bottom: 2px solid #CBD5E1; padding-bottom:15px;">
                 <h3 style="color: #0F172A; margin:0; font-family: 'Bebas Neue', sans-serif; letter-spacing: 1px; font-size: 2.2rem;">FORMULARIO DE NUEVA GUÍA</h3>

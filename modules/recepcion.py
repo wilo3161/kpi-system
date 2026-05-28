@@ -588,55 +588,56 @@ def _proceso_recepcion_completo(guia_doc: dict) -> None:
     st.subheader("📋 Registro de Recepción")
     
     if items_expected:
-        st.markdown("""
-        <style>
-        /* Aplicar estilo globalmente a los contenedores con borde en este módulo para evitar problemas de compatibilidad con :has() */
-        div[data-testid="stVerticalBlockBorderWrapper"] {
-            background-color: rgba(241, 245, 249, 0.98) !important; /* Gris muy suave/blanco hueso */
-            border-radius: 20px !important;
-            padding: 10px 15px !important;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.4) !important;
-            border: 2px solid rgba(255,255,255,0.8) !important;
-            backdrop-filter: blur(10px);
-        }
-        
-        /* Forzar texto oscuro en todo el contenedor */
-        div[data-testid="stVerticalBlockBorderWrapper"] p,
-        div[data-testid="stVerticalBlockBorderWrapper"] span,
-        div[data-testid="stVerticalBlockBorderWrapper"] h3,
-        div[data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stMarkdownContainer"] {
-            color: #0F172A !important;
-        }
-
-        /* Inputs y Selectbox */
-        div[data-testid="stVerticalBlockBorderWrapper"] input {
-            background-color: #FFFFFF !important;
-            color: #0F172A !important;
-            border: 1px solid #94A3B8 !important;
-            font-weight: 700 !important;
-            border-radius: 6px !important;
-        }
-        
-        div[data-testid="stVerticalBlockBorderWrapper"] div[data-baseweb="select"] > div {
-            background-color: #FFFFFF !important;
-            color: #0F172A !important;
-            border: 1px solid #94A3B8 !important;
-            border-radius: 6px !important;
-        }
-        
-        /* Botones de incremento/decremento (+/-) */
-        div[data-testid="stVerticalBlockBorderWrapper"] button {
-            background-color: #E2E8F0 !important;
-            color: #0F172A !important;
-            border: none !important;
-        }
-        div[data-testid="stVerticalBlockBorderWrapper"] button:hover {
-            background-color: #CBD5E1 !important;
-        }
-        </style>
-        """, unsafe_allow_html=True)
-        
         with st.container(border=True):
+            st.components.v1.html("""
+            <script>
+            // Forzar estilos del contenedor padre sin importar la versión de Streamlit
+            const doc = window.parent.document;
+            const markers = doc.querySelectorAll('.rec-marker-js');
+            markers.forEach(marker => {
+                let container = marker.closest('div[data-testid="stVerticalBlock"]');
+                if (container) {
+                    container.style.backgroundColor = "rgba(241, 245, 249, 0.98)";
+                    container.style.borderRadius = "20px";
+                    container.style.padding = "25px";
+                    container.style.boxShadow = "0 20px 40px rgba(0,0,0,0.4)";
+                    container.style.border = "2px solid rgba(255,255,255,0.8)";
+                    
+                    // Textos oscuros
+                    const texts = container.querySelectorAll('p, span, h3, h4, label, div[data-testid="stMarkdownContainer"]');
+                    texts.forEach(el => { el.style.color = "#0F172A"; });
+                    
+                    // Inputs
+                    const inputs = container.querySelectorAll('input, textarea');
+                    inputs.forEach(el => {
+                        el.style.backgroundColor = "#FFFFFF";
+                        el.style.color = "#0F172A";
+                        el.style.border = "1px solid #94A3B8";
+                        el.style.borderRadius = "6px";
+                        el.style.fontWeight = "700";
+                    });
+                    
+                    // Selects
+                    const selects = container.querySelectorAll('div[data-baseweb="select"] > div');
+                    selects.forEach(el => {
+                        el.style.backgroundColor = "#FFFFFF";
+                        el.style.border = "1px solid #94A3B8";
+                    });
+                    
+                    // Botones
+                    const btns = container.querySelectorAll('button');
+                    btns.forEach(el => {
+                        if(el.innerText === '+' || el.innerText === '-') {
+                            el.style.backgroundColor = "#E2E8F0";
+                            el.style.color = "#0F172A";
+                        }
+                    });
+                }
+            });
+            </script>
+            """, height=0)
+            
+            st.markdown("<div class='rec-marker-js'></div>", unsafe_allow_html=True)
             st.markdown("""
             <div style="text-align:center; margin-bottom: 20px; border-bottom: 2px solid #CBD5E1; padding-bottom:15px;">
                 <h3 style="color: #0F172A; margin:0; font-family: 'Bebas Neue', sans-serif; letter-spacing: 1px; font-size: 2.2rem;">HOJA DE RECEPCIÓN FÍSICA</h3>
