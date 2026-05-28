@@ -529,50 +529,7 @@ def show_generar_guias():
     # =========================================================================
     with tab_nueva:
         with st.container(border=True):
-            components.html("""
-            <script>
-            const doc = window.parent.document;
-            const setStyle = (el, prop, val) => el.style.setProperty(prop, val, "important");
-            
-            const markers = doc.querySelectorAll('.guia-marker-js');
-            markers.forEach(marker => {
-                let container = marker.closest('div[data-testid="stVerticalBlock"]');
-                if (container) {
-                    setStyle(container, "background-color", "rgba(241, 245, 249, 0.98)");
-                    setStyle(container, "border-radius", "20px");
-                    setStyle(container, "padding", "25px");
-                    setStyle(container, "box-shadow", "0 20px 40px rgba(0,0,0,0.4)");
-                    setStyle(container, "border", "2px solid rgba(255,255,255,0.8)");
-                    
-                    const texts = container.querySelectorAll('p, span, h3, h4, label, div[data-testid="stMarkdownContainer"]');
-                    texts.forEach(el => { setStyle(el, "color", "#0F172A"); });
-                    
-                    const inputs = container.querySelectorAll('input, textarea');
-                    inputs.forEach(el => {
-                        setStyle(el, "background-color", "#FFFFFF");
-                        setStyle(el, "color", "#0F172A");
-                        setStyle(el, "border", "1px solid #94A3B8");
-                        setStyle(el, "border-radius", "6px");
-                        setStyle(el, "font-weight", "600");
-                    });
-                    
-                    const selects = container.querySelectorAll('div[data-baseweb="select"] > div');
-                    selects.forEach(el => {
-                        setStyle(el, "background-color", "#FFFFFF");
-                        setStyle(el, "border", "1px solid #94A3B8");
-                        setStyle(el, "color", "#0F172A");
-                    });
-                    
-                    const selectTexts = container.querySelectorAll('div[data-baseweb="select"] span');
-                    selectTexts.forEach(el => {
-                        setStyle(el, "color", "#0F172A");
-                    });
-                }
-            });
-            </script>
-            """, height=0)
-            
-            st.markdown("<div class='guia-marker-js'></div>", unsafe_allow_html=True)
+            # Se ha eliminado la inyección de JS para estilos (guia-marker-js) para prevenir conflictos con Streamlit Selectboxes
             st.markdown("""
             <div style="text-align:center; margin-bottom: 20px; border-bottom: 2px solid #CBD5E1; padding-bottom:15px;">
                 <h3 style="color: #0F172A; margin:0; font-family: 'Bebas Neue', sans-serif; letter-spacing: 1px; font-size: 2.2rem;">FORMULARIO DE NUEVA GUÍA</h3>
