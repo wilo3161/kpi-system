@@ -528,65 +528,117 @@ def show_generar_guias():
     # TAB 1 — NUEVA GUÍA
     # =========================================================================
     with tab_nueva:
-        st.subheader("Nueva Guía de Remisión")
-        col_m, col_t = st.columns(2)
-        with col_m:
-            marca_sel = st.selectbox("Marca", list(MARCAS.keys()))
-        logo_bytes = cargar_logo_local(marca_sel)
-        tiendas_opciones = [t["Nombre de Tienda"] for t in TIENDAS_DATA]
-        tienda_sel = st.selectbox("Tienda Destino", tiendas_opciones)
-        tienda_info = next((t for t in TIENDAS_DATA if t["Nombre de Tienda"] == tienda_sel), {})
-        dest_nombre = tienda_info.get("Contacto", "")
-        dest_dir = tienda_info.get("Dirección", "")
-        dest_tel = tienda_info.get("Teléfono", "")
-        dest_ciudad = tienda_info.get("Destino", "")
-        c1, c2 = st.columns(2)
-        with c1:
-            destinatario = st.text_input("Contacto destinatario", value=dest_nombre)
-            telefono = st.text_input("Teléfono", value=dest_tel)
-        with c2:
-            direccion = st.text_area("Dirección", value=dest_dir, height=100)
-            ciudad = st.text_input("Ciudad", value=dest_ciudad)
-        c3, c4 = st.columns(2)
-        with c3:
-            peso_kg = st.number_input("Peso (kg)", min_value=0.0, step=0.5, format="%.1f")
-        with c4:
-            bultos = st.number_input("Bultos", min_value=1, step=1, value=1)
-        st.subheader("Datos de Transferencia")
-        url_transferencia = st.text_input("URL de transferencia", placeholder="https://...")
-        numero_transferencia = ""
-        total_prendas = 0
-        items_extraidos = []
-        if url_transferencia:
-            if not url_transferencia.startswith(("http://", "https://")):
-                url_transferencia = "https://" + url_transferencia
-            with st.spinner("Extrayendo datos..."):
-                datos = extraer_datos_transferencia(url_transferencia)
-            numero_transferencia = datos.get("numero_transferencia", "")
-            total_prendas = datos.get("total_prendas", 0)
-            items_extraidos = datos.get("items", [])
-            if not items_extraidos:
-                st.warning("⚠️ No se pudo extraer el detalle de productos. Puedes continuar manual.")
-            if numero_transferencia:
-                st.success(f"Transferencia: **{numero_transferencia}**")
-            else:
-                st.warning("No se pudo extraer el número de transferencia. Puedes ingresarlo manualmente.")
-            if total_prendas:
-                st.info(f"Total prendas extraídas: **{total_prendas:,}**")
-            else:
-                total_prendas = 0
-        else:
+        st.markdown("""
+        <style>
+        /* Estilo de Formulario Blanco para Contenedores con Borde en la pestaña Nueva Guía */
+        div[data-testid="stVerticalBlockBorderWrapper"] {
+            background-color: rgba(241, 245, 249, 0.98) !important;
+            border-radius: 20px !important;
+            padding: 20px 25px !important;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.4) !important;
+            border: 2px solid rgba(255,255,255,0.8) !important;
+            backdrop-filter: blur(10px);
+        }
+        
+        div[data-testid="stVerticalBlockBorderWrapper"] p,
+        div[data-testid="stVerticalBlockBorderWrapper"] span,
+        div[data-testid="stVerticalBlockBorderWrapper"] h3,
+        div[data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stMarkdownContainer"] {
+            color: #0F172A !important;
+        }
+
+        div[data-testid="stVerticalBlockBorderWrapper"] input, 
+        div[data-testid="stVerticalBlockBorderWrapper"] textarea {
+            background-color: #FFFFFF !important;
+            color: #0F172A !important;
+            border: 1px solid #94A3B8 !important;
+            font-weight: 600 !important;
+            border-radius: 6px !important;
+        }
+        
+        div[data-testid="stVerticalBlockBorderWrapper"] div[data-baseweb="select"] > div {
+            background-color: #FFFFFF !important;
+            color: #0F172A !important;
+            border: 1px solid #94A3B8 !important;
+            border-radius: 6px !important;
+        }
+        </style>
+        """, unsafe_allow_html=True)
+        
+        with st.container(border=True):
+            st.markdown("""
+            <div style="text-align:center; margin-bottom: 20px; border-bottom: 2px solid #CBD5E1; padding-bottom:15px;">
+                <h3 style="color: #0F172A; margin:0; font-family: 'Bebas Neue', sans-serif; letter-spacing: 1px; font-size: 2.2rem;">FORMULARIO DE NUEVA GUÍA</h3>
+                <p style="color: #475569; margin:0; font-size: 0.95rem;">Completa los datos para emitir la guía de remisión.</p>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            col_m, col_t = st.columns(2)
+            with col_m:
+                marca_sel = st.selectbox("Marca", list(MARCAS.keys()))
+            logo_bytes = cargar_logo_local(marca_sel)
+            tiendas_opciones = [t["Nombre de Tienda"] for t in TIENDAS_DATA]
+            tienda_sel = st.selectbox("Tienda Destino", tiendas_opciones)
+            tienda_info = next((t for t in TIENDAS_DATA if t["Nombre de Tienda"] == tienda_sel), {})
+            dest_nombre = tienda_info.get("Contacto", "")
+            dest_dir = tienda_info.get("Dirección", "")
+            dest_tel = tienda_info.get("Teléfono", "")
+            dest_ciudad = tienda_info.get("Destino", "")
+            c1, c2 = st.columns(2)
+            with c1:
+                destinatario = st.text_input("Contacto destinatario", value=dest_nombre)
+                telefono = st.text_input("Teléfono", value=dest_tel)
+            with c2:
+                direccion = st.text_area("Dirección", value=dest_dir, height=100)
+                ciudad = st.text_input("Ciudad", value=dest_ciudad)
+            c3, c4 = st.columns(2)
+            with c3:
+                peso_kg = st.number_input("Peso (kg)", min_value=0.0, step=0.5, format="%.1f")
+            with c4:
+                bultos = st.number_input("Bultos", min_value=1, step=1, value=1)
+            
+            st.markdown("<hr style='border-color: #CBD5E1;'>", unsafe_allow_html=True)
+            st.markdown("<h4 style='color: #1E293B; margin-bottom:10px;'>Datos de Transferencia</h4>", unsafe_allow_html=True)
+            
+            url_transferencia = st.text_input("URL de transferencia", placeholder="https://...")
+            numero_transferencia = ""
             total_prendas = 0
             items_extraidos = []
-        total_prendas_manual = st.number_input("Total prendas (manual)", min_value=0, step=1, value=total_prendas)
-        if total_prendas_manual:
-            total_prendas = total_prendas_manual
-        if not numero_transferencia:
-            numero_transferencia = st.text_input("N° de transferencia (manual)", value=numero_transferencia)
-        observaciones = st.text_area("Observaciones")
-        usar_ia = st.checkbox("🤖 Generar análisis IA al guardar", value=True)
-        nuevo_numero = obtener_proximo_numero_guia()
-        st.info(f"Número de guía asignado: **{nuevo_numero}**")
+            if url_transferencia:
+                if not url_transferencia.startswith(("http://", "https://")):
+                    url_transferencia = "https://" + url_transferencia
+                with st.spinner("Extrayendo datos..."):
+                    datos = extraer_datos_transferencia(url_transferencia)
+                numero_transferencia = datos.get("numero_transferencia", "")
+                total_prendas = datos.get("total_prendas", 0)
+                items_extraidos = datos.get("items", [])
+                if not items_extraidos:
+                    st.warning("⚠️ No se pudo extraer el detalle de productos. Puedes continuar manual.")
+                if numero_transferencia:
+                    st.success(f"Transferencia: **{numero_transferencia}**")
+                else:
+                    st.warning("No se pudo extraer el número de transferencia. Puedes ingresarlo manualmente.")
+                if total_prendas:
+                    st.info(f"Total prendas extraídas: **{total_prendas:,}**")
+                else:
+                    total_prendas = 0
+            else:
+                total_prendas = 0
+                items_extraidos = []
+            
+            c5, c6 = st.columns(2)
+            with c5:
+                total_prendas_manual = st.number_input("Total prendas (manual)", min_value=0, step=1, value=total_prendas)
+                if total_prendas_manual:
+                    total_prendas = total_prendas_manual
+            with c6:
+                if not numero_transferencia:
+                    numero_transferencia = st.text_input("N° de transferencia (manual)", value=numero_transferencia)
+            
+            observaciones = st.text_area("Observaciones")
+            usar_ia = st.checkbox("🤖 Generar análisis IA al guardar", value=True)
+            nuevo_numero = obtener_proximo_numero_guia()
+            st.info(f"Número de guía asignado: **{nuevo_numero}**")
 
         if st.button("💾 Guardar y Generar PDF", type="primary", use_container_width=True):
             if not destinatario or not direccion:
