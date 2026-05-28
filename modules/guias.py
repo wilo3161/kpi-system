@@ -733,8 +733,21 @@ def show_generar_guias():
             mc3.metric("Guías en manifiesto", len(manifiesto.get("guias", [])))
             guias_ids = manifiesto.get("guias", [])
             if guias_ids:
-                guias_man = local_db.find("guias", {"numero_guia": {"$in": [str(g) for g in guias_ids]}, "anulada": False})
+                in_list = []
+                for g in guias_ids:
+                    in_list.append(str(g))
+                    if str(g).isdigit():
+                        in_list.append(int(g))
+                guias_man = local_db.find("guias", {"numero_guia": {"$in": in_list}, "anulada": False})
                 if guias_man:
+                    # Eliminar duplicados si los hay (priorizar los que tienen recepción)
+                    guias_unicas = {}
+                    for d in guias_man:
+                        num = str(d.get("numero_guia"))
+                        if num not in guias_unicas or "recepcion" in d:
+                            guias_unicas[num] = d
+                    guias_man = list(guias_unicas.values())
+                    
                     for d in guias_man:
                         d["observaciones_recepcion"] = d.get("recepcion", {}).get("observaciones", "")
                     cols_show = ["numero_guia", "numero_transferencia", "tienda_destino", "fecha_emision", "estado", "bultos", "total_prendas", "usuario_genera", "observaciones_recepcion"]

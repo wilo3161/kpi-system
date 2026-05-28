@@ -161,20 +161,16 @@ def _actualizar_guia_recepcion(
             "audit.updated_by": usuario,
         }
         
-        doc_id = guia_existente.get("_id")
-        if doc_id:
-            local_db.update("guias", {"_id": doc_id}, update_doc)
-            # Agregar timeline e incidencias
-            local_db.update(
-                "guias",
-                {"_id": doc_id},
-                {"$push": {"timeline": evento, "incidencias": {"$each": incidencias}}}
-            )
-        else:
-            # Fallback en caso de que _id no exista (poco probable)
-            query_val = guia_existente.get("numero_guia")
-            local_db.update("guias", {"numero_guia": query_val}, update_doc)
-            local_db.update("guias", {"numero_guia": query_val}, {"$push": {"timeline": evento, "incidencias": {"$each": incidencias}}})
+        # IMPORTANTE: Usamos el valor original y tipo de numero_guia de la BD para evitar problemas 
+        # de ObjectId stringificado o int vs str.
+        query_val = guia_existente.get("numero_guia")
+        
+        local_db.update("guias", {"numero_guia": query_val}, update_doc)
+        local_db.update(
+            "guias",
+            {"numero_guia": query_val},
+            {"$push": {"timeline": evento, "incidencias": {"$each": incidencias}}}
+        )
         
         # 3. Registrar faltantes / sobrantes / stock bloqueado (con insert_many para mejor rendimiento)
         docs_faltantes = []
