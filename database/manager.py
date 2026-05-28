@@ -16,7 +16,7 @@ import pandas as pd
 from datetime import datetime, timedelta, date
 from pymongo import MongoClient, ReturnDocument, ASCENDING, DESCENDING
 from utils.common import hash_password
-from config.stores_data import TIENDAS_DATA
+# from config.stores_data import TIENDAS_DATA  # Removido para evitar circular import
 
 try:
     from pydantic import BaseModel, ValidationError, field_validator
