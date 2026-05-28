@@ -367,7 +367,8 @@ def inject_global_styles():
 
     /* Inputs (Text, Number, Select) */
     .stTextInput > div > div > input, 
-    .stNumberInput > div > div > input {
+    .stNumberInput > div > div > input,
+    .stSelectbox div[data-baseweb="select"] > div:first-child {
         background: rgba(15, 23, 42, 0.7) !important;
         border: 1px solid rgba(255, 255, 255, 0.1) !important;
         border-radius: 10px !important;
@@ -377,10 +378,16 @@ def inject_global_styles():
         transition: all 0.3s ease !important;
     }
     .stTextInput > div > div > input:focus, 
-    .stNumberInput > div > div > input:focus {
+    .stNumberInput > div > div > input:focus,
+    .stSelectbox div[data-baseweb="select"] > div:first-child:focus-within {
         border-color: var(--aero-blue) !important;
         box-shadow: 0 0 0 3px var(--aero-blue-glow) !important;
         background: rgba(30, 41, 59, 0.9) !important;
+    }
+    
+    /* Fix for select text color specifically */
+    .stSelectbox div[data-baseweb="select"] span {
+        color: #F8FAFC !important;
     }
 
     /* Curtains and Animations */
