@@ -590,90 +590,117 @@ def _proceso_recepcion_completo(guia_doc: dict) -> None:
     if items_expected:
         st.markdown("""
         <style>
-        /* Contenedor tipo Formulario Blanco Impreso */
-        .reception-form-container {
-            background-color: #FFFFFF !important;
-            border-radius: 12px;
-            padding: 20px;
-            box-shadow: 0 8px 30px rgba(0,0,0,0.15);
-            margin-bottom: 20px;
+        /* Target the specific container using the marker */
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.rec-marker) {
+            background-color: rgba(241, 245, 249, 0.98) !important; /* Gris muy suave/blanco hueso */
+            border-radius: 20px !important;
+            padding: 10px 15px !important;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.4) !important;
+            border: 2px solid rgba(255,255,255,0.8) !important;
+            backdrop-filter: blur(10px);
         }
-        /* Eliminar estilos oscuros por defecto en los inputs dentro del formulario */
-        .reception-form-container input, .reception-form-container select {
-            background-color: #F8FAFC !important;
-            color: #1E293B !important;
-            border: 1px solid #CBD5E1 !important;
+        
+        /* Forzar texto oscuro en todo el contenedor */
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.rec-marker) p,
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.rec-marker) span,
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.rec-marker) h3,
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.rec-marker) div[data-testid="stMarkdownContainer"] {
+            color: #0F172A !important;
+        }
+
+        /* Inputs y Selectbox */
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.rec-marker) input {
+            background-color: #FFFFFF !important;
+            color: #0F172A !important;
+            border: 1px solid #94A3B8 !important;
+            font-weight: 700 !important;
+            border-radius: 6px !important;
+        }
+        
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.rec-marker) div[data-baseweb="select"] > div {
+            background-color: #FFFFFF !important;
+            color: #0F172A !important;
+            border: 1px solid #94A3B8 !important;
+            border-radius: 6px !important;
+        }
+        
+        /* Botones de incremento/decremento (+/-) */
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.rec-marker) button {
+            background-color: #E2E8F0 !important;
+            color: #0F172A !important;
+            border: none !important;
+        }
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.rec-marker) button:hover {
+            background-color: #CBD5E1 !important;
         }
         </style>
         """, unsafe_allow_html=True)
         
-        st.markdown("<div class='reception-form-container'>", unsafe_allow_html=True)
-        st.markdown("""
-        <div style="text-align:center; margin-bottom: 20px; border-bottom: 2px solid #E2E8F0; padding-bottom:15px;">
-            <h3 style="color: #0F172A; margin:0; font-family: 'Bebas Neue', sans-serif; letter-spacing: 1px; font-size: 2rem;">HOJA DE RECEPCIÓN FÍSICA</h3>
-            <p style="color: #64748B; margin:0; font-size: 0.95rem;">Verifica las cantidades físicas. Usa los botones <b>+</b> o <b>-</b> para ajustes.</p>
-        </div>
-        """, unsafe_allow_html=True)
+        with st.container(border=True):
+            st.markdown("<div class='rec-marker'></div>", unsafe_allow_html=True)
+            st.markdown("""
+            <div style="text-align:center; margin-bottom: 20px; border-bottom: 2px solid #CBD5E1; padding-bottom:15px;">
+                <h3 style="color: #0F172A; margin:0; font-family: 'Bebas Neue', sans-serif; letter-spacing: 1px; font-size: 2.2rem;">HOJA DE RECEPCIÓN FÍSICA</h3>
+                <p style="color: #475569; margin:0; font-size: 0.95rem;">Verifica las cantidades físicas. Usa los botones <b>+</b> o <b>-</b> para ajustes.</p>
+            </div>
+            """, unsafe_allow_html=True)
 
-        edicion_items = []
-        estados_opciones = ["CONFORME", "FALTANTE", "SOBRANTE", "DAÑADO", "MANCHA", "COSTURA", "ETIQUETA_INCORRECTA", "PRODUCTO_DIFERENTE"]
-        
-        # Headers del formulario
-        hc1, hc2, hc3, hc4, hc5 = st.columns([1.5, 3, 1, 1.5, 2])
-        hc1.markdown("<span style='color:#334155; font-weight:700;'>CÓDIGO / ESTILO</span>", unsafe_allow_html=True)
-        hc2.markdown("<span style='color:#334155; font-weight:700;'>DESCRIPCIÓN</span>", unsafe_allow_html=True)
-        hc3.markdown("<span style='color:#334155; font-weight:700;'>ESPERADO</span>", unsafe_allow_html=True)
-        hc4.markdown("<span style='color:#334155; font-weight:700;'>RECIBIDO (+/-)</span>", unsafe_allow_html=True)
-        hc5.markdown("<span style='color:#334155; font-weight:700;'>ESTADO</span>", unsafe_allow_html=True)
-        st.markdown("<hr style='margin-top:0px; margin-bottom:15px; border-color:#E2E8F0;'>", unsafe_allow_html=True)
-        
-        for i, item in enumerate(items_expected):
-            c1, c2, c3, c4, c5 = st.columns([1.5, 3, 1, 1.5, 2])
+            edicion_items = []
+            estados_opciones = ["CONFORME", "FALTANTE", "SOBRANTE", "DAÑADO", "MANCHA", "COSTURA", "ETIQUETA_INCORRECTA", "PRODUCTO_DIFERENTE"]
             
-            with c1:
-                st.markdown(f"<div style='color:#0F172A; font-weight:600; font-size:1rem; margin-top:5px;'>{item.get('codigo', '')}</div><div style='color:#64748B; font-size:0.8rem;'>Estilo: {item.get('estilo', '')}</div>", unsafe_allow_html=True)
-            with c2:
-                st.markdown(f"<div style='color:#334155; font-size:0.9rem; margin-top:8px;'>{item.get('descripcion', '')}</div>", unsafe_allow_html=True)
+            # Headers del formulario
+            hc1, hc2, hc3, hc4, hc5 = st.columns([1.5, 3, 1, 1.5, 2])
+            hc1.markdown("<span style='font-weight:800; font-size:0.9rem;'>CÓDIGO / ESTILO</span>", unsafe_allow_html=True)
+            hc2.markdown("<span style='font-weight:800; font-size:0.9rem;'>DESCRIPCIÓN</span>", unsafe_allow_html=True)
+            hc3.markdown("<span style='font-weight:800; font-size:0.9rem;'>ESPERADO</span>", unsafe_allow_html=True)
+            hc4.markdown("<span style='font-weight:800; font-size:0.9rem;'>RECIBIDO (+/-)</span>", unsafe_allow_html=True)
+            hc5.markdown("<span style='font-weight:800; font-size:0.9rem;'>ESTADO</span>", unsafe_allow_html=True)
+            st.markdown("<hr style='margin-top:0px; margin-bottom:15px; border-color:#CBD5E1; border-width: 2px;'>", unsafe_allow_html=True)
             
-            esp = item.get("cantidad_esperada", 1)
-            with c3:
-                st.markdown(f"<div style='color:#0F172A; font-weight:bold; font-size:1.2rem; text-align:center; margin-top:5px; background:#F1F5F9; border-radius:5px; padding:2px;'>{esp}</div>", unsafe_allow_html=True)
-            
-            with c4:
-                recibido = st.number_input(
-                    "Recibido",
-                    min_value=0,
-                    value=esp,
-                    step=1,
-                    key=f"rec_{numero_guia}_{i}",
-                    label_visibility="collapsed"
-                )
-            
-            with c5:
-                # Pre-seleccionar estado basado en diferencias matemáticas
-                def_estado = "CONFORME"
-                if recibido < esp: def_estado = "FALTANTE"
-                elif recibido > esp: def_estado = "SOBRANTE"
+            for i, item in enumerate(items_expected):
+                c1, c2, c3, c4, c5 = st.columns([1.5, 3, 1, 1.5, 2])
                 
-                estado_val = st.selectbox(
-                    "Estado",
-                    options=estados_opciones,
-                    index=estados_opciones.index(def_estado) if def_estado in estados_opciones else 0,
-                    key=f"est_{numero_guia}_{i}",
-                    label_visibility="collapsed"
-                )
-            
-            edicion_items.append({
-                "codigo": item.get("codigo"),
-                "estilo": item.get("estilo"),
-                "descripcion": item.get("descripcion"),
-                "cantidad_esperada": esp,
-                "cantidad_recibida": recibido,
-                "estado_item": estado_val
-            })
-            st.markdown("<hr style='margin-top:5px; margin-bottom:10px; opacity:0.15; border-color:#94A3B8;'>", unsafe_allow_html=True)
-            
-        st.markdown("</div>", unsafe_allow_html=True) # Cierra reception-form-container
+                with c1:
+                    st.markdown(f"<div style='font-weight:700; font-size:1.05rem; margin-top:5px;'>{item.get('codigo', '')}</div><div style='color:#475569 !important; font-size:0.85rem; font-weight:600;'>Estilo: {item.get('estilo', '')}</div>", unsafe_allow_html=True)
+                with c2:
+                    st.markdown(f"<div style='font-size:0.95rem; font-weight:500; margin-top:8px;'>{item.get('descripcion', '')}</div>", unsafe_allow_html=True)
+                
+                esp = item.get("cantidad_esperada", 1)
+                with c3:
+                    st.markdown(f"<div style='font-weight:800; font-size:1.3rem; text-align:center; margin-top:5px; background:#E2E8F0; border-radius:6px; padding:4px; border: 1px solid #CBD5E1;'>{esp}</div>", unsafe_allow_html=True)
+                
+                with c4:
+                    recibido = st.number_input(
+                        "Recibido",
+                        min_value=0,
+                        value=esp,
+                        step=1,
+                        key=f"rec_{numero_guia}_{i}",
+                        label_visibility="collapsed"
+                    )
+                
+                with c5:
+                    def_estado = "CONFORME"
+                    if recibido < esp: def_estado = "FALTANTE"
+                    elif recibido > esp: def_estado = "SOBRANTE"
+                    
+                    estado_val = st.selectbox(
+                        "Estado",
+                        options=estados_opciones,
+                        index=estados_opciones.index(def_estado) if def_estado in estados_opciones else 0,
+                        key=f"est_{numero_guia}_{i}",
+                        label_visibility="collapsed"
+                    )
+                
+                edicion_items.append({
+                    "codigo": item.get("codigo"),
+                    "estilo": item.get("estilo"),
+                    "descripcion": item.get("descripcion"),
+                    "cantidad_esperada": esp,
+                    "cantidad_recibida": recibido,
+                    "estado_item": estado_val
+                })
+                st.markdown("<hr style='margin-top:8px; margin-bottom:12px; border-color:#94A3B8; opacity:0.3;'>", unsafe_allow_html=True)
 
         total_recibido = sum(it["cantidad_recibida"] for it in edicion_items)
         tiene_novedad = any(it["cantidad_recibida"] != it["cantidad_esperada"] or it["estado_item"] != "CONFORME" for it in edicion_items)
