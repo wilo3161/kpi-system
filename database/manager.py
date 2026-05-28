@@ -345,6 +345,7 @@ class MockLocalDBFallback:
                 ]
 
             # Tiendas mock limitadas a 10 para ahorrar memoria
+            from config.stores_data import TIENDAS_DATA
             for tienda in TIENDAS_DATA[:10]:
                 nombre = tienda.get("Nombre de Tienda", "")
                 contacto = tienda.get("Contacto", "")
