@@ -609,68 +609,70 @@ def _proceso_recepcion_completo(guia_doc: dict) -> None:
     st.subheader("📋 Registro de Recepción")
     
     if items_expected:
-        with st.container(border=True):
+        with st.container():
             st.markdown("""
-            <div style="text-align:center; margin-bottom: 20px; border-bottom: 2px solid #CBD5E1; padding-bottom:15px;">
-                <h3 style="color: #0F172A; margin:0; font-family: 'Bebas Neue', sans-serif; letter-spacing: 1px; font-size: 2.2rem;">HOJA DE RECEPCIÓN FÍSICA</h3>
-                <p style="color: #475569; margin:0; font-size: 0.95rem;">Verifica las cantidades físicas y reporta el estado.</p>
+            <div style="background-color: #ffffff; color: #000000; padding: 15px; border-radius: 10px; text-align:center; margin-bottom: 20px; border: 1px solid #CBD5E1;">
+                <h3 style="margin:0; font-family: 'Bebas Neue', sans-serif; letter-spacing: 1px; font-size: 2.2rem;">HOJA DE RECEPCIÓN FÍSICA</h3>
+                <p style="margin:0; font-size: 0.95rem;">Verifica las cantidades físicas. Usa los botones <b>+</b> o <b>-</b> para ajustes.</p>
             </div>
             """, unsafe_allow_html=True)
 
+            edicion_items = []
             estados_opciones = ["CONFORME", "FALTANTE", "SOBRANTE", "DAÑADO", "MANCHA", "COSTURA", "ETIQUETA_INCORRECTA", "PRODUCTO_DIFERENTE"]
             
-            # Preparar datos para st.data_editor
-            df_data = []
-            for item in items_expected:
-                esp = item.get("cantidad_esperada", 1)
-                df_data.append({
-                    "Código": item.get("codigo", ""),
-                    "Estilo": item.get("estilo", ""),
-                    "Descripción": item.get("descripcion", ""),
-                    "Esperado": esp,
-                    "Recibido": esp,
-                    "Estado": "CONFORME"
-                })
+            # Headers del formulario
+            hc1, hc2, hc3, hc4, hc5 = st.columns([1.5, 3, 1, 1.5, 2])
+            hc1.markdown("<span style='font-weight:800; font-size:0.9rem;'>CÓDIGO / ESTILO</span>", unsafe_allow_html=True)
+            hc2.markdown("<span style='font-weight:800; font-size:0.9rem;'>DESCRIPCIÓN</span>", unsafe_allow_html=True)
+            hc3.markdown("<span style='font-weight:800; font-size:0.9rem;'>ESPERADO</span>", unsafe_allow_html=True)
+            hc4.markdown("<span style='font-weight:800; font-size:0.9rem;'>RECIBIDO (+/-)</span>", unsafe_allow_html=True)
+            hc5.markdown("<span style='font-weight:800; font-size:0.9rem;'>ESTADO</span>", unsafe_allow_html=True)
+            st.markdown("<hr style='margin-top:0px; margin-bottom:15px; border-color:#CBD5E1; border-width: 2px;'>", unsafe_allow_html=True)
             
-            df = pd.DataFrame(df_data)
-            
-            # Renderizar editor compacto y estético
-            edited_df = st.data_editor(
-                df,
-                column_config={
-                    "Código": st.column_config.TextColumn("Código", disabled=True),
-                    "Estilo": st.column_config.TextColumn("Estilo", disabled=True),
-                    "Descripción": st.column_config.TextColumn("Descripción", disabled=True, width="large"),
-                    "Esperado": st.column_config.NumberColumn("Esperado", disabled=True),
-                    "Recibido": st.column_config.NumberColumn("Recibido (+/-)", min_value=0, step=1, required=True),
-                    "Estado": st.column_config.SelectboxColumn("Estado", options=estados_opciones, required=True),
-                },
-                hide_index=True,
-                use_container_width=True,
-                key=f"editor_{numero_guia}"
-            )
-            
-            # Procesar items editados
-            edicion_items = []
-            for i, row in edited_df.iterrows():
-                recibido = row["Recibido"]
-                esp = row["Esperado"]
-                estado_val = row["Estado"]
+            for i, item in enumerate(items_expected):
+                c1, c2, c3, c4, c5 = st.columns([1.5, 3, 1, 1.5, 2])
                 
-                # Auto-ajuste de estado si el usuario olvidó cambiarlo
-                if recibido < esp and estado_val == "CONFORME":
-                    estado_val = "FALTANTE"
-                elif recibido > esp and estado_val == "CONFORME":
-                    estado_val = "SOBRANTE"
+                with c1:
+                    st.markdown(f"<div style='font-weight:700; font-size:1.05rem; margin-top:5px;'>{item.get('codigo', '')}</div><div style='font-size:0.85rem; font-weight:600;'>Estilo: {item.get('estilo', '')}</div>", unsafe_allow_html=True)
+                with c2:
+                    st.markdown(f"<div style='font-size:0.95rem; font-weight:500; margin-top:8px;'>{item.get('descripcion', '')}</div>", unsafe_allow_html=True)
+                
+                esp = item.get("cantidad_esperada", 1)
+                with c3:
+                    st.markdown(f"<div style='font-weight:800; font-size:1.3rem; text-align:center; margin-top:5px; border-radius:6px; padding:4px; border: 1px solid #CBD5E1;'>{esp}</div>", unsafe_allow_html=True)
+                
+                with c4:
+                    recibido = st.number_input(
+                        "Recibido",
+                        min_value=0,
+                        value=esp,
+                        step=1,
+                        key=f"rec_{numero_guia}_{i}",
+                        label_visibility="collapsed"
+                    )
+                
+                with c5:
+                    def_estado = "CONFORME"
+                    if recibido < esp: def_estado = "FALTANTE"
+                    elif recibido > esp: def_estado = "SOBRANTE"
                     
+                    estado_val = st.selectbox(
+                        "Estado",
+                        options=estados_opciones,
+                        index=estados_opciones.index(def_estado) if def_estado in estados_opciones else 0,
+                        key=f"est_{numero_guia}_{i}",
+                        label_visibility="collapsed"
+                    )
+                
                 edicion_items.append({
-                    "codigo": row["Código"],
-                    "estilo": row["Estilo"],
-                    "descripcion": row["Descripción"],
+                    "codigo": item.get("codigo"),
+                    "estilo": item.get("estilo"),
+                    "descripcion": item.get("descripcion"),
                     "cantidad_esperada": esp,
                     "cantidad_recibida": recibido,
                     "estado_item": estado_val
                 })
+                st.markdown("<hr style='margin-top:8px; margin-bottom:12px; border-color:#94A3B8; opacity:0.3;'>", unsafe_allow_html=True)
 
         total_recibido = sum(it["cantidad_recibida"] for it in edicion_items)
         tiene_novedad = any(it["cantidad_recibida"] != it["cantidad_esperada"] or it["estado_item"] != "CONFORME" for it in edicion_items)
