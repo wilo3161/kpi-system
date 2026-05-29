@@ -21,6 +21,15 @@ def reload_stores_data():
     
     # Intentar cargar desde la base de datos
     db_tiendas = local_db.find("tiendas", {})
+    
+    # Auto-migración: Si detecta la data vieja (ej. "Aeropostale Mall del Rio" sin estructura nueva)
+    if db_tiendas and any("Aeropostale Mall del Rio" == t.get("Nombre de Tienda") for t in db_tiendas):
+        try:
+            local_db.db["tiendas"].drop()
+        except Exception:
+            pass
+        db_tiendas = []
+        
     if db_tiendas:
         TIENDAS_DATA.clear()
         # Asegurar que se limpian ObjectIds si existen y no son serializables, aunque no es necesario, solo pasamos la data
