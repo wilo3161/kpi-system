@@ -611,27 +611,22 @@ def _proceso_recepcion_completo(guia_doc: dict) -> None:
     if items_expected:
         st.markdown("""
         <style>
-        .recepcion-box {
-            background-color: rgba(15, 23, 42, 0.95) !important;
-            padding: 20px;
-            border-radius: 12px;
-            border: 1px solid #334155;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.5);
-        }
-        /* Apuntar al contenedor padre inmediato en Streamlit */
-        div[data-testid="stVerticalBlock"]:has(> div > div > div > .recepcion-box-marker) {
-            background-color: rgba(10, 15, 25, 0.95) !important;
-            padding: 20px !important;
-            border-radius: 12px !important;
+        /* Apuntar al contenedor que contiene nuestra marca */
+        div[data-testid="stVerticalBlock"]:has(.recepcion-box-marker) {
+            background-color: rgba(15, 23, 42, 0.92) !important;
+            padding: 30px !important;
+            border-radius: 15px !important;
             border: 1px solid #334155 !important;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5) !important;
+            backdrop-filter: blur(8px) !important;
         }
         </style>
-        <div class='recepcion-box-marker'></div>
         """, unsafe_allow_html=True)
         
         with st.container():
+            st.markdown("<div class='recepcion-box-marker'></div>", unsafe_allow_html=True)
             st.markdown("""
-            <div style="background-color: #0F172A; color: #FFFFFF; padding: 15px; border-radius: 10px; text-align:center; margin-bottom: 20px; border: 1px solid #334155;">
+            <div style="text-align:center; margin-bottom: 20px; border-bottom: 2px solid #334155; padding-bottom:15px;">
                 <h3 style="margin:0; font-family: 'Bebas Neue', sans-serif; letter-spacing: 1px; font-size: 2.2rem; color: #FFFFFF;">HOJA DE RECEPCIÓN FÍSICA</h3>
                 <p style="margin:0; font-size: 0.95rem; color: #94A3B8;">Verifica las cantidades físicas. Usa los botones <b>+</b> o <b>-</b> para ajustes.</p>
             </div>
