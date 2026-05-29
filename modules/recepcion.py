@@ -577,9 +577,14 @@ def _proceso_recepcion_completo(guia_doc: dict) -> None:
     # Validar que la tienda coincida (si el usuario es tipo Tienda)
     rol_actual = st.session_state.get("role", "")
     tienda_asignada = st.session_state.get("assigned_store", "")
-    if rol_actual == "Tienda" and guia_doc.get("tienda_destino") != tienda_asignada:
-        st.error(f"❌ Acceso denegado: Esta guía pertenece a {guia_doc.get('tienda_destino')} y tu tienda asignada es {tienda_asignada}.")
-        return
+    
+    if rol_actual == "Tienda":
+        import re
+        asignada_norm = re.sub(r'[^a-zA-Z0-9]', '', tienda_asignada).lower()
+        destino_norm = re.sub(r'[^a-zA-Z0-9]', '', guia_doc.get("tienda_destino", "")).lower()
+        if asignada_norm != destino_norm:
+            st.error(f"❌ Acceso denegado: Esta guía pertenece a {guia_doc.get('tienda_destino')} y tu tienda asignada es {tienda_asignada}.")
+            return
 
     
     # Validar estado previo
@@ -845,7 +850,12 @@ def _panel_guias_pendientes():
     query = {"estado": {"$in": estados}, "anulada": False}
     
     if st.session_state.get("role") == "Tienda":
-        query["tienda_destino"] = st.session_state.get("assigned_store")
+        import re
+        assigned = st.session_state.get("assigned_store", "")
+        # Crear regex que ignore espacios y guiones
+        words = re.split(r'[\s\-]+', assigned)
+        regex_pattern = ".*?".join(re.escape(w) for w in words if w)
+        query["tienda_destino"] = {"$regex": regex_pattern, "$options": "i"}
         
     guias = local_db.find("guias", query, sort=[("fecha", -1)], limit=50)
     if not guias:
@@ -872,7 +882,12 @@ def _panel_historial():
     query = {"estado": {"$in": [EstadoGuia.RECIBIDA_CONFORME, EstadoGuia.RECIBIDA_NOVEDAD, EstadoGuia.CONCILIADA, EstadoGuia.CERRADA]}}
     
     if st.session_state.get("role") == "Tienda":
-        query["tienda_destino"] = st.session_state.get("assigned_store")
+        import re
+        assigned = st.session_state.get("assigned_store", "")
+        # Crear regex que ignore espacios y guiones
+        words = re.split(r'[\s\-]+', assigned)
+        regex_pattern = ".*?".join(re.escape(w) for w in words if w)
+        query["tienda_destino"] = {"$regex": regex_pattern, "$options": "i"}
         
     guias = local_db.find("guias", query, sort=[("fecha", -1)], limit=100)
     if not guias:
