@@ -42,7 +42,7 @@ def _inicializar_modelo():
     try:
         genai.configure(api_key=api_key)
         _modelo_gemini = genai.GenerativeModel(
-            model_name="gemini-1.5-flash",
+            model_name="gemini-2.5-flash",
             system_instruction="Eres 'wilo IA', el asistente exclusivo de inteligencia artificial del ERP de Fashion Club Ecuador y Aeropostale. Nunca debes mencionar que eres de Google, Gemini o OpenAI, tu nombre es únicamente wilo IA."
         )
         return _modelo_gemini
