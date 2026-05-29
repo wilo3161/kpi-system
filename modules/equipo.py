@@ -308,9 +308,36 @@ def show_gestion_equipo():
                     st.rerun()
                 
                 st.divider()
-                st.markdown("#### ✈️ Enviar a Telegram")
-                if st.button("Enviar último mensaje de wilo IA", use_container_width=True, type="primary"):
-                    ultimo_mensaje = next((m["content"] for m in reversed(st.session_state.chat_gemini) if m["role"] == "assistant"), None)
+                st.markdown("#### 💬 Enviar por WhatsApp")
+                miembros_wa = {"Grupal / Elegir en la app": ""}
+                for area, miembros in EQUIPO_LOGISTICO.items():
+                    for m in miembros:
+                        wa_num = m.get("whatsapp", "").strip()
+                        if wa_num:
+                            miembros_wa[m["nombre"]] = wa_num
+                
+                destinatario = st.selectbox("Seleccionar Destinatario:", list(miembros_wa.keys()))
+                ultimo_mensaje = next((m["content"] for m in reversed(st.session_state.chat_gemini) if m["role"] == "assistant"), "")
+                
+                if ultimo_mensaje and "¡Hola! Soy wilo IA" not in ultimo_mensaje:
+                    import urllib.parse
+                    texto_url = urllib.parse.quote(ultimo_mensaje)
+                    num = miembros_wa[destinatario]
+                    if num:
+                        # Si empieza con 0, lo quitamos y agregamos el 593 (Ecuador)
+                        if num.startswith("0"):
+                            num = "593" + num[1:]
+                        wa_link = f"https://wa.me/{num}?text={texto_url}"
+                    else:
+                        wa_link = f"https://wa.me/?text={texto_url}"
+                    
+                    st.link_button(f"📲 Abrir WhatsApp", wa_link, type="primary", use_container_width=True)
+                else:
+                    st.warning("No hay mensaje generado para enviar.")
+
+                st.divider()
+                st.markdown("#### ✈️ Enviar a mi Telegram")
+                if st.button("Enviar último mensaje por Telegram", use_container_width=True):
                     # Evitar enviar el saludo inicial
                     if ultimo_mensaje and "¡Hola! Soy wilo IA" not in ultimo_mensaje:
                         from utils.telegram_helper import enviar_mensaje_telegram
@@ -321,7 +348,7 @@ def show_gestion_equipo():
                         else:
                             st.error(res["message"])
                     else:
-                        st.warning("No hay un mensaje generado por wilo IA para enviar.")
+                        st.warning("No hay mensaje generado para enviar.")
 
             with col_der:
                 chat_container = st.container(height=400)
