@@ -306,6 +306,22 @@ def show_gestion_equipo():
                     st.session_state.chat_gemini = []
                     st.session_state.prompt_rapido = ""
                     st.rerun()
+                
+                st.divider()
+                st.markdown("#### ✈️ Enviar a Telegram")
+                if st.button("Enviar último mensaje de wilo IA", use_container_width=True, type="primary"):
+                    ultimo_mensaje = next((m["content"] for m in reversed(st.session_state.chat_gemini) if m["role"] == "assistant"), None)
+                    # Evitar enviar el saludo inicial
+                    if ultimo_mensaje and "¡Hola! Soy wilo IA" not in ultimo_mensaje:
+                        from utils.telegram_helper import enviar_mensaje_telegram
+                        with st.spinner("Enviando a Telegram..."):
+                            res = enviar_mensaje_telegram(ultimo_mensaje)
+                        if res["success"]:
+                            st.success(res["message"])
+                        else:
+                            st.error(res["message"])
+                    else:
+                        st.warning("No hay un mensaje generado por wilo IA para enviar.")
 
             with col_der:
                 chat_container = st.container(height=400)
