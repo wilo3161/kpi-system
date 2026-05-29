@@ -13,64 +13,69 @@ import logging
 logger = logging.getLogger(__name__)
 
 try:
-    import openai
-    _OPENAI_OK = True
+    import google.generativeai as genai
+    _GEMINI_OK = True
 except ImportError:
-    _OPENAI_OK = False
+    _GEMINI_OK = False
 
 # -----------------------------------------------------------------------------
-# Singleton del modelo OpenAI (Wilo IA)
+# Singleton del modelo Gemini (Wilo IA)
 # -----------------------------------------------------------------------------
-_cliente_openai = None
+_modelo_gemini = None
 
 def _inicializar_modelo():
-    """Configura OpenAI y retorna el cliente listo para usar."""
-    global _cliente_openai
-    if _cliente_openai is not None:
-        return _cliente_openai
+    """Configura Gemini y retorna el modelo listo para usar."""
+    global _modelo_gemini
+    if _modelo_gemini is not None:
+        return _modelo_gemini
 
-    if not _OPENAI_OK:
+    if not _GEMINI_OK:
         return None
 
-    from utils.secrets_helper import obtener_credencial
-    api_key = obtener_credencial("deepseek", "api_key")
+    from utils.secrets_helper import obtener_api_key_gemini
+    api_key = obtener_api_key_gemini()
     
     if not api_key:
-        logger.error("API Key de DeepSeek no configurada.")
+        logger.error("API Key de Gemini no configurada.")
         return None
 
     try:
-        from openai import OpenAI
-        _cliente_openai = OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
-        return _cliente_openai
+        genai.configure(api_key=api_key)
+        _modelo_gemini = genai.GenerativeModel(
+            model_name="gemini-1.5-flash",
+            system_instruction="Eres 'wilo IA', el asistente exclusivo de inteligencia artificial del ERP de Fashion Club Ecuador y Aeropostale. Nunca debes mencionar que eres de Google, Gemini o OpenAI, tu nombre es únicamente wilo IA."
+        )
+        return _modelo_gemini
     except Exception as e:
-        logger.error("Error configurando OpenAI: %s", e)
+        logger.error("Error configurando Gemini: %s", e)
         return None
 
 def _ejecutar_prompt(prompt: str, fallback: str = "⚠️ wilo IA no disponible.") -> str:
-    """Ejecuta un prompt en OpenAI y retorna la respuesta."""
-    cliente = _inicializar_modelo()
-    if not cliente:
+    """Ejecuta un prompt en Gemini y retorna la respuesta."""
+    modelo = _inicializar_modelo()
+    if not modelo:
         return fallback
     try:
-        response = cliente.chat.completions.create(
-            model="deepseek-chat",
-            messages=[
-                {"role": "system", "content": "Eres 'wilo IA', el asistente exclusivo de inteligencia artificial del ERP de Fashion Club Ecuador y Aeropostale. Nunca debes mencionar que eres de OpenAI o ChatGPT, tu nombre es únicamente wilo IA."},
-                {"role": "user", "content": prompt}
-            ],
-            max_tokens=800,
-            temperature=0.7
-        )
-        return response.choices[0].message.content.strip()
+        response = modelo.generate_content(prompt)
+        return response.text.strip()
     except Exception as e:
-        logger.error("Error en wilo IA (OpenAI): %s", e)
+        logger.error("Error en wilo IA (Gemini): %s", e)
         return f"Error: {e}"
 
-
 def transcribir_audio(audio_bytes: bytes) -> str | None:
-    """DeepSeek no soporta transcripción de audio nativamente."""
-    return "La transcripción de audio no está disponible con el modelo actual (DeepSeek)."
+    """Para transcribir audio con Gemini 1.5 Flash se usa la API multimodal."""
+    modelo = _inicializar_modelo()
+    if not modelo:
+        return "⚠️ Modelo no disponible para transcribir."
+    try:
+        response = modelo.generate_content([
+            "Transcribe textualmente el siguiente audio en español:",
+            {"mime_type": "audio/ogg", "data": audio_bytes}
+        ])
+        return response.text.strip()
+    except Exception as e:
+        logger.error("Error al transcribir con Gemini: %s", e)
+        return None
 
 
 # -----------------------------------------------------------------------------
