@@ -14,7 +14,7 @@ from modules.main_page import show_main_page
 st.set_page_config(
     layout="wide",
     page_title="AEROPOSTALE ERP | Control Total",
-    page_icon="images/favicon.png",
+    page_icon="👕",
     initial_sidebar_state="collapsed",
 )
 
