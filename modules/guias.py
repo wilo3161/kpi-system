@@ -416,28 +416,40 @@ def generar_pdf_profesional(guia_data: dict) -> bytes:
     contenido = []
     tienda, marca = guia_data.get("tienda_destino", "Destino"), guia_data.get("marca", "")
     logo_bytes, qr_bytes = guia_data.get("logo_bytes"), guia_data.get("qr_bytes")
-    logo_el = Image(io.BytesIO(logo_bytes), width=2.5*cm, height=2.5*cm) if logo_bytes else Paragraph("", campo_s)
-    qr_el = Image(io.BytesIO(qr_bytes), width=3.0*cm, height=3.0*cm) if qr_bytes else Paragraph("", campo_s)
+    
+    # Reducir tamaño de logos y encabezados para ser más compacto
+    logo_el = Image(io.BytesIO(logo_bytes), width=2.0*cm, height=2.0*cm) if logo_bytes else Paragraph("", campo_s)
+    qr_el = Image(io.BytesIO(qr_bytes), width=2.2*cm, height=2.2*cm) if qr_bytes else Paragraph("", campo_s)
+    
     titulo_cell = Paragraph(f"Guía de Remisión<br/>{tienda} — {marca}", titulo_s)
-    header_tbl = Table([[logo_el, titulo_cell, qr_el]], colWidths=[3*cm, 11*cm, 4*cm])
-    header_tbl.setStyle(TableStyle([("VALIGN", (0,0), (-1,-1), "TOP"), ("ALIGN", (1,0), (1,0), "CENTER"),
-                                    ("ALIGN", (2,0), (2,0), "RIGHT"), ("LEFTPADDING", (0,0), (-1,-1), 2),
-                                    ("RIGHTPADDING", (0,0), (-1,-1), 2)]))
+    header_tbl = Table([[logo_el, titulo_cell, qr_el]], colWidths=[2.5*cm, 12*cm, 2.5*cm])
+    header_tbl.setStyle(TableStyle([
+        ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
+        ("ALIGN", (1,0), (1,0), "CENTER"),
+        ("ALIGN", (2,0), (2,0), "RIGHT"),
+    ]))
     contenido.append(header_tbl)
+    
     if qr_bytes:
-        contenido.append(Paragraph("Escanea para confirmar recepción", qr_s))
-    contenido.append(Spacer(1, 0.5*cm))
+        contenido.append(Paragraph("Escanea para confirmar", qr_s))
+    
+    contenido.append(Spacer(1, 0.3*cm))
+    
     num_guia, num_trans, tot_prendas = guia_data.get("numero_guia", ""), guia_data.get("numero_transferencia", "No registrada"), guia_data.get("total_prendas", 0)
-    contenido.append(Paragraph(f"N° Transferencia: <b>{num_trans}</b>", destac_s))
-    contenido.append(Paragraph(f"Total Prendas: <b>{tot_prendas:,}</b>", destac_s))
-    contenido.append(Spacer(1, 0.2*cm))
-    contenido.append(Paragraph(f"N° Guía: {num_guia} &nbsp;&nbsp; Fecha: {guia_data.get('fecha_emision', '')}", info_s))
-    contenido.append(Spacer(1, 0.6*cm))
+    
+    info_tbl = Table([
+        [Paragraph(f"<b>N° Transferencia:</b> {num_trans}", destac_s), Paragraph(f"<b>Total Prendas:</b> {tot_prendas:,}", destac_s)],
+        [Paragraph(f"N° Guía: {num_guia}", info_s), Paragraph(f"Fecha: {guia_data.get('fecha_emision', '')}", info_s)]
+    ], colWidths=[8.5*cm, 8.5*cm])
+    contenido.append(info_tbl)
+    contenido.append(Spacer(1, 0.3*cm))
+    
     dest = guia_data.get("destinatario", {})
     if isinstance(dest, str):
         dest_nombre, dest_dir, dest_tel, dest_ciudad = dest, guia_data.get("direccion_destinatario", ""), guia_data.get("telefono_destinatario", ""), guia_data.get("ciudad", "")
     else:
         dest_nombre, dest_dir, dest_tel, dest_ciudad = dest.get("nombre", ""), dest.get("direccion", ""), dest.get("telefono", ""), dest.get("ciudad", "")
+        
     rem_data = [[Paragraph("REMITENTE", seccion_s)],
                 [Paragraph(f"<b>Empresa:</b> {MARCAS.get(marca, {}).get('remitente_empresa', marca)}", campo_s)],
                 [Paragraph(f"<b>Dirección:</b> {DIRECCION_REMITENTE}", campo_s)],
@@ -447,35 +459,46 @@ def generar_pdf_profesional(guia_data: dict) -> bytes:
                  [Paragraph(f"<b>Dirección:</b> {dest_dir}", campo_s)],
                  [Paragraph(f"<b>Teléfono:</b> {dest_tel}", campo_s)],
                  [Paragraph(f"<b>Ciudad:</b> {dest_ciudad}", campo_s)]]
+                 
     while len(rem_data) < len(dest_data): rem_data.append([Paragraph("", campo_s)])
-    tbl_rem, tbl_dest = Table(rem_data, colWidths=[8*cm]), Table(dest_data, colWidths=[8*cm])
+    
+    tbl_rem, tbl_dest = Table(rem_data, colWidths=[8.2*cm]), Table(dest_data, colWidths=[8.2*cm])
     for t in (tbl_rem, tbl_dest):
-        t.setStyle(TableStyle([("BACKGROUND", (0,0), (-1,0), c_fondo), ("ALIGN", (0,0), (-1,0), "CENTER"),
-                               ("GRID", (0,0), (-1,-1), 0.5, c_borde), ("TOPPADDING", (0,0), (-1,-1), 5),
-                               ("BOTTOMPADDING", (0,0), (-1,-1), 5)]))
+        t.setStyle(TableStyle([
+            ("BACKGROUND", (0,0), (-1,0), c_fondo),
+            ("ALIGN", (0,0), (-1,0), "CENTER"),
+            ("GRID", (0,0), (-1,-1), 0.5, c_borde),
+            ("TOPPADDING", (0,0), (-1,-1), 2),
+            ("BOTTOMPADDING", (0,0), (-1,-1), 2)
+        ]))
+        
     tbl_side = Table([[tbl_rem, tbl_dest]], colWidths=[8.5*cm, 8.5*cm])
     tbl_side.setStyle(TableStyle([("VALIGN", (0,0), (-1,-1), "TOP")]))
     contenido.append(tbl_side)
-    contenido.append(Spacer(1, 0.6*cm))
+    
+    contenido.append(Spacer(1, 0.3*cm))
     bultos, peso = guia_data.get("bultos", 0), guia_data.get("peso", 0)
     if bultos or peso:
         contenido.append(Paragraph(f"<b>Bultos:</b> {bultos} &nbsp;&nbsp; <b>Peso:</b> {peso} kg", campo_s))
-        contenido.append(Spacer(1, 0.3*cm))
+        
     obs = guia_data.get("observaciones", "")
     if obs:
         contenido.append(Paragraph(f"<b>Observaciones:</b> {obs}", campo_s))
-        contenido.append(Spacer(1, 0.5*cm))
+        
     ai = guia_data.get("ai_analysis", {})
     if ai and ai.get("resumen_operacional"):
         contenido.append(Paragraph(f"<b>Análisis IA:</b> {ai['resumen_operacional']} — Riesgo: {ai.get('riesgo_detectado', 'N/A')}", campo_s))
-        contenido.append(Spacer(1, 0.4*cm))
+        
+    contenido.append(Spacer(1, 0.3*cm))
     usuario = guia_data.get("usuario_genera", "")
     firma_tbl = Table([[Paragraph("_________________________", campo_s), Paragraph("_________________________", campo_s)],
                        [Paragraph("Revisado por", firma_s), Paragraph(f"Generado por: {usuario}", firma_s)]], colWidths=[8.5*cm, 8.5*cm])
-    firma_tbl.setStyle(TableStyle([("ALIGN", (0,0), (-1,-1), "CENTER"), ("TOPPADDING", (0,0), (-1,-1), 10)]))
+    firma_tbl.setStyle(TableStyle([("ALIGN", (0,0), (-1,-1), "CENTER"), ("TOPPADDING", (0,0), (-1,-1), 5)]))
     contenido.append(firma_tbl)
-    contenido.append(Spacer(1, 0.4*cm))
+    
+    contenido.append(Spacer(1, 0.2*cm))
     contenido.append(Paragraph("Documento generado electrónicamente — Válido sin firma física", pie_s))
+    
     doc.build(contenido)
     buffer.seek(0)
     return buffer.getvalue()
@@ -536,25 +559,33 @@ def show_generar_guias():
     # TAB 1 — NUEVA GUÍA
     # =========================================================================
     with tab_nueva:
-        with st.container(border=True):
-            components.html("""
-            <script>
-            const doc = window.parent.document;
-            const markers = doc.querySelectorAll('.form-bg-white-js');
-            markers.forEach(marker => {
-                let container = marker.closest('div[data-testid="stVerticalBlock"]');
-                if (container) {
-                    container.style.setProperty("background-color", "#FFFFFF", "important");
-                    container.style.setProperty("border-radius", "15px", "important");
-                    container.style.setProperty("padding", "25px", "important");
-                    
-                    const texts = container.querySelectorAll('label p, div[data-testid="stMarkdownContainer"] p');
-                    texts.forEach(el => { el.style.setProperty("color", "#0F172A", "important"); });
-                }
-            });
-            </script>
-            """, height=0)
-            st.markdown("<div class='form-bg-white-js'></div>", unsafe_allow_html=True)
+        with st.container():
+            st.markdown("""
+            <style>
+            /* Inyección de CSS puro para lograr fondo blanco con texto negro e inputs claros */
+            div[data-testid="stVerticalBlock"]:has(.form-bg-white-js) {
+                background-color: #FFFFFF !important;
+                border-radius: 15px !important;
+                padding: 25px !important;
+                border: 1px solid #CBD5E1 !important;
+                box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1) !important;
+            }
+            /* Texto en general dentro del contenedor */
+            div[data-testid="stVerticalBlock"]:has(.form-bg-white-js) * {
+                color: #0F172A !important;
+            }
+            /* Inputs y Selects */
+            div[data-testid="stVerticalBlock"]:has(.form-bg-white-js) input,
+            div[data-testid="stVerticalBlock"]:has(.form-bg-white-js) textarea,
+            div[data-testid="stVerticalBlock"]:has(.form-bg-white-js) div[data-baseweb="select"] > div {
+                background-color: #F8FAFC !important;
+                color: #0F172A !important;
+                border: 1px solid #CBD5E1 !important;
+            }
+            </style>
+            <div class='form-bg-white-js'></div>
+            """, unsafe_allow_html=True)
+            
             st.markdown("""
             <div style="text-align:center; margin-bottom: 20px; border-bottom: 2px solid #CBD5E1; padding-bottom:15px;">
                 <h3 style="color: #0F172A; margin:0; font-family: 'Bebas Neue', sans-serif; letter-spacing: 1px; font-size: 2.2rem;">FORMULARIO DE NUEVA GUÍA</h3>
@@ -564,7 +595,7 @@ def show_generar_guias():
             
             col_m, col_t = st.columns(2)
             with col_m:
-                marca_sel = st.selectbox("Marca", list(MARCAS.keys()))
+                marca_sel = st.selectbox("Empresa", ["Tempo", "Fashion Club", "Aeropostale", "Price Club"])
             logo_bytes = cargar_logo_local(marca_sel)
             
             if not TIENDAS_DATA:
