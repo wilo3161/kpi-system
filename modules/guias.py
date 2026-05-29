@@ -46,13 +46,13 @@ CIUDAD_REMITENTE    = "San Roque"
 TELEFONO_REMITENTE  = "0993052744"
 
 MARCAS = {
-    "Fashion Club": {
-        "remitente_empresa": "FASHION CLUB - Centro de Distribución",
-        "logo_filename": "Fashion.jpg",
+    "Aeropostale": {
+        "remitente_empresa": "AEROPOSTALE - Centro de Distribución",
+        "logo_filename": "Aeropostale.jpg",
     },
-    "Tempo": {
-        "remitente_empresa": "TEMPO - Centro de Distribución",
-        "logo_filename": "Tempo.jpg",
+    "Price Club": {
+        "remitente_empresa": "PRICE CLUB - Centro de Distribución",
+        "logo_filename": "PriceClub.jpg",
     },
 }
 
