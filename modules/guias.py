@@ -436,67 +436,64 @@ def generar_pdf_profesional(guia_data: dict) -> bytes:
     contenido.append(Spacer(1, 0.3*cm))
     
     num_guia, num_trans, tot_prendas = guia_data.get("numero_guia", ""), guia_data.get("numero_transferencia", "No registrada"), guia_data.get("total_prendas", 0)
-    
-    info_tbl = Table([
-        [Paragraph(f"<b>N° Transferencia:</b> {num_trans}", destac_s), Paragraph(f"<b>Total Prendas:</b> {tot_prendas:,}", destac_s)],
-        [Paragraph(f"N° Guía: {num_guia}", info_s), Paragraph(f"Fecha: {guia_data.get('fecha_emision', '')}", info_s)]
-    ], colWidths=[8.5*cm, 8.5*cm])
-    contenido.append(info_tbl)
-    contenido.append(Spacer(1, 0.3*cm))
-    
     dest = guia_data.get("destinatario", {})
     if isinstance(dest, str):
         dest_nombre, dest_dir, dest_tel, dest_ciudad = dest, guia_data.get("direccion_destinatario", ""), guia_data.get("telefono_destinatario", ""), guia_data.get("ciudad", "")
     else:
         dest_nombre, dest_dir, dest_tel, dest_ciudad = dest.get("nombre", ""), dest.get("direccion", ""), dest.get("telefono", ""), dest.get("ciudad", "")
-        
-    rem_data = [[Paragraph("REMITENTE", seccion_s)],
-                [Paragraph(f"<b>Empresa:</b> {MARCAS.get(marca, {}).get('remitente_empresa', marca)}", campo_s)],
-                [Paragraph(f"<b>Dirección:</b> {DIRECCION_REMITENTE}", campo_s)],
-                [Paragraph(f"<b>Teléfono:</b> {TELEFONO_REMITENTE}", campo_s)]]
-    dest_data = [[Paragraph("DESTINATARIO", seccion_s)],
-                 [Paragraph(f"<b>Contacto:</b> {dest_nombre}", campo_s)],
-                 [Paragraph(f"<b>Dirección:</b> {dest_dir}", campo_s)],
-                 [Paragraph(f"<b>Teléfono:</b> {dest_tel}", campo_s)],
-                 [Paragraph(f"<b>Ciudad:</b> {dest_ciudad}", campo_s)]]
-                 
-    while len(rem_data) < len(dest_data): rem_data.append([Paragraph("", campo_s)])
+
+    campo_s_bold = st_("CB", fontName="Helvetica-Bold", fontSize=9, textColor=c_primario, alignment=TA_LEFT, spaceAfter=2)
+    campo_s_val = st_("CV", fontName="Helvetica", fontSize=9, textColor=c_primario, alignment=TA_LEFT, spaceAfter=2)
     
-    tbl_rem, tbl_dest = Table(rem_data, colWidths=[8.2*cm]), Table(dest_data, colWidths=[8.2*cm])
-    for t in (tbl_rem, tbl_dest):
-        t.setStyle(TableStyle([
-            ("BACKGROUND", (0,0), (-1,0), c_fondo),
-            ("ALIGN", (0,0), (-1,0), "CENTER"),
-            ("GRID", (0,0), (-1,-1), 0.5, c_borde),
-            ("TOPPADDING", (0,0), (-1,-1), 2),
-            ("BOTTOMPADDING", (0,0), (-1,-1), 2)
-        ]))
-        
-    tbl_side = Table([[tbl_rem, tbl_dest]], colWidths=[8.5*cm, 8.5*cm])
-    tbl_side.setStyle(TableStyle([("VALIGN", (0,0), (-1,-1), "TOP")]))
-    contenido.append(tbl_side)
-    
-    contenido.append(Spacer(1, 0.3*cm))
+    unified_data = [
+        [Paragraph("Número de Guía:", campo_s_bold), Paragraph(str(num_guia), campo_s_val)],
+        [Paragraph("N° Transferencia:", campo_s_bold), Paragraph(str(num_trans), campo_s_val)],
+        [Paragraph("Fecha Emisión:", campo_s_bold), Paragraph(guia_data.get('fecha_emision', ''), campo_s_val)],
+        [Paragraph("Total Prendas:", campo_s_bold), Paragraph(f"{tot_prendas:,}", campo_s_val)],
+        [Paragraph("Tienda Destino:", campo_s_bold), Paragraph(tienda, campo_s_val)],
+        [Paragraph("Contacto Destino:", campo_s_bold), Paragraph(dest_nombre, campo_s_val)],
+        [Paragraph("Dirección Destino:", campo_s_bold), Paragraph(dest_dir, campo_s_val)],
+        [Paragraph("Ciudad:", campo_s_bold), Paragraph(dest_ciudad, campo_s_val)],
+        [Paragraph("Teléfono Destino:", campo_s_bold), Paragraph(dest_tel, campo_s_val)],
+        [Paragraph("Empresa Remitente:", campo_s_bold), Paragraph(MARCAS.get(marca, {}).get('remitente_empresa', marca), campo_s_val)],
+        [Paragraph("Dirección Origen:", campo_s_bold), Paragraph(DIRECCION_REMITENTE, campo_s_val)],
+        [Paragraph("Teléfono Origen:", campo_s_bold), Paragraph(TELEFONO_REMITENTE, campo_s_val)],
+    ]
+
     bultos, peso = guia_data.get("bultos", 0), guia_data.get("peso", 0)
     if bultos or peso:
-        contenido.append(Paragraph(f"<b>Bultos:</b> {bultos} &nbsp;&nbsp; <b>Peso:</b> {peso} kg", campo_s))
+        unified_data.append([Paragraph("Bultos / Peso:", campo_s_bold), Paragraph(f"{bultos} bultos &nbsp;|&nbsp; {peso} kg", campo_s_val)])
         
     obs = guia_data.get("observaciones", "")
     if obs:
-        contenido.append(Paragraph(f"<b>Observaciones:</b> {obs}", campo_s))
+        unified_data.append([Paragraph("Observaciones:", campo_s_bold), Paragraph(obs, campo_s_val)])
         
     ai = guia_data.get("ai_analysis", {})
     if ai and ai.get("resumen_operacional"):
-        contenido.append(Paragraph(f"<b>Análisis IA:</b> {ai['resumen_operacional']} — Riesgo: {ai.get('riesgo_detectado', 'N/A')}", campo_s))
-        
-    contenido.append(Spacer(1, 0.3*cm))
+        unified_data.append([Paragraph("Análisis IA:", campo_s_bold), Paragraph(f"{ai['resumen_operacional']} (Riesgo: {ai.get('riesgo_detectado', 'N/A')})", campo_s_val)])
+
+    tbl_unified = Table(unified_data, colWidths=[4.5*cm, 12.5*cm])
+    tbl_unified.setStyle(TableStyle([
+        ("BACKGROUND", (0,0), (0,-1), c_fondo), # Fondo gris/azul claro para la primera columna
+        ("BACKGROUND", (1,0), (1,-1), HexColor("#FFFFFF")), # Blanco para la segunda columna
+        ("GRID", (0,0), (-1,-1), 0.5, c_borde),
+        ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
+        ("TOPPADDING", (0,0), (-1,-1), 6),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 6),
+        ("LEFTPADDING", (0,0), (-1,-1), 8),
+        ("RIGHTPADDING", (0,0), (-1,-1), 8),
+    ]))
+    
+    contenido.append(tbl_unified)
+    
+    contenido.append(Spacer(1, 0.8*cm))
     usuario = guia_data.get("usuario_genera", "")
     firma_tbl = Table([[Paragraph("_________________________", campo_s), Paragraph("_________________________", campo_s)],
                        [Paragraph("Revisado por", firma_s), Paragraph(f"Generado por: {usuario}", firma_s)]], colWidths=[8.5*cm, 8.5*cm])
     firma_tbl.setStyle(TableStyle([("ALIGN", (0,0), (-1,-1), "CENTER"), ("TOPPADDING", (0,0), (-1,-1), 5)]))
     contenido.append(firma_tbl)
     
-    contenido.append(Spacer(1, 0.2*cm))
+    contenido.append(Spacer(1, 0.4*cm))
     contenido.append(Paragraph("Documento generado electrónicamente — Válido sin firma física", pie_s))
     
     doc.build(contenido)
