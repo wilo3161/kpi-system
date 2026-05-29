@@ -256,6 +256,7 @@ def show_gestion_equipo():
                     new_cargo = st.text_input("Cargo")
                     new_email = st.text_input("Email", placeholder="ejemplo@fashionclub.com.ec")
                     new_whatsapp = st.text_input("WhatsApp", placeholder="09XXXXXXXX")
+                    new_telegram = st.text_input("Telegram ID", placeholder="Ej: 123456789 (Opcional)")
                     
                     if st.form_submit_button("Guardar Miembro", use_container_width=True):
                         if new_nombre and new_cargo:
@@ -264,7 +265,8 @@ def show_gestion_equipo():
                                 "area": new_area,
                                 "cargo": new_cargo.strip(),
                                 "email": new_email.strip(),
-                                "whatsapp": new_whatsapp.strip()
+                                "whatsapp": new_whatsapp.strip(),
+                                "telegram_id": new_telegram.strip()
                             })
                             st.success(f"✅ {new_nombre} añadido correctamente.")
                             st.rerun()
@@ -336,13 +338,23 @@ def show_gestion_equipo():
                     st.warning("No hay mensaje generado para enviar.")
 
                 st.divider()
-                st.markdown("#### ✈️ Enviar a mi Telegram")
+                st.markdown("#### ✈️ Enviar a Telegram")
+                miembros_tg = {"Mi Telegram Principal": None}
+                for area, miembros in EQUIPO_LOGISTICO.items():
+                    for m in miembros:
+                        tg_id = m.get("telegram_id", "").strip()
+                        if tg_id:
+                            miembros_tg[m["nombre"]] = tg_id
+                            
+                destinatario_tg = st.selectbox("Destinatario Telegram:", list(miembros_tg.keys()))
+                
                 if st.button("Enviar último mensaje por Telegram", use_container_width=True):
                     # Evitar enviar el saludo inicial
                     if ultimo_mensaje and "¡Hola! Soy wilo IA" not in ultimo_mensaje:
                         from utils.telegram_helper import enviar_mensaje_telegram
                         with st.spinner("Enviando a Telegram..."):
-                            res = enviar_mensaje_telegram(ultimo_mensaje)
+                            target_id = miembros_tg[destinatario_tg]
+                            res = enviar_mensaje_telegram(ultimo_mensaje, target_chat_id=target_id)
                         if res["success"]:
                             st.success(res["message"])
                         else:
