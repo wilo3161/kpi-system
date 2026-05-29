@@ -556,39 +556,11 @@ def show_generar_guias():
     # TAB 1 — NUEVA GUÍA
     # =========================================================================
     with tab_nueva:
-        with st.container():
+        with st.container(border=True):
             st.markdown("""
-            <style>
-            /* Inyección de CSS puro para lograr fondo cristalino con texto negro e inputs limpios */
-            div[data-testid="stVerticalBlock"]:has(.form-bg-white-js) {
-                background: linear-gradient(135deg, rgba(255, 255, 255, 0.85) 0%, rgba(255, 255, 255, 0.45) 100%) !important;
-                backdrop-filter: blur(12px) !important;
-                border-radius: 15px !important;
-                padding: 25px !important;
-                border: 1px solid rgba(255, 255, 255, 0.4) !important;
-                box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15) !important;
-            }
-            /* Texto en general dentro del contenedor */
-            div[data-testid="stVerticalBlock"]:has(.form-bg-white-js) * {
-                color: #0F172A !important;
-            }
-            /* Inputs y Selects */
-            div[data-testid="stVerticalBlock"]:has(.form-bg-white-js) input,
-            div[data-testid="stVerticalBlock"]:has(.form-bg-white-js) textarea,
-            div[data-testid="stVerticalBlock"]:has(.form-bg-white-js) div[data-baseweb="select"] > div {
-                background-color: rgba(255, 255, 255, 0.9) !important;
-                color: #0F172A !important;
-                border: 1px solid #CBD5E1 !important;
-                box-shadow: inset 0 1px 3px rgba(0,0,0,0.05) !important;
-            }
-            </style>
-            <div class='form-bg-white-js'></div>
-            """, unsafe_allow_html=True)
-            
-            st.markdown("""
-            <div style="text-align:center; margin-bottom: 20px; border-bottom: 2px solid rgba(15, 23, 42, 0.1); padding-bottom:15px;">
-                <h3 style="color: #0F172A; margin:0; font-family: 'Bebas Neue', sans-serif; letter-spacing: 1px; font-size: 2.2rem;">FORMULARIO DE NUEVA GUÍA</h3>
-                <p style="color: #475569; margin:0; font-size: 0.95rem;">Completa los datos para emitir la guía de remisión.</p>
+            <div style="text-align:center; margin-bottom: 20px; border-bottom: 2px solid #CBD5E1; padding-bottom:15px;">
+                <h3 style="margin:0; font-family: 'Bebas Neue', sans-serif; letter-spacing: 1px; font-size: 2.2rem;">FORMULARIO DE NUEVA GUÍA</h3>
+                <p style="margin:0; font-size: 0.95rem;">Completa los datos para emitir la guía de remisión.</p>
             </div>
             """, unsafe_allow_html=True)
             
