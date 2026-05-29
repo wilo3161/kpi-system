@@ -639,7 +639,9 @@ def mostrar_dashboard_transferencias():
                                     if fig_p: st.plotly_chart(fig_p, use_container_width=True)
                                 with c_b:
                                     if 'talla' in df_prendas.columns:
-                                        fig_tm_t = px.treemap(df_prendas, path=[px.Constant("Tallas"), 'talla'], values='cantidad', title="Peso Relativo por Talla (%)", color_discrete_sequence=px.colors.qualitative.Safe)
+                                        df_prendas_tm = df_prendas.copy()
+                                        df_prendas_tm['Tallas'] = "Tallas"
+                                        fig_tm_t = px.treemap(df_prendas_tm, path=['Tallas', 'talla'], values='cantidad', title="Peso Relativo por Talla (%)", color_discrete_sequence=px.colors.qualitative.Safe)
                                         fig_tm_t.update_layout(template="plotly_dark", margin=dict(t=30, l=10, r=10, b=10))
                                         st.plotly_chart(fig_tm_t, use_container_width=True)
                                         
@@ -734,7 +736,9 @@ def mostrar_dashboard_transferencias():
                                         if fig_p_f: st.plotly_chart(fig_p_f, use_container_width=True)
                                     with c2:
                                         if 'talla' in df_prendas_f.columns:
-                                            fig_tm_t_f = px.treemap(df_prendas_f, path=[px.Constant("Tallas"), 'talla'], values='cantidad', title="Peso Relativo Histórico: Talla (%)", color_discrete_sequence=px.colors.qualitative.Safe)
+                                            df_prendas_f_tm = df_prendas_f.copy()
+                                            df_prendas_f_tm['Tallas'] = "Tallas"
+                                            fig_tm_t_f = px.treemap(df_prendas_f_tm, path=['Tallas', 'talla'], values='cantidad', title="Peso Relativo Histórico: Talla (%)", color_discrete_sequence=px.colors.qualitative.Safe)
                                             fig_tm_t_f.update_layout(template="plotly_dark", margin=dict(t=30, l=10, r=10, b=10))
                                             st.plotly_chart(fig_tm_t_f, use_container_width=True)
                                             
