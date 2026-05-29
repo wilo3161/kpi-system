@@ -158,7 +158,7 @@ def show_gestion_equipo():
         st.markdown("---")
 
         area_emojis = {
-            "Liderazgo": "👑",
+            "Liderazgo": "👔",
             "Transferencias": "🔄",
             "Distribución": "📦",
             "Empaque": "📮",
@@ -217,7 +217,7 @@ def show_gestion_equipo():
         lider_html = ""
         if lideres:
             l = lideres[0]
-            lider_html = f"<div class='org-node lider'><div class='org-name'>👑 {l.get('nombre','')}</div><div class='org-title'>{l.get('cargo','')}</div></div>"
+            lider_html = f"<div class='org-node lider'><div class='org-name'>👔 {l.get('nombre','')}</div><div class='org-title'>{l.get('cargo','')}</div></div>"
         
         branches_html = "<div class='org-branches'>"
         for area, miembros in EQUIPO_LOGISTICO.items():
@@ -338,54 +338,94 @@ def show_gestion_equipo():
     # PESTAÑA 5 – REGISTRO DIARIO DE ACTIVIDADES
     # =====================================================================
     with tabs[4] if is_admin else tabs[2]:
-        st.markdown("### 📝 Registro de Actividades Diarias (Formulario Web)")
-        miembros_lista = [m.get("nombre") for m in db_equipo]
+        st.markdown("### 📝 Registro de Actividades Diarias")
         
-        with st.form("form_actividades"):
-            st.subheader("Ingresar Actividad")
-            empleado = st.selectbox("Selecciona tu nombre", [""] + miembros_lista)
-            actividad = st.text_area("Describe tus actividades (ej. Transferencias: Ejecución de transferencias de 2,000 prendas...)")
-            
-            if st.form_submit_button("Guardar Actividad", use_container_width=True):
-                if empleado and actividad:
-                    local_db.insert("actividades_diarias", {
-                        "fecha": datetime.now().strftime("%Y-%m-%d"),
-                        "empleado": empleado,
-                        "actividad": actividad
-                    })
-                    st.success(f"✅ Actividad registrada con éxito para {empleado}!")
+        # Filtrar a Wilson Perez y obtener todos los miembros
+        miembros_completos = [m.get("nombre") for m in db_equipo if m.get("nombre")]
+        miembros_ingreso = [m for m in miembros_completos if m.lower() != "wilson perez"]
+        
+        # Fecha de hoy para ingresos (el registro siempre es del día actual)
+        fecha_hoy = datetime.now().strftime("%Y-%m-%d")
+        
+        # Consultar quiénes ya han registrado hoy
+        acts_hoy = local_db.find("actividades_diarias", {"fecha": fecha_hoy})
+        empleados_con_registro = {a.get("empleado") for a in acts_hoy if a.get("empleado")}
+        
+        col_form, col_status = st.columns([0.65, 0.35])
+        
+        with col_status:
+            st.markdown("#### 📌 Estado de Ingresos Hoy")
+            estado_html = "<div style='background: rgba(255,255,255,0.05); padding: 15px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.1);'>"
+            for emp in miembros_ingreso:
+                if emp in empleados_con_registro:
+                    estado_html += f"<div style='margin-bottom: 5px; font-weight: 500; color: #10b981;'>🟢 {emp}</div>"
                 else:
-                    st.error("Por favor, selecciona tu nombre y describe la actividad.")
+                    estado_html += f"<div style='margin-bottom: 5px; color: #ef4444;'>🔴 {emp}</div>"
+            estado_html += "</div>"
+            st.markdown(estado_html, unsafe_allow_html=True)
         
-        st.divider()
-        st.subheader("📊 Reporte de Actividades del Día")
-        st.info("💡 Este reporte consolida automáticamente la información de todos los miembros del equipo.")
-        if st.button("Generar Reporte del Día (8:00 PM)", type="primary", use_container_width=True):
-            hoy_str = datetime.now().strftime("%Y-%m-%d")
-            acts = local_db.find("actividades_diarias", {"fecha": hoy_str})
-            if acts:
-                meses = ["", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
-                hoy_dt = datetime.now()
-                fecha_formateada = f"{hoy_dt.day:02d} de {meses[hoy_dt.month]} de {hoy_dt.year}"
+        with col_form:
+            # Lógica de bloqueo por hora para usuarios NO administradores
+            from datetime import time as dt_time
+            hora_actual = datetime.now().time()
+            hora_limite = dt_time(19, 47)
+            
+            bloqueado = False
+            if not is_admin and hora_actual > hora_limite:
+                bloqueado = True
                 
-                reporte = f"**Reporte de actividades - {fecha_formateada}**\n\n"
-                
-                # Agrupar por empleado
-                acts_por_emp = {}
-                for a in acts:
-                    emp = a.get("empleado", "Desconocido")
-                    if emp not in acts_por_emp:
-                        acts_por_emp[emp] = []
-                    acts_por_emp[emp].append(a.get("actividad", ""))
-                
-                for emp, textos in acts_por_emp.items():
-                    reporte += f"{emp}:\n"
-                    for t in textos:
-                        reporte += f"{t}\n"
-                    reporte += "\n"
-                
-                st.code(reporte, language="markdown")
+            if bloqueado:
+                st.error("⏰ El horario de registro ha finalizado (límite: 19:47). No se permiten más ingresos por hoy.")
             else:
-                st.warning("Aún no hay actividades registradas el día de hoy.")
+                with st.form("form_actividades"):
+                    st.subheader("Ingresar Actividad")
+                    empleado = st.selectbox("Selecciona tu nombre", [""] + miembros_ingreso)
+                    actividad = st.text_area("Describe tus actividades (ej. Transferencias: Ejecución de transferencias de 2,000 prendas...)", height=150)
+                    
+                    if st.form_submit_button("Guardar Información", use_container_width=True):
+                        if empleado and actividad:
+                            local_db.insert("actividades_diarias", {
+                                "fecha": fecha_hoy,
+                                "empleado": empleado,
+                                "actividad": actividad,
+                                "hora_registro": datetime.now().strftime("%H:%M:%S")
+                            })
+                            st.success(f"✅ Información guardada correctamente para {empleado}.")
+                            st.rerun()
+                        else:
+                            st.error("Por favor, selecciona tu nombre y describe la actividad.")
+        
+        # SECCIÓN EXCLUSIVA PARA EL ADMINISTRADOR
+        if is_admin:
+            st.divider()
+            st.subheader("📊 Reporte Consolidado (Administrador)")
+            
+            fecha_consulta = st.date_input("Consultar registros por fecha:", datetime.now().date())
+            fecha_str = fecha_consulta.strftime("%Y-%m-%d")
+            
+            if st.button("Generar Registro", type="primary", use_container_width=True):
+                acts_consulta = local_db.find("actividades_diarias", {"fecha": fecha_str})
+                if acts_consulta:
+                    meses = ["", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
+                    fecha_formateada = f"{fecha_consulta.day:02d} de {meses[fecha_consulta.month]} de {fecha_consulta.year}"
+                    
+                    reporte = f"Reporte de actividades - {fecha_formateada}\n\n"
+                    
+                    # Agrupar por empleado para mantener todo en un solo bloque por persona
+                    acts_por_emp = {}
+                    for a in acts_consulta:
+                        emp = a.get("empleado", "Desconocido")
+                        if emp not in acts_por_emp:
+                            acts_por_emp[emp] = []
+                        acts_por_emp[emp].append(a.get("actividad", ""))
+                    
+                    for emp, textos in acts_por_emp.items():
+                        reporte += f"{emp}:\n\n"
+                        for t in textos:
+                            reporte += f"{t}\n\n"
+                    
+                    st.code(reporte, language="text")
+                else:
+                    st.warning(f"Aún no hay actividades registradas para la fecha: {fecha_str}.")
 
     st.markdown('</div>', unsafe_allow_html=True)
