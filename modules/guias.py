@@ -46,6 +46,14 @@ CIUDAD_REMITENTE    = "San Roque"
 TELEFONO_REMITENTE  = "0993052744"
 
 MARCAS = {
+    "Fashion Club": {
+        "remitente_empresa": "FASHION CLUB - Centro de Distribución",
+        "logo_filename": "Fashion.jpg",
+    },
+    "Tempo": {
+        "remitente_empresa": "TEMPO - Centro de Distribución",
+        "logo_filename": "Tempo.jpg",
+    },
     "Aeropostale": {
         "remitente_empresa": "AEROPOSTALE - Centro de Distribución",
         "logo_filename": "Aeropostale.jpg",
@@ -563,7 +571,7 @@ def show_generar_guias():
                 from config.stores_data import reload_stores_data
                 reload_stores_data()
             
-            tiendas_opciones = [t["Nombre de Tienda"] for t in TIENDAS_DATA if t.get("Empresa", "") == marca_sel]
+            tiendas_opciones = [t["Nombre de Tienda"] for t in TIENDAS_DATA]
                 
             tienda_sel = st.selectbox("Tienda Destino", tiendas_opciones)
             tienda_info = next((t for t in TIENDAS_DATA if t["Nombre de Tienda"] == tienda_sel), {})

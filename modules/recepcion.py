@@ -610,126 +610,67 @@ def _proceso_recepcion_completo(guia_doc: dict) -> None:
     
     if items_expected:
         with st.container(border=True):
-            st.components.v1.html("""
-            <script>
-            // Forzar estilos del contenedor padre sin importar la versión de Streamlit
-            const doc = window.parent.document;
-            const setStyle = (el, prop, val) => el.style.setProperty(prop, val, "important");
-
-            const markers = doc.querySelectorAll('.rec-marker-js');
-            markers.forEach(marker => {
-                let container = marker.closest('div[data-testid="stVerticalBlock"]');
-                if (container) {
-                    setStyle(container, "background-color", "rgba(241, 245, 249, 0.98)");
-                    setStyle(container, "border-radius", "20px");
-                    setStyle(container, "padding", "25px");
-                    setStyle(container, "box-shadow", "0 20px 40px rgba(0,0,0,0.4)");
-                    setStyle(container, "border", "2px solid rgba(255,255,255,0.8)");
-                    
-                    // Textos oscuros
-                    const texts = container.querySelectorAll('p, span, h3, h4, label, div[data-testid="stMarkdownContainer"]');
-                    texts.forEach(el => { setStyle(el, "color", "#0F172A"); });
-                    
-                    // Inputs
-                    const inputs = container.querySelectorAll('input, textarea');
-                    inputs.forEach(el => {
-                        setStyle(el, "background-color", "#FFFFFF");
-                        setStyle(el, "color", "#0F172A");
-                        setStyle(el, "border", "1px solid #94A3B8");
-                        setStyle(el, "border-radius", "6px");
-                        setStyle(el, "font-weight", "700");
-                    });
-                    
-                    // Selects
-                    const selects = container.querySelectorAll('div[data-baseweb="select"] > div');
-                    selects.forEach(el => {
-                        setStyle(el, "background-color", "#FFFFFF");
-                        setStyle(el, "border", "1px solid #94A3B8");
-                        setStyle(el, "color", "#0F172A");
-                    });
-                    
-                    const selectTexts = container.querySelectorAll('div[data-baseweb="select"] span');
-                    selectTexts.forEach(el => {
-                        setStyle(el, "color", "#0F172A");
-                    });
-                    
-                    // Botones
-                    const btns = container.querySelectorAll('button');
-                    btns.forEach(el => {
-                        if(el.innerText === '+' || el.innerText === '-') {
-                            setStyle(el, "background-color", "#E2E8F0");
-                            setStyle(el, "color", "#0F172A");
-                        }
-                    });
-                }
-            });
-            </script>
-            """, height=0)
-            
-            st.markdown("<div class='rec-marker-js'></div>", unsafe_allow_html=True)
             st.markdown("""
             <div style="text-align:center; margin-bottom: 20px; border-bottom: 2px solid #CBD5E1; padding-bottom:15px;">
                 <h3 style="color: #0F172A; margin:0; font-family: 'Bebas Neue', sans-serif; letter-spacing: 1px; font-size: 2.2rem;">HOJA DE RECEPCIÓN FÍSICA</h3>
-                <p style="color: #475569; margin:0; font-size: 0.95rem;">Verifica las cantidades físicas. Usa los botones <b>+</b> o <b>-</b> para ajustes.</p>
+                <p style="color: #475569; margin:0; font-size: 0.95rem;">Verifica las cantidades físicas y reporta el estado.</p>
             </div>
             """, unsafe_allow_html=True)
 
-            edicion_items = []
             estados_opciones = ["CONFORME", "FALTANTE", "SOBRANTE", "DAÑADO", "MANCHA", "COSTURA", "ETIQUETA_INCORRECTA", "PRODUCTO_DIFERENTE"]
             
-            # Headers del formulario
-            hc1, hc2, hc3, hc4, hc5 = st.columns([1.5, 3, 1, 1.5, 2])
-            hc1.markdown("<span style='font-weight:800; font-size:0.9rem;'>CÓDIGO / ESTILO</span>", unsafe_allow_html=True)
-            hc2.markdown("<span style='font-weight:800; font-size:0.9rem;'>DESCRIPCIÓN</span>", unsafe_allow_html=True)
-            hc3.markdown("<span style='font-weight:800; font-size:0.9rem;'>ESPERADO</span>", unsafe_allow_html=True)
-            hc4.markdown("<span style='font-weight:800; font-size:0.9rem;'>RECIBIDO (+/-)</span>", unsafe_allow_html=True)
-            hc5.markdown("<span style='font-weight:800; font-size:0.9rem;'>ESTADO</span>", unsafe_allow_html=True)
-            st.markdown("<hr style='margin-top:0px; margin-bottom:15px; border-color:#CBD5E1; border-width: 2px;'>", unsafe_allow_html=True)
-            
-            for i, item in enumerate(items_expected):
-                c1, c2, c3, c4, c5 = st.columns([1.5, 3, 1, 1.5, 2])
-                
-                with c1:
-                    st.markdown(f"<div style='font-weight:700; font-size:1.05rem; margin-top:5px;'>{item.get('codigo', '')}</div><div style='color:#475569 !important; font-size:0.85rem; font-weight:600;'>Estilo: {item.get('estilo', '')}</div>", unsafe_allow_html=True)
-                with c2:
-                    st.markdown(f"<div style='font-size:0.95rem; font-weight:500; margin-top:8px;'>{item.get('descripcion', '')}</div>", unsafe_allow_html=True)
-                
+            # Preparar datos para st.data_editor
+            df_data = []
+            for item in items_expected:
                 esp = item.get("cantidad_esperada", 1)
-                with c3:
-                    st.markdown(f"<div style='font-weight:800; font-size:1.3rem; text-align:center; margin-top:5px; background:#E2E8F0; border-radius:6px; padding:4px; border: 1px solid #CBD5E1;'>{esp}</div>", unsafe_allow_html=True)
+                df_data.append({
+                    "Código": item.get("codigo", ""),
+                    "Estilo": item.get("estilo", ""),
+                    "Descripción": item.get("descripcion", ""),
+                    "Esperado": esp,
+                    "Recibido": esp,
+                    "Estado": "CONFORME"
+                })
+            
+            df = pd.DataFrame(df_data)
+            
+            # Renderizar editor compacto y estético
+            edited_df = st.data_editor(
+                df,
+                column_config={
+                    "Código": st.column_config.TextColumn("Código", disabled=True),
+                    "Estilo": st.column_config.TextColumn("Estilo", disabled=True),
+                    "Descripción": st.column_config.TextColumn("Descripción", disabled=True, width="large"),
+                    "Esperado": st.column_config.NumberColumn("Esperado", disabled=True),
+                    "Recibido": st.column_config.NumberColumn("Recibido (+/-)", min_value=0, step=1, required=True),
+                    "Estado": st.column_config.SelectboxColumn("Estado", options=estados_opciones, required=True),
+                },
+                hide_index=True,
+                use_container_width=True,
+                key=f"editor_{numero_guia}"
+            )
+            
+            # Procesar items editados
+            edicion_items = []
+            for i, row in edited_df.iterrows():
+                recibido = row["Recibido"]
+                esp = row["Esperado"]
+                estado_val = row["Estado"]
                 
-                with c4:
-                    recibido = st.number_input(
-                        "Recibido",
-                        min_value=0,
-                        value=esp,
-                        step=1,
-                        key=f"rec_{numero_guia}_{i}",
-                        label_visibility="collapsed"
-                    )
-                
-                with c5:
-                    def_estado = "CONFORME"
-                    if recibido < esp: def_estado = "FALTANTE"
-                    elif recibido > esp: def_estado = "SOBRANTE"
+                # Auto-ajuste de estado si el usuario olvidó cambiarlo
+                if recibido < esp and estado_val == "CONFORME":
+                    estado_val = "FALTANTE"
+                elif recibido > esp and estado_val == "CONFORME":
+                    estado_val = "SOBRANTE"
                     
-                    estado_val = st.selectbox(
-                        "Estado",
-                        options=estados_opciones,
-                        index=estados_opciones.index(def_estado) if def_estado in estados_opciones else 0,
-                        key=f"est_{numero_guia}_{i}",
-                        label_visibility="collapsed"
-                    )
-                
                 edicion_items.append({
-                    "codigo": item.get("codigo"),
-                    "estilo": item.get("estilo"),
-                    "descripcion": item.get("descripcion"),
+                    "codigo": row["Código"],
+                    "estilo": row["Estilo"],
+                    "descripcion": row["Descripción"],
                     "cantidad_esperada": esp,
                     "cantidad_recibida": recibido,
                     "estado_item": estado_val
                 })
-                st.markdown("<hr style='margin-top:8px; margin-bottom:12px; border-color:#94A3B8; opacity:0.3;'>", unsafe_allow_html=True)
 
         total_recibido = sum(it["cantidad_recibida"] for it in edicion_items)
         tiene_novedad = any(it["cantidad_recibida"] != it["cantidad_esperada"] or it["estado_item"] != "CONFORME" for it in edicion_items)
