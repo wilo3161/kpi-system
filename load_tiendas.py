@@ -7,232 +7,7 @@ from database.manager import local_db
 
 tiendas_data = [
   {
-    "Nombre de Tienda": "Mall del Rio",
-    "Empresa": "Aeropostale",
-    "Origen": "MATRIZ",
-    "Destino": "CUENCA",
-    "Contacto": "Adrian",
-    "Dirección": "Av. Felipe II y Autopista Sur - CC Mall del Rio",
-    "Teléfono": "0984752711"
-  },
-  {
-    "Nombre de Tienda": "6 de Diciembre",
-    "Empresa": "Aeropostale",
-    "Origen": "MATRIZ",
-    "Destino": "QUITO",
-    "Contacto": "Micaela Yépez",
-    "Dirección": "Av. 6 de Diciembre y Thomas de Berlanga CC Riocentro UIO",
-    "Teléfono": "0987883889"
-  },
-  {
-    "Nombre de Tienda": "Paseo Ambato",
-    "Empresa": "Aeropostale",
-    "Origen": "MATRIZ",
-    "Destino": "AMBATO",
-    "Contacto": "Franco Torres",
-    "Dirección": "Manuelita Saenz y Pio Baroja, cerca al parque de las Flores CC Paseo Shoppi",
-    "Teléfono": "0984951515"
-  },
-  {
-    "Nombre de Tienda": "Ambato",
-    "Empresa": "Aeropostale",
-    "Origen": "MATRIZ",
-    "Destino": "AMBATO",
-    "Contacto": "Gabriela Urrutia",
-    "Dirección": "Av. Atahualpa y Victor Hugo CC Mall de los Andes",
-    "Teléfono": "0967239488"
-  },
-  {
-    "Nombre de Tienda": "Babahoyo",
-    "Empresa": "Aeropostale",
-    "Origen": "MATRIZ",
-    "Destino": "BABAHOYO",
-    "Contacto": "Yomaira Sellan",
-    "Dirección": "Av.Enrique Ponce Luque CC Paseo Shopping Babahoyo",
-    "Teléfono": "0981841355"
-  },
-  {
-    "Nombre de Tienda": "bombolí",
-    "Empresa": "Aeropostale",
-    "Origen": "MATRIZ",
-    "Destino": "SANTO DOMINGO",
-    "Contacto": "Josselyn Navarrete",
-    "Dirección": "Via Chone Diagonal a la Universidad Catolica CC Bpmbolí Shopping",
-    "Teléfono": "0939906346"
-  },
-  {
-    "Nombre de Tienda": "Bahía de Caráquez",
-    "Empresa": "Aeropostale",
-    "Origen": "MATRIZ",
-    "Destino": "BAHIA DE CARAQUE",
-    "Contacto": "Nayely Orejuela",
-    "Dirección": "Av. 3 de Noviembre - CC Paseo Shoping Bahía de caraquez",
-    "Teléfono": "0981131760"
-  },
-  {
-    "Nombre de Tienda": "Carapungo",
-    "Empresa": "Aeropostale",
-    "Origen": "MATRIZ",
-    "Destino": "QUITO",
-    "Contacto": "Maria José Benalcazar",
-    "Dirección": "Av. Simón Bolivar, Panamericana Norte y calle, Capitán Giovanni Calles - CC ",
-    "Teléfono": "0997242323"
-  },
-  {
-    "Nombre de Tienda": "CCI",
-    "Empresa": "Aeropostale",
-    "Origen": "MATRIZ",
-    "Destino": "QUITO",
-    "Contacto": "Carolina Procel",
-    "Dirección": "Av. Amazonas y Naciones Unidas - CC Iñaquito",
-    "Teléfono": "0984048928"
-  },
-  {
-    "Nombre de Tienda": "Ceibos",
-    "Empresa": "Aeropostale",
-    "Origen": "MATRIZ",
-    "Destino": "GUAYAQUIL",
-    "Contacto": "Angie Delgado",
-    "Dirección": "Av. Del Bombero y San Eduardo - Riocentro Ceibos",
-    "Teléfono": "0999085369"
-  },
-  {
-    "Nombre de Tienda": "Centro Histórico",
-    "Empresa": "Aeropostale",
-    "Origen": "MATRIZ",
-    "Destino": "CUENCA",
-    "Contacto": "Renata Sacari",
-    "Dirección": "Av. Simón Bolívar y PadreA guirre Centro Histórico diagonal a a la chocolateria",
-    "Teléfono": "0980874018"
-  },
-  {
-    "Nombre de Tienda": "City Mall",
-    "Empresa": "Price Club",
-    "Origen": "MATRIZ",
-    "Destino": "GUAYAQUIL",
-    "Contacto": "Jordan Guale",
-    "Dirección": "Av. felipe Pezo y Av. Benjamín Carrión CC City Mall",
-    "Teléfono": "0962880194"
-  },
-  {
-    "Nombre de Tienda": "Condado Shopping",
-    "Empresa": "Aeropostale",
-    "Origen": "MATRIZ",
-    "Destino": "QUITO",
-    "Contacto": "Mateo Recalde",
-    "Dirección": "Av. Mariscal Sucre entre Av. La Prensa Y Jhon F. Kennedy - CC Condado Sho",
-    "Teléfono": "0993736447"
-  },
-  {
-    "Nombre de Tienda": "Daule",
-    "Empresa": "Aeropostale",
-    "Origen": "MATRIZ",
-    "Destino": "DAULE",
-    "Contacto": "Alisson Ramirez",
-    "Dirección": "Av. Vicente Piedrahita y Coronel Calletano Cestaris- Paseo Shoping Daule",
-    "Teléfono": "0978881886"
-  },
-  {
-    "Nombre de Tienda": "Dorado",
-    "Empresa": "Aeropostale",
-    "Origen": "MATRIZ",
-    "Destino": "GUAYAQUIL",
-    "Contacto": "Oscar Alvarado",
-    "Dirección": "Av. León Febres Cordero Ribadeneyra - Rio Centro Dorado",
-    "Teléfono": "0959098012"
-  },
-  {
-    "Nombre de Tienda": "Durán",
-    "Empresa": "Aeropostale",
-    "Origen": "MATRIZ",
-    "Destino": "DURÁN",
-    "Contacto": "Yaritza Córdova",
-    "Dirección": "Av. Boliche Panamericana - Paseo Shoping Durán Junto al Terminal",
-    "Teléfono": "0996359344"
-  },
-  {
-    "Nombre de Tienda": "el Coca",
-    "Empresa": "Aeropostale",
-    "Origen": "MATRIZ",
-    "Destino": "EL COCA",
-    "Contacto": "Adriana Zurita",
-    "Dirección": "Av. 9 de Octubre y Río Curaray - Junto a Super Akí el Coca",
-    "Teléfono": "0989137928"
-  },
-  {
-    "Nombre de Tienda": "La Plaza",
-    "Empresa": "Aeropostale",
-    "Origen": "MATRIZ",
-    "Destino": "IBARRA",
-    "Contacto": "Andrea Andrango",
-    "Dirección": "Av. Mariano Acosta entre Inacio Canelos y Víctor Gómez Jurado - CC La Plaz",
-    "Teléfono": "0978765143"
-  },
-  {
-    "Nombre de Tienda": "Lago Agrio",
-    "Empresa": "Aeropostale",
-    "Origen": "MATRIZ",
-    "Destino": "LAGO AGRIO",
-    "Contacto": "Angie Maldonado",
-    "Dirección": "Av. Quito y Pasaje Brazil - Junto a Super Aki Lago Agrio",
-    "Teléfono": "0989893309"
-  },
-  {
-    "Nombre de Tienda": "Machala",
-    "Empresa": "Aeropostale",
-    "Origen": "MATRIZ",
-    "Destino": "MACHALA",
-    "Contacto": "Iris carpio",
-    "Dirección": "Av. Paquisha y Vía Machala km. 2 1/2 - CC Paseo Shoping Machala",
-    "Teléfono": "0997260162"
-  },
-  {
-    "Nombre de Tienda": "Mall del Pacífico",
-    "Empresa": "Aeropostale",
-    "Origen": "MATRIZ",
-    "Destino": "MANTA",
-    "Contacto": "Karina Figueroa",
-    "Dirección": "Av. Malecón y Calle 23 - CC Mall del Pacífico",
-    "Teléfono": "0990614279"
-  },
-  {
-    "Nombre de Tienda": "Mall del Río",
-    "Empresa": "Aeropostale",
-    "Origen": "MATRIZ",
-    "Destino": "GUAYAQUIL",
-    "Contacto": "Danna Peralta",
-    "Dirección": "Av. Francisco de Orellana y Av. Guillermo Pareja - CC Mall del Río",
-    "Teléfono": "0995609664"
-  },
-  {
-    "Nombre de Tienda": "Mall del Sol",
-    "Empresa": "Aeropostale",
-    "Origen": "MATRIZ",
-    "Destino": "GUAYAQUIL",
-    "Contacto": "Kiara Dávalos",
-    "Dirección": "Av. Juan tanca marengo, Carlos Aurelio Rubira Infante 14 NE y Pasaje 1A - C",
-    "Teléfono": "0992753549"
-  },
-  {
-    "Nombre de Tienda": "Mall del Sur",
-    "Empresa": "Aeropostale",
-    "Origen": "MATRIZ",
-    "Destino": "GUAYAQUIL",
-    "Contacto": "Judith Asunción",
-    "Dirección": "AV 25 de Julio junto al Hospital de IESS - CC Mall del Sur",
-    "Teléfono": "0996869429"
-  },
-  {
-    "Nombre de Tienda": "Manta",
-    "Empresa": "Aeropostale",
-    "Origen": "MATRIZ",
-    "Destino": "MANTA",
-    "Contacto": "Yenny Alvia",
-    "Dirección": "Av. 4 de noviembre Paseo Shoping Manta",
-    "Teléfono": "0995168732"
-  },
-  {
-    "Nombre de Tienda": "Milagro",
+    "Nombre de Tienda": "Aeropostale - Milagro",
     "Empresa": "Aeropostale",
     "Origen": "MATRIZ",
     "Destino": "MILAGRO",
@@ -241,25 +16,25 @@ tiendas_data = [
     "Teléfono": "0985415948"
   },
   {
-    "Nombre de Tienda": "Peso Shopping Riobamat",
+    "Nombre de Tienda": "Aeropostale - Peso Shopping Riobamba",
     "Empresa": "Aeropostale",
     "Origen": "MATRIZ",
     "Destino": "RIOBAMBA",
-    "Contacto": "Maria Fernanda Ibarra",
+    "Contacto": "María Fernanda Ibarra",
     "Dirección": "Av. Antonio José de Sucre frente a la Universidad UNACH CC Paseo Shopping",
     "Teléfono": "0993438844"
   },
   {
-    "Nombre de Tienda": "Multiplaza Riobamba",
+    "Nombre de Tienda": "Aeropostale - Multiplaza Riobamba",
     "Empresa": "Aeropostale",
     "Origen": "MATRIZ",
     "Destino": "RIOBAMBA",
     "Contacto": "Jennifer Jimenez",
     "Dirección": "Avenida Lizarzaburu y Agustin Torres - CC Multiplaza Riobamba",
-    "Teléfono": "0962838619"
+    "Teléfono": "0962636619"
   },
   {
-    "Nombre de Tienda": "Pasaje",
+    "Nombre de Tienda": "Aeropostale - Pasaje",
     "Empresa": "Aeropostale",
     "Origen": "MATRIZ",
     "Destino": "PASAJE",
@@ -268,7 +43,7 @@ tiendas_data = [
     "Teléfono": "0969586186"
   },
   {
-    "Nombre de Tienda": "Paseo Ambato",
+    "Nombre de Tienda": "Aeropostale - Paseo Ambato",
     "Empresa": "Aeropostale",
     "Origen": "MATRIZ",
     "Destino": "AMBATO",
@@ -277,7 +52,7 @@ tiendas_data = [
     "Teléfono": "0984951515"
   },
   {
-    "Nombre de Tienda": "Pedernales",
+    "Nombre de Tienda": "Aeropostale - Pedernales",
     "Empresa": "Aeropostale",
     "Origen": "MATRIZ",
     "Destino": "PEDERNALES",
@@ -286,7 +61,7 @@ tiendas_data = [
     "Teléfono": "0989113061"
   },
   {
-    "Nombre de Tienda": "Península",
+    "Nombre de Tienda": "Aeropostale - Península",
     "Empresa": "Aeropostale",
     "Origen": "MATRIZ",
     "Destino": "PENINSULA",
@@ -295,7 +70,7 @@ tiendas_data = [
     "Teléfono": "0997432684"
   },
   {
-    "Nombre de Tienda": "Playas",
+    "Nombre de Tienda": "Aeropostale - Playas",
     "Empresa": "Aeropostale",
     "Origen": "MATRIZ",
     "Destino": "PLAYAS",
@@ -304,7 +79,223 @@ tiendas_data = [
     "Teléfono": "0991871477"
   },
   {
-    "Nombre de Tienda": "Portoviejo",
+    "Nombre de Tienda": "Aeropostale - (Cuenca) Mall del Rio",
+    "Empresa": "Aeropostale",
+    "Origen": "MATRIZ",
+    "Destino": "CUENCA",
+    "Contacto": "Adrian",
+    "Dirección": "Av. Felipe II y Autopista Sur - CC Mall del Rio",
+    "Teléfono": "0984752711"
+  },
+  {
+    "Nombre de Tienda": "Aeropostale - 6 de Diciembre",
+    "Empresa": "Aeropostale",
+    "Origen": "MATRIZ",
+    "Destino": "QUITO",
+    "Contacto": "Micaela Yépez",
+    "Dirección": "Av. 6 de Diciembre y Thomas de Berlanga CC Riocentro UIO",
+    "Teléfono": "0987883889"
+  },
+  {
+    "Nombre de Tienda": "Aeropostale - Ambato",
+    "Empresa": "Aeropostale",
+    "Origen": "MATRIZ",
+    "Destino": "AMBATO",
+    "Contacto": "Gabriela Urrutia",
+    "Dirección": "Av. Atahualpa y Victor Hugo CC Mall de los Andes",
+    "Teléfono": "0967239488"
+  },
+  {
+    "Nombre de Tienda": "Aeropostale - Babahoyo",
+    "Empresa": "Aeropostale",
+    "Origen": "MATRIZ",
+    "Destino": "BABAHOYO",
+    "Contacto": "Yomaira Sellan",
+    "Dirección": "Av.Enrique Ponce Luque CC Paseo Shopping Babahoyo",
+    "Teléfono": "0981841355"
+  },
+  {
+    "Nombre de Tienda": "Aeropostale - bombolí",
+    "Empresa": "Aeropostale",
+    "Origen": "MATRIZ",
+    "Destino": "SANTO DOMINGO",
+    "Contacto": "Josselyn Navarrete",
+    "Dirección": "Via Chone Diagonal a la Universidad Catolica CC Bombolí Shopping",
+    "Teléfono": "0939906346"
+  },
+  {
+    "Nombre de Tienda": "Aeropostale - Bahía de Caráquez",
+    "Empresa": "Aeropostale",
+    "Origen": "MATRIZ",
+    "Destino": "BAHIA DE CARAQUE",
+    "Contacto": "Nayely Orejuela",
+    "Dirección": "Av. 3 de Noviembre - CC Paseo Shoping Bahía de caraquez",
+    "Teléfono": "0981131760"
+  },
+  {
+    "Nombre de Tienda": "Aeropostale - Carapungo",
+    "Empresa": "Aeropostale",
+    "Origen": "MATRIZ",
+    "Destino": "QUITO",
+    "Contacto": "María José Benalcazar",
+    "Dirección": "Av. Simón Bolívar, Panamericana Norte y calle, Capitán Giovanni Calles - CC",
+    "Teléfono": "0997242323"
+  },
+  {
+    "Nombre de Tienda": "Aeropostale - CCI",
+    "Empresa": "Aeropostale",
+    "Origen": "MATRIZ",
+    "Destino": "QUITO",
+    "Contacto": "Carolina Procel",
+    "Dirección": "Av. Amazonas y Naciones Unidas - CC Iñaquito",
+    "Teléfono": "0984048928"
+  },
+  {
+    "Nombre de Tienda": "Aeropostale - Ceibos",
+    "Empresa": "Aeropostale",
+    "Origen": "MATRIZ",
+    "Destino": "GUAYAQUIL",
+    "Contacto": "Angie Delgado",
+    "Dirección": "Av. Del Bombero y San Eduardo - Riocentro Ceibos",
+    "Teléfono": "0999085369"
+  },
+  {
+    "Nombre de Tienda": "Aeropostale - Centro Histórico",
+    "Empresa": "Aeropostale",
+    "Origen": "MATRIZ",
+    "Destino": "CUENCA",
+    "Contacto": "Renata Sacari",
+    "Dirección": "Av. Simón Bolívar y PadreA guirre Centro Histórico diagonal a a la chocolateria",
+    "Teléfono": "0980874018"
+  },
+  {
+    "Nombre de Tienda": "Price Club - City Mall",
+    "Empresa": "Price Club",
+    "Origen": "MATRIZ",
+    "Destino": "GUAYAQUIL",
+    "Contacto": "Jordan Guale",
+    "Dirección": "Av. felipe Pezo y Av. Benjamín Carrión CC City Mall",
+    "Teléfono": "0962880194"
+  },
+  {
+    "Nombre de Tienda": "Aeropostale - Condado Shopping",
+    "Empresa": "Aeropostale",
+    "Origen": "MATRIZ",
+    "Destino": "QUITO",
+    "Contacto": "Mateo Recalde",
+    "Dirección": "Av. Mariscal Sucre entre Av. La Prensa Y Jhon F. Kennedy - CC Condado Sh",
+    "Teléfono": "0993736447"
+  },
+  {
+    "Nombre de Tienda": "Aeropostale - Daule",
+    "Empresa": "Aeropostale",
+    "Origen": "MATRIZ",
+    "Destino": "DAULE",
+    "Contacto": "Alisson Ramirez",
+    "Dirección": "Av. Vicente Piedrahita y Coronel Calletano Cestaris- Paseo Shoping Daule",
+    "Teléfono": "0978881886"
+  },
+  {
+    "Nombre de Tienda": "Aeropostale - Dorado",
+    "Empresa": "Aeropostale",
+    "Origen": "MATRIZ",
+    "Destino": "GUAYAQUIL",
+    "Contacto": "Oscar Alvarado",
+    "Dirección": "Av. León Febres Cordero Ribadeneyra - Rio Centro Dorado",
+    "Teléfono": "0959098012"
+  },
+  {
+    "Nombre de Tienda": "Aeropostale - Durán",
+    "Empresa": "Aeropostale",
+    "Origen": "MATRIZ",
+    "Destino": "DURAN",
+    "Contacto": "Yaritza Córdova",
+    "Dirección": "Av. Boliche Panamericana - Paseo Shoping Durán Junto al Terminal",
+    "Teléfono": "0996359344"
+  },
+  {
+    "Nombre de Tienda": "Aeropostale - el Coca",
+    "Empresa": "Aeropostale",
+    "Origen": "MATRIZ",
+    "Destino": "EL COCA",
+    "Contacto": "Adriana Zurita",
+    "Dirección": "Av. 9 de Octubre y Río Curaray - Junto a Super Akí el Coca",
+    "Teléfono": "0989137928"
+  },
+  {
+    "Nombre de Tienda": "Aeropostale - La Plaza",
+    "Empresa": "Aeropostale",
+    "Origen": "MATRIZ",
+    "Destino": "IBARRA",
+    "Contacto": "Andrea Andrango",
+    "Dirección": "Av. Mariano Acosta entre Inacio Canelos y Víctor Gómez Jurado - CC La Plaza",
+    "Teléfono": "0978765143"
+  },
+  {
+    "Nombre de Tienda": "Aeropostale - Lago Agrio",
+    "Empresa": "Aeropostale",
+    "Origen": "MATRIZ",
+    "Destino": "LAGO AGRIO",
+    "Contacto": "Angie Maldonado",
+    "Dirección": "Av. Quito y Pasaje Brazil - Junto a Super Aki Lago Agrio",
+    "Teléfono": "0989893309"
+  },
+  {
+    "Nombre de Tienda": "Aeropostale - Machala",
+    "Empresa": "Aeropostale",
+    "Origen": "MATRIZ",
+    "Destino": "MACHALA",
+    "Contacto": "Iris carpio",
+    "Dirección": "Av. Paquisha y Vía Machala km  2 1/2 - CC Paseo Shoping Machala",
+    "Teléfono": "0997260162"
+  },
+  {
+    "Nombre de Tienda": "Aeropostale - Mall del Pacífico",
+    "Empresa": "Aeropostale",
+    "Origen": "MATRIZ",
+    "Destino": "MANTA",
+    "Contacto": "Karina Figueroa",
+    "Dirección": "Av. Malecón y Calle 23 - CC Mall del Pacífico",
+    "Teléfono": "0990614279"
+  },
+  {
+    "Nombre de Tienda": "Aeropostale - Mall del Río (Gye)",
+    "Empresa": "Aeropostale",
+    "Origen": "MATRIZ",
+    "Destino": "GUAYAQUIL",
+    "Contacto": "Danna Peralta",
+    "Dirección": "Av. Francisco de Orellana y Av. Guillermo Pareja - CC Mall del Río",
+    "Teléfono": "0995609664"
+  },
+  {
+    "Nombre de Tienda": "Aeropostale - Mall del Sol",
+    "Empresa": "Aeropostale",
+    "Origen": "MATRIZ",
+    "Destino": "GUAYAQUIL",
+    "Contacto": "Kiara Dávalos",
+    "Dirección": "Av. Juan tanca marengo, Carlos Aurelio Rubira Infante 14 NE y Pasaje 1A - C",
+    "Teléfono": "0992753549"
+  },
+  {
+    "Nombre de Tienda": "Aeropostale - Mall del Sur",
+    "Empresa": "Aeropostale",
+    "Origen": "MATRIZ",
+    "Destino": "GUAYAQUIL",
+    "Contacto": "Judith Asunción",
+    "Dirección": "AV 25 de Julio junto al Hospital de IESS -  CC Mall del Sur",
+    "Teléfono": "0996869429"
+  },
+  {
+    "Nombre de Tienda": "Aeropostale - Manta",
+    "Empresa": "Aeropostale",
+    "Origen": "MATRIZ",
+    "Destino": "MANTA",
+    "Contacto": "Yenny Alvia",
+    "Dirección": "Av. 4 de noviembre Paseo Shoping Manta",
+    "Teléfono": "0995168732"
+  },
+  {
+    "Nombre de Tienda": "Aeropostale - Portoviejo",
     "Empresa": "Aeropostale",
     "Origen": "MATRIZ",
     "Destino": "PORTOVIEJO",
@@ -313,7 +304,7 @@ tiendas_data = [
     "Teléfono": "0963683962"
   },
   {
-    "Nombre de Tienda": "Rio Centro Norte",
+    "Nombre de Tienda": "Aeropostale - Rio Centro Norte",
     "Empresa": "Aeropostale",
     "Origen": "MATRIZ",
     "Destino": "GUAYAQUIL",
@@ -322,7 +313,7 @@ tiendas_data = [
     "Teléfono": "0969705137"
   },
   {
-    "Nombre de Tienda": "San Luis",
+    "Nombre de Tienda": "Aeropostale - San Luis",
     "Empresa": "Aeropostale",
     "Origen": "MATRIZ",
     "Destino": "QUITO",
@@ -331,7 +322,7 @@ tiendas_data = [
     "Teléfono": "0991879974"
   },
   {
-    "Nombre de Tienda": "Santo Domingo",
+    "Nombre de Tienda": "Aeropostale - Santo Domingo",
     "Empresa": "Aeropostale",
     "Origen": "MATRIZ",
     "Destino": "SANTO DOMINGO",
@@ -340,7 +331,7 @@ tiendas_data = [
     "Teléfono": "0967593039"
   },
   {
-    "Nombre de Tienda": "Cayambe",
+    "Nombre de Tienda": "Aeropostale - Cayambe",
     "Empresa": "Aeropostale",
     "Origen": "MATRIZ",
     "Destino": "CAYAMBE",
@@ -349,7 +340,7 @@ tiendas_data = [
     "Teléfono": "0995414136"
   },
   {
-    "Nombre de Tienda": "Quevedo",
+    "Nombre de Tienda": "Aeropostale - Quevedo",
     "Empresa": "Aeropostale",
     "Origen": "MATRIZ",
     "Destino": "QUEVEDO",
@@ -358,7 +349,7 @@ tiendas_data = [
     "Teléfono": "0981398074"
   },
   {
-    "Nombre de Tienda": "Portoviejo",
+    "Nombre de Tienda": "Price Club - Portoviejo",
     "Empresa": "Price Club",
     "Origen": "MATRIZ",
     "Destino": "PORTOVIEJO",
@@ -367,7 +358,7 @@ tiendas_data = [
     "Teléfono": "0959877997"
   },
   {
-    "Nombre de Tienda": "Machala",
+    "Nombre de Tienda": "Price Club - Machala",
     "Empresa": "Price Club",
     "Origen": "MATRIZ",
     "Destino": "MACHALA",
@@ -376,7 +367,7 @@ tiendas_data = [
     "Teléfono": "0998087085"
   },
   {
-    "Nombre de Tienda": "Guayaquil",
+    "Nombre de Tienda": "Price Club - Guayaquil",
     "Empresa": "Price Club",
     "Origen": "MATRIZ",
     "Destino": "GUAYAQUIL",
@@ -385,7 +376,7 @@ tiendas_data = [
     "Teléfono": "0999085369"
   },
   {
-    "Nombre de Tienda": "Ibarra",
+    "Nombre de Tienda": "Price Club - Ibarra",
     "Empresa": "Price Club",
     "Origen": "MATRIZ",
     "Destino": "IBARRA",
@@ -394,7 +385,7 @@ tiendas_data = [
     "Teléfono": "0982649058"
   },
   {
-    "Nombre de Tienda": "Altos del Rio",
+    "Nombre de Tienda": "Aeropostale - Altos del Rio",
     "Empresa": "Aeropostale",
     "Origen": "MATRIZ",
     "Destino": "CUENCA",
