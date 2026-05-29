@@ -609,11 +609,31 @@ def _proceso_recepcion_completo(guia_doc: dict) -> None:
     st.subheader("📋 Registro de Recepción")
     
     if items_expected:
+        st.markdown("""
+        <style>
+        .recepcion-box {
+            background-color: rgba(15, 23, 42, 0.95) !important;
+            padding: 20px;
+            border-radius: 12px;
+            border: 1px solid #334155;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.5);
+        }
+        /* Apuntar al contenedor padre inmediato en Streamlit */
+        div[data-testid="stVerticalBlock"]:has(> div > div > div > .recepcion-box-marker) {
+            background-color: rgba(10, 15, 25, 0.95) !important;
+            padding: 20px !important;
+            border-radius: 12px !important;
+            border: 1px solid #334155 !important;
+        }
+        </style>
+        <div class='recepcion-box-marker'></div>
+        """, unsafe_allow_html=True)
+        
         with st.container():
             st.markdown("""
-            <div style="background-color: #ffffff; color: #000000; padding: 15px; border-radius: 10px; text-align:center; margin-bottom: 20px; border: 1px solid #CBD5E1;">
-                <h3 style="margin:0; font-family: 'Bebas Neue', sans-serif; letter-spacing: 1px; font-size: 2.2rem;">HOJA DE RECEPCIÓN FÍSICA</h3>
-                <p style="margin:0; font-size: 0.95rem;">Verifica las cantidades físicas. Usa los botones <b>+</b> o <b>-</b> para ajustes.</p>
+            <div style="background-color: #0F172A; color: #FFFFFF; padding: 15px; border-radius: 10px; text-align:center; margin-bottom: 20px; border: 1px solid #334155;">
+                <h3 style="margin:0; font-family: 'Bebas Neue', sans-serif; letter-spacing: 1px; font-size: 2.2rem; color: #FFFFFF;">HOJA DE RECEPCIÓN FÍSICA</h3>
+                <p style="margin:0; font-size: 0.95rem; color: #94A3B8;">Verifica las cantidades físicas. Usa los botones <b>+</b> o <b>-</b> para ajustes.</p>
             </div>
             """, unsafe_allow_html=True)
 
