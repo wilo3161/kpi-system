@@ -558,11 +558,12 @@ def show_generar_guias():
             with col_m:
                 marca_sel = st.selectbox("Marca", list(MARCAS.keys()))
             logo_bytes = cargar_logo_local(marca_sel)
-            tiendas_opciones = [t["Nombre de Tienda"] for t in TIENDAS_DATA]
-            if not tiendas_opciones:
+            
+            if not TIENDAS_DATA:
                 from config.stores_data import reload_stores_data
                 reload_stores_data()
-                tiendas_opciones = [t["Nombre de Tienda"] for t in TIENDAS_DATA]
+            
+            tiendas_opciones = [t["Nombre de Tienda"] for t in TIENDAS_DATA if t.get("Empresa", "") == marca_sel]
                 
             tienda_sel = st.selectbox("Tienda Destino", tiendas_opciones)
             tienda_info = next((t for t in TIENDAS_DATA if t["Nombre de Tienda"] == tienda_sel), {})
@@ -623,13 +624,13 @@ def show_generar_guias():
             
             observaciones = st.text_area("Observaciones")
             usar_ia = st.checkbox("🤖 Generar análisis IA al guardar", value=True)
-            nuevo_numero = obtener_proximo_numero_guia()
-            st.info(f"Número de guía asignado: **{nuevo_numero}**")
+            st.info("El número secuencial de guía se asignará automáticamente al presionar Guardar.")
 
         if st.button("💾 Guardar y Generar PDF", type="primary", use_container_width=True):
             if not destinatario or not direccion:
                 st.error("Completa destinatario y dirección.")
             else:
+                nuevo_numero = obtener_proximo_numero_guia()
                 base_url = st.secrets.get("app", {}).get("url", "https://tu-app.streamlit.app")
                 qr_url = f"{base_url}?modulo=recepcion&transferencia={numero_transferencia}&guia={nuevo_numero}"
                 qr = qrcode.QRCode(box_size=5, border=2)

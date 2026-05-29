@@ -860,6 +860,12 @@ def _proceso_recepcion_completo(guia_doc: dict) -> None:
             with st.expander("Ver incidencias"):
                 for inc in incidencias:
                     st.markdown(f"• **{inc['tipo']}**: {inc['descripcion']}")
+                    
+        st.markdown("---")
+        if st.button("✅ Finalizar Recepción y Volver", type="primary", use_container_width=True):
+            if "guia_activa_recepcion" in st.session_state:
+                del st.session_state["guia_activa_recepcion"]
+            st.rerun()
 
 # ============================================================================
 # PANELES DE BÚSQUEDA Y ADMIN
@@ -923,6 +929,24 @@ def _panel_historial():
             "Estado": rec.get("estado_recepcion"), "Diferencias": "Sí" if rec.get("diferencias_detectadas") else "No"
         })
     st.dataframe(pd.DataFrame(data), use_container_width=True)
+
+    if st.session_state.get("role") == "Administrador":
+        st.markdown("---")
+        st.subheader("🛠️ Panel de Administración (Edición de Recepciones)")
+        with st.expander("Revertir Estado de Guía (Corregir error de tienda)"):
+            st.warning("⚠️ Revertir una guía a estado 'EN_TRANSITO' eliminará la información de la recepción actual y permitirá que la tienda la vuelva a recepcionar desde cero. Úsalo solo si el usuario cometió un error insalvable.")
+            guia_a_revertir = st.selectbox("Selecciona una guía recepcionada", [g["numero_guia"] for g in guias])
+            if st.button("Revertir a EN_TRANSITO", type="primary"):
+                guia_doc = local_db.find_one("guias", {"numero_guia": guia_a_revertir})
+                if guia_doc:
+                    local_db.update("guias", {"numero_guia": guia_a_revertir}, {
+                        "$set": {"estado": EstadoGuia.EN_TRANSITO, "recepcion": {}},
+                        "$push": {"timeline": _build_evento("REVERSION_ADMIN", "Administrador revertió la recepción por error del usuario.", st.session_state.get("username", "admin"))}
+                    })
+                    st.success(f"✅ Guía {guia_a_revertir} revertida correctamente a EN_TRANSITO. La tienda ya puede verla en pendientes nuevamente.")
+                    import time
+                    time.sleep(1)
+                    st.rerun()
 
 # ============================================================================
 # ENTRY POINT

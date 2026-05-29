@@ -37,10 +37,10 @@ def reload_stores_data():
             pass
                 
     PRICE_CLUBS.clear()
-    PRICE_CLUBS.extend([t["Nombre de Tienda"] for t in TIENDAS_DATA if "Price Club" in t["Nombre de Tienda"]])
+    PRICE_CLUBS.extend([t["Nombre de Tienda"] for t in TIENDAS_DATA if "Price Club" in t.get("Empresa", "")])
     
     TIENDAS_REGULARES.clear()
-    TIENDAS_REGULARES.extend([t["Nombre de Tienda"] for t in TIENDAS_DATA if "Aeropostale" in t["Empresa"] and "Price Club" not in t["Nombre de Tienda"]])
+    TIENDAS_REGULARES.extend([t["Nombre de Tienda"] for t in TIENDAS_DATA if "Aeropostale" in t.get("Empresa", "")])
     
     TIENDAS_DICT.clear()
     TIENDAS_DICT.update({t["Nombre de Tienda"]: t for t in TIENDAS_DATA})
