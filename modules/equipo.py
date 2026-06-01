@@ -103,16 +103,10 @@ def show_gestion_equipo():
     # ───────────── PESTAÑAS ─────────────
     is_admin = st.session_state.get("role") == "Administrador"
     if is_admin:
-        tabs = st.tabs([
-            "📇 Directorio del Equipo", "🌳 Organigrama",
-            "⚙️ Administrar Personal", "🤖 Asistente IA",
-            "📝 Registro Diario"
+        tabs = st.tabs(["📇 Directorio del Equipo", "🌳 Organigrama", "📝 Registro Diario"])
         ])
     else:
-        tabs = st.tabs([
-            "📇 Directorio del Equipo", "🌳 Organigrama",
-            "🤖 Asistente IA", "📝 Registro Diario"
-        ])
+        tabs = st.tabs(["📇 Directorio del Equipo", "🌳 Organigrama", "📝 Registro Diario"])
 
     # =====================================================================
     # PESTAÑA 1 – DIRECTORIO DEL EQUIPO
@@ -296,106 +290,107 @@ def show_gestion_equipo():
 # =====================================================================
 # PESTAÑA 4 – ASISTENTE IA (wilo IA)
 # =====================================================================
-    with tabs[3] if is_admin else tabs[2]:
-        st.markdown("### 🤖 Asistente Inteligente — wilo IA")
-        if len(st.session_state.chat_gemini) == 0:
-            st.session_state.chat_gemini.append({"role": "assistant", "content": "¡Hola! Soy wilo IA. ¿En qué puedo ayudarte a gestionar el equipo hoy?"})
+if is_admin:
+    with tabs[3]:
+            st.markdown("### 🤖 Asistente Inteligente — wilo IA")
+            if len(st.session_state.chat_gemini) == 0:
+                st.session_state.chat_gemini.append({"role": "assistant", "content": "¡Hola! Soy wilo IA. ¿En qué puedo ayudarte a gestionar el equipo hoy?"})
 
-        col_izq, col_der = st.columns([0.3, 0.7])
-        with col_izq:
-            st.subheader("⚡ Acciones rápidas")
-            if st.button("📋 Solicitar actividades diarias al equipo", use_container_width=True):
-                st.session_state.prompt_rapido = "Envía un mensaje a todo mi equipo pidiéndoles un resumen de las actividades realizadas hoy."
-                st.rerun()
-            if st.button("🗑️ Limpiar conversación", use_container_width=True):
-                st.session_state.chat_gemini = []
-                st.session_state.prompt_rapido = ""
-                st.rerun()
+            col_izq, col_der = st.columns([0.3, 0.7])
+            with col_izq:
+                st.subheader("⚡ Acciones rápidas")
+                if st.button("📋 Solicitar actividades diarias al equipo", use_container_width=True):
+                    st.session_state.prompt_rapido = "Envía un mensaje a todo mi equipo pidiéndoles un resumen de las actividades realizadas hoy."
+                    st.rerun()
+                if st.button("🗑️ Limpiar conversación", use_container_width=True):
+                    st.session_state.chat_gemini = []
+                    st.session_state.prompt_rapido = ""
+                    st.rerun()
             
-            st.divider()
-            st.markdown("#### 💬 Enviar por WhatsApp")
-            miembros_wa = {"Grupal / Elegir en la app": ""}
-            for area, miembros in EQUIPO_LOGISTICO.items():
-                for m in miembros:
-                    wa_num = m.get("whatsapp", "").strip()
-                    if wa_num:
-                        miembros_wa[m["nombre"]] = wa_num
+                st.divider()
+                st.markdown("#### 💬 Enviar por WhatsApp")
+                miembros_wa = {"Grupal / Elegir en la app": ""}
+                for area, miembros in EQUIPO_LOGISTICO.items():
+                    for m in miembros:
+                        wa_num = m.get("whatsapp", "").strip()
+                        if wa_num:
+                            miembros_wa[m["nombre"]] = wa_num
             
-            destinatario = st.selectbox("Seleccionar Destinatario:", list(miembros_wa.keys()))
-            ultimo_mensaje = next((m["content"] for m in reversed(st.session_state.chat_gemini) if m["role"] == "assistant"), "")
+                destinatario = st.selectbox("Seleccionar Destinatario:", list(miembros_wa.keys()))
+                ultimo_mensaje = next((m["content"] for m in reversed(st.session_state.chat_gemini) if m["role"] == "assistant"), "")
             
-            if ultimo_mensaje and "¡Hola! Soy wilo IA" not in ultimo_mensaje:
-                import urllib.parse
-                texto_url = urllib.parse.quote(ultimo_mensaje)
-                num = miembros_wa[destinatario]
-                if num:
-                    # Si empieza con 0, lo quitamos y agregamos el 593 (Ecuador)
-                    if num.startswith("0"):
-                        num = "593" + num[1:]
-                    wa_link = f"https://wa.me/{num}?text={texto_url}"
-                else:
-                    wa_link = f"https://wa.me/?text={texto_url}"
-                
-                st.link_button(f"📲 Abrir WhatsApp", wa_link, type="primary", use_container_width=True)
-            else:
-                st.warning("No hay mensaje generado para enviar.")
-
-            st.divider()
-            st.markdown("#### ✈️ Enviar a Telegram")
-            miembros_tg = {"Mi Telegram Principal": None}
-            for area, miembros in EQUIPO_LOGISTICO.items():
-                for m in miembros:
-                    tg_id = m.get("telegram_id", "").strip()
-                    if tg_id:
-                        miembros_tg[m["nombre"]] = tg_id
-                        
-            destinatario_tg = st.selectbox("Destinatario Telegram:", list(miembros_tg.keys()))
-            
-            if st.button("Enviar último mensaje por Telegram", use_container_width=True):
-                # Evitar enviar el saludo inicial
                 if ultimo_mensaje and "¡Hola! Soy wilo IA" not in ultimo_mensaje:
-                    from utils.telegram_helper import enviar_mensaje_telegram
-                    with st.spinner("Enviando a Telegram..."):
-                        target_id = miembros_tg[destinatario_tg]
-                        res = enviar_mensaje_telegram(ultimo_mensaje, target_chat_id=target_id)
-                    if res["success"]:
-                        st.success(res["message"])
+                    import urllib.parse
+                    texto_url = urllib.parse.quote(ultimo_mensaje)
+                    num = miembros_wa[destinatario]
+                    if num:
+                        # Si empieza con 0, lo quitamos y agregamos el 593 (Ecuador)
+                        if num.startswith("0"):
+                            num = "593" + num[1:]
+                        wa_link = f"https://wa.me/{num}?text={texto_url}"
                     else:
-                        st.error(res["message"])
+                        wa_link = f"https://wa.me/?text={texto_url}"
+                
+                    st.link_button(f"📲 Abrir WhatsApp", wa_link, type="primary", use_container_width=True)
                 else:
                     st.warning("No hay mensaje generado para enviar.")
 
-        with col_der:
-            chat_container = st.container(height=400)
-            with chat_container:
-                for msg in st.session_state.chat_gemini:
-                    with st.chat_message(msg["role"]):
-                        st.markdown(msg["content"])
+                st.divider()
+                st.markdown("#### ✈️ Enviar a Telegram")
+                miembros_tg = {"Mi Telegram Principal": None}
+                for area, miembros in EQUIPO_LOGISTICO.items():
+                    for m in miembros:
+                        tg_id = m.get("telegram_id", "").strip()
+                        if tg_id:
+                            miembros_tg[m["nombre"]] = tg_id
+                        
+                destinatario_tg = st.selectbox("Destinatario Telegram:", list(miembros_tg.keys()))
+            
+                if st.button("Enviar último mensaje por Telegram", use_container_width=True):
+                    # Evitar enviar el saludo inicial
+                    if ultimo_mensaje and "¡Hola! Soy wilo IA" not in ultimo_mensaje:
+                        from utils.telegram_helper import enviar_mensaje_telegram
+                        with st.spinner("Enviando a Telegram..."):
+                            target_id = miembros_tg[destinatario_tg]
+                            res = enviar_mensaje_telegram(ultimo_mensaje, target_chat_id=target_id)
+                        if res["success"]:
+                            st.success(res["message"])
+                        else:
+                            st.error(res["message"])
+                    else:
+                        st.warning("No hay mensaje generado para enviar.")
 
-            # Procesar prompt rápido si existe
-            if st.session_state.prompt_rapido:
-                prompt = st.session_state.prompt_rapido
-                st.session_state.prompt_rapido = ""
-                st.session_state.chat_gemini.append({"role": "user", "content": prompt})
-                with st.spinner("🤖 Pensando..."):
-                    respuesta = llamar_asistente_ia(prompt, EQUIPO_LOGISTICO)
-                st.session_state.chat_gemini.append({"role": "assistant", "content": respuesta})
-                st.rerun()
+            with col_der:
+                chat_container = st.container(height=400)
+                with chat_container:
+                    for msg in st.session_state.chat_gemini:
+                        with st.chat_message(msg["role"]):
+                            st.markdown(msg["content"])
 
-            user_input = st.chat_input("Escribe tu mensaje o comando...")
-            if user_input:
-                st.session_state.chat_gemini.append({"role": "user", "content": user_input})
-                with st.spinner("🤖 Pensando..."):
-                    respuesta = llamar_asistente_ia(user_input, EQUIPO_LOGISTICO)
-                st.session_state.chat_gemini.append({"role": "assistant", "content": respuesta})
-                st.rerun()
+                # Procesar prompt rápido si existe
+                if st.session_state.prompt_rapido:
+                    prompt = st.session_state.prompt_rapido
+                    st.session_state.prompt_rapido = ""
+                    st.session_state.chat_gemini.append({"role": "user", "content": prompt})
+                    with st.spinner("🤖 Pensando..."):
+                        respuesta = llamar_asistente_ia(prompt, EQUIPO_LOGISTICO)
+                    st.session_state.chat_gemini.append({"role": "assistant", "content": respuesta})
+                    st.rerun()
 
-            st.info("📋 **Nota:** Los mensajes generados son texto listo para copiar y pegar en WhatsApp o correo. Si hay número registrado, se incluye un enlace wa.me.")
+                user_input = st.chat_input("Escribe tu mensaje o comando...")
+                if user_input:
+                    st.session_state.chat_gemini.append({"role": "user", "content": user_input})
+                    with st.spinner("🤖 Pensando..."):
+                        respuesta = llamar_asistente_ia(user_input, EQUIPO_LOGISTICO)
+                    st.session_state.chat_gemini.append({"role": "assistant", "content": respuesta})
+                    st.rerun()
+
+                st.info("📋 **Nota:** Los mensajes generados son texto listo para copiar y pegar en WhatsApp o correo. Si hay número registrado, se incluye un enlace wa.me.")
 
     # =====================================================================
     # PESTAÑA 5 – REGISTRO DIARIO DE ACTIVIDADES
     # =====================================================================
-    with tabs[4] if is_admin else tabs[3]:
+    with tabs[4] if is_admin else tabs[2]:
         st.markdown("### 📝 Registro de Actividades Diarias")
         
         # Filtrar a Wilson Perez y obtener todos los miembros
