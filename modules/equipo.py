@@ -1,11 +1,13 @@
 # modules/equipo.py
 import streamlit as st
 import pandas as pd
-from datetime import datetime, timedelta
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
+TZ_GUAYAQUIL = ZoneInfo("America/Guayaquil")
 
 def obtener_hora_ecuador():
-    # Ecuador está en UTC-5
-    return datetime.utcnow() - timedelta(hours=5)
+    return datetime.now(TZ_GUAYAQUIL)
 from database.manager import local_db
 from utils.ui import add_back_button, show_module_header
 from ai.supply_chain_ai import _ejecutar_prompt  # wilo IA (OpenAI)
