@@ -423,15 +423,29 @@ def show_gestion_equipo():
         with col_form:
             # Lógica de bloqueo por hora para usuarios NO administradores
             from datetime import time as dt_time
-            hora_actual = datetime.now().time()
-            hora_limite = dt_time(19, 47)
+            from datetime import datetime
+            
+            now = datetime.now()
+            hora_actual = now.time()
+            hora_limite = dt_time(20, 0)
+            
+            # Consultar última emisión del reporte
+            estado_cierre = local_db.find_one("estado_sistema", {"id": "cierre_reporte"})
+            if not estado_cierre:
+                ultima_emision_dt = datetime(1970, 1, 1)
+            else:
+                ultima_emision_dt = datetime.fromisoformat(estado_cierre.get("ultima_emision", "1970-01-01T00:00:00"))
             
             bloqueado = False
-            if not is_admin and hora_actual > hora_limite:
-                bloqueado = True
-                
+            if not is_admin:
+                if hora_actual >= hora_limite:
+                    limite_hoy = datetime.combine(now.date(), hora_limite)
+                    # Si ya son pasadas las 20:00 y no se ha emitido el reporte después de las 20:00 de hoy
+                    if ultima_emision_dt < limite_hoy:
+                        bloqueado = True
+                        
             if bloqueado:
-                st.error("⏰ El horario de registro ha finalizado (límite: 19:47). No se permiten más ingresos por hoy.")
+                st.error("⏰ El horario de registro ha finalizado (se cierra a las 20:00). Estará habilitado nuevamente una vez que el Administrador emita el reporte.")
             else:
                 with st.form("form_actividades"):
                     st.subheader("Ingresar Actividad")
@@ -460,6 +474,18 @@ def show_gestion_equipo():
             fecha_str = fecha_consulta.strftime("%Y-%m-%d")
             
             if st.button("Generar Registro", type="primary", use_container_width=True):
+                # Registrar que se emitió el reporte para habilitar la plataforma
+                from datetime import datetime
+                now_str = datetime.now().isoformat()
+                estado_cierre = local_db.find_one("estado_sistema", {"id": "cierre_reporte"})
+                if estado_cierre:
+                    # Usar delete sobre data para TinyDB/mock local_db, de forma segura
+                    if hasattr(local_db, 'data') and 'estado_sistema' in local_db.data:
+                        local_db.data["estado_sistema"] = [x for x in local_db.data["estado_sistema"] if x.get("id") != "cierre_reporte"]
+                    else:
+                        local_db.delete("estado_sistema", {"id": "cierre_reporte"})
+                local_db.insert("estado_sistema", {"id": "cierre_reporte", "ultima_emision": now_str})
+                
                 acts_consulta = local_db.find("actividades_diarias", {"fecha": fecha_str})
                 if acts_consulta:
                     meses = ["", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
