@@ -103,7 +103,10 @@ def show_gestion_equipo():
     # ───────────── PESTAÑAS ─────────────
     is_admin = st.session_state.get("role") == "Administrador"
     if is_admin:
-        tabs = st.tabs(["📇 Directorio del Equipo", "🌳 Organigrama", "📝 Registro Diario"])
+        tabs = st.tabs([
+            "📇 Directorio del Equipo", "🌳 Organigrama",
+            "⚙️ Administrar Personal", "🤖 Asistente IA",
+            "📝 Registro Diario"
         ])
     else:
         tabs = st.tabs(["📇 Directorio del Equipo", "🌳 Organigrama", "📝 Registro Diario"])
