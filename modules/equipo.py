@@ -400,10 +400,15 @@ def show_gestion_equipo():
         miembros_completos = [m.get("nombre") for m in db_equipo if m.get("nombre")]
         miembros_ingreso = [m for m in miembros_completos if m.lower() != "wilson perez"]
         
-        # Fecha de hoy para ingresos (el registro siempre es del día actual)
-        fecha_hoy = datetime.now().strftime("%Y-%m-%d")
+        # Fecha de registro (el corte es a las 20:00, a partir de ahí cuenta para el día siguiente)
+        from datetime import timedelta
+        ahora = datetime.now()
+        if ahora.hour >= 20:
+            fecha_hoy = (ahora + timedelta(days=1)).strftime("%Y-%m-%d")
+        else:
+            fecha_hoy = ahora.strftime("%Y-%m-%d")
         
-        # Consultar quiénes ya han registrado hoy
+        # Consultar quiénes ya han registrado para la fecha en curso
         acts_hoy = local_db.find("actividades_diarias", {"fecha": fecha_hoy})
         empleados_con_registro = {a.get("empleado") for a in acts_hoy if a.get("empleado")}
         
@@ -421,7 +426,6 @@ def show_gestion_equipo():
             st.markdown(estado_html, unsafe_allow_html=True)
         
         with col_form:
-            # Lógica de bloqueo por hora para usuarios NO administradores
             from datetime import time as dt_time
             from datetime import datetime
             
@@ -443,10 +447,13 @@ def show_gestion_equipo():
                     # Si ya son pasadas las 20:00 y no se ha emitido el reporte después de las 20:00 de hoy
                     if ultima_emision_dt < limite_hoy:
                         bloqueado = True
-                        
+            
             if bloqueado:
-                st.error("⏰ El horario de registro ha finalizado (se cierra a las 20:00). Estará habilitado nuevamente una vez que el Administrador emita el reporte.")
+                st.error("⏰ El horario de registro ha finalizado (corte a las 20:00). Estará habilitado nuevamente una vez que el Administrador emita el reporte de hoy.")
             else:
+                if ahora.hour >= 20:
+                    st.info("🌙 Registro habilitado para el día de MAÑANA.")
+                    
                 with st.form("form_actividades"):
                     st.subheader("Ingresar Actividad")
                     empleado = st.selectbox("Selecciona tu nombre", [""] + miembros_ingreso)
