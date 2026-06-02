@@ -1,7 +1,11 @@
 # modules/equipo.py
 import streamlit as st
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta
+
+def obtener_hora_ecuador():
+    # Ecuador está en UTC-5
+    return datetime.utcnow() - timedelta(hours=5)
 from database.manager import local_db
 from utils.ui import add_back_button, show_module_header
 from ai.supply_chain_ai import _ejecutar_prompt  # wilo IA (OpenAI)
@@ -68,7 +72,7 @@ Tu función principal es ayudar a Wilson con la comunicación hacia su equipo:
     5. Si tienes un número de WhatsApp, incluir también un enlace wa.me con el mensaje codificado.
 - Si Wilson hace preguntas generales sobre logística, el equipo o las operaciones, responde con información útil y concisa.
 - Responde siempre en español formal pero directo. Sé proactivo.
-Fecha y hora actual: {datetime.now().strftime('%d/%m/%Y %H:%M')}"""
+Fecha y hora actual: {obtener_hora_ecuador().strftime('%d/%m/%Y %H:%M')}"""
 
     prompt_completo = f"{system_prompt}\n\nPregunta del usuario: {prompt_usuario}"
     return _ejecutar_prompt(prompt_completo, "Lo siento, el asistente no está disponible en este momento.")
@@ -404,7 +408,7 @@ def show_gestion_equipo():
         from datetime import time as dt_time
         
         # Fecha de registro (el corte es a las 20:00, a partir de ahí cuenta para el día siguiente)
-        ahora = datetime.now()
+        ahora = obtener_hora_ecuador()
         if ahora.hour >= 20:
             fecha_hoy = (ahora + timedelta(days=1)).strftime("%Y-%m-%d")
         else:
@@ -428,7 +432,7 @@ def show_gestion_equipo():
             st.markdown(estado_html, unsafe_allow_html=True)
         
         with col_form:
-            now = datetime.now()
+            now = obtener_hora_ecuador()
             hora_actual = now.time()
             hora_limite = dt_time(20, 0)
             
@@ -464,7 +468,7 @@ def show_gestion_equipo():
                                 "fecha": fecha_hoy,
                                 "empleado": empleado,
                                 "actividad": actividad,
-                                "hora_registro": datetime.now().strftime("%H:%M:%S")
+                                "hora_registro": obtener_hora_ecuador().strftime("%H:%M:%S")
                             })
                             st.success(f"✅ Información guardada correctamente para {empleado}.")
                             st.rerun()
@@ -476,12 +480,12 @@ def show_gestion_equipo():
             st.divider()
             st.subheader("📊 Reporte Consolidado (Administrador)")
             
-            fecha_consulta = st.date_input("Consultar registros por fecha:", datetime.now().date())
+            fecha_consulta = st.date_input("Consultar registros por fecha:", obtener_hora_ecuador().date())
             fecha_str = fecha_consulta.strftime("%Y-%m-%d")
             
             if st.button("Generar Registro", type="primary", use_container_width=True):
                 # Registrar que se emitió el reporte para habilitar la plataforma
-                now_str = datetime.now().isoformat()
+                now_str = obtener_hora_ecuador().isoformat()
                 estado_cierre = local_db.find_one("estado_sistema", {"id": "cierre_reporte"})
                 if estado_cierre:
                     # Usar delete sobre data para TinyDB/mock local_db, de forma segura
