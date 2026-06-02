@@ -290,11 +290,11 @@ def show_gestion_equipo():
                                 st.rerun()
                         st.divider()
 
-# =====================================================================
-# PESTAÑA 4 – ASISTENTE IA (wilo IA)
-# =====================================================================
-if is_admin:
-    with tabs[3]:
+    # =====================================================================
+    # PESTAÑA 4 – ASISTENTE IA (wilo IA)
+    # =====================================================================
+    if is_admin:
+        with tabs[3]:
             st.markdown("### 🤖 Asistente Inteligente — wilo IA")
             if len(st.session_state.chat_gemini) == 0:
                 st.session_state.chat_gemini.append({"role": "assistant", "content": "¡Hola! Soy wilo IA. ¿En qué puedo ayudarte a gestionar el equipo hoy?"})
