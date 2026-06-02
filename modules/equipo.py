@@ -400,8 +400,10 @@ def show_gestion_equipo():
         miembros_completos = [m.get("nombre") for m in db_equipo if m.get("nombre")]
         miembros_ingreso = [m for m in miembros_completos if m.lower() != "wilson perez"]
         
-        # Fecha de registro (el corte es a las 20:00, a partir de ahí cuenta para el día siguiente)
         from datetime import timedelta
+        from datetime import time as dt_time
+        
+        # Fecha de registro (el corte es a las 20:00, a partir de ahí cuenta para el día siguiente)
         ahora = datetime.now()
         if ahora.hour >= 20:
             fecha_hoy = (ahora + timedelta(days=1)).strftime("%Y-%m-%d")
@@ -426,9 +428,6 @@ def show_gestion_equipo():
             st.markdown(estado_html, unsafe_allow_html=True)
         
         with col_form:
-            from datetime import time as dt_time
-            from datetime import datetime
-            
             now = datetime.now()
             hora_actual = now.time()
             hora_limite = dt_time(20, 0)
@@ -482,7 +481,6 @@ def show_gestion_equipo():
             
             if st.button("Generar Registro", type="primary", use_container_width=True):
                 # Registrar que se emitió el reporte para habilitar la plataforma
-                from datetime import datetime
                 now_str = datetime.now().isoformat()
                 estado_cierre = local_db.find_one("estado_sistema", {"id": "cierre_reporte"})
                 if estado_cierre:
