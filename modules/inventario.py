@@ -92,9 +92,37 @@ def show_control_inventario():
 
     # ===== CARGA DE ARCHIVO =====
     if puede_cargar:
-        st.subheader("📂 Cargar archivo de stock consolidado")
-        archivo = st.file_uploader("Seleccionar archivo Excel", type=["xlsx", "xls"], key="stock_upload")
-        if archivo:
+        st.subheader("📂 Ingesta de Datos (Diaria y Masiva)")
+        tab_diaria, tab_masiva = st.tabs(["Carga Diaria", "Carga Masiva (Históricos)"])
+        
+        with tab_masiva:
+            st.info("Sube múltiples archivos para construir el histórico. El sistema guardará la fecha que encuentre en el nombre del archivo (ej. stock_2024-05-10.xlsx) o la fecha actual.")
+            archivos_masivos = st.file_uploader("Seleccionar múltiples archivos Excel", type=["xlsx", "xls"], accept_multiple_files=True, key="stock_upload_masivo")
+            if st.button("Procesar Archivos Históricos", type="primary") and archivos_masivos:
+                db = get_db_v2()
+                with st.spinner(f"Procesando {len(archivos_masivos)} archivos..."):
+                    import re
+                    exitosos = 0
+                    for arch in archivos_masivos:
+                        try:
+                            df_temp = pd.read_excel(arch, engine='openpyxl')
+                            match = re.search(r'\d{4}-\d{2}-\d{2}', arch.name)
+                            fecha_str = match.group() if match else datetime.now().strftime("%Y-%m-%d")
+                            
+                            data_to_save = df_temp.to_dict("records")
+                            for row in data_to_save:
+                                row["fecha_carga_diaria"] = fecha_str
+                                
+                            db.delete("stock_consolidado", {"fecha_carga_diaria": fecha_str})
+                            db.insert_many("stock_consolidado", data_to_save)
+                            exitosos += 1
+                        except Exception as e:
+                            st.error(f"Error procesando {arch.name}: {e}")
+                    st.success(f"✅ Se guardaron {exitosos} archivos históricos en MongoDB exitosamente.")
+        
+        with tab_diaria:
+            archivo = st.file_uploader("Seleccionar archivo Excel del día", type=["xlsx", "xls"], key="stock_upload")
+            if archivo:
             try:
                 with st.spinner("Cargando y procesando archivo..."):
                     time.sleep(0.5)  # simular progreso
@@ -310,55 +338,81 @@ def show_control_inventario():
                 fig.update_layout(template="plotly_dark")
                 st.plotly_chart(fig, use_container_width=True)
                 
-            # --- INTEGRACIÓN MACHINE LEARNING REPLENISHMENT ---
+            # --- INTEGRACIÓN MACHINE LEARNING (Curvas de Tallas) ---
             st.markdown("---")
-            st.markdown("#### 🤖 Machine Learning: Sugerencia de Reposición")
-            if 'DELTA_VENTAS' in df.columns:
+            st.markdown("#### 🤖 Machine Learning: Sugerencia Avanzada Multidimensional")
+            
+            # Verificar si existen columnas requeridas para agrupar
+            col_estilo = next((c for c in df.columns if 'ESTILO' in c.upper()), None)
+            col_color = next((c for c in df.columns if 'COLOR' in c.upper()), None)
+            col_talla = next((c for c in df.columns if 'TALLA' in c.upper()), None)
+            
+            if 'DELTA_VENTAS' in df.columns and col_estilo and col_color and col_talla:
                 matriz_cols = [c for c in tiendas if 'MATRIZ' in c.upper()]
                 matriz_col = matriz_cols[0] if matriz_cols else None
                 
                 if matriz_col:
                     tienda_sel = st.selectbox("Seleccione Tienda Destino", [c for c in tiendas if c != matriz_col])
-                    if st.button("Generar Sugerencias de Reposición (ML)", type="primary"):
-                        resultados = []
-                        df_ml = df[df['DELTA_VENTAS'] > 0].copy()
-                        for _, row in df_ml.iterrows():
-                            codigo = row[codigo_col]
-                            stock_tienda = row.get(tienda_sel, 0)
-                            stock_matriz = row.get(matriz_col, 0)
-                            ventas_diarias = row.get('DELTA_VENTAS', 0)
+                    
+                    if st.button("Generar Sugerencias por Talla (ML)", type="primary"):
+                        with st.spinner("Analizando curvas de tallas y proyectando demanda..."):
+                            df_ml = df[df['DELTA_VENTAS'] > 0].copy()
                             
-                            demanda_proyectada = ventas_diarias * 7 # Proyección a 7 días
-                            sugerencia = 0
-                            if stock_tienda < demanda_proyectada:
-                                necesidad = demanda_proyectada - stock_tienda
-                                if stock_matriz >= necesidad:
-                                    sugerencia = necesidad
-                                elif stock_matriz > 0:
-                                    sugerencia = stock_matriz
-                                    
-                            if sugerencia > 0:
-                                resultados.append({
-                                    codigo_col: codigo,
-                                    producto_col: row[producto_col],
-                                    'Tienda_Destino': tienda_sel,
-                                    'Rotacion_Diaria': ventas_diarias,
-                                    'Demanda_7D': demanda_proyectada,
-                                    'Stock_Matriz': stock_matriz,
-                                    'Transferencia_Sugerida': sugerencia
-                                })
-                        
-                        if resultados:
-                            df_sug = pd.DataFrame(resultados).sort_values('Transferencia_Sugerida', ascending=False)
-                            st.dataframe(df_sug, use_container_width=True)
-                            csv_ml = df_sug.to_csv(index=False).encode('utf-8')
-                            st.download_button("📥 Exportar Sugerencias (CSV)", csv_ml, "sugerencias_ml.csv", "text/csv")
-                        else:
-                            st.success("No hay sugerencias de reposición pendientes para esta tienda.")
+                            # 1. Agrupar Delta por ESTILO y COLOR
+                            df_estilo_color = df_ml.groupby([col_estilo, col_color])['DELTA_VENTAS'].sum().reset_index(name='DELTA_EC')
+                            
+                            # 2. Agrupar por ESTILO, COLOR, TALLA para la proporción histórica
+                            df_tallas = df_ml.groupby([col_estilo, col_color, col_talla])['DELTA_VENTAS'].sum().reset_index(name='DELTA_TALLA')
+                            df_tallas = pd.merge(df_tallas, df_estilo_color, on=[col_estilo, col_color], how='left')
+                            df_tallas['PROPORCION_TALLA'] = df_tallas['DELTA_TALLA'] / df_tallas['DELTA_EC']
+                            
+                            resultados = []
+                            # Evaluamos cada SKU a nivel talla
+                            for _, row in df_ml.iterrows():
+                                est = row[col_estilo]
+                                col = row[col_color]
+                                tal = row[col_talla]
+                                
+                                rot_ec_df = df_estilo_color[(df_estilo_color[col_estilo]==est) & (df_estilo_color[col_color]==col)]
+                                rotacion_estilo_color = rot_ec_df['DELTA_EC'].sum() if not rot_ec_df.empty else 0
+                                
+                                prop_talla_df = df_tallas[(df_tallas[col_estilo]==est) & (df_tallas[col_color]==col) & (df_tallas[col_talla]==tal)]
+                                proporcion_talla = prop_talla_df['PROPORCION_TALLA'].sum() if not prop_talla_df.empty else 0
+                                
+                                rotacion_esperada_talla = rotacion_estilo_color * proporcion_talla if proporcion_talla > 0 else row['DELTA_VENTAS']
+                                
+                                demanda_7d = rotacion_esperada_talla * 7
+                                stock_tienda = row.get(tienda_sel, 0)
+                                stock_matriz = row.get(matriz_col, 0)
+                                
+                                sugerencia = 0
+                                if stock_tienda < demanda_7d:
+                                    necesidad = math.ceil(demanda_7d - stock_tienda)
+                                    sugerencia = min(necesidad, stock_matriz)
+                                        
+                                if sugerencia > 0:
+                                    resultados.append({
+                                        codigo_col: row[codigo_col],
+                                        producto_col: row[producto_col],
+                                        col_estilo: est,
+                                        col_color: col,
+                                        col_talla: tal,
+                                        'Demanda_Proyectada_Talla': round(demanda_7d, 1),
+                                        'Stock_Matriz': stock_matriz,
+                                        'Transferencia_Sugerida': sugerencia
+                                    })
+                            
+                            if resultados:
+                                df_sug = pd.DataFrame(resultados).sort_values([col_estilo, col_color, 'Transferencia_Sugerida'], ascending=[True, True, False])
+                                st.dataframe(df_sug, use_container_width=True)
+                                csv_ml = df_sug.to_csv(index=False).encode('utf-8')
+                                st.download_button("📥 Exportar Sugerencias con Curva de Tallas (CSV)", csv_ml, "sugerencias_tallas.csv", "text/csv")
+                            else:
+                                st.success("No hay sugerencias pendientes para esta tienda.")
                 else:
-                    st.info("No se encontró una columna 'MATRIZ' para sugerir reposiciones.")
+                    st.info("No se encontró una columna 'MATRIZ'.")
             else:
-                st.info("Aún no hay datos históricos suficientes para calcular el Delta de Ventas y aplicar ML.")
+                st.info("Aún no hay datos históricos suficientes o faltan columnas (ESTILO, COLOR, TALLA) para aplicar ML con curvas de tallas.")
         else:
             st.info("No se detectó una columna de fecha. No es posible calcular días en inventario ni productos lentos.")
 
