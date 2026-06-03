@@ -768,40 +768,90 @@ def show_generar_guias():
     # =========================================================================
     with tab_dash:
         st.subheader("📈 Dashboard Progresivo (Prendas Transferidas Hoy)")
+
+        ahora_ec = datetime.now(TZ_QUITO)
+        hora_ec = ahora_ec.hour
+        today_str = ahora_ec.strftime("%d/%m/%Y")
         
-        # Obtener guías globales para el tablero de hoy sin filtros de rol, para que todos vean el progreso
-        todas_las_guias = local_db.find("guias", sort=[("fecha", -1)], limit=1000)
-        today_str = datetime.now(TZ_QUITO).strftime("%d/%m/%Y")
+        HORA_CIERRE = 19  # 7pm Ecuador
         
-        guias_hoy = [d for d in todas_las_guias if d.get("fecha_emision", "").startswith(today_str) and not d.get("anulada")]
-        
-        prendas_por_usuario = {}
-        for d in guias_hoy:
-            usr = d.get("usuario_genera", "Desconocido")
-            prendas = d.get("total_prendas", 0)
-            prendas_por_usuario[usr] = prendas_por_usuario.get(usr, 0) + prendas
+        if hora_ec >= HORA_CIERRE:
+            # Jornada cerrada — mostrar el resumen final del día
+            st.markdown(f"""
+            <div style="background: linear-gradient(145deg, rgba(30,41,59,0.9), rgba(15,23,42,1)); border: 2px solid #f59e0b; border-radius: 15px; padding: 25px; text-align: center; margin-bottom: 20px;">
+                <div style="font-size: 3rem;">🌙</div>
+                <h2 style="color: #f59e0b; margin: 8px 0;">Jornada Cerrada — {today_str}</h2>
+                <p style="color: #94a3b8; margin: 0;">El dashboard se reiniciará automáticamente mañana al comenzar las operaciones.</p>
+            </div>
+            """, unsafe_allow_html=True)
             
-        if not prendas_por_usuario:
-            st.info("Aún no hay transferencias registradas el día de hoy.")
+            # Mostrar el resumen final de la jornada de hoy
+            todas_las_guias = local_db.find("guias", sort=[("fecha", -1)], limit=1000)
+            guias_hoy = [d for d in todas_las_guias if d.get("fecha_emision", "").startswith(today_str) and not d.get("anulada")]
+            prendas_por_usuario = {}
+            for d in guias_hoy:
+                usr = d.get("usuario_genera", "Desconocido")
+                prendas_por_usuario[usr] = prendas_por_usuario.get(usr, 0) + d.get("total_prendas", 0)
+            
+            if prendas_por_usuario:
+                st.markdown("#### 📋 Cierre final del día:")
+                usuarios_ordenados = sorted(prendas_por_usuario.items(), key=lambda x: x[1], reverse=True)
+                cols_per_row = 3
+                for i in range(0, len(usuarios_ordenados), cols_per_row):
+                    row_users = usuarios_ordenados[i:i+cols_per_row]
+                    cols = st.columns(cols_per_row)
+                    for j, (usr, total_p) in enumerate(row_users):
+                        with cols[j]:
+                            st.markdown(f"""
+                            <div style="background: linear-gradient(145deg, rgba(30,41,59,0.8), rgba(15,23,42,0.9)); border: 1px solid #f59e0b; border-radius: 15px; padding: 25px 15px; text-align: center; box-shadow: 0 8px 32px rgba(0,0,0,0.2);">
+                                <div style="font-size: 2.5rem; margin-bottom: 5px;">🏆</div>
+                                <h2 style="margin: 0; color: #f8fafc; font-size: 1.3rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{usr}</h2>
+                                <h1 style="margin: 10px 0; color: #f59e0b; font-size: 3rem; font-weight: 800;">{total_p:,}</h1>
+                                <p style="margin: 0; color: #94a3b8; font-weight: 600; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 1px;">Total Final del Día</p>
+                            </div>
+                            """, unsafe_allow_html=True)
+                    st.write("")
+            else:
+                st.info("No se registraron transferencias el día de hoy.")
         else:
-            # Ordenar de mayor a menor
-            usuarios_ordenados = sorted(prendas_por_usuario.items(), key=lambda x: x[1], reverse=True)
-            cols_per_row = 3
-            for i in range(0, len(usuarios_ordenados), cols_per_row):
-                row_users = usuarios_ordenados[i:i+cols_per_row]
-                cols = st.columns(cols_per_row)
-                for j, (usr, total_p) in enumerate(row_users):
-                    with cols[j]:
-                        st.markdown(f"""
-                        <div style="background: linear-gradient(145deg, rgba(30,41,59,0.8), rgba(15,23,42,0.9)); border: 1px solid #38bdf8; border-radius: 15px; padding: 25px 15px; text-align: center; box-shadow: 0 8px 32px rgba(0,0,0,0.2);">
-                            <div style="font-size: 3rem; margin-bottom: 5px;">📦</div>
-                            <h2 style="margin: 0; color: #f8fafc; font-size: 1.4rem; text-transform: capitalize; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{usr}</h2>
-                            <h1 style="margin: 10px 0; color: #38bdf8; font-size: 3.2rem; font-weight: 800;">{total_p:,}</h1>
-                            <p style="margin: 0; color: #94a3b8; font-weight: 600; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px;">Prendas Hoy</p>
-                        </div>
-                        """, unsafe_allow_html=True)
-                st.write("")
+            # Jornada abierta — mostrar progreso en tiempo real
+            minutos_restantes = (HORA_CIERRE - hora_ec - 1) * 60 + (60 - ahora_ec.minute)
+            st.markdown(f"""
+            <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(16,185,129,0.1); border: 1px solid #10b981; border-radius: 10px; padding: 12px 20px; margin-bottom: 20px;">
+                <span style="color: #10b981; font-weight: 700; font-size: 1rem;">🟢 Jornada Activa — {today_str}</span>
+                <span style="color: #94a3b8; font-size: 0.9rem;">⏰ Cierre en: {minutos_restantes // 60}h {minutos_restantes % 60}m (19:00)</span>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            todas_las_guias = local_db.find("guias", sort=[("fecha", -1)], limit=1000)
+            guias_hoy = [d for d in todas_las_guias if d.get("fecha_emision", "").startswith(today_str) and not d.get("anulada")]
+            
+            prendas_por_usuario = {}
+            for d in guias_hoy:
+                usr = d.get("usuario_genera", "Desconocido")
+                prendas_por_usuario[usr] = prendas_por_usuario.get(usr, 0) + d.get("total_prendas", 0)
                 
+            if not prendas_por_usuario:
+                st.info("Aún no hay transferencias registradas el día de hoy. Las guías irán apareciendo conforme se generen.")
+            else:
+                # Ordenar de mayor a menor
+                usuarios_ordenados = sorted(prendas_por_usuario.items(), key=lambda x: x[1], reverse=True)
+                cols_per_row = 3
+                for i in range(0, len(usuarios_ordenados), cols_per_row):
+                    row_users = usuarios_ordenados[i:i+cols_per_row]
+                    cols = st.columns(cols_per_row)
+                    for j, (usr, total_p) in enumerate(row_users):
+                        with cols[j]:
+                            st.markdown(f"""
+                            <div style="background: linear-gradient(145deg, rgba(30,41,59,0.8), rgba(15,23,42,0.9)); border: 1px solid #38bdf8; border-radius: 15px; padding: 25px 15px; text-align: center; box-shadow: 0 8px 32px rgba(0,0,0,0.2);">
+                                <div style="font-size: 3rem; margin-bottom: 5px;">📦</div>
+                                <h2 style="margin: 0; color: #f8fafc; font-size: 1.4rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{usr}</h2>
+                                <h1 style="margin: 10px 0; color: #38bdf8; font-size: 3.2rem; font-weight: 800;">{total_p:,}</h1>
+                                <p style="margin: 0; color: #94a3b8; font-weight: 600; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px;">Prendas Hoy</p>
+                            </div>
+                            """, unsafe_allow_html=True)
+                    st.write("")
+
         st.divider()
         st.subheader("📊 Resumen Histórico y Semanal")
         query = {}
