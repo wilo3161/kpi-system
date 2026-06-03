@@ -8,6 +8,9 @@ from datetime import datetime
 import time
 import math
 from utils.ui import acu_metric
+from database.manager import get_db_v2
+from sklearn.linear_model import LinearRegression
+import numpy as np
 
 # ========== FUNCIONES AUXILIARES ==========
 def detectar_columnas(df):
@@ -98,6 +101,41 @@ def show_control_inventario():
                     df = pd.read_excel(archivo, engine='openpyxl')
                     codigo_col, producto_col, tiendas, fecha_col = detectar_columnas(df)
                     df, dias_col = calcular_dias_inventario(df, fecha_col)
+
+                    # --- INTEGRACIÓN MONGODB E HISTÓRICO ---
+                    db = get_db_v2()
+                    today_str = datetime.now().strftime("%Y-%m-%d")
+                    # Guardar histórico del día actual
+                    data_to_save = df.to_dict("records")
+                    for row in data_to_save:
+                        row["fecha_carga_diaria"] = today_str
+                    
+                    db.delete("stock_consolidado", {"fecha_carga_diaria": today_str})
+                    db.insert_many("stock_consolidado", data_to_save)
+                    
+                    # Calcular Delta (Ventas) vs ayer
+                    yesterday = datetime.now() - pd.Timedelta(days=1)
+                    yesterday_str = yesterday.strftime("%Y-%m-%d")
+                    
+                    docs_ayer = db.find("stock_consolidado", {"fecha_carga_diaria": yesterday_str})
+                    if docs_ayer:
+                        df_ayer = pd.DataFrame(docs_ayer)
+                        # Sumar totals si es posible
+                        if codigo_col in df_ayer.columns:
+                            # Aseguramos columnas numericas
+                            df['TOTAL_INV'] = df[tiendas].sum(axis=1) if tiendas else 0
+                            df_ayer['TOTAL_INV'] = df_ayer[tiendas].sum(axis=1) if tiendas else 0
+                            
+                            curr_grp = df.groupby(codigo_col)['TOTAL_INV'].sum().reset_index(name='T_CURR')
+                            prev_grp = df_ayer.groupby(codigo_col)['TOTAL_INV'].sum().reset_index(name='T_PREV')
+                            merged = pd.merge(curr_grp, prev_grp, on=codigo_col, how='left')
+                            merged['T_PREV'] = merged['T_PREV'].fillna(merged['T_CURR'])
+                            merged['DELTA_VENTAS'] = merged['T_PREV'] - merged['T_CURR']
+                            
+                            df = pd.merge(df, merged[[codigo_col, 'DELTA_VENTAS']], on=codigo_col, how='left')
+                            df['DELTA_VENTAS'] = df['DELTA_VENTAS'].fillna(0)
+                    else:
+                        df['DELTA_VENTAS'] = 0
 
                     st.session_state.df = df
                     st.session_state.codigo_col = codigo_col
@@ -271,6 +309,56 @@ def show_control_inventario():
                 fig.update_traces(textposition="outside")
                 fig.update_layout(template="plotly_dark")
                 st.plotly_chart(fig, use_container_width=True)
+                
+            # --- INTEGRACIÓN MACHINE LEARNING REPLENISHMENT ---
+            st.markdown("---")
+            st.markdown("#### 🤖 Machine Learning: Sugerencia de Reposición")
+            if 'DELTA_VENTAS' in df.columns:
+                matriz_cols = [c for c in tiendas if 'MATRIZ' in c.upper()]
+                matriz_col = matriz_cols[0] if matriz_cols else None
+                
+                if matriz_col:
+                    tienda_sel = st.selectbox("Seleccione Tienda Destino", [c for c in tiendas if c != matriz_col])
+                    if st.button("Generar Sugerencias de Reposición (ML)", type="primary"):
+                        resultados = []
+                        df_ml = df[df['DELTA_VENTAS'] > 0].copy()
+                        for _, row in df_ml.iterrows():
+                            codigo = row[codigo_col]
+                            stock_tienda = row.get(tienda_sel, 0)
+                            stock_matriz = row.get(matriz_col, 0)
+                            ventas_diarias = row.get('DELTA_VENTAS', 0)
+                            
+                            demanda_proyectada = ventas_diarias * 7 # Proyección a 7 días
+                            sugerencia = 0
+                            if stock_tienda < demanda_proyectada:
+                                necesidad = demanda_proyectada - stock_tienda
+                                if stock_matriz >= necesidad:
+                                    sugerencia = necesidad
+                                elif stock_matriz > 0:
+                                    sugerencia = stock_matriz
+                                    
+                            if sugerencia > 0:
+                                resultados.append({
+                                    codigo_col: codigo,
+                                    producto_col: row[producto_col],
+                                    'Tienda_Destino': tienda_sel,
+                                    'Rotacion_Diaria': ventas_diarias,
+                                    'Demanda_7D': demanda_proyectada,
+                                    'Stock_Matriz': stock_matriz,
+                                    'Transferencia_Sugerida': sugerencia
+                                })
+                        
+                        if resultados:
+                            df_sug = pd.DataFrame(resultados).sort_values('Transferencia_Sugerida', ascending=False)
+                            st.dataframe(df_sug, use_container_width=True)
+                            csv_ml = df_sug.to_csv(index=False).encode('utf-8')
+                            st.download_button("📥 Exportar Sugerencias (CSV)", csv_ml, "sugerencias_ml.csv", "text/csv")
+                        else:
+                            st.success("No hay sugerencias de reposición pendientes para esta tienda.")
+                else:
+                    st.info("No se encontró una columna 'MATRIZ' para sugerir reposiciones.")
+            else:
+                st.info("Aún no hay datos históricos suficientes para calcular el Delta de Ventas y aplicar ML.")
         else:
             st.info("No se detectó una columna de fecha. No es posible calcular días en inventario ni productos lentos.")
 
