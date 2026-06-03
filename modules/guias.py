@@ -767,7 +767,43 @@ def show_generar_guias():
     # TAB 3 — DASHBOARD SEMANAL Y DE GUÍAS
     # =========================================================================
     with tab_dash:
-        st.subheader("📈 Dashboard de Guías y Acumulado Semanal")
+        st.subheader("📈 Dashboard Progresivo (Prendas Transferidas Hoy)")
+        
+        # Obtener guías globales para el tablero de hoy sin filtros de rol, para que todos vean el progreso
+        todas_las_guias = local_db.find("guias", sort=[("fecha", -1)], limit=1000)
+        today_str = datetime.now(TZ_QUITO).strftime("%d/%m/%Y")
+        
+        guias_hoy = [d for d in todas_las_guias if d.get("fecha_emision", "").startswith(today_str) and not d.get("anulada")]
+        
+        prendas_por_usuario = {}
+        for d in guias_hoy:
+            usr = d.get("usuario_genera", "Desconocido")
+            prendas = d.get("total_prendas", 0)
+            prendas_por_usuario[usr] = prendas_por_usuario.get(usr, 0) + prendas
+            
+        if not prendas_por_usuario:
+            st.info("Aún no hay transferencias registradas el día de hoy.")
+        else:
+            # Ordenar de mayor a menor
+            usuarios_ordenados = sorted(prendas_por_usuario.items(), key=lambda x: x[1], reverse=True)
+            cols_per_row = 3
+            for i in range(0, len(usuarios_ordenados), cols_per_row):
+                row_users = usuarios_ordenados[i:i+cols_per_row]
+                cols = st.columns(cols_per_row)
+                for j, (usr, total_p) in enumerate(row_users):
+                    with cols[j]:
+                        st.markdown(f"""
+                        <div style="background: linear-gradient(145deg, rgba(30,41,59,0.8), rgba(15,23,42,0.9)); border: 1px solid #38bdf8; border-radius: 15px; padding: 25px 15px; text-align: center; box-shadow: 0 8px 32px rgba(0,0,0,0.2);">
+                            <div style="font-size: 3rem; margin-bottom: 5px;">📦</div>
+                            <h2 style="margin: 0; color: #f8fafc; font-size: 1.4rem; text-transform: capitalize; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{usr}</h2>
+                            <h1 style="margin: 10px 0; color: #38bdf8; font-size: 3.2rem; font-weight: 800;">{total_p:,}</h1>
+                            <p style="margin: 0; color: #94a3b8; font-weight: 600; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px;">Prendas Hoy</p>
+                        </div>
+                        """, unsafe_allow_html=True)
+                st.write("")
+                
+        st.divider()
+        st.subheader("📊 Resumen Histórico y Semanal")
         query = {}
         if rol_activo == "Tienda":
             query["tienda_destino"] = st.session_state.get("assigned_store")
@@ -775,7 +811,7 @@ def show_generar_guias():
             query["usuario_genera"] = usuario_activo
         docs = local_db.find("guias", query, sort=[("fecha", -1)], limit=500)
         if not docs:
-            st.info("No hay guías registradas.")
+            st.info("No hay guías registradas en tu historial.")
         else:
             # Métricas Generales
             total = len(docs)
