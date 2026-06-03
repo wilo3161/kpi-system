@@ -485,12 +485,11 @@ def show_gestion_equipo():
             fecha_consulta = st.date_input("Consultar registros por fecha:", obtener_hora_ecuador().date())
             fecha_str = fecha_consulta.strftime("%Y-%m-%d")
             
-            if st.button("Generar Registro", type="primary", use_container_width=True):
+            if st.button("Generar Registro con IA ✨", type="primary", use_container_width=True):
                 # Registrar que se emitió el reporte para habilitar la plataforma
                 now_str = obtener_hora_ecuador().isoformat()
                 estado_cierre = local_db.find_one("estado_sistema", {"id": "cierre_reporte"})
                 if estado_cierre:
-                    # Usar delete sobre data para TinyDB/mock local_db, de forma segura
                     if hasattr(local_db, 'data') and 'estado_sistema' in local_db.data:
                         local_db.data["estado_sistema"] = [x for x in local_db.data["estado_sistema"] if x.get("id") != "cierre_reporte"]
                     else:
@@ -502,22 +501,65 @@ def show_gestion_equipo():
                     meses = ["", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
                     fecha_formateada = f"{fecha_consulta.day:02d} de {meses[fecha_consulta.month]} de {fecha_consulta.year}"
                     
-                    reporte = f"Reporte de actividades - {fecha_formateada}\n\n"
-                    
-                    # Agrupar por empleado para mantener todo en un solo bloque por persona
+                    # Agrupar por empleado y DEDUPLICAR — solo conservar actividades únicas
                     acts_por_emp = {}
                     for a in acts_consulta:
                         emp = a.get("empleado", "Desconocido")
+                        texto = a.get("actividad", "").strip()
                         if emp not in acts_por_emp:
-                            acts_por_emp[emp] = []
-                        acts_por_emp[emp].append(a.get("actividad", ""))
+                            acts_por_emp[emp] = set()
+                        acts_por_emp[emp].add(texto)
                     
+                    # Construir texto crudo para enviar a la IA
+                    texto_crudo = f"Fecha: {fecha_formateada}\n\n"
                     for emp, textos in acts_por_emp.items():
-                        reporte += f"{emp}:\n\n"
+                        texto_crudo += f"{emp}:\n"
                         for t in textos:
-                            reporte += f"{t}\n\n"
+                            texto_crudo += f"{t}\n"
+                        texto_crudo += "\n"
                     
-                    st.code(reporte, language="text")
+                    # Generar reporte con IA
+                    with st.spinner("✨ Generando reporte profesional con IA..."):
+                        prompt = f"""Eres un asistente logístico del Centro de Distribución Aeropostale Ecuador.
+
+Recibes el siguiente reporte crudo de actividades del día {fecha_formateada}:
+
+{texto_crudo}
+
+Tu tarea es reformatear este reporte en un formato PROFESIONAL y LIMPIO siguiendo EXACTAMENTE estas reglas:
+1. Encabezado: "Reporte de actividades - {fecha_formateada}"
+2. Por cada colaborador, agrupa sus actividades en categorías lógicas (Transferencias, Distribución, Logística, Control, etc.)
+3. Cada categoría debe tener: Nombre de la categoría seguido de dos puntos, luego una descripción clara y concisa de lo realizado.
+4. ELIMINA toda información repetida — si la misma actividad aparece más de una vez para el mismo colaborador, solo inclúyela una vez.
+5. Si el texto menciona cantidades (prendas, cartones, etc.), incorpóralas.
+6. El tono debe ser profesional pero directo. En español formal.
+7. NO incluyas al colaborador "Wilson Pérez" ni su texto "Reporte diario" como actividad.
+8. Devuelve SOLO el reporte formateado, sin explicaciones adicionales.
+
+Ejemplo de formato esperado:
+Reporte de actividades - 07 de Mayo de 2026
+
+Colaborador:
+
+Categoría 1: Descripción detallada de lo que realizó.
+
+Categoría 2: Descripción detallada de lo que realizó.
+"""
+                        reporte_ia = _ejecutar_prompt(prompt, texto_crudo)
+                    
+                    # Mostrar el reporte generado listo para copiar
+                    st.success("✅ Reporte generado correctamente")
+                    st.markdown("#### 📋 Reporte Listo para Copiar:")
+                    st.code(reporte_ia, language="text")
+                    
+                    # Botón de descarga como archivo .txt
+                    st.download_button(
+                        label="📥 Descargar reporte .txt",
+                        data=reporte_ia,
+                        file_name=f"reporte_actividades_{fecha_str}.txt",
+                        mime="text/plain",
+                        use_container_width=True
+                    )
                 else:
                     st.warning(f"Aún no hay actividades registradas para la fecha: {fecha_str}.")
 
