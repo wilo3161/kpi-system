@@ -146,12 +146,31 @@ class MongoDBAtlas:
         pass
 
     def _ensure_required_users(self):
-        # (igual que antes)
-        pass
-
+        # Crear usuario admin si no existe
+        from utils.common import hash_password
+        if self.count("users") == 0 or not self.find_one("users", {"username": "admin"}):
+            self.insert("users", {
+                "username": "admin",
+                "password": hash_password("admin_test"),
+                "role": "Administrador",
+                "name": "Administrador General"
+            })
+            
     def _ensure_store_users(self):
-        # (igual que antes)
-        pass
+        from utils.common import hash_password
+        import re
+        # Tiendas mock limitadas
+        tiendas = ["MALL DEL SOL", "CONDADO SHOPPING", "QUICENTRO"]
+        for tienda in tiendas:
+            username = re.sub(r'[^a-z0-9_]', '', tienda.lower().replace(' ', '_'))
+            if self.count("users", {"username": username}) == 0:
+                self.insert("users", {
+                    "username": username,
+                    "password": hash_password("Tienda@2026"),
+                    "role": "Tienda",
+                    "name": tienda,
+                    "assigned_store": tienda
+                })
 
     def _validate_historico(self, doc):
         if not PYDANTIC_AVAILABLE or HistoricoModel is None: return doc
