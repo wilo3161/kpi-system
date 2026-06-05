@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 from database.manager import local_db
 import json
 import logging
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -18,15 +19,20 @@ try:
 except ImportError:
     _GEMINI_OK = False
 
+# Modelos en orden de preferencia (el primero se intenta primero)
+_MODELOS_PREFERENCIA = ["gemini-1.5-flash", "gemini-2.0-flash", "gemini-2.5-flash"]
+
 # -----------------------------------------------------------------------------
 # Singleton del modelo Gemini (Wilo IA)
 # -----------------------------------------------------------------------------
 _modelo_gemini = None
+_modelo_nombre_activo = None
 
-def _inicializar_modelo():
+def _inicializar_modelo(model_name: str = None):
     """Configura Gemini y retorna el modelo listo para usar."""
-    global _modelo_gemini
-    if _modelo_gemini is not None:
+    global _modelo_gemini, _modelo_nombre_activo
+
+    if _modelo_gemini is not None and model_name is None:
         return _modelo_gemini
 
     if not _GEMINI_OK:
@@ -34,33 +40,81 @@ def _inicializar_modelo():
 
     from utils.secrets_helper import obtener_api_key_gemini
     api_key = obtener_api_key_gemini()
-    
+
     if not api_key:
         logger.error("API Key de Gemini no configurada.")
         return None
 
+    nombre = model_name or _MODELOS_PREFERENCIA[0]
     try:
         genai.configure(api_key=api_key)
-        _modelo_gemini = genai.GenerativeModel(
-            model_name="gemini-2.5-flash",
+        modelo = genai.GenerativeModel(
+            model_name=nombre,
             system_instruction="Eres 'wilo IA', el asistente exclusivo de inteligencia artificial del ERP de Fashion Club Ecuador y Aeropostale. Nunca debes mencionar que eres de Google, Gemini o OpenAI, tu nombre es únicamente wilo IA."
         )
+        _modelo_gemini = modelo
+        _modelo_nombre_activo = nombre
         return _modelo_gemini
     except Exception as e:
-        logger.error("Error configurando Gemini: %s", e)
+        logger.error("Error configurando Gemini (%s): %s", nombre, e)
         return None
 
 def _ejecutar_prompt(prompt: str, fallback: str = "⚠️ wilo IA no disponible.") -> str:
-    """Ejecuta un prompt en Gemini y retorna la respuesta."""
-    modelo = _inicializar_modelo()
-    if not modelo:
+    """
+    Ejecuta un prompt en Gemini con manejo de cuota (429) y retry automático.
+    Prueba modelos en orden de preferencia si el actual falla por cuota.
+    """
+    global _modelo_gemini, _modelo_nombre_activo
+
+    if not _GEMINI_OK:
         return fallback
-    try:
-        response = modelo.generate_content(prompt)
-        return response.text.strip()
-    except Exception as e:
-        logger.error("Error en wilo IA (Gemini): %s", e)
-        return f"Error: {e}"
+
+    modelos_a_intentar = list(_MODELOS_PREFERENCIA)
+    # Si ya hay un modelo activo, ponerlo primero
+    if _modelo_nombre_activo and _modelo_nombre_activo in modelos_a_intentar:
+        modelos_a_intentar.remove(_modelo_nombre_activo)
+        modelos_a_intentar.insert(0, _modelo_nombre_activo)
+
+    ultimo_error = None
+    for nombre_modelo in modelos_a_intentar:
+        modelo = _inicializar_modelo(nombre_modelo)
+        if not modelo:
+            continue
+
+        # Intentar hasta 3 veces con backoff para errores 429
+        for intento in range(3):
+            try:
+                response = modelo.generate_content(prompt)
+                _modelo_nombre_activo = nombre_modelo  # guardar el que funcionó
+                return response.text.strip()
+            except Exception as e:
+                error_str = str(e)
+                ultimo_error = e
+                if "429" in error_str or "quota" in error_str.lower() or "rate" in error_str.lower():
+                    if intento < 2:
+                        wait = (intento + 1) * 3  # 3s, 6s
+                        logger.warning("Cuota excedida en %s, reintentando en %ds...", nombre_modelo, wait)
+                        time.sleep(wait)
+                    else:
+                        logger.warning("Cuota agotada en modelo %s, intentando siguiente...", nombre_modelo)
+                        break  # probar siguiente modelo
+                else:
+                    logger.error("Error en wilo IA (%s): %s", nombre_modelo, e)
+                    break  # error no relacionado con cuota, salir del retry
+
+    # Si todos los modelos fallaron por cuota
+    if ultimo_error and ("429" in str(ultimo_error) or "quota" in str(ultimo_error).lower()):
+        return (
+            "⚠️ **wilo IA alcanzó el límite de uso de la API por hoy.**\n\n"
+            "El sistema tiene un límite diario de consultas de IA. "
+            "Puedes:\n"
+            "• Esperar unos minutos y volver a intentarlo\n"
+            "• Copiar el texto de actividades manualmente\n"
+            "• Intentarlo mañana cuando el cupo se renueve\n\n"
+            f"_(Error técnico: {str(ultimo_error)[:120]})_"
+        )
+    return fallback if not ultimo_error else f"⚠️ Error IA: {str(ultimo_error)[:200]}"
+
 
 def transcribir_audio(audio_bytes: bytes) -> str | None:
     """Para transcribir audio con Gemini 1.5 Flash se usa la API multimodal."""
