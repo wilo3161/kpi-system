@@ -634,7 +634,6 @@ def show_generar_guias():
                     numero_transferencia = st.text_input("N° de transferencia (manual)", value=numero_transferencia)
             
             observaciones = st.text_area("Observaciones")
-            usar_ia = st.checkbox("🤖 Generar análisis IA al guardar", value=True)
             st.info("El número secuencial de guía se asignará automáticamente al presionar Guardar.")
 
         if st.button("💾 Guardar y Generar PDF", type="primary", use_container_width=True):
@@ -658,9 +657,6 @@ def show_generar_guias():
                                                     qr_url, items_extraidos)
                 doc_guia["logo_bytes"] = logo_bytes
                 doc_guia["qr_bytes"] = qr_bytes
-                if usar_ia:
-                    with st.spinner("Analizando con IA..."):
-                        doc_guia["ai_analysis"] = _analizar_guia_con_ia(doc_guia)
                 try:
                     # Inserción atómica de la guía y actualización del manifiesto
                     local_db.insert("guias", doc_guia)
@@ -677,8 +673,10 @@ def show_generar_guias():
                                        "transferencia": numero_transferencia, "prendas": total_prendas,
                                        "peso": peso_kg, "bultos": bultos})
                 try:
+                    import threading
                     bot = TelegramBot()
-                    bot.enviar_mensaje(f"🚚 *NUEVA GUÍA EMITIDA*\n📄 Guía: `{nuevo_numero}`\n🏪 Tienda: {tienda_sel}\n🔄 Transferencia: {numero_transferencia}\n📦 Prendas: {total_prendas:,}\n👤 Usuario: {usuario_activo}")
+                    msg_text = f"🚚 *NUEVA GUÍA EMITIDA*\n📄 Guía: `{nuevo_numero}`\n🏪 Tienda: {tienda_sel}\n🔄 Transferencia: {numero_transferencia}\n📦 Prendas: {total_prendas:,}\n👤 Usuario: {usuario_activo}"
+                    threading.Thread(target=bot.enviar_mensaje, args=(msg_text,)).start()
                 except Exception:
                     pass
 
