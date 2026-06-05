@@ -547,8 +547,25 @@ Categoría 2: Descripción detallada de lo que realizó.
 """
                         reporte_ia = _ejecutar_prompt(prompt, texto_crudo)
                     
+                    # ── GUARDAR EN BASE DE DATOS ──
+                    # Si ya existe un reporte para esa fecha, lo reemplazamos
+                    reporte_existente = local_db.find_one("reportes_diarios", {"fecha": fecha_str})
+                    if reporte_existente:
+                        if hasattr(local_db, 'data') and 'reportes_diarios' in local_db.data:
+                            local_db.data["reportes_diarios"] = [x for x in local_db.data["reportes_diarios"] if x.get("fecha") != fecha_str]
+                        else:
+                            local_db.delete("reportes_diarios", {"fecha": fecha_str})
+                    local_db.insert("reportes_diarios", {
+                        "fecha": fecha_str,
+                        "fecha_formateada": fecha_formateada,
+                        "reporte": reporte_ia,
+                        "generado_por": st.session_state.get("username", "Admin"),
+                        "generado_en": obtener_hora_ecuador().isoformat(),
+                        "colaboradores": list(acts_por_emp.keys()),
+                    })
+
                     # Mostrar el reporte generado listo para copiar
-                    st.success("✅ Reporte generado correctamente")
+                    st.success("✅ Reporte generado y guardado correctamente")
                     st.markdown("#### 📋 Reporte Listo para Copiar:")
                     st.code(reporte_ia, language="text")
                     
@@ -562,5 +579,39 @@ Categoría 2: Descripción detallada de lo que realizó.
                     )
                 else:
                     st.warning(f"Aún no hay actividades registradas para la fecha: {fecha_str}.")
+
+            # ── HISTORIAL DE REPORTES GUARDADOS ──
+            st.divider()
+            st.subheader("📚 Historial de Reportes Diarios")
+            reportes_guardados = local_db.find("reportes_diarios", sort=[("fecha", -1)], limit=60)
+            if not reportes_guardados:
+                st.info("Aún no hay reportes guardados. Genera el primer reporte con el botón de arriba.")
+            else:
+                # Selector de fecha con los reportes disponibles
+                fechas_disponibles = [r.get("fecha_formateada", r.get("fecha")) for r in reportes_guardados]
+                fechas_raw = [r.get("fecha") for r in reportes_guardados]
+                fecha_sel_label = st.selectbox(
+                    "📅 Seleccionar reporte por fecha:",
+                    options=range(len(fechas_disponibles)),
+                    format_func=lambda i: fechas_disponibles[i]
+                )
+                reporte_sel = reportes_guardados[fecha_sel_label]
+                gen_por = reporte_sel.get("generado_por", "—")
+                gen_en = reporte_sel.get("generado_en", "")[:16].replace("T", " ")
+                colaboradores = ", ".join(reporte_sel.get("colaboradores", []))
+                st.markdown(f"""
+                <div style='background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; padding: 12px 18px; margin-bottom: 10px;'>
+                    <span style='color:#94a3b8; font-size:0.85rem;'>Generado por <b>{gen_por}</b> el {gen_en} &nbsp;|&nbsp; Colaboradores: {colaboradores}</span>
+                </div>
+                """, unsafe_allow_html=True)
+                st.code(reporte_sel.get("reporte", ""), language="text")
+                st.download_button(
+                    label=f"📥 Descargar {fechas_disponibles[fecha_sel_label]}.txt",
+                    data=reporte_sel.get("reporte", ""),
+                    file_name=f"reporte_{fechas_raw[fecha_sel_label]}.txt",
+                    mime="text/plain",
+                    use_container_width=True,
+                    key=f"dl_hist_{fecha_sel_label}"
+                )
 
     st.markdown('</div>', unsafe_allow_html=True)
