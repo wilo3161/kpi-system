@@ -849,9 +849,31 @@ def show_generar_guias():
                             </div>
                             """, unsafe_allow_html=True)
                     st.write("")
+                    st.write("")
 
         st.divider()
-        st.subheader("📊 Resumen Histórico y Semanal")
+        st.markdown("#### 📊 Histórico de Transferencias (Últimos 7 días)")
+        import pandas as pd
+        from datetime import timedelta
+        
+        # Generar los últimos 7 días
+        fechas_7d = [(ahora_ec - timedelta(days=i)).strftime("%d/%m/%Y") for i in range(6, -1, -1)]
+        prendas_por_dia = {f: 0 for f in fechas_7d}
+        
+        # Usar todas_las_guias que ya se consultó arriba
+        # Si no existe (caso de que se metan condicionales raros), hacer query rápido
+        docs_chart = local_db.find("guias", sort=[("fecha", -1)], limit=1000)
+        for d in docs_chart:
+            f_emision = d.get("fecha_emision", "")[:10]
+            if f_emision in prendas_por_dia and not d.get("anulada"):
+                prendas_por_dia[f_emision] += d.get("total_prendas", 0)
+                
+        df_chart = pd.DataFrame(list(prendas_por_dia.items()), columns=["Fecha", "Prendas Transferidas"])
+        df_chart.set_index("Fecha", inplace=True)
+        st.bar_chart(df_chart, use_container_width=True)
+
+        st.divider()
+        st.subheader("📊 Resumen Histórico")
         query = {}
         if rol_activo == "Tienda":
             query["tienda_destino"] = st.session_state.get("assigned_store")
