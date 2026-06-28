@@ -210,7 +210,7 @@ def show_control_inventario():
         col3.metric("Días promedio en inventario", "N/A")
 
     # ===== PESTAÑAS =====
-    tab_sku, tab_atributo, tab_kpi = st.tabs(["🔍 Consulta por SKU", "🏷️ Consulta por Atributo", "📈 KPIs y Reportes"])
+    tab_sku, tab_atributo, tab_kpi, tab_agente = st.tabs(["🔍 Consulta por SKU", "🏷️ Consulta por Atributo", "📈 KPIs y Reportes", "🤖 Agente CEDI"])
 
     # ---------- TAB SKU ----------
     with tab_sku:
@@ -432,3 +432,47 @@ def show_control_inventario():
 
     with st.expander("📋 Ver columnas de tiendas detectadas"):
         st.write(tiendas)
+
+    # ---------- TAB AGENTE CEDI ----------
+    with tab_agente:
+        st.subheader("🤖 Agente CEDI - Pruebas de Tool Calling")
+        st.info("Simula el envío de un payload JSON desde SAP/WMS para disparar alertas automáticas.")
+        
+        json_ejemplo = '''{
+  "sprint1": {
+    "sku_id": "AERO-TSHIRT-M-BLU",
+    "stock_actual": 8,
+    "ventas_historicas_30dias": 150,
+    "lead_time_dias": 5
+  },
+  "sprint2": {
+    "lote_id": "LOTE-999",
+    "fecha_ingreso_wms": "2026-06-25T10:00:00",
+    "fecha_disponible_venta": "2026-06-28T12:00:00",
+    "sucursal": "Quicentro",
+    "categoria_falla": "B_Merma_Comercial",
+    "unidades_devueltas": 12,
+    "unidades_despachadas": 100
+  },
+  "sprint3": {
+    "id_vehiculo": "CAM-01",
+    "odometro_actual": 49800,
+    "km_ultimo_mantenimiento": 40000,
+    "pedidos_entregados_ok": 85,
+    "pedidos_totales_ruta": 100
+  }
+}'''
+        
+        payload_input = st.text_area("JSON Payload:", value=json_ejemplo, height=350)
+        
+        if st.button("🚀 Ejecutar Agente", type="primary"):
+            try:
+                import json
+                payload = json.loads(payload_input)
+                from ai.agente_logistico import invocar_agente_logistico
+                with st.spinner("El Agente está evaluando..."):
+                    respuesta = invocar_agente_logistico(payload)
+                st.markdown("### Resultado de la Ejecución:")
+                st.markdown(respuesta)
+            except Exception as e:
+                st.error(f"Error procesando JSON o contactando al agente: {e}")
