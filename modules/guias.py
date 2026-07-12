@@ -422,9 +422,9 @@ def generar_pdf_profesional(guia_data: dict) -> bytes:
     
     # Título del encabezado
     c.setFillColor(color_texto)
-    c.setFont("Helvetica-Bold", 14)
-    # Acortar texto largo
-    c.drawCentredString(label_width / 2.0, label_height - 13*mm, tienda[:20])
+    c.setFont("Helvetica-Bold", 12) # Font un poco más pequeño para nombres largos
+    # Acortar texto largo hasta 35 caracteres para que no se corte
+    c.drawCentredString(label_width / 2.0, label_height - 13*mm, tienda[:35])
     
     c.setFont("Helvetica", 10)
     c.drawCentredString(label_width / 2.0, label_height - 18*mm, f"Guía: {num_guia} | Trans: {num_trans}")
@@ -459,14 +459,37 @@ def generar_pdf_profesional(guia_data: dict) -> bytes:
             logger.error(f"Error drawing QR: {e}")
 
     # 4. DATOS ADICIONALES Y FIRMA (Abajo)
-    y_footer = 20*mm
+    y_footer = 12*mm
     dest = guia_data.get("destinatario", {})
-    dest_nombre = dest if isinstance(dest, str) else dest.get("nombre", "")
+    if isinstance(dest, str):
+        dest_nombre = dest
+        dest_dir = guia_data.get("direccion_destinatario", "")
+        dest_tel = guia_data.get("telefono_destinatario", "")
+    else:
+        dest_nombre = dest.get("nombre", "")
+        dest_dir = dest.get("direccion", "")
+        dest_tel = dest.get("telefono", "")
         
     c.setFillColor(color_oscuro)
+    c.setFont("Helvetica-Bold", 8)
+    c.drawString(5*mm, y_footer + 17*mm, f"Contacto:")
     c.setFont("Helvetica", 8)
-    c.drawString(10*mm, y_footer + 10*mm, f"Contacto: {dest_nombre[:25]}")
-    c.drawString(10*mm, y_footer + 5*mm, f"Bultos / Peso: {guia_data.get('bultos', 1)} bultos | {guia_data.get('peso', 0)} kg")
+    c.drawString(20*mm, y_footer + 17*mm, f"{dest_nombre[:35]}")
+    
+    c.setFont("Helvetica-Bold", 8)
+    c.drawString(5*mm, y_footer + 13*mm, f"Telf:")
+    c.setFont("Helvetica", 8)
+    c.drawString(20*mm, y_footer + 13*mm, f"{dest_tel}")
+    
+    c.setFont("Helvetica-Bold", 8)
+    c.drawString(5*mm, y_footer + 9*mm, f"Dir:")
+    c.setFont("Helvetica", 7)
+    c.drawString(20*mm, y_footer + 9*mm, f"{dest_dir[:55]}")
+    
+    c.setFont("Helvetica-Bold", 8)
+    c.drawString(5*mm, y_footer + 5*mm, f"Envío:")
+    c.setFont("Helvetica", 8)
+    c.drawString(20*mm, y_footer + 5*mm, f"{guia_data.get('bultos', 1)} bultos | {guia_data.get('peso', 0)} kg")
     
     c.setFont("Helvetica-Oblique", 6)
     c.drawCentredString(label_width / 2.0, 8*mm, "Documento Digital / Etiqueta Térmica 4x6\"")
