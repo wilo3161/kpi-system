@@ -3,6 +3,8 @@ import streamlit as st
 from pathlib import Path
 import base64
 import traceback
+from utils.logger_setup import setup_logging
+setup_logging()
 from utils.auth import check_password
 from utils.ui import show_header, load_css
 from modules.main_page import show_main_page
@@ -113,6 +115,8 @@ def main():
     except Exception as e:
         import logging
         import traceback
+from utils.logger_setup import setup_logging
+setup_logging()
         logging.error(f"Error en {current_page}: {str(e)}")
         logging.error(traceback.format_exc())
         

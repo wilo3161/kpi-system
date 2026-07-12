@@ -90,29 +90,6 @@ def _listar_correos(gestor: GestorCorreo, carpeta: str = "INBOX", limite: int = 
         logger.exception(e)
         return [{"id": "err", "asunto": f"Excepción: {e}"}]
 
-def _analizar_con_gemini(asunto: str, cuerpo: str, accion: str = "resumir") -> str:
-    """Usa el servicio centralizado de IA para analizar o redactar respuesta (robustecido)."""
-    try:
-        if accion == "resumir":
-            prompt = f"""Eres 'wilo IA', el asistente ejecutivo de Fashion Club Ecuador (Centro de Distribución Aeropostale).
-Analiza este correo y proporciona:
-1. Resumen en 2-3 líneas
-2. Prioridad: ALTA / MEDIA / BAJA
-3. Acción recomendada
-
-Asunto: {asunto}
-Contenido: {cuerpo[:1500]}"""
-        elif accion == "responder":
-            prompt = f"""Eres 'wilo IA', el asistente exclusivo de Wilson Pérez, Jefe de Logística de Fashion Club Ecuador.
-Redacta una respuesta profesional, cordial y concisa (máx 200 palabras) para este correo.
-Firma como: Wilson Pérez | Jefe de Logística | Fashion Club Ecuador | wperez@fashionclub.com.ec
-
-Asunto: {asunto}
-Correo original: {cuerpo[:1500]}"""
-        else:
-            prompt = cuerpo[:2000]
-
-        return _ejecutar_prompt(prompt, "No se pudo completar el análisis.")
     except Exception as e:
         logger.error(f"Error en análisis IA: {e}")
         return "Error al procesar la solicitud de IA."
@@ -160,7 +137,6 @@ def show_gestor_correos():
                             label = f"**{c.get('de', 'Desconocido')[:20]}**\n{c.get('asunto')[:30]}..."
                             if st.button(label, key=f"v_{i}", use_container_width=True):
                                 st.session_state.correo_seleccionado = c
-                                st.session_state.sugerencia_wilo = None # Resetear la sugerencia al cambiar
                 
                 with col_detalle:
                     sel = st.session_state.correo_seleccionado
@@ -172,56 +148,10 @@ def show_gestor_correos():
                         st.text_area("Mensaje Original", sel['cuerpo'][:2000], height=200, disabled=True)
                         
                         st.divider()
-                        st.subheader("🤖 Análisis y Respuesta de wilo IA")
-                        
-                        if st.session_state.get("sugerencia_wilo") is None:
-                            with st.spinner("wilo IA está analizando este correo..."):
-                                st.session_state.sugerencia_wilo = _analizar_con_gemini(sel['asunto'], sel['cuerpo'], "responder")
-                        
-                        st.info(st.session_state.sugerencia_wilo)
-                    else:
-                        st.info("👈 Selecciona un correo de la lista para leerlo y que wilo IA sugiera una respuesta.")
-            else:
-                st.info("Presiona 'Conectar / Actualizar' para cargar correos.")
-
-        with tab2:
-            with st.form("redactar"):
-                para = st.text_input("Para")
-                asunto = st.text_input("Asunto")
-                cuerpo = st.text_area("Mensaje", height=200)
-                if st.form_submit_button("📤 Enviar"):
-                    if not para or not asunto or not cuerpo:
-                        st.error("Completa todos los campos.")
-                    else:
-                        try:
-                            import html
-                            cuerpo_seguro = html.escape(cuerpo).replace('\n', '<br>')
-                            destinatarios_lista = [p.strip() for p in para.split(',') if p.strip()]
-                            exito = gestor.enviar_correo(destinatarios_lista, asunto, f"<div>{cuerpo_seguro}</div>")
-                            if exito:
-                                st.success("Correo enviado correctamente.")
-                            else:
-                                st.error("Error al enviar el correo.")
                         except Exception as e:
                             st.error(f"Excepción al enviar: {e}")
                             logger.exception(e)
 
-        with tab3:
-            if st.session_state.correo_seleccionado:
-                c = st.session_state.correo_seleccionado
-                col1, col2 = st.columns(2)
-                with col1:
-                    if st.button("🤖 Analizar seleccionado (resumen)"):
-                        with st.spinner("Analizando..."):
-                            resultado = _analizar_con_gemini(c['asunto'], c['cuerpo'], "resumir")
-                            st.write(resultado)
-                with col2:
-                    if st.button("📝 Redactar respuesta sugerida"):
-                        with st.spinner("Redactando respuesta..."):
-                            resultado = _analizar_con_gemini(c['asunto'], c['cuerpo'], "responder")
-                            st.code(resultado, language="markdown")
-            else:
-                st.info("Selecciona un correo de la bandeja para analizarlo.")
     except Exception as e:
         st.error(f"Error general en Gestión de Correos: {e}")
         logger.exception(e)

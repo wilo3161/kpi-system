@@ -1,3 +1,6 @@
+import logging
+logger = logging.getLogger(__name__)
+
 # database/manager.py
 # ============================================================================
 # VERSIÓN OPTIMIZADA PARA MEMORIA
@@ -139,7 +142,7 @@ class MongoDBAtlas:
             self.db["stock_consolidado"].create_index("codigo")
             self.db["stock_consolidado"].create_index("tienda")
         except Exception as e:
-            print(f"Advertencia: No se pudieron crear algunos índices: {e}")
+            logger.info(f"Advertencia: No se pudieron crear algunos índices: {e}")
 
     def _seed_if_empty(self):
         # (igual que antes, sin cambios)
@@ -185,7 +188,7 @@ class MongoDBAtlas:
             doc["_created"] = datetime.utcnow()
             return self.db[collection].insert_one(doc).inserted_id
         except Exception as e:
-            print(f"Error insert {collection}: {e}")
+            logger.info(f"Error insert {collection}: {e}")
             return None
 
     def insert_many(self, collection, docs):
@@ -218,7 +221,7 @@ class MongoDBAtlas:
                 docs = [self._validate_historico(d) for d in docs]
             return docs
         except Exception as e:
-            print(f"Error find {collection}: {e}")
+            logger.info(f"Error find {collection}: {e}")
             return []
 
     def find_one(self, collection, query, projection=None):
@@ -231,7 +234,7 @@ class MongoDBAtlas:
                 return doc
             return None
         except Exception as e:
-            print(f"Error find_one {collection}: {e}")
+            logger.info(f"Error find_one {collection}: {e}")
             return None
 
     def find_one_and_update(self, collection, filter, update, projection=None, upsert=False):
@@ -247,7 +250,7 @@ class MongoDBAtlas:
                 return doc
             return None
         except Exception as e:
-            print(f"Error find_one_and_update {collection}: {e}")
+            logger.info(f"Error find_one_and_update {collection}: {e}")
             return None
 
     def update(self, collection, query, update_doc, upsert=False):
@@ -258,7 +261,7 @@ class MongoDBAtlas:
             else:
                 self.db[collection].update_one(query, {"$set": update_doc}, upsert=upsert)
         except Exception as e:
-            print(f"Error update {collection}: {e}")
+            logger.info(f"Error update {collection}: {e}")
 
     def update_many(self, collection, query, update_doc, upsert=False):
         if not self.connected: return
@@ -268,21 +271,21 @@ class MongoDBAtlas:
             else:
                 self.db[collection].update_many(query, {"$set": update_doc}, upsert=upsert)
         except Exception as e:
-            print(f"Error update_many {collection}: {e}")
+            logger.info(f"Error update_many {collection}: {e}")
 
     def delete(self, collection, query):
         if not self.connected: return
         try:
             self.db[collection].delete_many(query)
         except Exception as e:
-            print(f"Error delete {collection}: {e}")
+            logger.info(f"Error delete {collection}: {e}")
 
     def count(self, collection, query={}):
         if not self.connected: return 0
         try:
             return self.db[collection].count_documents(query)
         except Exception as e:
-            print(f"Error count {collection}: {e}")
+            logger.info(f"Error count {collection}: {e}")
             return 0
 
     # ---------- CONTADOR SEGURO ----------
