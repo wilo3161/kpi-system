@@ -35,7 +35,7 @@ from utils.ui import add_back_button, show_module_header
 from config.stores_data import TIENDAS_DATA
 from services.notifications import TelegramBot
 from database.manager import local_db
-# ai modules deleted
+from ai.supply_chain_ai import _ejecutar_prompt
 from utils.backgrounds import set_module_background
 
 logger = logging.getLogger(__name__)
@@ -503,6 +503,12 @@ def _render_timeline(timeline: list) -> None:
 # FUNCIÓN PRINCIPAL
 # ============================================================================
 def show_generar_guias():
+    try:
+        _show_generar_guias_impl()
+    except Exception as e:
+        raise e
+
+def _show_generar_guias_impl():
     show_module_header("🚚 Guías de Remisión", "Sistema logístico con trazabilidad completa")
     set_module_background("guias")
     
