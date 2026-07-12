@@ -35,7 +35,7 @@ from utils.ui import add_back_button, show_module_header
 from config.stores_data import TIENDAS_DATA
 from services.notifications import TelegramBot
 from database.manager import local_db
-from ai.supply_chain_ai import _ejecutar_prompt
+# ai modules deleted
 from utils.backgrounds import set_module_background
 
 logger = logging.getLogger(__name__)
