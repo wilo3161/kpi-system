@@ -123,62 +123,62 @@ def show_control_inventario():
         with tab_diaria:
             archivo = st.file_uploader("Seleccionar archivo Excel del día", type=["xlsx", "xls"], key="stock_upload")
             if archivo:
-            try:
-                with st.spinner("Cargando y procesando archivo..."):
-                    time.sleep(0.5)  # simular progreso
-                    df = pd.read_excel(archivo, engine='openpyxl')
-                    codigo_col, producto_col, tiendas, fecha_col = detectar_columnas(df)
-                    df, dias_col = calcular_dias_inventario(df, fecha_col)
-
-                    # --- INTEGRACIÓN MONGODB E HISTÓRICO ---
-                    db = get_db_v2()
-                    today_str = datetime.now().strftime("%Y-%m-%d")
-                    # Guardar histórico del día actual
-                    data_to_save = df.to_dict("records")
-                    for row in data_to_save:
-                        row["fecha_carga_diaria"] = today_str
-                    
-                    db.delete("stock_consolidado", {"fecha_carga_diaria": today_str})
-                    db.insert_many("stock_consolidado", data_to_save)
-                    
-                    # Calcular Delta (Ventas) vs ayer
-                    yesterday = datetime.now() - pd.Timedelta(days=1)
-                    yesterday_str = yesterday.strftime("%Y-%m-%d")
-                    
-                    docs_ayer = db.find("stock_consolidado", {"fecha_carga_diaria": yesterday_str})
-                    if docs_ayer:
-                        df_ayer = pd.DataFrame(docs_ayer)
-                        # Sumar totals si es posible
-                        if codigo_col in df_ayer.columns:
-                            # Aseguramos columnas numericas
-                            df['TOTAL_INV'] = df[tiendas].sum(axis=1) if tiendas else 0
-                            df_ayer['TOTAL_INV'] = df_ayer[tiendas].sum(axis=1) if tiendas else 0
-                            
-                            curr_grp = df.groupby(codigo_col)['TOTAL_INV'].sum().reset_index(name='T_CURR')
-                            prev_grp = df_ayer.groupby(codigo_col)['TOTAL_INV'].sum().reset_index(name='T_PREV')
-                            merged = pd.merge(curr_grp, prev_grp, on=codigo_col, how='left')
-                            merged['T_PREV'] = merged['T_PREV'].fillna(merged['T_CURR'])
-                            merged['DELTA_VENTAS'] = merged['T_PREV'] - merged['T_CURR']
-                            
-                            df = pd.merge(df, merged[[codigo_col, 'DELTA_VENTAS']], on=codigo_col, how='left')
-                            df['DELTA_VENTAS'] = df['DELTA_VENTAS'].fillna(0)
-                    else:
-                        df['DELTA_VENTAS'] = 0
-
-                    st.session_state.df = df
-                    st.session_state.codigo_col = codigo_col
-                    st.session_state.producto_col = producto_col
-                    st.session_state.tiendas = tiendas
-                    st.session_state.fecha_col = fecha_col
-                    st.session_state.dias_col = dias_col
-
-                st.success(f"✅ Archivo cargado: {df.shape[0]} SKUs, {len(tiendas)} tiendas")
-                st.info(f"Código: **{codigo_col}** | Producto: **{producto_col}**")
-                if fecha_col:
-                    st.info(f"Columna de fecha detectada: **{fecha_col}**")
-                st.dataframe(df.head())
-            except Exception as e:
-                st.error(f"❌ Error al leer archivo: {e}")
+                try:
+                    with st.spinner("Cargando y procesando archivo..."):
+                        time.sleep(0.5)  # simular progreso
+                        df = pd.read_excel(archivo, engine='openpyxl')
+                        codigo_col, producto_col, tiendas, fecha_col = detectar_columnas(df)
+                        df, dias_col = calcular_dias_inventario(df, fecha_col)
+    
+                        # --- INTEGRACIÓN MONGODB E HISTÓRICO ---
+                        db = get_db_v2()
+                        today_str = datetime.now().strftime("%Y-%m-%d")
+                        # Guardar histórico del día actual
+                        data_to_save = df.to_dict("records")
+                        for row in data_to_save:
+                            row["fecha_carga_diaria"] = today_str
+                        
+                        db.delete("stock_consolidado", {"fecha_carga_diaria": today_str})
+                        db.insert_many("stock_consolidado", data_to_save)
+                        
+                        # Calcular Delta (Ventas) vs ayer
+                        yesterday = datetime.now() - pd.Timedelta(days=1)
+                        yesterday_str = yesterday.strftime("%Y-%m-%d")
+                        
+                        docs_ayer = db.find("stock_consolidado", {"fecha_carga_diaria": yesterday_str})
+                        if docs_ayer:
+                            df_ayer = pd.DataFrame(docs_ayer)
+                            # Sumar totals si es posible
+                            if codigo_col in df_ayer.columns:
+                                # Aseguramos columnas numericas
+                                df['TOTAL_INV'] = df[tiendas].sum(axis=1) if tiendas else 0
+                                df_ayer['TOTAL_INV'] = df_ayer[tiendas].sum(axis=1) if tiendas else 0
+                                
+                                curr_grp = df.groupby(codigo_col)['TOTAL_INV'].sum().reset_index(name='T_CURR')
+                                prev_grp = df_ayer.groupby(codigo_col)['TOTAL_INV'].sum().reset_index(name='T_PREV')
+                                merged = pd.merge(curr_grp, prev_grp, on=codigo_col, how='left')
+                                merged['T_PREV'] = merged['T_PREV'].fillna(merged['T_CURR'])
+                                merged['DELTA_VENTAS'] = merged['T_PREV'] - merged['T_CURR']
+                                
+                                df = pd.merge(df, merged[[codigo_col, 'DELTA_VENTAS']], on=codigo_col, how='left')
+                                df['DELTA_VENTAS'] = df['DELTA_VENTAS'].fillna(0)
+                        else:
+                            df['DELTA_VENTAS'] = 0
+    
+                        st.session_state.df = df
+                        st.session_state.codigo_col = codigo_col
+                        st.session_state.producto_col = producto_col
+                        st.session_state.tiendas = tiendas
+                        st.session_state.fecha_col = fecha_col
+                        st.session_state.dias_col = dias_col
+    
+                    st.success(f"✅ Archivo cargado: {df.shape[0]} SKUs, {len(tiendas)} tiendas")
+                    st.info(f"Código: **{codigo_col}** | Producto: **{producto_col}**")
+                    if fecha_col:
+                        st.info(f"Columna de fecha detectada: **{fecha_col}**")
+                    st.dataframe(df.head())
+                except Exception as e:
+                    st.error(f"❌ Error al leer archivo: {e}")
     else:
         st.info("Solo administradores y logística pueden cargar archivos. Si ya hay datos cargados, puedes consultar.")
 

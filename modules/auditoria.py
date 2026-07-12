@@ -148,9 +148,7 @@ def show_gestor_correos():
                         st.text_area("Mensaje Original", sel['cuerpo'][:2000], height=200, disabled=True)
                         
                         st.divider()
-                        except Exception as e:
-                            st.error(f"Excepción al enviar: {e}")
-                            logger.exception(e)
+                        st.divider()
 
     except Exception as e:
         st.error(f"Error general en Gestión de Correos: {e}")
