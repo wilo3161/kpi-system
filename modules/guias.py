@@ -394,14 +394,10 @@ Responde con este JSON exacto:
 # ============================================================================
 # GENERACIÓN DE PDF PROFESIONAL
 # ============================================================================
-def generar_pdf_profesional(guia_data: dict) -> bytes:
-    from reportlab.pdfgen import canvas
+def _dibujar_etiqueta_en_canvas(c, guia_data: dict, label_width, label_height):
     from reportlab.lib.units import mm
-    buffer = io.BytesIO()
-    
-    # Tamaño térmico 4x6" (100x150 mm)
-    label_width, label_height = 100*mm, 150*mm
-    c = canvas.Canvas(buffer, pagesize=(label_width, label_height))
+    from reportlab.lib.colors import HexColor
+    import io
     
     # Paleta de colores modernos
     color_fondo = HexColor("#0033A0") # Azul Corporativo
@@ -450,13 +446,14 @@ def generar_pdf_profesional(guia_data: dict) -> bytes:
     if qr_bytes:
         from reportlab.lib.utils import ImageReader
         try:
+            import logging
             img = ImageReader(io.BytesIO(qr_bytes))
             qr_size = 40*mm
             c.drawImage(img, (label_width - qr_size)/2.0, y_medio - 45*mm, width=qr_size, height=qr_size)
             c.setFont("Helvetica-Bold", 8)
             c.drawCentredString(label_width / 2.0, y_medio - 49*mm, "ESCANEAR PARA RECEPCIÓN")
         except Exception as e:
-            logger.error(f"Error drawing QR: {e}")
+            logging.error(f"Error drawing QR: {e}")
 
     # 4. DATOS ADICIONALES Y FIRMA (Abajo)
     y_footer = 12*mm
@@ -494,7 +491,69 @@ def generar_pdf_profesional(guia_data: dict) -> bytes:
     c.setFont("Helvetica-Oblique", 6)
     c.drawCentredString(label_width / 2.0, 8*mm, "Documento Digital / Etiqueta Térmica 4x6\"")
     c.drawCentredString(label_width / 2.0, 5*mm, f"Generado por: {guia_data.get('usuario_genera', 'Sistema')}")
+
+def generar_pdf_profesional(guia_data: dict) -> bytes:
+    from reportlab.pdfgen import canvas
+    from reportlab.lib.units import mm
+    import io
+    buffer = io.BytesIO()
     
+    # Tamaño térmico 4x6" (100x150 mm)
+    label_width, label_height = 100*mm, 150*mm
+    c = canvas.Canvas(buffer, pagesize=(label_width, label_height))
+    
+    _dibujar_etiqueta_en_canvas(c, guia_data, label_width, label_height)
+    
+    c.save()
+    buffer.seek(0)
+    return buffer.getvalue()
+
+def generar_pdf_a4_agrupado(guias_list: list) -> bytes:
+    """Genera un PDF A4 con hasta 4 etiquetas (2x2 grid)."""
+    from reportlab.pdfgen import canvas
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.units import mm
+    import io
+    buffer = io.BytesIO()
+    
+    c = canvas.Canvas(buffer, pagesize=A4)
+    a4_width, a4_height = A4
+    
+    # Tamaño de cada etiqueta en el A4 (ligeramente ajustado para dejar márgenes)
+    # A4 = 210 x 297 mm
+    # 2 etiquetas a lo ancho = 200mm. Dejamos 5mm margen izq/der.
+    # 2 etiquetas a lo alto = 300mm (apretado). Hacemos un poco de padding.
+    label_width, label_height = 98*mm, 142*mm 
+    
+    # Posiciones relativas (x, y) de la esquina inferior izquierda de cada etiqueta
+    # El orden será: Top-Left, Top-Right, Bottom-Left, Bottom-Right
+    # Recordemos que (0,0) en ReportLab es la esquina INFERIOR IZQUIERDA del papel.
+    
+    margen_x = 5 * mm
+    margen_y = 5 * mm
+    
+    posiciones = [
+        (margen_x, a4_height - margen_y - label_height),                    # 0: Superior Izquierda
+        (a4_width - margen_x - label_width, a4_height - margen_y - label_height), # 1: Superior Derecha
+        (margen_x, a4_height - margen_y - 2*label_height - 2*mm),           # 2: Inferior Izquierda
+        (a4_width - margen_x - label_width, a4_height - margen_y - 2*label_height - 2*mm) # 3: Inferior Derecha
+    ]
+    
+    for idx, guia_data in enumerate(guias_list[:4]): # Max 4
+        x, y = posiciones[idx]
+        c.saveState()
+        c.translate(x, y)
+        
+        # Opcional: Dibujar borde alrededor de cada etiqueta para ayudar a cortar
+        from reportlab.lib.colors import HexColor
+        c.setStrokeColor(HexColor("#CBD5E1"))
+        c.setLineWidth(0.5)
+        c.rect(0, 0, label_width, label_height)
+        
+        _dibujar_etiqueta_en_canvas(c, guia_data, label_width, label_height)
+        
+        c.restoreState()
+        
     c.save()
     buffer.seek(0)
     return buffer.getvalue()
@@ -538,6 +597,9 @@ def _show_generar_guias_impl():
     from utils.ui import inject_acumatica_css
     inject_acumatica_css()
 
+    if "cola_impresion" not in st.session_state:
+        st.session_state.cola_impresion = []
+
     # Mostrar notificaciones internas
     usuario_actual = st.session_state.get("username", "")
     if usuario_actual:
@@ -561,6 +623,14 @@ def _show_generar_guias_impl():
     # TAB 1 — NUEVA GUÍA
     # =========================================================================
     with tab_nueva:
+        if st.session_state.get("cola_impresion"):
+            col_info, col_clear = st.columns([3, 1])
+            col_info.info(f"Tienes {len(st.session_state.cola_impresion)} etiquetas acumuladas listas para imprimir en A4.")
+            if col_clear.button("🧹 Limpiar cola", key="btn_clear_cola"):
+                st.session_state.cola_impresion = []
+                st.rerun()
+                
+
         with st.container(border=True):
             st.markdown("""
             <div style="text-align:center; margin-bottom: 20px; border-bottom: 2px solid #CBD5E1; padding-bottom:15px;">
@@ -686,20 +756,33 @@ def _show_generar_guias_impl():
                     pass
 
                 pdf_bytes = generar_pdf_profesional(doc_guia)
+                st.session_state.cola_impresion.append(doc_guia)
+                
                 st.image(qr_bytes, width=150, caption="QR de recepción")
                 
-                c_btn1, c_btn2 = st.columns(2)
+                st.markdown("---")
+                st.subheader(f"🖨️ Etiquetas acumuladas (A4): {len(st.session_state.cola_impresion)}/4")
+                
+                c_btn1, c_btn2, c_btn3 = st.columns(3)
+                
+                pdf_a4 = generar_pdf_a4_agrupado(st.session_state.cola_impresion)
                 with c_btn1:
-                    st.download_button("📥 Descargar PDF Térmico", pdf_bytes, f"guia_{nuevo_numero}.pdf", "application/pdf", use_container_width=True)
+                    if len(st.session_state.cola_impresion) >= 4:
+                        st.download_button("🖨️ Imprimir 4 Etiquetas (A4)", pdf_a4, "etiquetas_agrupadas.pdf", "application/pdf", use_container_width=True)
+                    else:
+                        st.download_button("🖨️ Imprimir acumuladas (A4)", pdf_a4, "etiquetas_agrupadas.pdf", "application/pdf", use_container_width=True)
                 
                 with c_btn2:
+                    st.download_button("📄 Descargar solo esta (Térmica)", pdf_bytes, f"guia_{nuevo_numero}.pdf", "application/pdf", use_container_width=True)
+                
+                with c_btn3:
                     import urllib.parse
                     mensaje_wa = (
-                        f"🚚 *NUEVA GUÍA EMITIDA*\n"
-                        f"📄 Guía: {nuevo_numero}\n"
-                        f"🔄 Transferencia: {numero_transferencia}\n"
-                        f"📦 Prendas: {total_prendas:,}\n\n"
-                        f"🔗 *Enlace de Recepción (Escanear QR):*\n{qr_url}"
+                        f"🚚 *NUEVA GUÍA EMITIDA*\\n"
+                        f"📄 Guía: {nuevo_numero}\\n"
+                        f"🔄 Transferencia: {numero_transferencia}\\n"
+                        f"📦 Prendas: {total_prendas:,}\\n\\n"
+                        f"🔗 *Enlace de Recepción (Escanear QR):*\\n{qr_url}"
                     )
                     url_wa = f"https://wa.me/?text={urllib.parse.quote(mensaje_wa)}"
                     st.markdown(f'<a href="{url_wa}" target="_blank" style="display:inline-block; width:100%; text-align:center; background-color:#25D366; color:white; padding:8px 0; border-radius:4px; text-decoration:none; font-weight:bold;">📲 Enviar por WhatsApp</a>', unsafe_allow_html=True)
