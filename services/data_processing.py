@@ -94,7 +94,7 @@ def clasificar_tipo_prenda(producto):
         ('POLO', 'Polo', 'POLO'), ('HOODIE', 'Hoodie', 'HOODIE'), ('FLEECE', 'Fleece', 'FLEECE'),
         ('SHIRTS', 'Camisa', 'SHIRT'), ('PANTS', 'Pantalón', 'PANTS'), ('JACKET', 'Chaqueta', 'JACKET'),
         ('SHORTS', 'Shorts', 'SHORTS'), ('LEGGING', 'Legging', 'LEGGING'), ('DRESS', 'Vestido', 'DRESS'),
-        ('SKIRT', 'Falda', 'SKIRT'), ('FUNDA', 'Funda', 'FUNDA'),
+        ('SKIRT', 'Falda', 'SKIRT'), ('FUNDA', 'Funda', 'FUNDA'), ('BAG', 'Funda', 'FUNDA'), ('PLASTIG', 'Funda', 'FUNDA'), ('PLASTIC', 'Funda', 'FUNDA'),
     ]
     for pattern, nombre, abrev in mapeo:
         if pattern in p:
@@ -179,7 +179,14 @@ def procesar_archivos(df_transferencias, df_detalle):
     else:
         df_det['COSTO'] = 0.0
         
-    df_det['ES_FUNDA'] = df_det['CATEGORIA'].str.upper().str.contains('FUNDA', na=False)
+    cond_funda = (
+        df_det['CATEGORIA'].str.upper().str.contains('FUNDA', na=False) |
+        df_det['PRODUCTO_ORIGINAL'].str.upper().str.contains('FUNDA', na=False) |
+        df_det['PRODUCTO_ORIGINAL'].str.upper().str.contains('BAG', na=False) |
+        df_det['PRODUCTO_ORIGINAL'].str.upper().str.contains('PLASTIG', na=False) |
+        df_det['PRODUCTO_ORIGINAL'].str.upper().str.contains('PLASTIC', na=False)
+    )
+    df_det['ES_FUNDA'] = cond_funda
 
     # Pre-calculamos para evitar lambdas complejas en groupby
     df_det['CANT_PRENDA'] = df_det['CANTIDAD'].where(~df_det['ES_FUNDA'], 0)
