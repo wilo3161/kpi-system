@@ -395,108 +395,84 @@ Responde con este JSON exacto:
 # GENERACIÓN DE PDF PROFESIONAL
 # ============================================================================
 def generar_pdf_profesional(guia_data: dict) -> bytes:
+    from reportlab.pdfgen import canvas
+    from reportlab.lib.units import mm
     buffer = io.BytesIO()
-    page_width, page_height = A4
-    margen = 1.5 * cm
-    doc = SimpleDocTemplate(buffer, pagesize=(page_width, page_height),
-                            leftMargin=margen, rightMargin=margen,
-                            topMargin=margen, bottomMargin=margen)
-    styles = getSampleStyleSheet()
-    c_primario, c_secundario, c_fondo, c_borde, c_acento = HexColor("#1E293B"), HexColor("#475569"), HexColor("#F1F5F9"), HexColor("#CBD5E1"), HexColor("#0033A0")
-    def st_(name, **kw): return ParagraphStyle(name, parent=styles["Normal"], **kw)
-    titulo_s = st_("T", fontName="Helvetica-Bold", fontSize=15, textColor=c_primario, alignment=TA_CENTER, spaceAfter=4, leading=18)
-    seccion_s = st_("S", fontName="Helvetica-Bold", fontSize=11, textColor=c_acento, alignment=TA_CENTER, spaceBefore=4, spaceAfter=4)
-    campo_s = st_("C", fontName="Helvetica", fontSize=9, textColor=c_secundario, alignment=TA_LEFT, spaceAfter=4, leading=11)
-    destac_s = st_("D", fontName="Helvetica-Bold", fontSize=13, textColor=c_primario, alignment=TA_LEFT, spaceAfter=4)
-    info_s = st_("I", fontName="Helvetica", fontSize=9, textColor=c_secundario, alignment=TA_LEFT, spaceAfter=3)
-    firma_s = st_("F", fontName="Helvetica", fontSize=8, textColor=c_secundario, alignment=TA_CENTER, spaceBefore=12)
-    qr_s = st_("Q", fontName="Helvetica-Bold", fontSize=9, textColor=c_primario, alignment=TA_CENTER, spaceBefore=3)
-    pie_s = st_("P", fontSize=7, alignment=TA_CENTER, textColor=c_secundario)
+    
+    # Tamaño térmico 4x6" (100x150 mm)
+    label_width, label_height = 100*mm, 150*mm
+    c = canvas.Canvas(buffer, pagesize=(label_width, label_height))
+    
+    # Paleta de colores modernos
+    color_fondo = HexColor("#0033A0") # Azul Corporativo
+    color_texto = HexColor("#FFFFFF")
+    color_gris = HexColor("#F1F5F9")
+    color_oscuro = HexColor("#1E293B")
+    color_borde = HexColor("#CBD5E1")
+    
+    tienda = str(guia_data.get("tienda_destino", "Destino")).upper()
+    marca = str(guia_data.get("marca", ""))
+    num_guia = str(guia_data.get("numero_guia", ""))
+    num_trans = str(guia_data.get("numero_transferencia", "N/A"))
+    tot_prendas = guia_data.get("total_prendas", 0)
+    
+    # 1. ENCABEZADO REDONDEADO (Top)
+    c.setFillColor(color_fondo)
+    c.roundRect(5*mm, label_height - 30*mm, label_width - 10*mm, 25*mm, 4*mm, stroke=0, fill=1)
+    
+    # Título del encabezado
+    c.setFillColor(color_texto)
+    c.setFont("Helvetica-Bold", 14)
+    # Acortar texto largo
+    c.drawCentredString(label_width / 2.0, label_height - 13*mm, tienda[:20])
+    
+    c.setFont("Helvetica", 10)
+    c.drawCentredString(label_width / 2.0, label_height - 18*mm, f"Guía: {num_guia} | Trans: {num_trans}")
+    
+    c.setFont("Helvetica-Bold", 9)
+    c.drawCentredString(label_width / 2.0, label_height - 24*mm, f"{marca.upper()}")
 
-    contenido = []
-    tienda, marca = guia_data.get("tienda_destino", "Destino"), guia_data.get("marca", "")
-    logo_bytes, qr_bytes = guia_data.get("logo_bytes"), guia_data.get("qr_bytes")
+    # 2. BLOQUE DE RESUMEN (Medio)
+    y_medio = label_height - 55*mm
+    c.setFillColor(color_gris)
+    c.setStrokeColor(color_borde)
+    c.setLineWidth(1)
+    c.roundRect(5*mm, y_medio, label_width - 10*mm, 20*mm, 2*mm, stroke=1, fill=1)
     
-    # Reducir tamaño de logos y encabezados para ser más compacto
-    logo_el = Image(io.BytesIO(logo_bytes), width=2.0*cm, height=2.0*cm) if logo_bytes else Paragraph("", campo_s)
-    qr_el = Image(io.BytesIO(qr_bytes), width=2.2*cm, height=2.2*cm) if qr_bytes else Paragraph("", campo_s)
-    
-    titulo_cell = Paragraph(f"Guía de Remisión<br/>{tienda} — {marca}", titulo_s)
-    header_tbl = Table([[logo_el, titulo_cell, qr_el]], colWidths=[2.5*cm, 12*cm, 2.5*cm])
-    header_tbl.setStyle(TableStyle([
-        ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
-        ("ALIGN", (1,0), (1,0), "CENTER"),
-        ("ALIGN", (2,0), (2,0), "RIGHT"),
-    ]))
-    contenido.append(header_tbl)
-    
+    c.setFillColor(color_oscuro)
+    c.setFont("Helvetica-Bold", 24)
+    c.drawCentredString(label_width / 2.0, y_medio + 7*mm, f"{tot_prendas:,}")
+    c.setFont("Helvetica", 8)
+    c.drawCentredString(label_width / 2.0, y_medio + 2*mm, "TOTAL PRENDAS")
+
+    # 3. CÓDIGO QR EN EL CENTRO
+    qr_bytes = guia_data.get("qr_bytes")
     if qr_bytes:
-        contenido.append(Paragraph("Escanea para confirmar", qr_s))
-    
-    contenido.append(Spacer(1, 0.3*cm))
-    
-    num_guia, num_trans, tot_prendas = guia_data.get("numero_guia", ""), guia_data.get("numero_transferencia", "No registrada"), guia_data.get("total_prendas", 0)
+        from reportlab.lib.utils import ImageReader
+        try:
+            img = ImageReader(io.BytesIO(qr_bytes))
+            qr_size = 40*mm
+            c.drawImage(img, (label_width - qr_size)/2.0, y_medio - 45*mm, width=qr_size, height=qr_size)
+            c.setFont("Helvetica-Bold", 8)
+            c.drawCentredString(label_width / 2.0, y_medio - 49*mm, "ESCANEAR PARA RECEPCIÓN")
+        except Exception as e:
+            logger.error(f"Error drawing QR: {e}")
+
+    # 4. DATOS ADICIONALES Y FIRMA (Abajo)
+    y_footer = 20*mm
     dest = guia_data.get("destinatario", {})
-    if isinstance(dest, str):
-        dest_nombre, dest_dir, dest_tel, dest_ciudad = dest, guia_data.get("direccion_destinatario", ""), guia_data.get("telefono_destinatario", ""), guia_data.get("ciudad", "")
-    else:
-        dest_nombre, dest_dir, dest_tel, dest_ciudad = dest.get("nombre", ""), dest.get("direccion", ""), dest.get("telefono", ""), dest.get("ciudad", "")
-
-    campo_s_bold = st_("CB", fontName="Helvetica-Bold", fontSize=9, textColor=c_primario, alignment=TA_LEFT, spaceAfter=2)
-    campo_s_val = st_("CV", fontName="Helvetica", fontSize=9, textColor=c_primario, alignment=TA_LEFT, spaceAfter=2)
-    
-    unified_data = [
-        [Paragraph("Número de Guía:", campo_s_bold), Paragraph(str(num_guia), campo_s_val)],
-        [Paragraph("N° Transferencia:", campo_s_bold), Paragraph(str(num_trans), campo_s_val)],
-        [Paragraph("Fecha Emisión:", campo_s_bold), Paragraph(guia_data.get('fecha_emision', ''), campo_s_val)],
-        [Paragraph("Total Prendas:", campo_s_bold), Paragraph(f"{tot_prendas:,}", campo_s_val)],
-        [Paragraph("Tienda Destino:", campo_s_bold), Paragraph(tienda, campo_s_val)],
-        [Paragraph("Contacto Destino:", campo_s_bold), Paragraph(dest_nombre, campo_s_val)],
-        [Paragraph("Dirección Destino:", campo_s_bold), Paragraph(dest_dir, campo_s_val)],
-        [Paragraph("Ciudad:", campo_s_bold), Paragraph(dest_ciudad, campo_s_val)],
-        [Paragraph("Teléfono Destino:", campo_s_bold), Paragraph(dest_tel, campo_s_val)],
-        [Paragraph("Empresa Remitente:", campo_s_bold), Paragraph(MARCAS.get(marca, {}).get('remitente_empresa', marca), campo_s_val)],
-        [Paragraph("Dirección Origen:", campo_s_bold), Paragraph(DIRECCION_REMITENTE, campo_s_val)],
-        [Paragraph("Teléfono Origen:", campo_s_bold), Paragraph(TELEFONO_REMITENTE, campo_s_val)],
-    ]
-
-    bultos, peso = guia_data.get("bultos", 0), guia_data.get("peso", 0)
-    if bultos or peso:
-        unified_data.append([Paragraph("Bultos / Peso:", campo_s_bold), Paragraph(f"{bultos} bultos &nbsp;|&nbsp; {peso} kg", campo_s_val)])
+    dest_nombre = dest if isinstance(dest, str) else dest.get("nombre", "")
         
-    obs = guia_data.get("observaciones", "")
-    if obs:
-        unified_data.append([Paragraph("Observaciones:", campo_s_bold), Paragraph(obs, campo_s_val)])
-        
-    ai = guia_data.get("ai_analysis", {})
-    if ai and ai.get("resumen_operacional"):
-        unified_data.append([Paragraph("Análisis IA:", campo_s_bold), Paragraph(f"{ai['resumen_operacional']} (Riesgo: {ai.get('riesgo_detectado', 'N/A')})", campo_s_val)])
-
-    tbl_unified = Table(unified_data, colWidths=[4.5*cm, 12.5*cm])
-    tbl_unified.setStyle(TableStyle([
-        ("BACKGROUND", (0,0), (0,-1), c_fondo), # Fondo gris/azul claro para la primera columna
-        ("BACKGROUND", (1,0), (1,-1), HexColor("#FFFFFF")), # Blanco para la segunda columna
-        ("GRID", (0,0), (-1,-1), 0.5, c_borde),
-        ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
-        ("TOPPADDING", (0,0), (-1,-1), 6),
-        ("BOTTOMPADDING", (0,0), (-1,-1), 6),
-        ("LEFTPADDING", (0,0), (-1,-1), 8),
-        ("RIGHTPADDING", (0,0), (-1,-1), 8),
-    ]))
+    c.setFillColor(color_oscuro)
+    c.setFont("Helvetica", 8)
+    c.drawString(10*mm, y_footer + 10*mm, f"Contacto: {dest_nombre[:25]}")
+    c.drawString(10*mm, y_footer + 5*mm, f"Bultos / Peso: {guia_data.get('bultos', 1)} bultos | {guia_data.get('peso', 0)} kg")
     
-    contenido.append(tbl_unified)
+    c.setFont("Helvetica-Oblique", 6)
+    c.drawCentredString(label_width / 2.0, 8*mm, "Documento Digital / Etiqueta Térmica 4x6\"")
+    c.drawCentredString(label_width / 2.0, 5*mm, f"Generado por: {guia_data.get('usuario_genera', 'Sistema')}")
     
-    contenido.append(Spacer(1, 0.8*cm))
-    usuario = guia_data.get("usuario_genera", "")
-    firma_tbl = Table([[Paragraph("_________________________", campo_s), Paragraph("_________________________", campo_s)],
-                       [Paragraph("Revisado por", firma_s), Paragraph(f"Generado por: {usuario}", firma_s)]], colWidths=[8.5*cm, 8.5*cm])
-    firma_tbl.setStyle(TableStyle([("ALIGN", (0,0), (-1,-1), "CENTER"), ("TOPPADDING", (0,0), (-1,-1), 5)]))
-    contenido.append(firma_tbl)
-    
-    contenido.append(Spacer(1, 0.4*cm))
-    contenido.append(Paragraph("Documento generado electrónicamente — Válido sin firma física", pie_s))
-    
-    doc.build(contenido)
+    c.save()
     buffer.seek(0)
     return buffer.getvalue()
 
@@ -682,7 +658,22 @@ def show_generar_guias():
 
                 pdf_bytes = generar_pdf_profesional(doc_guia)
                 st.image(qr_bytes, width=150, caption="QR de recepción")
-                st.download_button("📥 Descargar Guía PDF", pdf_bytes, f"guia_{nuevo_numero}.pdf", "application/pdf")
+                
+                c_btn1, c_btn2 = st.columns(2)
+                with c_btn1:
+                    st.download_button("📥 Descargar PDF Térmico", pdf_bytes, f"guia_{nuevo_numero}.pdf", "application/pdf", use_container_width=True)
+                
+                with c_btn2:
+                    import urllib.parse
+                    mensaje_wa = (
+                        f"🚚 *NUEVA GUÍA EMITIDA*\n"
+                        f"📄 Guía: {nuevo_numero}\n"
+                        f"🔄 Transferencia: {numero_transferencia}\n"
+                        f"📦 Prendas: {total_prendas:,}\n\n"
+                        f"🔗 *Enlace de Recepción (Escanear QR):*\n{qr_url}"
+                    )
+                    url_wa = f"https://wa.me/?text={urllib.parse.quote(mensaje_wa)}"
+                    st.markdown(f'<a href="{url_wa}" target="_blank" style="display:inline-block; width:100%; text-align:center; background-color:#25D366; color:white; padding:8px 0; border-radius:4px; text-decoration:none; font-weight:bold;">📲 Enviar por WhatsApp</a>', unsafe_allow_html=True)
 
                 # Notificación interna a la tienda destino
                 tienda_usuario = local_db.find_one("users", {"assigned_store": tienda_sel, "role": "Tienda"})
