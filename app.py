@@ -48,6 +48,24 @@ st.set_page_config(
 # FUNCIONES FALTANTES INYECTADAS POR EL ASISTENTE
 # ==============================================================================
 
+def extraer_url_transferencia(url_str):
+    """Extrae el link de transferencia de un parámetro query de URL si existe."""
+    if not url_str:
+        return url_str
+    if not isinstance(url_str, str) or not url_str.startswith(("http://", "https://")):
+        return url_str
+    try:
+        import urllib.parse as urlparse
+        parsed_url = urlparse.urlparse(url_str)
+        query_params = urlparse.parse_qs(parsed_url.query)
+        for param_name, param_values in query_params.items():
+            for val in param_values:
+                if val.startswith(("http://", "https://")):
+                    return val
+    except Exception:
+        pass
+    return url_str
+
 def hash_password(password):
     return hashlib.sha256(str(password).encode()).hexdigest()
 
@@ -7428,11 +7446,17 @@ def show_generar_guias():
         st.divider()
 
         st.subheader("🔗 Informacion Digital")
-        url_pedido = st.text_input(
+        url_pedido_raw = st.text_input(
             "**URL del Pedido/Tracking:**",
             placeholder="https://pedidos.fashionclub.com/orden-12345",
             value="https://pedidos.fashionclub.com/",
         )
+        
+        # Extraer la URL de la transferencia real si viene embebida en un parámetro
+        url_pedido = extraer_url_transferencia(url_pedido_raw)
+        
+        if url_pedido != url_pedido_raw:
+            st.info(f"🔗 URL de transferencia extraída: {url_pedido}")
 
         if url_pedido and url_pedido.startswith(("http://", "https://")):
             try:
