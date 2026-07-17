@@ -41,6 +41,24 @@ from utils.backgrounds import set_module_background
 logger = logging.getLogger(__name__)
 TZ_QUITO = ZoneInfo("America/Guayaquil")
 
+def extraer_url_transferencia(url_str):
+    """Extrae el link de transferencia de un parámetro query de URL si existe."""
+    if not url_str:
+        return url_str
+    if not isinstance(url_str, str) or not url_str.startswith(("http://", "https://")):
+        return url_str
+    try:
+        import urllib.parse as urlparse
+        parsed_url = urlparse.urlparse(url_str)
+        query_params = urlparse.parse_qs(parsed_url.query)
+        for param_name, param_values in query_params.items():
+            for val in param_values:
+                if val.startswith(("http://", "https://")):
+                    return val
+    except Exception:
+        pass
+    return url_str
+
 DIRECCION_REMITENTE = "Av. Santo Thomas y antigua via a Cotacachi"
 CIUDAD_REMITENTE    = "San Roque"
 TELEFONO_REMITENTE  = "0993052744"
@@ -199,6 +217,7 @@ def extraer_items_desde_html(html_text: str) -> tuple[list[dict], int]:
 def extraer_datos_transferencia(url: str) -> dict:
     datos = {"numero_transferencia": "", "total_prendas": 0, "items": []}
     try:
+        url = extraer_url_transferencia(url)
         response = requests.get(url, timeout=15)
         if response.status_code != 200:
             logger.warning(f"Error al obtener URL: {url} - status {response.status_code}")
@@ -673,7 +692,17 @@ def _show_generar_guias_impl():
             st.markdown("<hr style='border-color: #CBD5E1;'>", unsafe_allow_html=True)
             st.markdown("<h4 style='color: #1E293B; margin-bottom:10px;'>Datos de Transferencia</h4>", unsafe_allow_html=True)
             
-            url_transferencia = st.text_input("URL de transferencia", placeholder="https://...")
+            # Intentar obtener la URL de transferencia desde los parámetros del navegador
+            query_transferencia = st.query_params.get("transferencia", "")
+            if not query_transferencia:
+                query_transferencia = st.query_params.get("url", "")
+                
+            url_transferencia_input = st.text_input("URL de transferencia", value=query_transferencia, placeholder="https://...")
+            url_transferencia = extraer_url_transferencia(url_transferencia_input)
+            
+            if url_transferencia != url_transferencia_input:
+                st.info(f"🔗 URL de transferencia extraída: {url_transferencia}")
+                
             numero_transferencia = ""
             total_prendas = 0
             items_extraidos = []
@@ -719,7 +748,9 @@ def _show_generar_guias_impl():
                 base_url = st.secrets.get("app", {}).get("url", "https://tu-app.streamlit.app")
                 qr_url = f"{base_url}?modulo=recepcion&transferencia={numero_transferencia}&guia={nuevo_numero}"
                 qr = qrcode.QRCode(box_size=5, border=2)
-                qr.add_data(qr_url)
+                # Utilizar la URL de transferencia para el código QR si está disponible, de lo contrario usar qr_url
+                url_para_qr = url_transferencia if url_transferencia else qr_url
+                qr.add_data(url_para_qr)
                 qr.make(fit=True)
                 qr_img = qr.make_image(fill_color="#0033A0", back_color="white")
                 qr_buf = io.BytesIO()
