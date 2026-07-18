@@ -530,15 +530,32 @@ def generar_acta_recepcion_pdf(guia_doc: dict, recepcion_data: dict, diferencias
 # ============================================================================
 # SUBIDA A GOOGLE DRIVE
 # ============================================================================
-def subir_a_google_drive(archivo_bytes: bytes, nombre_archivo: str, mime_type: str, carpeta_id: str = None) -> str:
+def _obtener_servicio_drive():
     if not GOOGLE_DRIVE_AVAILABLE:
         raise ImportError("google-api-python-client no instalado")
+    creds_json = st.secrets["gdrive_service_account"]
+    import json
+    creds_info = json.loads(creds_json)
+    credentials = service_account.Credentials.from_service_account_info(creds_info, scopes=['https://www.googleapis.com/auth/drive'])
+    return build('drive', 'v3', credentials=credentials)
+
+def obtener_o_crear_carpeta_drive(nombre_carpeta: str, service) -> str:
+    query = f"name='{nombre_carpeta}' and mimeType='application/vnd.google-apps.folder' and trashed=false"
+    results = service.files().list(q=query, spaces='drive', fields='files(id, name)').execute()
+    items = results.get('files', [])
+    if items:
+        return items[0]['id']
+    else:
+        file_metadata = {
+            'name': nombre_carpeta,
+            'mimeType': 'application/vnd.google-apps.folder'
+        }
+        folder = service.files().create(body=file_metadata, fields='id').execute()
+        return folder.get('id')
+
+def subir_a_google_drive(archivo_bytes: bytes, nombre_archivo: str, mime_type: str, carpeta_id: str = None) -> str:
     try:
-        creds_json = st.secrets["gdrive_service_account"]
-        import json
-        creds_info = json.loads(creds_json)
-        credentials = service_account.Credentials.from_service_account_info(creds_info, scopes=['https://www.googleapis.com/auth/drive.file'])
-        service = build('drive', 'v3', credentials=credentials)
+        service = _obtener_servicio_drive()
         media = MediaIoBaseUpload(io.BytesIO(archivo_bytes), mimetype=mime_type, resumable=True)
         file_metadata = {'name': nombre_archivo}
         if carpeta_id:
@@ -769,8 +786,15 @@ def _proceso_recepcion_completo(guia_doc: dict) -> None:
         else:
             novedades_texto = "\n\n✅ Todo conforme, sin novedades."
         contenido_mensaje = f"**Recepción de guía #{numero_guia}**\nTienda: {guia_doc.get('tienda_destino')}\nTotal esperado: {diferencias.get('total_esperado')}\nTotal recibido: {diferencias.get('total_recibido')}\nEstado: {estado_recepcion}{novedades_texto}"
+        # Notificar al creador
         if creador_guia:
             _enviar_mensaje_interno(creador_guia, f"Recepción de guía #{numero_guia}", contenido_mensaje, remitente=usuario)
+            
+        # Notificar a administradores
+        admins = local_db.find("users", {"role": "Administrador"})
+        for admin in admins:
+            if admin.get("username") != creador_guia:
+                _enviar_mensaje_interno(admin.get("username"), f"Recepción de guía #{numero_guia}", contenido_mensaje, remitente=usuario)
         
         # Disparar evento
         try:
@@ -805,12 +829,21 @@ def _proceso_recepcion_completo(guia_doc: dict) -> None:
             if pdf_bytes:
                 st.download_button("📥 Descargar Acta (PDF)", pdf_bytes, f"acta_recepcion_{numero_guia}.pdf", "application/pdf")
         
-        if GOOGLE_DRIVE_AVAILABLE and st.checkbox("📤 Subir acta a Google Drive", key=f"subir_drive_{numero_guia}"):
+        # Subida automática a Google Drive del Acta PDF (sin checkbox)
+        if GOOGLE_DRIVE_AVAILABLE and pdf_bytes:
             try:
-                link = subir_a_google_drive(excel_bytes, f"acta_recepcion_{numero_guia}.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-                st.success(f"Acta subida a Drive: [Ver archivo]({link})")
+                # 1. Obtener servicio
+                service = _obtener_servicio_drive()
+                # 2. Obtener o crear carpeta de la tienda
+                nombre_tienda = guia_doc.get("tienda_destino", "Tienda_Desconocida")
+                carpeta_id = obtener_o_crear_carpeta_drive(nombre_tienda, service)
+                # 3. Subir archivo
+                nombre_archivo = f"acta_recepcion_{numero_guia}.pdf"
+                link = subir_a_google_drive(pdf_bytes, nombre_archivo, "application/pdf", carpeta_id)
+                st.success(f"✅ Acta digital respaldada en Google Drive: [{nombre_tienda}/{nombre_archivo}]({link})")
             except Exception as e:
-                st.error(f"Error al subir a Drive: {e}")
+                logger.error(f"Error al subir a Drive de forma automatizada: {e}")
+                st.error("⚠️ No se pudo respaldar el acta en Google Drive.")
         
         _notificar_segun_incidencia(guia_doc, estado_recepcion, incidencias, usuario, diferencias)
         
