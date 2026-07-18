@@ -745,8 +745,11 @@ def _show_generar_guias_impl():
                 st.error("Completa destinatario y dirección.")
             else:
                 nuevo_numero = obtener_proximo_numero_guia()
-                base_url = st.secrets.get("app", {}).get("url", "https://tu-app.streamlit.app")
-                qr_url = f"{base_url}?modulo=recepcion&transferencia={numero_transferencia}&guia={nuevo_numero}"
+                if url_transferencia:
+                    qr_url = url_transferencia
+                else:
+                    base_url = st.secrets.get("app", {}).get("url", "https://tu-app.streamlit.app")
+                    qr_url = f"{base_url}?modulo=recepcion&transferencia={numero_transferencia}&guia={nuevo_numero}"
                 qr = qrcode.QRCode(box_size=5, border=2)
                 # Utilizar la URL de transferencia para el código QR si está disponible, de lo contrario usar qr_url
                 url_para_qr = url_transferencia if url_transferencia else qr_url
