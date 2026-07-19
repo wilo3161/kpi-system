@@ -720,7 +720,24 @@ def _show_generar_guias_impl():
         
         with sub_tab_batch:
             st.markdown("### 🚀 Generación Masiva de Guías")
-            st.info("Pega una tabla con Tienda Destino y URL de Transferencia para generar múltiples guías a la vez.")
+            st.info("""
+            **💡 Instrucciones para usar la Generación Masiva:**
+            1. **Prepara tus datos:** Necesitas dos datos clave por cada guía: el nombre exacto de la **Tienda Destino** y la **URL Transferencia**.
+            2. **Usa la plantilla:** Puedes descargar el archivo de ejemplo abajo, llenarlo en Excel, y luego **copiar y pegar** las filas directamente en la tabla de esta pantalla.
+            3. **Genera:** Una vez que la tabla tenga tus datos, haz clic en **'Generar Guías en Lote'** y el sistema procesará todas a la vez, entregándote un archivo ZIP con todos los PDFs listos para imprimir.
+            """)
+            
+            buf_template = io.BytesIO()
+            with pd.ExcelWriter(buf_template, engine="openpyxl") as w:
+                pd.DataFrame({"Tienda Destino": ["Mall del Rio", "Scala Shopping"], "URL Transferencia": ["https://...", "https://..."]}).to_excel(w, index=False, sheet_name="Plantilla")
+            st.download_button(
+                "📥 Descargar Plantilla Excel de Ejemplo", 
+                buf_template.getvalue(), 
+                "Plantilla_Guias_Batch.xlsx", 
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                help="Descarga este archivo como guía para saber cómo ingresar los datos"
+            )
+            
             if "batch_df" not in st.session_state:
                 st.session_state.batch_df = pd.DataFrame({"Tienda Destino": [""], "URL Transferencia": [""]})
             
