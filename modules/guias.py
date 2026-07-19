@@ -915,6 +915,25 @@ def _show_generar_guias_impl():
                             st.session_state.last_guia = nuevo_numero
                             st.session_state.last_pdf = pdf_bytes
                             st.session_state.last_qr = doc_guia["qr_url"]
+                            
+                            # Notificación interna a la tienda destino
+                            tienda_usuario = local_db.find_one("users", {"assigned_store": tienda_sel, "role": "Tienda"})
+                            if tienda_usuario:
+                                username_tienda = tienda_usuario.get("username")
+                                mensaje_contenido = f"**Nueva guía de envío**\nN° Guía: {nuevo_numero}\nTransferencia: {numero_transferencia}\nTotal prendas: {total_prendas}\nPeso: {peso_kg} kg\nBultos: {bultos}\n\nPuedes ver el detalle en tu bandeja de recepción."
+                                _enviar_mensaje_interno(username_tienda, f"Guía de remisión #{nuevo_numero}", mensaje_contenido, remitente=usuario_activo)
+                            else:
+                                logger.warning(f"No se encontró usuario para la tienda {tienda_sel}")
+            
+                            ai = doc_guia.get("ai_analysis", {})
+                            if ai and ai.get("resumen_operacional"):
+                                with st.expander("🤖 Análisis IA", expanded=True):
+                                    st.info(ai["resumen_operacional"])
+                                    st.markdown(f"**Riesgo:** {ai.get('riesgo_detectado', 'N/A')}")
+                                    if ai.get("acciones_sugeridas"):
+                                        st.markdown("**Acciones sugeridas:**")
+                                        for a in ai["acciones_sugeridas"]:
+                                            st.markdown(f"- {a}")
                         else:
                             st.error(nuevo_numero) # Here nuevo_numero is the error string
             
@@ -936,9 +955,9 @@ def _show_generar_guias_impl():
                         else:
                             st.download_button("🖨️ Imprimir acumuladas (A4)", pdf_a4, "etiquetas_agrupadas.pdf", "application/pdf", use_container_width=True, on_click=limpiar_cola)
                 
-                with c_btn2:
-                    st.download_button("📄 Descargar solo esta (Térmica)", pdf_bytes, f"guia_{nuevo_numero}.pdf", "application/pdf", use_container_width=True)
-                
+                    with c_btn2:
+                        st.download_button("📄 Descargar solo esta (Térmica)", pdf_bytes, f"guia_{nuevo_numero}.pdf", "application/pdf", use_container_width=True)
+                    
                     with c_btn3:
                         import urllib.parse
                         import re
@@ -960,25 +979,6 @@ def _show_generar_guias_impl():
                                 
                         url_wa = f"https://wa.me/{tel_wa}?text={urllib.parse.quote(mensaje_wa)}"
                         st.markdown(f'<a href="{url_wa}" target="_blank" style="display:inline-block; width:100%; text-align:center; background-color:#25D366; color:white; padding:8px 0; border-radius:4px; text-decoration:none; font-weight:bold;">📲 Enviar por WhatsApp</a>', unsafe_allow_html=True)
-
-                # Notificación interna a la tienda destino
-                tienda_usuario = local_db.find_one("users", {"assigned_store": tienda_sel, "role": "Tienda"})
-                if tienda_usuario:
-                    username_tienda = tienda_usuario.get("username")
-                    mensaje_contenido = f"**Nueva guía de envío**\nN° Guía: {nuevo_numero}\nTransferencia: {numero_transferencia}\nTotal prendas: {total_prendas}\nPeso: {peso_kg} kg\nBultos: {bultos}\n\nPuedes ver el detalle en tu bandeja de recepción."
-                    _enviar_mensaje_interno(username_tienda, f"Guía de remisión #{nuevo_numero}", mensaje_contenido, remitente=usuario_activo)
-                else:
-                    logger.warning(f"No se encontró usuario para la tienda {tienda_sel}")
-
-                ai = doc_guia.get("ai_analysis", {})
-                if ai and ai.get("resumen_operacional"):
-                    with st.expander("🤖 Análisis IA", expanded=True):
-                        st.info(ai["resumen_operacional"])
-                        st.markdown(f"**Riesgo:** {ai.get('riesgo_detectado', 'N/A')}")
-                        if ai.get("acciones_sugeridas"):
-                            st.markdown("**Acciones sugeridas:**")
-                            for a in ai["acciones_sugeridas"]:
-                                st.markdown(f"- {a}")
 
     # =========================================================================
     # TAB 2 — MANIFIESTO (sin cambios)
@@ -1130,7 +1130,6 @@ def _show_generar_guias_impl():
 
         st.divider()
         st.markdown("#### 📊 Histórico de Transferencias (Últimos 7 días)")
-        import pandas as pd
         from datetime import timedelta
         
         # Generar los últimos 7 días
