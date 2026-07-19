@@ -547,15 +547,7 @@ def generar_acta_recepcion_pdf(guia_doc: dict, recepcion_data: dict, diferencias
 # ============================================================================
 # SUBIDA A GOOGLE DRIVE
 # ============================================================================
-def _obtener_servicio_drive():
-    if not GOOGLE_DRIVE_AVAILABLE:
-        raise ImportError("google-api-python-client no instalado")
-    creds_json = st.secrets["gdrive_service_account"]
-    import json
-    creds_info = json.loads(creds_json)
-    credentials = service_account.Credentials.from_service_account_info(creds_info, scopes=['https://www.googleapis.com/auth/drive'])
-    return build('drive', 'v3', credentials=credentials)
-
+from services.drive_service import _obtener_servicio_drive
 def obtener_o_crear_carpeta_drive(nombre_carpeta: str, service) -> str:
     query = f"name='{nombre_carpeta}' and mimeType='application/vnd.google-apps.folder' and trashed=false"
     results = service.files().list(q=query, spaces='drive', fields='files(id, name)').execute()

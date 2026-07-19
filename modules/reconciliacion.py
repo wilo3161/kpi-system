@@ -527,18 +527,58 @@ def show_reconciliacion_v8():
 
     with st.sidebar:
         st.header("📁 Carga de Archivos")
-        st.markdown("**Formatos soportados:** Excel (.xlsx, .xls) y CSV")
-        uploaded_manifesto = st.file_uploader("Manifiesto (con GUIA y SUBTOTAL)", type=["csv", "xlsx", "xls"], key="manifesto_upload")
-        uploaded_facturas = st.file_uploader("Facturas (con GUIA y VALOR)", type=["csv", "xlsx", "xls"], key="facturas_upload")
-        if uploaded_manifesto and uploaded_facturas:
-            if st.button("📥 Cargar Archivos", type="primary", use_container_width=True):
-                with st.spinner("Cargando..."):
-                    manifesto = cargar_archivo_local(uploaded_manifesto, "Manifiesto")
-                    facturas = cargar_archivo_local(uploaded_facturas, "Facturas")
-                    if manifesto is not None and facturas is not None:
-                        st.session_state.gastos_datos["manifesto"] = manifesto
-                        st.session_state.gastos_datos["facturas"] = facturas
-                        st.rerun()
+        st.markdown("**Formatos:** Excel (.xlsx, .xls) y CSV")
+        
+        tipo_carga_rec = st.radio("Método:", ["Google Drive", "Manual"], horizontal=True)
+        
+        if tipo_carga_rec == "Google Drive":
+            from services.drive_service import _obtener_servicio_drive, listar_archivos_excel_recientes, descargar_archivo_drive
+            try:
+                drive_service = _obtener_servicio_drive()
+                archivos_recientes = listar_archivos_excel_recientes(drive_service, limit=15)
+                if not archivos_recientes:
+                    st.warning("No se encontraron archivos en Drive.")
+                else:
+                    opciones_arch = {f"{a['name']} ({a['createdTime'][:10]})": a['id'] for a in archivos_recientes}
+                    
+                    idx_m, idx_f = 0, 0
+                    for i, name in enumerate(opciones_arch.keys()):
+                        if "manifiesto" in name.lower() or "guia" in name.lower(): idx_m = i
+                        if "factura" in name.lower(): idx_f = i
+                        
+                    sel_m = st.selectbox("Manifiesto:", list(opciones_arch.keys()), index=idx_m)
+                    sel_f = st.selectbox("Facturas:", list(opciones_arch.keys()), index=idx_f)
+                    
+                    if st.button("📥 Importar de Drive", type="primary", use_container_width=True):
+                        with st.spinner("Descargando..."):
+                            f_m = descargar_archivo_drive(drive_service, opciones_arch[sel_m])
+                            f_f = descargar_archivo_drive(drive_service, opciones_arch[sel_f])
+                            
+                            # Para simular file_uploader name y mantener cargar_archivo_local compatible:
+                            f_m.name = sel_m
+                            f_f.name = sel_f
+                            
+                            manifesto = cargar_archivo_local(f_m, "Manifiesto")
+                            facturas = cargar_archivo_local(f_f, "Facturas")
+                            
+                            if manifesto is not None and facturas is not None:
+                                st.session_state.gastos_datos["manifesto"] = manifesto
+                                st.session_state.gastos_datos["facturas"] = facturas
+                                st.rerun()
+            except Exception as e:
+                st.error(f"Error con Drive: {e}")
+        else:
+            uploaded_manifesto = st.file_uploader("Manifiesto (GUIA y SUBTOTAL)", type=["csv", "xlsx", "xls"], key="manifesto_upload")
+            uploaded_facturas = st.file_uploader("Facturas (GUIA y VALOR)", type=["csv", "xlsx", "xls"], key="facturas_upload")
+            if uploaded_manifesto and uploaded_facturas:
+                if st.button("📥 Cargar Manual", type="primary", use_container_width=True):
+                    with st.spinner("Cargando..."):
+                        manifesto = cargar_archivo_local(uploaded_manifesto, "Manifiesto")
+                        facturas = cargar_archivo_local(uploaded_facturas, "Facturas")
+                        if manifesto is not None and facturas is not None:
+                            st.session_state.gastos_datos["manifesto"] = manifesto
+                            st.session_state.gastos_datos["facturas"] = facturas
+                            st.rerun()
 
     if st.session_state.gastos_datos["manifesto"] is not None:
         manifesto = st.session_state.gastos_datos["manifesto"]

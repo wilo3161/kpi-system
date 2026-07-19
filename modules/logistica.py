@@ -418,35 +418,85 @@ def mostrar_dashboard_transferencias():
 
         tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["📂 Carga y Cruce", "📈 KPIs por Categoría", "🏪 Desglose por Tienda", "🎽 Análisis de Productos", "📅 Histórico + Forecast", "🤖 Asistente IA"])
 
-        # ==================== TAB 1 (CORREGIDA) ====================
+        # ==================== TAB 1 (CORREGIDA CON GOOGLE DRIVE) ====================
         with tab1:
-            st.subheader("Sube los archivos para el análisis")
-            with st.form(key="upload_form", clear_on_submit=False):
-                colA, colB = st.columns(2)
-                with colA:
-                    archT = st.file_uploader("Archivo transferencias (.xlsx)", type=['xlsx'], key="trans_uploader")
-                with colB:
-                    archD = st.file_uploader("Archivo detalle (.xlsx)", type=['xlsx'], key="det_uploader")
-                procesar_click = st.form_submit_button("🔀 Procesar cruce", type="primary", use_container_width=True)
+            st.subheader("Sube o sincroniza los archivos para el análisis")
+            
+            tipo_carga = st.radio("Método de Carga:", ["Google Drive (Recomendado)", "Subida Manual"], horizontal=True)
+            
+            dfT, dfD = None, None
+            nombre_archivo = "Desconocido"
 
-            if procesar_click and archT and archD:
+            if tipo_carga == "Google Drive (Recomendado)":
+                from services.drive_service import _obtener_servicio_drive, listar_archivos_excel_recientes, descargar_archivo_drive
                 try:
-                    dfT, dfD = pd.read_excel(archT), pd.read_excel(archD)
+                    drive_service = _obtener_servicio_drive()
+                    st.info("Buscando archivos recientes en Drive...")
+                    archivos_recientes = listar_archivos_excel_recientes(drive_service, limit=20)
+                    if not archivos_recientes:
+                        st.warning("No se encontraron archivos de Excel recientes en tu Google Drive.")
+                    else:
+                        opciones_archivos = {f"{a['name']} ({a['createdTime'][:10]})": a['id'] for a in archivos_recientes}
+                        
+                        # Preselección basada en nombres
+                        idx_t, idx_d = 0, 0
+                        for i, name in enumerate(opciones_archivos.keys()):
+                            if "transferencia" in name.lower(): idx_t = i
+                            if "detalle" in name.lower(): idx_d = i
+                            
+                        colA, colB = st.columns(2)
+                        with colA:
+                            sel_t = st.selectbox("Archivo de Transferencias:", list(opciones_archivos.keys()), index=idx_t)
+                        with colB:
+                            sel_d = st.selectbox("Archivo Detalle:", list(opciones_archivos.keys()), index=idx_d)
+                            
+                        if st.button("🔀 Procesar desde Drive", type="primary", use_container_width=True):
+                            with st.spinner("Descargando archivos desde Google Drive..."):
+                                id_t = opciones_archivos[sel_t]
+                                id_d = opciones_archivos[sel_d]
+                                file_t = descargar_archivo_drive(drive_service, id_t)
+                                file_d = descargar_archivo_drive(drive_service, id_d)
+                                dfT = pd.read_excel(file_t)
+                                dfD = pd.read_excel(file_d)
+                                nombre_archivo = sel_t
+                except Exception as e:
+                    st.error(f"Error conectando a Google Drive: {e}")
+                    
+            else:
+                with st.form(key="upload_form", clear_on_submit=False):
+                    colA, colB = st.columns(2)
+                    with colA:
+                        archT = st.file_uploader("Archivo transferencias (.xlsx)", type=['xlsx'], key="trans_uploader")
+                    with colB:
+                        archD = st.file_uploader("Archivo detalle (.xlsx)", type=['xlsx'], key="det_uploader")
+                    procesar_click = st.form_submit_button("🔀 Procesar cruce manual", type="primary", use_container_width=True)
+
+                if procesar_click:
+                    if archT and archD:
+                        dfT = pd.read_excel(archT)
+                        dfD = pd.read_excel(archD)
+                        nombre_archivo = archT.name
+                    else:
+                        st.warning("Selecciona ambos archivos antes de procesar.")
+
+            # FLUJO COMÚN DE PROCESAMIENTO
+            if dfT is not None and dfD is not None:
+                try:
                     dfC, dfDE = procesar_archivos(dfT, dfD)
                     if dfC is not None and dfDE is not None:
                         st.session_state.update({'df_cruce': dfC, 'df_detalle_enr': dfDE})
                         st.session_state.procesado_archivos_logistica = True
-                        st.session_state.archT_name = archT.name
+                        st.session_state.archT_name = nombre_archivo
                         fecha_d = date.today()
                         if 'FECHA' in dfC.columns:
                             f_clean = dfC['FECHA'].dropna()
                             if not f_clean.empty:
                                 fecha_d = f_clean.iloc[0]
                         st.session_state.fecha_d_logistica = fecha_d
+                        st.success("¡Datos procesados correctamente!")
+                        st.rerun()
                 except Exception as e:
-                    st.error(f"Error procesando archivos: {e}")
-            elif procesar_click:
-                st.warning("Selecciona ambos archivos antes de procesar.")
+                    st.error(f"Error procesando datos: {e}")
 
             if st.session_state.get('procesado_archivos_logistica'):
                 existe = existe_historico_dia(st.session_state.fecha_d_logistica, "Transferencias Diarias")

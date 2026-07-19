@@ -620,6 +620,61 @@ def _render_timeline(timeline: list) -> None:
                     f'<span style="font-weight:600">{evt}</span> — {desc}</div>', unsafe_allow_html=True)
 
 # ============================================================================
+# FUNCION BACKEND GUIA
+# ============================================================================
+def generar_guia_backend(tienda_sel, destinatario, direccion, telefono, ciudad, peso_kg, bultos, observaciones, numero_transferencia, total_prendas, url_transferencia, usuario_activo, items_extraidos, logo_bytes, marca_sel, tienda_info):
+    import io
+    import qrcode
+    
+    nuevo_numero = obtener_proximo_numero_guia()
+    base_url = st.secrets.get("app", {}).get("url", "https://tu-app.streamlit.app")
+    qr_url = f"{base_url}?modulo=recepcion&transferencia={numero_transferencia}&guia={nuevo_numero}"
+    qr = qrcode.QRCode(box_size=5, border=2)
+    qr.add_data(qr_url)
+    qr.make(fit=True)
+    qr_img = qr.make_image(fill_color="#0033A0", back_color="white")
+    qr_buf = io.BytesIO()
+    qr_img.save(qr_buf, format="PNG")
+    qr_bytes = qr_buf.getvalue()
+    
+    doc_guia = construir_documento_guia(
+        nuevo_numero, marca_sel, tienda_info, tienda_sel,
+        destinatario, direccion, telefono, ciudad, float(peso_kg),
+        int(bultos), observaciones, str(numero_transferencia),
+        int(total_prendas), url_transferencia, usuario_activo,
+        qr_url, items_extraidos
+    )
+    doc_guia["logo_bytes"] = logo_bytes
+    doc_guia["qr_bytes"] = qr_bytes
+    
+    try:
+        local_db.insert("guias", doc_guia)
+        if "manifiesto_obj" in st.session_state:
+            local_db.update("manifiesto", {"_id": st.session_state.manifiesto_obj["_id"]},
+                            {"$push": {"guias": str(nuevo_numero)},
+                             "$inc": {"metricas.total_prendas": int(total_prendas),
+                                      "metricas.total_bultos": int(bultos)}})
+    except Exception as exc:
+        return False, f"Error BD: {exc}", None, None
+        
+    try:
+        from core.event_bus import emitir
+        emitir("GUIA_CREADA", {"guia": str(nuevo_numero), "tienda": tienda_sel,
+                               "transferencia": numero_transferencia, "prendas": total_prendas,
+                               "peso": peso_kg, "bultos": bultos})
+    except: pass
+    
+    try:
+        import threading
+        bot = TelegramBot()
+        msg_text = f"🚚 *NUEVA GUÍA EMITIDA*\\n📄 Guía: `{nuevo_numero}`\\n🏪 Tienda: {tienda_sel}\\n🔄 Transferencia: {numero_transferencia}\\n📦 Prendas: {total_prendas:,}\\n👤 Usuario: {usuario_activo}"
+        threading.Thread(target=bot.enviar_mensaje, args=(msg_text,)).start()
+    except: pass
+    
+    pdf_bytes = generar_pdf_profesional(doc_guia)
+    return True, str(nuevo_numero), pdf_bytes, doc_guia
+
+# ============================================================================
 # FUNCIÓN PRINCIPAL
 # ============================================================================
 def show_generar_guias():
@@ -661,179 +716,250 @@ def _show_generar_guias_impl():
     # TAB 1 — NUEVA GUÍA
     # =========================================================================
     with tab_nueva:
-        if st.session_state.get("cola_impresion"):
-            col_info, col_clear = st.columns([3, 1])
-            col_info.info(f"Tienes {len(st.session_state.cola_impresion)} etiquetas acumuladas listas para imprimir en A4.")
-            if col_clear.button("🧹 Limpiar cola", key="btn_clear_cola"):
-                st.session_state.cola_impresion = []
-                st.rerun()
-                
+        sub_tab_ind, sub_tab_batch = st.tabs(["📄 Individual", "🚀 Masiva (Batch)"])
+        
+        with sub_tab_batch:
+            st.markdown("### 🚀 Generación Masiva de Guías")
+            st.info("Pega una tabla con Tienda Destino y URL de Transferencia para generar múltiples guías a la vez.")
+            if "batch_df" not in st.session_state:
+                st.session_state.batch_df = pd.DataFrame({"Tienda Destino": [""], "URL Transferencia": [""]})
+            
+            edited_df = st.data_editor(st.session_state.batch_df, num_rows="dynamic", use_container_width=True)
+            
+            if st.button("🚀 Generar Guías en Lote", type="primary"):
+                import zipfile
+                valid_rows = edited_df[(edited_df["Tienda Destino"] != "") & (edited_df["URL Transferencia"] != "")]
+                if valid_rows.empty:
+                    st.warning("No hay filas válidas para procesar.")
+                else:
+                    zip_buffer = io.BytesIO()
+                    exitosas = 0
+                    fallidas = 0
+                    
+                    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+                        progress = st.progress(0)
+                        status_text = st.empty()
+                        
+                        for i, row in valid_rows.iterrows():
+                            tienda_destino = str(row["Tienda Destino"]).strip()
+                            url_t = str(row["URL Transferencia"]).strip()
+                            status_text.text(f"Procesando: {tienda_destino}...")
+                            
+                            datos = extraer_datos_transferencia(url_t)
+                            if not datos.get("numero_transferencia"):
+                                fallidas += 1
+                                continue
+                                
+                            marca_sel_batch = "Aeropostale"
+                            logo_bytes_b = cargar_logo_local(marca_sel_batch)
+                            tienda_info_b = next((t for t in TIENDAS_REGULARES + PRICE_CLUBS + VENTAS_POR_MAYOR if t == tienda_destino), TIENDAS_DATA.get("Tienda A"))
+                            if isinstance(tienda_info_b, str):
+                                tienda_info_b = TIENDAS_DATA.get(tienda_info_b, TIENDAS_DATA["Tienda A"])
+                                
+                            success, num_guia, pdf_bytes_b, doc_guia_b = generar_guia_backend(
+                                tienda_sel=tienda_destino,
+                                destinatario=tienda_info_b.get("encargado", "ND"),
+                                direccion=tienda_info_b.get("direccion", "ND"),
+                                telefono=tienda_info_b.get("telefono", "ND"),
+                                ciudad=tienda_info_b.get("ciudad", "ND"),
+                                peso_kg=0.0,
+                                bultos=1,
+                                observaciones="Generado en Batch",
+                                numero_transferencia=datos["numero_transferencia"],
+                                total_prendas=datos.get("total_prendas", 0),
+                                url_transferencia=url_t,
+                                usuario_activo=usuario_activo,
+                                items_extraidos=datos.get("items", []),
+                                logo_bytes=logo_bytes_b,
+                                marca_sel=marca_sel_batch,
+                                tienda_info=tienda_info_b
+                            )
+                            
+                            if success:
+                                exitosas += 1
+                                zip_file.writestr(f"Guia_{num_guia}_{tienda_destino}.pdf", pdf_bytes_b)
+                            else:
+                                fallidas += 1
+                                
+                            progress.progress((i + 1) / len(valid_rows))
+                            
+                    status_text.empty()
+                    progress.empty()
+                    
+                    if exitosas > 0:
+                        st.success(f"✅ Se generaron {exitosas} guías. (❌ Fallidas: {fallidas})")
+                        st.download_button("📥 Descargar ZIP con Guías", zip_buffer.getvalue(), "Guias_Batch.zip", "application/zip", type="primary", use_container_width=True)
+                    else:
+                        st.error("No se pudo generar ninguna guía. Verifica las URLs.")
 
-        with st.container(border=True):
-            st.markdown("""
-            <div style="text-align:center; margin-bottom: 20px; border-bottom: 2px solid #CBD5E1; padding-bottom:15px;">
-                <h3 style="margin:0; font-family: 'Bebas Neue', sans-serif; letter-spacing: 1px; font-size: 2.2rem;">FORMULARIO DE NUEVA GUÍA</h3>
-                <p style="margin:0; font-size: 0.95rem;">Completa los datos para emitir la guía de remisión.</p>
-            </div>
-            """, unsafe_allow_html=True)
+        with sub_tab_ind:
+            if st.session_state.get("cola_impresion"):
+                col_info, col_clear = st.columns([3, 1])
+                col_info.info(f"Tienes {len(st.session_state.cola_impresion)} etiquetas acumuladas listas para imprimir en A4.")
+                if col_clear.button("🧹 Limpiar cola", key="btn_clear_cola"):
+                    st.session_state.cola_impresion = []
+                    st.rerun()
+                    
+
+            with st.container(border=True):
+                st.markdown("""
+                <div style="text-align:center; margin-bottom: 20px; border-bottom: 2px solid #CBD5E1; padding-bottom:15px;">
+                    <h3 style="margin:0; font-family: 'Bebas Neue', sans-serif; letter-spacing: 1px; font-size: 2.2rem;">FORMULARIO DE NUEVA GUÍA</h3>
+                    <p style="margin:0; font-size: 0.95rem;">Completa los datos para emitir la guía de remisión.</p>
+                </div>
+                """, unsafe_allow_html=True)
             
-            col_m, col_t = st.columns(2)
-            with col_m:
-                # Solo Tempo y Fashion Club como Empresas remitentes
-                marca_sel = st.selectbox("Empresa (Remitente)", ["Tempo", "Fashion Club"])
-            logo_bytes = cargar_logo_local(marca_sel)
+                col_m, col_t = st.columns(2)
+                with col_m:
+                    # Solo Tempo y Fashion Club como Empresas remitentes
+                    marca_sel = st.selectbox("Empresa (Remitente)", ["Tempo", "Fashion Club"])
+                logo_bytes = cargar_logo_local(marca_sel)
             
-            if not TIENDAS_DATA:
-                from config.stores_data import reload_stores_data
-                reload_stores_data()
+                if not TIENDAS_DATA:
+                    from config.stores_data import reload_stores_data
+                    reload_stores_data()
             
-            tiendas_opciones = [t["Nombre de Tienda"] for t in TIENDAS_DATA]
+                tiendas_opciones = [t["Nombre de Tienda"] for t in TIENDAS_DATA]
                 
-            tienda_sel = st.selectbox("Tienda Destino", tiendas_opciones)
-            tienda_info = next((t for t in TIENDAS_DATA if t["Nombre de Tienda"] == tienda_sel), {})
-            dest_nombre = tienda_info.get("Contacto", "")
-            dest_dir = tienda_info.get("Dirección", "")
-            dest_tel = tienda_info.get("Teléfono", "")
-            dest_ciudad = tienda_info.get("Destino", "")
-            c1, c2 = st.columns(2)
-            with c1:
-                destinatario = st.text_input("Contacto destinatario", value=dest_nombre)
-                telefono = st.text_input("Teléfono", value=dest_tel)
-            with c2:
-                direccion = st.text_area("Dirección", value=dest_dir, height=100)
-                ciudad = st.text_input("Ciudad", value=dest_ciudad)
-            c3, c4 = st.columns(2)
-            with c3:
-                peso_kg = st.number_input("Peso (kg)", min_value=0.0, step=0.5, format="%.1f")
-            with c4:
-                bultos = st.number_input("Bultos", min_value=1, step=1, value=1)
+                tienda_sel = st.selectbox("Tienda Destino", tiendas_opciones)
+                tienda_info = next((t for t in TIENDAS_DATA if t["Nombre de Tienda"] == tienda_sel), {})
+                dest_nombre = tienda_info.get("Contacto", "")
+                dest_dir = tienda_info.get("Dirección", "")
+                dest_tel = tienda_info.get("Teléfono", "")
+                dest_ciudad = tienda_info.get("Destino", "")
+                c1, c2 = st.columns(2)
+                with c1:
+                    destinatario = st.text_input("Contacto destinatario", value=dest_nombre)
+                    telefono = st.text_input("Teléfono", value=dest_tel)
+                with c2:
+                    direccion = st.text_area("Dirección", value=dest_dir, height=100)
+                    ciudad = st.text_input("Ciudad", value=dest_ciudad)
+                c3, c4 = st.columns(2)
+                with c3:
+                    peso_kg = st.number_input("Peso (kg)", min_value=0.0, step=0.5, format="%.1f")
+                with c4:
+                    bultos = st.number_input("Bultos", min_value=1, step=1, value=1)
             
-            st.markdown("<hr style='border-color: #CBD5E1;'>", unsafe_allow_html=True)
-            st.markdown("<h4 style='color: #1E293B; margin-bottom:10px;'>Datos de Transferencia</h4>", unsafe_allow_html=True)
+                st.markdown("<hr style='border-color: #CBD5E1;'>", unsafe_allow_html=True)
+                st.markdown("<h4 style='color: #1E293B; margin-bottom:10px;'>Datos de Transferencia</h4>", unsafe_allow_html=True)
             
-            # Intentar obtener la URL de transferencia desde los parámetros del navegador
-            query_transferencia = st.query_params.get("transferencia", "")
-            if not query_transferencia:
-                query_transferencia = st.query_params.get("url", "")
+                # Intentar obtener la URL de transferencia desde los parámetros del navegador
+                query_transferencia = st.query_params.get("transferencia", "")
+                if not query_transferencia:
+                    query_transferencia = st.query_params.get("url", "")
                 
-            url_transferencia_input = st.text_input("URL de transferencia", value=query_transferencia, placeholder="https://...")
-            url_transferencia = extraer_url_transferencia(url_transferencia_input)
+                url_transferencia_input = st.text_input("URL de transferencia", value=query_transferencia, placeholder="https://...")
+                url_transferencia = extraer_url_transferencia(url_transferencia_input)
             
-            if url_transferencia != url_transferencia_input:
-                st.info(f"🔗 URL de transferencia extraída: {url_transferencia}")
+                if url_transferencia != url_transferencia_input:
+                    st.info(f"🔗 URL de transferencia extraída: {url_transferencia}")
                 
-            numero_transferencia = ""
-            total_prendas = 0
-            items_extraidos = []
-            if url_transferencia:
-                if not url_transferencia.startswith(("http://", "https://")):
-                    url_transferencia = "https://" + url_transferencia
-                with st.spinner("Extrayendo datos..."):
-                    datos = extraer_datos_transferencia(url_transferencia)
-                numero_transferencia = datos.get("numero_transferencia", "")
-                total_prendas = datos.get("total_prendas", 0)
-                items_extraidos = datos.get("items", [])
-                if not items_extraidos:
-                    st.warning("⚠️ No se pudo extraer el detalle de productos. Puedes continuar manual.")
-                if numero_transferencia:
-                    st.success(f"Transferencia: **{numero_transferencia}**")
-                else:
-                    st.warning("No se pudo extraer el número de transferencia. Puedes ingresarlo manualmente.")
-                if total_prendas:
-                    st.info(f"Total prendas extraídas: **{total_prendas:,}**")
-                else:
-                    total_prendas = 0
-            else:
+                numero_transferencia = ""
                 total_prendas = 0
                 items_extraidos = []
-            
-            c5, c6 = st.columns(2)
-            with c5:
-                total_prendas_manual = st.number_input("Total prendas (manual)", min_value=0, step=1, value=total_prendas)
-                if total_prendas_manual:
-                    total_prendas = total_prendas_manual
-            with c6:
-                if not numero_transferencia:
-                    numero_transferencia = st.text_input("N° de transferencia (manual)", value=numero_transferencia)
-            
-            observaciones = st.text_area("Observaciones")
-            st.info("El número secuencial de guía se asignará automáticamente al presionar Guardar.")
-
-        if st.button("💾 Guardar y Generar PDF", type="primary", use_container_width=True):
-            if not destinatario or not direccion:
-                st.error("Completa destinatario y dirección.")
-            else:
-                nuevo_numero = obtener_proximo_numero_guia()
-                base_url = st.secrets.get("app", {}).get("url", "https://tu-app.streamlit.app")
-                qr_url = f"{base_url}?modulo=recepcion&transferencia={numero_transferencia}&guia={nuevo_numero}"
-                qr = qrcode.QRCode(box_size=5, border=2)
-                qr.add_data(qr_url)
-                qr.make(fit=True)
-                qr_img = qr.make_image(fill_color="#0033A0", back_color="white")
-                qr_buf = io.BytesIO()
-                qr_img.save(qr_buf, format="PNG")
-                qr_bytes = qr_buf.getvalue()
-                doc_guia = construir_documento_guia(nuevo_numero, marca_sel, tienda_info, tienda_sel,
-                                                    destinatario, direccion, telefono, ciudad, float(peso_kg),
-                                                    int(bultos), observaciones, str(numero_transferencia),
-                                                    int(total_prendas), url_transferencia, usuario_activo,
-                                                    qr_url, items_extraidos)
-                doc_guia["logo_bytes"] = logo_bytes
-                doc_guia["qr_bytes"] = qr_bytes
-                try:
-                    # Inserción atómica de la guía y actualización del manifiesto
-                    local_db.insert("guias", doc_guia)
-                    local_db.update("manifiesto", {"_id": st.session_state.manifiesto_obj["_id"]},
-                                    {"$push": {"guias": str(nuevo_numero)},
-                                     "$inc": {"metricas.total_prendas": int(total_prendas),
-                                              "metricas.total_bultos": int(bultos)}})
-                    st.success(f"✅ Guía #{nuevo_numero} guardada.")
-                except Exception as exc:
-                    st.error(f"Error al guardar: {exc}")
-                    return
-                from core.event_bus import emitir
-                emitir("GUIA_CREADA", {"guia": str(nuevo_numero), "tienda": tienda_sel,
-                                       "transferencia": numero_transferencia, "prendas": total_prendas,
-                                       "peso": peso_kg, "bultos": bultos})
-                try:
-                    import threading
-                    bot = TelegramBot()
-                    msg_text = f"🚚 *NUEVA GUÍA EMITIDA*\n📄 Guía: `{nuevo_numero}`\n🏪 Tienda: {tienda_sel}\n🔄 Transferencia: {numero_transferencia}\n📦 Prendas: {total_prendas:,}\n👤 Usuario: {usuario_activo}"
-                    threading.Thread(target=bot.enviar_mensaje, args=(msg_text,)).start()
-                except Exception:
-                    pass
-
-                pdf_bytes = generar_pdf_profesional(doc_guia)
-                st.session_state.cola_impresion.append(doc_guia)
-                
-                st.image(qr_bytes, width=150, caption="QR de recepción")
-                
-                st.markdown("---")
-                st.subheader(f"🖨️ Etiquetas acumuladas (A4): {len(st.session_state.cola_impresion)}/4")
-                
-                c_btn1, c_btn2, c_btn3 = st.columns(3)
-                
-                pdf_a4 = generar_pdf_a4_agrupado(st.session_state.cola_impresion)
-                with c_btn1:
-                    if len(st.session_state.cola_impresion) >= 4:
-                        st.download_button("🖨️ Imprimir 4 Etiquetas (A4)", pdf_a4, "etiquetas_agrupadas.pdf", "application/pdf", use_container_width=True)
+                if url_transferencia:
+                    if not url_transferencia.startswith(("http://", "https://")):
+                        url_transferencia = "https://" + url_transferencia
+                    with st.spinner("Extrayendo datos..."):
+                        datos = extraer_datos_transferencia(url_transferencia)
+                    numero_transferencia = datos.get("numero_transferencia", "")
+                    total_prendas = datos.get("total_prendas", 0)
+                    items_extraidos = datos.get("items", [])
+                    if not items_extraidos:
+                        st.warning("⚠️ No se pudo extraer el detalle de productos. Puedes continuar manual.")
+                    if numero_transferencia:
+                        st.success(f"Transferencia: **{numero_transferencia}**")
                     else:
-                        st.download_button("🖨️ Imprimir acumuladas (A4)", pdf_a4, "etiquetas_agrupadas.pdf", "application/pdf", use_container_width=True)
+                        st.warning("No se pudo extraer el número de transferencia. Puedes ingresarlo manualmente.")
+                    if total_prendas:
+                        st.info(f"Total prendas extraídas: **{total_prendas:,}**")
+                    else:
+                        total_prendas = 0
+                else:
+                    total_prendas = 0
+                    items_extraidos = []
+            
+                c5, c6 = st.columns(2)
+                with c5:
+                    total_prendas_manual = st.number_input("Total prendas (manual)", min_value=0, step=1, value=total_prendas)
+                    if total_prendas_manual:
+                        total_prendas = total_prendas_manual
+                with c6:
+                    if not numero_transferencia:
+                        numero_transferencia = st.text_input("N° de transferencia (manual)", value=numero_transferencia)
+            
+                observaciones = st.text_area("Observaciones")
+                st.info("El número secuencial de guía se asignará automáticamente al presionar Guardar.")
+
+                if st.button("💾 Guardar y Generar PDF", type="primary", use_container_width=True):
+                    if not destinatario or not direccion:
+                        st.error("Completa destinatario y dirección.")
+                    else:
+                        success, nuevo_numero, pdf_bytes, doc_guia = generar_guia_backend(
+                            tienda_sel, destinatario, direccion, telefono, ciudad, peso_kg, bultos, observaciones,
+                            numero_transferencia, total_prendas, url_transferencia, usuario_activo, items_extraidos,
+                            logo_bytes, marca_sel, tienda_info
+                        )
+                    
+                        if success:
+                            st.success(f"✅ Guía #{nuevo_numero} guardada.")
+                            
+                            if len(st.session_state.cola_impresion) >= 4:
+                                st.session_state.cola_impresion = []
+                                st.info("El contador de impresión ha vuelto a cero (se acumularon más de 4 guías sin imprimir).")
+                                
+                            st.session_state.cola_impresion.append(doc_guia)
+                            st.image(doc_guia["qr_bytes"], width=150, caption="QR de recepción")
+                        
+                            # Store current PDF in session to render the download buttons
+                            st.session_state.last_guia = nuevo_numero
+                            st.session_state.last_pdf = pdf_bytes
+                            st.session_state.last_qr = doc_guia["qr_url"]
+                        else:
+                            st.error(nuevo_numero) # Here nuevo_numero is the error string
+            
+                # Show download buttons if there's a last generated guide
+                if st.session_state.get("last_guia") and st.session_state.get("last_pdf"):
+                    nuevo_numero = st.session_state.last_guia
+                    pdf_bytes = st.session_state.last_pdf
+                    qr_url = st.session_state.last_qr
+                
+                    c_btn1, c_btn2, c_btn3 = st.columns(3)
+                
+                    pdf_a4 = generar_pdf_a4_agrupado(st.session_state.cola_impresion)
+                    with c_btn1:
+                        def limpiar_cola():
+                            st.session_state.cola_impresion = []
+                            
+                        if len(st.session_state.cola_impresion) == 4:
+                            st.download_button("🖨️ Imprimir 4 Etiquetas (A4)", pdf_a4, "etiquetas_agrupadas.pdf", "application/pdf", use_container_width=True, on_click=limpiar_cola)
+                        else:
+                            st.download_button("🖨️ Imprimir acumuladas (A4)", pdf_a4, "etiquetas_agrupadas.pdf", "application/pdf", use_container_width=True, on_click=limpiar_cola)
                 
                 with c_btn2:
                     st.download_button("📄 Descargar solo esta (Térmica)", pdf_bytes, f"guia_{nuevo_numero}.pdf", "application/pdf", use_container_width=True)
                 
-                with c_btn3:
-                    import urllib.parse
-                    mensaje_wa = (
-                        f"🚚 *NUEVA GUÍA EMITIDA*\\n"
-                        f"📄 Guía: {nuevo_numero}\\n"
-                        f"🔄 Transferencia: {numero_transferencia}\\n"
-                        f"📦 Prendas: {total_prendas:,}\\n\\n"
-                        f"🔗 *Enlace de Recepción (Escanear QR):*\\n{qr_url}"
-                    )
-                    url_wa = f"https://wa.me/?text={urllib.parse.quote(mensaje_wa)}"
-                    st.markdown(f'<a href="{url_wa}" target="_blank" style="display:inline-block; width:100%; text-align:center; background-color:#25D366; color:white; padding:8px 0; border-radius:4px; text-decoration:none; font-weight:bold;">📲 Enviar por WhatsApp</a>', unsafe_allow_html=True)
+                    with c_btn3:
+                        import urllib.parse
+                        import re
+                        mensaje_wa = (
+                            f"🚚 *NUEVA GUÍA EMITIDA*\\n"
+                            f"📄 Guía: {nuevo_numero}\\n"
+                            f"🔄 Transferencia: {numero_transferencia}\\n"
+                            f"📦 Prendas: {total_prendas:,}\\n\\n"
+                            f"🔗 *Enlace de Recepción (Escanear QR):*\\n{qr_url}"
+                        )
+                        
+                        tel_wa = ""
+                        if telefono and telefono != "ND":
+                            tel_limpio = re.sub(r'\D', '', telefono)
+                            if tel_limpio.startswith('0'):
+                                tel_wa = "593" + tel_limpio[1:]
+                            else:
+                                tel_wa = tel_limpio
+                                
+                        url_wa = f"https://wa.me/{tel_wa}?text={urllib.parse.quote(mensaje_wa)}"
+                        st.markdown(f'<a href="{url_wa}" target="_blank" style="display:inline-block; width:100%; text-align:center; background-color:#25D366; color:white; padding:8px 0; border-radius:4px; text-decoration:none; font-weight:bold;">📲 Enviar por WhatsApp</a>', unsafe_allow_html=True)
 
                 # Notificación interna a la tienda destino
                 tienda_usuario = local_db.find_one("users", {"assigned_store": tienda_sel, "role": "Tienda"})
