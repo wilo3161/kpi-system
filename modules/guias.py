@@ -725,22 +725,62 @@ def _show_generar_guias_impl():
         
         with sub_tab_batch:
             st.markdown("### 🚀 Generación Masiva de Guías")
+            
+            # --- INTEGRACIÓN DEL BOT AUTOMÁTICO ---
+            with st.expander("🤖 Asistente de Automatización (JirehWEB)", expanded=True):
+                st.info("Utiliza el bot para conectarse automáticamente a JirehWEB, extraer las transferencias pendientes de MATRIZ y generar las guías en lote sin copiar y pegar.")
+                
+                c1, c2 = st.columns([1, 2])
+                with c1:
+                    modo_bot = st.radio("Modo de ejecución:", ["Visual (Headful)", "Silencioso (Headless)"])
+                with c2:
+                    st.write("")
+                    st.write("")
+                    if st.button("🤖 Extraer y Generar Automáticamente", type="primary", use_container_width=True):
+                        import subprocess
+                        import sys
+                        from pathlib import Path
+                        
+                        script_path = Path("automation/orchestrator.py")
+                        if script_path.exists():
+                            st.info("Iniciando el bot... Por favor no cierres esta ventana.")
+                            cmd = [sys.executable, str(script_path)]
+                            if modo_bot == "Visual (Headful)":
+                                cmd.append("--headful")
+                                
+                            with st.spinner("🤖 El bot está trabajando. Esto puede tomar un momento..."):
+                                try:
+                                    # Corremos el orquestador
+                                    result = subprocess.run(cmd, capture_output=True, text=True)
+                                    st.text_area("Log del Bot", result.stdout, height=300)
+                                    if result.returncode == 0:
+                                        st.success("✅ Proceso automatizado finalizado correctamente.")
+                                    else:
+                                        st.error(f"⚠️ El bot terminó con errores (Código {result.returncode})")
+                                        st.text_area("Errores", result.stderr, height=150)
+                                except Exception as e:
+                                    st.error(f"Error al lanzar el bot: {e}")
+                        else:
+                            st.error("No se encontró el script de automatización.")
+
+            st.divider()
+            
+            st.markdown("#### Ingreso Manual (Alternativo)")
             st.info("""
-            **💡 Instrucciones para usar la Generación Masiva:**
+            **💡 Instrucciones para el modo manual:**
             1. **Prepara tus datos:** Necesitas dos datos clave por cada guía: el nombre exacto de la **Tienda Destino** y la **URL Transferencia**.
             2. **Usa la plantilla:** Puedes descargar el archivo de ejemplo abajo, llenarlo en Excel, y luego **copiar y pegar** las filas directamente en la tabla de esta pantalla.
-            3. **Genera:** Una vez que la tabla tenga tus datos, haz clic en **'Generar Guías en Lote'** y el sistema procesará todas a la vez, entregándote un archivo ZIP con todos los PDFs listos para imprimir.
+            3. **Genera:** Una vez que la tabla tenga tus datos, haz clic en **'Generar Guías en Lote'**.
             """)
             
             buf_template = io.BytesIO()
             with pd.ExcelWriter(buf_template, engine="openpyxl") as w:
                 pd.DataFrame({"Tienda Destino": ["Mall del Rio", "Scala Shopping"], "URL Transferencia": ["https://...", "https://..."]}).to_excel(w, index=False, sheet_name="Plantilla")
             st.download_button(
-                "📥 Descargar Plantilla Excel de Ejemplo", 
+                "📥 Descargar Plantilla Excel", 
                 buf_template.getvalue(), 
                 "Plantilla_Guias_Batch.xlsx", 
-                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                help="Descarga este archivo como guía para saber cómo ingresar los datos"
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
             
             if "batch_df" not in st.session_state:
