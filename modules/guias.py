@@ -628,7 +628,12 @@ def generar_guia_backend(tienda_sel, destinatario, direccion, telefono, ciudad, 
     
     nuevo_numero = obtener_proximo_numero_guia()
     base_url = st.secrets.get("app", {}).get("url", "https://tu-app.streamlit.app")
-    qr_url = f"{base_url}?modulo=recepcion&transferencia={numero_transferencia}&guia={nuevo_numero}"
+    
+    if url_transferencia:
+        qr_url = url_transferencia
+    else:
+        qr_url = f"{base_url}?modulo=recepcion&transferencia={numero_transferencia}&guia={nuevo_numero}"
+        
     qr = qrcode.QRCode(box_size=5, border=2)
     qr.add_data(qr_url)
     qr.make(fit=True)
@@ -921,17 +926,16 @@ def _show_generar_guias_impl():
                         if success:
                             st.success(f"✅ Guía #{nuevo_numero} guardada.")
                             
-                            if len(st.session_state.cola_impresion) >= 4:
-                                st.session_state.cola_impresion = []
-                                st.info("El contador de impresión ha vuelto a cero (se acumularon más de 4 guías sin imprimir).")
-                                
                             st.session_state.cola_impresion.append(doc_guia)
                             st.image(doc_guia["qr_bytes"], width=150, caption="QR de recepción")
                         
                             # Store current PDF in session to render the download buttons
                             st.session_state.last_guia = nuevo_numero
                             st.session_state.last_pdf = pdf_bytes
-                            st.session_state.last_qr = doc_guia["qr_url"]
+                            st.session_state.last_qr = doc_guia.get("qr_payload", doc_guia.get("url_transferencia", ""))
+                            st.session_state.last_transferencia = numero_transferencia
+                            st.session_state.last_prendas = total_prendas
+                            st.session_state.last_telefono = telefono
                             
                             # Notificación interna a la tienda destino
                             tienda_usuario = local_db.find_one("users", {"assigned_store": tienda_sel, "role": "Tienda"})
@@ -956,39 +960,74 @@ def _show_generar_guias_impl():
             
                 # Show download buttons if there's a last generated guide
                 if st.session_state.get("last_guia") and st.session_state.get("last_pdf"):
-                    nuevo_numero = st.session_state.last_guia
-                    pdf_bytes = st.session_state.last_pdf
-                    qr_url = st.session_state.last_qr
-                
+                    _guia_num = st.session_state.last_guia
+                    _pdf_bytes = st.session_state.last_pdf
+                    _qr_url = st.session_state.get("last_qr", "")
+                    _num_trans = st.session_state.get("last_transferencia", "")
+                    _tot_prendas = st.session_state.get("last_prendas", 0)
+                    _telefono = st.session_state.get("last_telefono", "")
+
+                    cola = st.session_state.cola_impresion
+                    n_cola = len(cola)
+
+                    # Indicador de progreso de la cola
+                    st.info(f"🖨️ Cola de impresión: **{n_cola}/4** guías acumuladas. {'¡Lista para imprimir!' if n_cola >= 4 else f'Faltan {4 - n_cola} guía(s) para imprimir automáticamente.'}")
+
                     c_btn1, c_btn2, c_btn3 = st.columns(3)
-                
-                    pdf_a4 = generar_pdf_a4_agrupado(st.session_state.cola_impresion)
+
                     with c_btn1:
-                        def limpiar_cola():
-                            st.session_state.cola_impresion = []
-                            
-                        if len(st.session_state.cola_impresion) == 4:
-                            st.download_button("🖨️ Imprimir 4 Etiquetas (A4)", pdf_a4, "etiquetas_agrupadas.pdf", "application/pdf", use_container_width=True, on_click=limpiar_cola)
+                        if n_cola >= 4:
+                            # Auto-imprimir las 4 guías
+                            pdf_a4 = generar_pdf_a4_agrupado(cola[:4])
+                            st.download_button(
+                                "🖨️ IMPRIMIR 4 ETIQUETAS (A4)",
+                                pdf_a4,
+                                "etiquetas_agrupadas.pdf",
+                                "application/pdf",
+                                use_container_width=True,
+                                type="primary",
+                                key="btn_imprimir_4",
+                                on_click=lambda: st.session_state.update({"cola_impresion": st.session_state.cola_impresion[4:]})
+                            )
+                            st.caption("✅ Al descargar, el contador se resetea a 0.")
                         else:
-                            st.download_button("🖨️ Imprimir acumuladas (A4)", pdf_a4, "etiquetas_agrupadas.pdf", "application/pdf", use_container_width=True, on_click=limpiar_cola)
-                
+                            if cola:
+                                pdf_a4 = generar_pdf_a4_agrupado(cola)
+                                def _limpiar_cola():
+                                    st.session_state.cola_impresion = []
+                                st.download_button(
+                                    f"🖨️ Imprimir acumuladas ({n_cola}) (A4)",
+                                    pdf_a4,
+                                    "etiquetas_agrupadas.pdf",
+                                    "application/pdf",
+                                    use_container_width=True,
+                                    on_click=_limpiar_cola
+                                )
+                            else:
+                                st.button("🖨️ Sin guías acumuladas", disabled=True, use_container_width=True)
+
                     with c_btn2:
-                        st.download_button("📄 Descargar solo esta (Térmica)", pdf_bytes, f"guia_{nuevo_numero}.pdf", "application/pdf", use_container_width=True)
-                    
+                        st.download_button(
+                            "📄 Descargar solo esta (Térmica)",
+                            _pdf_bytes,
+                            f"guia_{_guia_num}.pdf",
+                            "application/pdf",
+                            use_container_width=True
+                        )
+
                     with c_btn3:
                         import urllib.parse
-                        import re
+                        import re as _re
                         mensaje_wa = (
-                            f"🚚 *NUEVA GUÍA EMITIDA*\\n"
-                            f"📄 Guía: {nuevo_numero}\\n"
-                            f"🔄 Transferencia: {numero_transferencia}\\n"
-                            f"📦 Prendas: {total_prendas:,}\\n\\n"
-                            f"🔗 *Enlace de Recepción (Escanear QR):*\\n{qr_url}"
+                            f"🚚 *NUEVA GUÍA EMITIDA*\n"
+                            f"📄 Guía: {_guia_num}\n"
+                            f"🔄 Transferencia: {_num_trans}\n"
+                            f"📦 Prendas: {_tot_prendas:,}\n\n"
+                            f"🔗 *URL Transferencia:*\n{_qr_url}"
                         )
-                        
                         tel_wa = ""
-                        if telefono and telefono != "ND":
-                            tel_limpio = re.sub(r'\D', '', telefono)
+                        if _telefono and _telefono != "ND":
+                            tel_limpio = _re.sub(r'\D', '', _telefono)
                             if tel_limpio.startswith('0'):
                                 tel_wa = "593" + tel_limpio[1:]
                             else:
