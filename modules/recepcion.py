@@ -14,6 +14,7 @@ from zoneinfo import ZoneInfo
 
 import pandas as pd
 import streamlit as st
+from tenacity import retry, stop_after_attempt, wait_exponential
 from reportlab.lib.pagesizes import A4
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -77,19 +78,27 @@ def _build_evento(evento: str, descripcion: str, usuario: str,
                   modulo: str = "recepcion",
                   metadata: Optional[dict] = None,
                   cambios: Optional[dict] = None) -> dict:
-    return {
+    import hashlib
+    import json
+    ts = _ahora()
+    ev_dict = {
         "evento": evento,
         "descripcion": descripcion,
         "usuario": usuario,
-        "timestamp": _ahora(),
+        "timestamp": ts,
         "modulo": modulo,
         "metadata": metadata or {},
         "cambios_realizados": cambios or {},
     }
+    # Firmar el evento para inmutabilidad
+    data_str = json.dumps(ev_dict, sort_keys=True)
+    ev_dict["firma_sha256"] = hashlib.sha256(data_str.encode('utf-8')).hexdigest()
+    return ev_dict
 
 # ============================================================================
 # NOTIFICACIONES INTERNAS
 # ============================================================================
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10), reraise=True)
 def _enviar_mensaje_interno(destinatario_username: str, asunto: str, contenido: str, remitente: str = "Sistema"):
     """Guarda un mensaje interno en la BD y muestra un toast."""
     doc = {
@@ -147,30 +156,38 @@ def _actualizar_guia_recepcion(
         
         # Verificar que no esté ya recepcionada como conforme o cerrada
         estado_actual = guia_existente.get("estado")
-        if estado_actual in (EstadoGuia.RECIBIDA_CONFORME, EstadoGuia.CERRADA, EstadoGuia.CONCILIADA):
+        if estado_actual in (EstadoGuia.RECIBIDA_CONFORME, EstadoGuia.CERRADA, EstadoGuia.CONCILIADA, EstadoGuia.RECIBIDA_NOVEDAD):
             logger.warning(f"Guía {numero_guia} ya está recepcionada (estado {estado_actual})")
             st.warning("Esta guía ya fue recepcionada anteriormente.")
             return False
         
-        # 2. Actualizar guía principal
+        # 2. Actualizar guía principal de forma atómica con lock optimista
         ahora_str = _ahora()
-        update_doc = {
-            "estado": estado_nuevo,
-            "recepcion": recepcion_data,
-            "audit.updated_at": ahora_str,
-            "audit.updated_by": usuario,
-        }
-        
-        # IMPORTANTE: Usamos el valor original y tipo de numero_guia de la BD para evitar problemas 
-        # de ObjectId stringificado o int vs str.
         query_val = guia_existente.get("numero_guia")
         
-        local_db.update("guias", {"numero_guia": query_val}, update_doc)
-        local_db.update(
+        update_op = {
+            "$set": {
+                "estado": estado_nuevo,
+                "recepcion": recepcion_data,
+                "audit.updated_at": ahora_str,
+                "audit.updated_by": usuario,
+            },
+            "$push": {
+                "timeline": evento,
+                "incidencias": {"$each": incidencias}
+            }
+        }
+        
+        doc_updated = local_db.find_one_and_update(
             "guias",
-            {"numero_guia": query_val},
-            {"$push": {"timeline": evento, "incidencias": {"$each": incidencias}}}
+            {"numero_guia": query_val, "estado": estado_actual},
+            update_op
         )
+        
+        if not doc_updated:
+            logger.warning(f"Conflicto de concurrencia: Guía {numero_guia} fue modificada por otro proceso.")
+            st.warning("La guía acaba de ser modificada o recepcionada por otro usuario.")
+            return False
         
         # 3. Registrar faltantes / sobrantes / stock bloqueado (con insert_many para mejor rendimiento)
         docs_faltantes = []
@@ -553,6 +570,7 @@ def obtener_o_crear_carpeta_drive(nombre_carpeta: str, service) -> str:
         folder = service.files().create(body=file_metadata, fields='id').execute()
         return folder.get('id')
 
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10), reraise=True)
 def subir_a_google_drive(archivo_bytes: bytes, nombre_archivo: str, mime_type: str, carpeta_id: str = None) -> str:
     try:
         service = _obtener_servicio_drive()
@@ -569,19 +587,35 @@ def subir_a_google_drive(archivo_bytes: bytes, nombre_archivo: str, mime_type: s
 # ============================================================================
 # NOTIFICACIONES TELEGRAM
 # ============================================================================
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10), reraise=True)
+def _do_notificar(guia_doc: dict, estado_recepcion: str, incidencias: list, receptor: str, diferencias: dict):
+    from modules.telegram_bot import TelegramBot
+    bot = TelegramBot()
+    numero_guia = guia_doc.get('numero_guia')
+    tienda = guia_doc.get('tienda_destino')
+    if estado_recepcion == "CONFORME":
+        msg = f"✅ RECEPCIÓN CONFORME\nGuía: {numero_guia}\nTienda: {tienda}\nReceptor: {receptor}"
+        bot.enviar_mensaje(msg)
+    else:
+        msg = f"⚠️ RECEPCIÓN CON NOVEDADES\nGuía: {numero_guia}\nTienda: {tienda}\nReceptor: {receptor}\nIncidencias: {len(incidencias)}"
+        bot.enviar_mensaje(msg)
+
 def _notificar_segun_incidencia(guia_doc: dict, estado_recepcion: str, incidencias: list, receptor: str, diferencias: dict):
     try:
-        bot = TelegramBot()
-        numero_guia = guia_doc.get('numero_guia')
-        tienda = guia_doc.get('tienda_destino')
-        if estado_recepcion == "CONFORME":
-            msg = f"✅ RECEPCIÓN CONFORME\nGuía: {numero_guia}\nTienda: {tienda}\nReceptor: {receptor}"
-            bot.enviar_mensaje(msg)
-        else:
-            msg = f"⚠️ RECEPCIÓN CON NOVEDADES\nGuía: {numero_guia}\nTienda: {tienda}\nReceptor: {receptor}\nIncidencias: {len(incidencias)}"
-            bot.enviar_mensaje(msg)
+        _do_notificar(guia_doc, estado_recepcion, incidencias, receptor, diferencias)
     except Exception as e:
-        logger.warning(f"Error en notificación: {e}")
+        logger.warning(f"Error definitivo en notificación (tras reintentos): {e}")
+        try:
+            local_db.insert("pendientes_notificacion", {
+                "numero_guia": guia_doc.get("numero_guia"),
+                "estado_recepcion": estado_recepcion,
+                "receptor": receptor,
+                "fecha": _ahora(),
+                "estado": "PENDIENTE"
+            })
+            logger.critical(f"ALERTA: Notificación para {guia_doc.get('numero_guia')} encolada por fallo.")
+        except Exception as q_ex:
+            logger.critical(f"ALERTA CRÍTICA: No se pudo encolar notificación para {guia_doc.get('numero_guia')}: {q_ex}")
 
 # ============================================================================
 # PROCESO PRINCIPAL DE RECEPCIÓN (con todas las validaciones)
@@ -616,6 +650,11 @@ def _proceso_recepcion_completo(guia_doc: dict) -> None:
         st.warning(f"Estado {estado_actual} no permite recepción.")
         return
     
+    # Mostrar enlace de transferencia si existe
+    url_transf = guia_doc.get("url_transferencia", "")
+    if url_transf:
+        st.info(f"🔗 **Documento de transferencia:** [Abrir en sistema de origen]({url_transf})")
+    
     # Cargar items esperados
     items_expected = guia_doc.get("items_expected", [])
     items_expected = [it for it in items_expected if str(it.get("codigo", "")).strip()]
@@ -623,7 +662,13 @@ def _proceso_recepcion_completo(guia_doc: dict) -> None:
     
     st.subheader("📦 Mercadería Esperada")
     if items_expected:
-        df_esp = pd.DataFrame(items_expected)[["codigo", "estilo", "descripcion", "cantidad_esperada"]]
+        # Asegurar que todas las claves existan para evitar errores de Pandas
+        for it in items_expected:
+            if "talla" not in it: it["talla"] = ""
+            if "color" not in it: it["color"] = ""
+        df_esp = pd.DataFrame(items_expected)[["codigo", "estilo", "descripcion", "talla", "color", "cantidad_esperada"]]
+        # Renombrar columnas para mejor UI
+        df_esp.columns = ["SKU / Código", "Estilo", "Descripción", "Talla", "Color", "Cant. Esperada"]
         st.dataframe(df_esp, use_container_width=True)
     else:
         st.info(f"Total declarado: {total_esperado} prendas. Sin detalle por ítem.")
@@ -829,21 +874,44 @@ def _proceso_recepcion_completo(guia_doc: dict) -> None:
             if pdf_bytes:
                 st.download_button("📥 Descargar Acta (PDF)", pdf_bytes, f"acta_recepcion_{numero_guia}.pdf", "application/pdf")
         
-        # Subida automática a Google Drive del Acta PDF (sin checkbox)
-        if GOOGLE_DRIVE_AVAILABLE and pdf_bytes:
+        # Subida automática a Google Drive del Acta PDF y Excel (sin checkbox)
+        if GOOGLE_DRIVE_AVAILABLE and (pdf_bytes or excel_bytes):
             try:
                 # 1. Obtener servicio
                 service = _obtener_servicio_drive()
                 # 2. Obtener o crear carpeta de la tienda
                 nombre_tienda = guia_doc.get("tienda_destino", "Tienda_Desconocida")
                 carpeta_id = obtener_o_crear_carpeta_drive(nombre_tienda, service)
-                # 3. Subir archivo
-                nombre_archivo = f"acta_recepcion_{numero_guia}.pdf"
-                link = subir_a_google_drive(pdf_bytes, nombre_archivo, "application/pdf", carpeta_id)
-                st.success(f"✅ Acta digital respaldada en Google Drive: [{nombre_tienda}/{nombre_archivo}]({link})")
+                # 3. Subir archivos
+                enlaces_subidos = []
+                if pdf_bytes:
+                    nombre_pdf = f"acta_recepcion_{numero_guia}.pdf"
+                    link_pdf = subir_a_google_drive(pdf_bytes, nombre_pdf, "application/pdf", carpeta_id)
+                    enlaces_subidos.append(f"[{nombre_pdf}]({link_pdf})")
+                if excel_bytes:
+                    nombre_excel = f"acta_recepcion_{numero_guia}.xlsx"
+                    link_excel = subir_a_google_drive(excel_bytes, nombre_excel, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", carpeta_id)
+                    enlaces_subidos.append(f"[{nombre_excel}]({link_excel})")
+                
+                enlaces_str = " y ".join(enlaces_subidos)
+                st.success(f"✅ Documentos digitales respaldados en Google Drive ({nombre_tienda}): {enlaces_str}")
             except Exception as e:
-                logger.error(f"Error al subir a Drive de forma automatizada: {e}")
-                st.error("⚠️ No se pudo respaldar el acta en Google Drive.")
+                logger.error(f"Error definitivo al subir a Drive de forma automatizada (tras reintentos): {e}")
+                # Encolar para reintento
+                try:
+                    import base64
+                    local_db.insert("pendientes_drive", {
+                        "numero_guia": numero_guia,
+                        "tienda_destino": nombre_tienda,
+                        "fecha": _ahora(),
+                        "estado": "PENDIENTE",
+                        "pdf_b64": base64.b64encode(pdf_bytes).decode('utf-8') if pdf_bytes else None,
+                        "excel_b64": base64.b64encode(excel_bytes).decode('utf-8') if excel_bytes else None
+                    })
+                    st.warning("⚠️ Falló la conexión con Drive. El acta se guardó en la cola local para reintento automático.")
+                    logger.critical(f"ALERTA: Documento {numero_guia} encolado en pendientes_drive por fallo de Google Drive.")
+                except Exception as q_ex:
+                    logger.critical(f"ALERTA CRÍTICA: No se pudo encolar documento {numero_guia}: {q_ex}")
         
         _notificar_segun_incidencia(guia_doc, estado_recepcion, incidencias, usuario, diferencias)
         
@@ -987,6 +1055,38 @@ def show_recepcion_tienda():
         guia = local_db.find_one("guias", {"numero_guia": str(guia_qr)})
         if guia:
             _proceso_recepcion_completo(guia)
+            return
+        else:
+            st.warning("⚠️ No se pudo cargar la guía desde la base de datos (posible fallo de conexión o guía inexistente).")
+            st.info("Modo de Recepción Provisional activado.")
+            with st.form("form_recepcion_provisional"):
+                st.write(f"**Guía (escaneada):** {guia_qr}")
+                bultos = st.number_input("Número de Bultos recibidos", min_value=1, step=1)
+                total_prendas = st.number_input("Total de Prendas (conteo físico rápido)", min_value=1, step=1)
+                observaciones = st.text_area("Observaciones / Novedades")
+                if st.form_submit_button("Guardar Recepción Provisional", type="primary"):
+                    import json
+                    import os
+                    data_file = "data/recepciones_provisionales.json"
+                    os.makedirs("data", exist_ok=True)
+                    docs = []
+                    if os.path.exists(data_file):
+                        try:
+                            with open(data_file, "r", encoding="utf-8") as f:
+                                docs = json.load(f)
+                        except:
+                            pass
+                    docs.append({
+                        "numero_guia": guia_qr,
+                        "bultos": bultos,
+                        "total_prendas": total_prendas,
+                        "observaciones": observaciones,
+                        "fecha": _ahora(),
+                        "usuario": usuario_actual
+                    })
+                    with open(data_file, "w", encoding="utf-8") as f:
+                        json.dump(docs, f)
+                    st.success("✅ Recepción provisional guardada localmente. Se sincronizará cuando haya conexión.")
             return
             
     tab1, tab2, tab3 = st.tabs(["📋 Guías Pendientes", "🔍 Buscar", "📜 Historial"])

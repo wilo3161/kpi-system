@@ -205,10 +205,23 @@ def extraer_items_desde_html(html_text: str) -> tuple[list[dict], int]:
         if not _es_producto_valido(codigo, descripcion):
             continue
         total += cantidad
+        # Extraer talla y color de otras celdas si existen, o inferirlas de la descripción
+        talla = celdas[6].get_text(strip=True) if len(celdas) > 6 else ""
+        color = celdas[7].get_text(strip=True) if len(celdas) > 7 else ""
+        
+        # Si están vacías, intentar extraer de la descripción (ej: "CAMISETA ROJO S")
+        if not talla and not color:
+            partes = descripcion.split()
+            if len(partes) >= 2:
+                talla = partes[-1]
+                color = partes[-2]
+                
         items.append({
             "codigo": codigo,
             "estilo": estilo,
             "descripcion": descripcion,
+            "talla": talla,
+            "color": color,
             "cantidad_esperada": cantidad,
         })
     return items, total
@@ -259,11 +272,17 @@ def extraer_datos_transferencia(url: str) -> dict:
 # ============================================================================
 def _build_evento(evento: str, descripcion: str, usuario: str, modulo: str = "guias",
                   metadata: Optional[dict] = None, cambios: Optional[dict] = None) -> dict:
-    return {
+    import hashlib
+    import json
+    ts = datetime.now(TZ_QUITO).isoformat()
+    ev_dict = {
         "evento": evento, "descripcion": descripcion, "usuario": usuario,
-        "timestamp": datetime.now(TZ_QUITO).isoformat(), "modulo": modulo,
+        "timestamp": ts, "modulo": modulo,
         "metadata": metadata or {}, "cambios_realizados": cambios or {},
     }
+    data_str = json.dumps(ev_dict, sort_keys=True)
+    ev_dict["firma_sha256"] = hashlib.sha256(data_str.encode('utf-8')).hexdigest()
+    return ev_dict
 
 def construir_documento_guia(
     numero_guia: int,
@@ -745,15 +764,10 @@ def _show_generar_guias_impl():
                 st.error("Completa destinatario y dirección.")
             else:
                 nuevo_numero = obtener_proximo_numero_guia()
-                if url_transferencia:
-                    qr_url = url_transferencia
-                else:
-                    base_url = st.secrets.get("app", {}).get("url", "https://tu-app.streamlit.app")
-                    qr_url = f"{base_url}?modulo=recepcion&transferencia={numero_transferencia}&guia={nuevo_numero}"
+                base_url = st.secrets.get("app", {}).get("url", "https://tu-app.streamlit.app")
+                qr_url = f"{base_url}?modulo=recepcion&transferencia={numero_transferencia}&guia={nuevo_numero}"
                 qr = qrcode.QRCode(box_size=5, border=2)
-                # Utilizar la URL de transferencia para el código QR si está disponible, de lo contrario usar qr_url
-                url_para_qr = url_transferencia if url_transferencia else qr_url
-                qr.add_data(url_para_qr)
+                qr.add_data(qr_url)
                 qr.make(fit=True)
                 qr_img = qr.make_image(fill_color="#0033A0", back_color="white")
                 qr_buf = io.BytesIO()
