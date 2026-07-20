@@ -721,7 +721,80 @@ def _show_generar_guias_impl():
     # TAB 1 — NUEVA GUÍA
     # =========================================================================
     with tab_nueva:
-        sub_tab_ind, sub_tab_batch = st.tabs(["📄 Individual", "🚀 Masiva (Batch)"])
+        sub_tab_ind, sub_tab_batch, sub_tab_laar = st.tabs(["📄 Individual", "🚀 Masiva (Batch)", "📦 Generar Excel Laar"])
+        
+        with sub_tab_laar:
+            st.markdown("### 📦 Generador de Plantilla Excel Laar Courier")
+            st.info("Este asistente se conecta a JirehWEB para extraer transferencias pendientes y estructurar el Excel de carga masiva de Laar Courier sin duplicados.")
+            
+            # Form configuration fields
+            laar_col1, laar_col2 = st.columns(2)
+            with laar_col1:
+                fecha_ini_laar = st.date_input("Fecha Inicio Consulta:", datetime.now(TZ_QUITO), key="laar_fecha_ini")
+                piezas_laar = st.number_input("Número de piezas por guía:", min_value=1, value=1, step=1, key="laar_piezas")
+                contenido_laar = st.selectbox("Contenido de la guía:", ["MERCADERIA", "PUBLICIDAD", "MUEBLES", "MUESTRAS"], index=0, key="laar_contenido")
+            with laar_col2:
+                fecha_fin_laar = st.date_input("Fecha Fin Consulta:", datetime.now(TZ_QUITO), key="laar_fecha_fin")
+                peso_laar = st.number_input("Peso por guía (kg):", min_value=0.1, value=1.0, step=0.1, key="laar_peso")
+                tamanio_laar = st.selectbox("Tamaño del paquete:", ["MEDIANO", "PEQUEÑO", "GRANDE"], index=0, key="laar_tamanio")
+                
+            modo_bot_laar = st.radio("Modo de ejecución (Navegador):", ["Silencioso (Headless)", "Visual (Headful)"], key="laar_modo_bot")
+            
+            if st.button("🚀 Extraer y Descargar Excel Laar", type="primary", use_container_width=True):
+                import subprocess
+                import sys
+                from pathlib import Path
+                
+                laar_script = Path("automation/guias_laar.py")
+                if laar_script.exists():
+                    st.info("Iniciando la extracción desde JirehWEB... Por favor espera.")
+                    
+                    cmd_laar = [
+                        sys.executable, str(laar_script),
+                        "--fecha-inicio", fecha_ini_laar.strftime("%Y-%m-%d"),
+                        "--fecha-fin", fecha_fin_laar.strftime("%Y-%m-%d"),
+                        "--piezas", str(int(piezas_laar)),
+                        "--peso", f"{peso_laar:.1f}",
+                        "--contenido", contenido_laar,
+                        "--tamanio", tamanio_laar
+                    ]
+                    if modo_bot_laar == "Visual (Headful)":
+                        cmd_laar.append("--headful")
+                        
+                    with st.spinner("🤖 El asistente está extrayendo y procesando transferencias..."):
+                        try:
+                            res_laar = subprocess.run(cmd_laar, capture_output=True, text=True, encoding="utf-8")
+                            if res_laar.stdout:
+                                st.text_area("Bitácora del proceso", res_laar.stdout, height=180)
+                            
+                            excel_path = Path("automation/guiaslaar_generadas.xlsx")
+                            if excel_path.exists():
+                                excel_data = excel_path.read_bytes()
+                                st.success("✅ ¡Plantilla de Laar generada con éxito!")
+                                st.download_button(
+                                    label="📥 Descargar guiaslaar.xlsx",
+                                    data=excel_data,
+                                    file_name=f"guiaslaar_{fecha_ini_laar.strftime('%Y%m%d')}.xlsx",
+                                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                    use_container_width=True
+                                )
+                                # Eliminar archivo local temporal una vez cargado en memoria
+                                try:
+                                    os.remove(excel_path)
+                                except:
+                                    pass
+                            else:
+                                if "ya procesado" in res_laar.stdout or "No se extrajeron" in res_laar.stdout:
+                                    st.warning("⚠️ No se encontraron nuevas transferencias pendientes en ese rango de fechas (o ya fueron procesadas anteriormente).")
+                                else:
+                                    st.error("⚠️ El proceso terminó pero no se generó el archivo Excel.")
+                                    if res_laar.stderr:
+                                        st.text_area("Detalles del Error", res_laar.stderr, height=100)
+                        except Exception as e:
+                            st.error(f"Error al ejecutar el script de Laar: {e}")
+                else:
+                    st.error("No se encontró el script `automation/guias_laar.py`.")
+            st.divider()
         
         with sub_tab_batch:
             st.markdown("### 🚀 Generación Masiva de Guías")
