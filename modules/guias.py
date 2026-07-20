@@ -763,6 +763,9 @@ def _show_generar_guias_impl():
                         
                     with st.spinner("🤖 El asistente está extrayendo y procesando transferencias..."):
                         try:
+                            # Asegurar instalación de binarios de playwright en Streamlit Cloud
+                            subprocess.run([sys.executable, "-m", "playwright", "install", "chromium"], capture_output=True)
+                            
                             res_laar = subprocess.run(cmd_laar, capture_output=True, text=True, encoding="utf-8")
                             if res_laar.stdout:
                                 st.text_area("Bitácora del proceso", res_laar.stdout, height=180)
