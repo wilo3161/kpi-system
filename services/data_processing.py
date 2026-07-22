@@ -39,9 +39,11 @@ def extraer_entero(val):
     if pd.isna(val): return 0
     if isinstance(val, (int, float)): return int(val)
     s = str(val).strip()
-    # Si termina en ,000 o .000 (indicando decimales en formato string), lo removemos
-    s = re.sub(r'[,.]00+$', '', s)
-    # Removemos todo lo que no sea dígito
+    # Si termina en coma o punto seguido exclusivamente de ceros, lo quitamos
+    match = re.search(r'[,.](0+)$', s)
+    if match:
+        s = s[:match.start()]
+    # Removemos todo lo que no sea dígito (ej. separadores de miles)
     s = re.sub(r'\D', '', s)
     return int(s) if s else 0
 
