@@ -149,7 +149,7 @@ def procesar_archivos(df_transferencias, df_detalle):
     # --- Detalle ---
     det_cols = {normalizar_para_mapeo(c): c for c in df_detalle.columns}
     sec_col = next((det_cols[k] for k in det_cols if 'SECUENCIAL' in k), None)
-    cant_col = next((det_cols[k] for k in det_cols if 'CANTIDAD' in k or 'PRENDA' in k), None)
+    cant_col = next((det_cols[k] for k in det_cols if 'CANTIDAD' in k or 'TOTAL PRENDA' in k or 'CANT_' in k), None)
     prod_col = next((det_cols[k] for k in det_cols if 'PRODUCTO' in k), None)
     cat_col = next((det_cols[k] for k in det_cols if 'CATEGORIA' in k), None)
     grupo_col = next((det_cols[k] for k in det_cols if 'GRUPO' in k), None)
@@ -208,7 +208,7 @@ def procesar_archivos(df_transferencias, df_detalle):
     # --- Transferencias ---
     trans_cols = {normalizar_para_mapeo(c): c for c in df_transferencias.columns}
     sec_col_t = next((trans_cols[k] for k in trans_cols if 'SECUENCIAL' in k), None)
-    cant_col_t = next((trans_cols[k] for k in trans_cols if 'CANTIDAD' in k or 'PRENDA' in k), None)
+    cant_col_t = next((trans_cols[k] for k in trans_cols if 'CANTIDAD' in k or 'TOTAL PRENDA' in k), None)
     tienda_col = next((trans_cols[k] for k in trans_cols if 'BODEGA DESTINO' in k or 'SUCURSAL DESTINO' in k), None)
     fecha_col_t = next((trans_cols[k] for k in trans_cols if 'FECHA' in k), None)
 
