@@ -39,13 +39,13 @@ def extraer_entero(val):
     if pd.isna(val): return 0
     if isinstance(val, (int, float)): return int(val)
     s = str(val).strip()
-    # Si termina en coma o punto seguido exclusivamente de ceros, lo quitamos
-    match = re.search(r'[,.](0+)$', s)
-    if match:
-        s = s[:match.start()]
-    # Removemos todo lo que no sea dígito (ej. separadores de miles)
-    s = re.sub(r'\D', '', s)
-    return int(s) if s else 0
+    s = s.replace('.', '')
+    s = s.replace(',', '.')
+    try:
+        return int(float(s))
+    except ValueError:
+        s = re.sub(r'\D', '', s)
+        return int(s) if s else 0
 
 def parse_producto_color_talla(descripcion):
     """Separa una descripción de producto en (producto, color, talla)."""
@@ -143,8 +143,23 @@ def clasificar_categoria(bodega_destino, categoria_detalle, grupo):
     if 'FALLAS' in bodega_norm: return 'Fallas'
     return 'Tiendas'
 
+def _safe_numeric_int(series):
+    return series.apply(extraer_entero)
+
+def extraer_float(val):
+    if pd.isna(val): return 0.0
+    if isinstance(val, (int, float)): return float(val)
+    s = str(val).strip().replace(' ', '')
+    s = s.replace('.', '')
+    s = s.replace(',', '.')
+    try:
+        return float(s)
+    except ValueError:
+        s = re.sub(r'[^\d.]', '', s)
+        return float(s) if s else 0.0
+
 def _safe_numeric_conversion(series):
-    return pd.to_numeric(series, errors='coerce').fillna(0)
+    return series.apply(extraer_float)
 
 @st.cache_data(show_spinner=False)
 def procesar_archivos(df_transferencias, df_detalle):
@@ -166,7 +181,7 @@ def procesar_archivos(df_transferencias, df_detalle):
     df_det = df_detalle.copy()
     df_det['SECUENCIAL'] = df_det[sec_col].apply(_extraer_digitos).astype(str)
     df_det = df_det[df_det['SECUENCIAL'] != '']
-    df_det['CANTIDAD'] = _safe_numeric_conversion(df_det[cant_col])
+    df_det['CANTIDAD'] = _safe_numeric_int(df_det[cant_col])
     df_det['PRODUCTO_ORIGINAL'] = df_det[prod_col].astype(str)
     
     parsed = df_det['PRODUCTO_ORIGINAL'].apply(parse_producto_color_talla)
