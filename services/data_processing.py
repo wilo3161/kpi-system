@@ -161,14 +161,34 @@ def extraer_float(val):
 def _safe_numeric_conversion(series):
     return series.apply(extraer_float)
 
+def _is_true_quantity(df, col_name):
+    try:
+        sample = df[col_name].dropna().head(100)
+        for val in sample:
+            num = extraer_entero(val)
+            if num > 1000000:  # Barcodes/Secuenciales will be millions/billions
+                return False
+        return True
+    except:
+        return False
+
+def _find_true_quantity_col(df, cols_dict):
+    for exact in ['CANTIDAD', 'TOTAL PRENDAS', 'CANT_PRENDA', 'CANTIDAD TOTAL', 'CANTIDAD TRANSFERIDA']:
+        col = cols_dict.get(exact)
+        if col and _is_true_quantity(df, col):
+            return col
+    for k, col in cols_dict.items():
+        if ('CANTIDAD' in k or 'CANT_' in k or 'TOTAL' in k or 'PRENDA' in k) and 'BARRA' not in k and 'CODIGO' not in k and 'PRECIO' not in k:
+            if _is_true_quantity(df, col):
+                return col
+    return None
+
 @st.cache_data(show_spinner=False)
 def procesar_archivos(df_transferencias, df_detalle):
     # --- Detalle ---
     det_cols = {normalizar_para_mapeo(c): c for c in df_detalle.columns}
     sec_col = next((det_cols[k] for k in det_cols if 'SECUENCIAL' in k), None)
-    cant_col = det_cols.get('CANTIDAD') or det_cols.get('TOTAL PRENDAS')
-    if not cant_col:
-        cant_col = next((det_cols[k] for k in det_cols if ('CANTIDAD' in k or 'CANT_' in k) and 'BARRA' not in k and 'CODIGO' not in k), None)
+    cant_col = _find_true_quantity_col(df_detalle, det_cols)
     prod_col = next((det_cols[k] for k in det_cols if 'PRODUCTO' in k), None)
     cat_col = next((det_cols[k] for k in det_cols if 'CATEGORIA' in k), None)
     grupo_col = next((det_cols[k] for k in det_cols if 'GRUPO' in k), None)
@@ -227,9 +247,7 @@ def procesar_archivos(df_transferencias, df_detalle):
     # --- Transferencias ---
     trans_cols = {normalizar_para_mapeo(c): c for c in df_transferencias.columns}
     sec_col_t = next((trans_cols[k] for k in trans_cols if 'SECUENCIAL' in k), None)
-    cant_col_t = trans_cols.get('CANTIDAD') or trans_cols.get('TOTAL PRENDAS')
-    if not cant_col_t:
-        cant_col_t = next((trans_cols[k] for k in trans_cols if ('CANTIDAD' in k or 'CANT_' in k) and 'BARRA' not in k and 'CODIGO' not in k), None)
+    cant_col_t = _find_true_quantity_col(df_transferencias, trans_cols)
     tienda_col = next((trans_cols[k] for k in trans_cols if 'BODEGA DESTINO' in k or 'SUCURSAL DESTINO' in k), None)
     fecha_col_t = next((trans_cols[k] for k in trans_cols if 'FECHA' in k), None)
 
