@@ -151,7 +151,9 @@ def procesar_archivos(df_transferencias, df_detalle):
     # --- Detalle ---
     det_cols = {normalizar_para_mapeo(c): c for c in df_detalle.columns}
     sec_col = next((det_cols[k] for k in det_cols if 'SECUENCIAL' in k), None)
-    cant_col = next((det_cols[k] for k in det_cols if 'CANTIDAD' in k or 'TOTAL PRENDA' in k or 'CANT_' in k), None)
+    cant_col = det_cols.get('CANTIDAD') or det_cols.get('TOTAL PRENDAS')
+    if not cant_col:
+        cant_col = next((det_cols[k] for k in det_cols if ('CANTIDAD' in k or 'CANT_' in k) and 'BARRA' not in k and 'CODIGO' not in k), None)
     prod_col = next((det_cols[k] for k in det_cols if 'PRODUCTO' in k), None)
     cat_col = next((det_cols[k] for k in det_cols if 'CATEGORIA' in k), None)
     grupo_col = next((det_cols[k] for k in det_cols if 'GRUPO' in k), None)
@@ -210,7 +212,9 @@ def procesar_archivos(df_transferencias, df_detalle):
     # --- Transferencias ---
     trans_cols = {normalizar_para_mapeo(c): c for c in df_transferencias.columns}
     sec_col_t = next((trans_cols[k] for k in trans_cols if 'SECUENCIAL' in k), None)
-    cant_col_t = next((trans_cols[k] for k in trans_cols if 'CANTIDAD' in k or 'TOTAL PRENDA' in k), None)
+    cant_col_t = trans_cols.get('CANTIDAD') or trans_cols.get('TOTAL PRENDAS')
+    if not cant_col_t:
+        cant_col_t = next((trans_cols[k] for k in trans_cols if ('CANTIDAD' in k or 'CANT_' in k) and 'BARRA' not in k and 'CODIGO' not in k), None)
     tienda_col = next((trans_cols[k] for k in trans_cols if 'BODEGA DESTINO' in k or 'SUCURSAL DESTINO' in k), None)
     fecha_col_t = next((trans_cols[k] for k in trans_cols if 'FECHA' in k), None)
 
