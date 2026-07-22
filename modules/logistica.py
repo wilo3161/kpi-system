@@ -422,12 +422,12 @@ def mostrar_dashboard_transferencias():
         with tab1:
             st.subheader("Sube o sincroniza los archivos para el análisis")
             
-            tipo_carga = st.radio("Método de Carga:", ["Google Drive (Recomendado)", "Subida Manual"], horizontal=True)
+            tipo_carga = st.radio("Método de Carga:", ["Subida Manual", "Google Drive"], horizontal=True)
             
             dfT, dfD = None, None
             nombre_archivo = "Desconocido"
 
-            if tipo_carga == "Google Drive (Recomendado)":
+            if tipo_carga == "Google Drive":
                 from services.drive_service import _obtener_servicio_drive, listar_archivos_excel_recientes, descargar_archivo_drive
                 try:
                     drive_service = _obtener_servicio_drive()
