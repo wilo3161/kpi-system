@@ -297,9 +297,9 @@ def show_gestion_equipo():
                         st.divider()
 
     # =====================================================================
-    # PESTAÑA 5 – REGISTRO DIARIO DE ACTIVIDADES
+    # PESTAÑA 4 – REGISTRO DIARIO DE ACTIVIDADES
     # =====================================================================
-    with tabs[4] if is_admin else tabs[2]:
+    with tabs[3] if is_admin else tabs[2]:
         st.markdown("### 📝 Registro de Actividades Diarias")
         
         # Filtrar a Wilson Perez y obtener todos los miembros
