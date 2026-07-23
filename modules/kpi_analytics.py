@@ -312,8 +312,8 @@ def show_kpi_analytics():
                          use_container_width=True)
             total_semana = df_pred['prediccion'].sum()
             dia_pico = df_pred.loc[df_pred['prediccion'].idxmax()]
-            st.markdown(acu_metric("Total proyectado semana", f"{total_semana:,}", color="blue", icon="📊"), unsafe_allow_html=True)
-            st.info(f"📌 Día pico: **{dia_pico['fecha'].strftime('%A %d/%m')}** con **{dia_pico['prediccion']:,}** unidades.")
+            st.markdown(acu_metric("Total proyectado semana", f"{total_semana}", color="blue", icon="📊"), unsafe_allow_html=True)
+            st.info(f"📌 Día pico: **{dia_pico['fecha'].strftime('%A %d/%m')}** con **{dia_pico['prediccion']}** unidades.")
 
     # ==================== NUEVA TAB 7: ABC ====================
     with tab7:

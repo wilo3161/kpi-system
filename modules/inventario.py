@@ -202,8 +202,8 @@ def show_control_inventario():
     avg_dias = df[dias_col].mean() if dias_col and dias_col in df.columns else None
 
     col1, col2, col3 = st.columns(3)
-    col1.metric("Total SKUs", f"{total_skus:,}")
-    col2.metric("Stock Total", f"{total_stock:,.0f}")
+    col1.metric("Total SKUs", f"{total_skus}")
+    col2.metric("Stock Total", f"{total_stock:.0f}")
     if avg_dias and pd.notna(avg_dias):
         col3.metric("Días promedio en inventario", f"{avg_dias:.1f} días")
     else:

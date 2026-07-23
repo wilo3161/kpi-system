@@ -35,7 +35,6 @@ from utils.ui import add_back_button, show_module_header
 from config.stores_data import TIENDAS_DATA
 from services.notifications import TelegramBot
 from database.manager import local_db
-from ai.supply_chain_ai import _ejecutar_prompt
 from utils.backgrounds import set_module_background
 
 logger = logging.getLogger(__name__)
@@ -394,40 +393,7 @@ def _eliminar_guia_permanente(numero_guia: str, usuario: str) -> bool:
     local_db.delete("guias", {"numero_guia": str(numero_guia)})
     return True
 
-# ============================================================================
-# AI ASSISTANT (solo análisis interno)
-# ============================================================================
-def _analizar_guia_con_ia(guia_data: dict) -> dict:
-    fallback = {"resumen_operacional": None, "riesgo_detectado": "BAJO",
-                "acciones_sugeridas": ["Confirmar recepción en tienda destino."],
-                "correo_sugerido": None, "prioridad_operativa": "NORMAL"}
-    prompt = f"""
-Eres analista de logística de Aeropostale Ecuador. Analiza esta guía de remisión y responde SOLO en JSON válido.
 
-Datos de la guía:
-- Número: {guia_data.get('numero_guia')}
-- Tienda destino: {guia_data.get('tienda_destino')}
-- Transferencia: {guia_data.get('numero_transferencia')}
-- Total prendas: {guia_data.get('total_prendas', 0)}
-- Bultos: {guia_data.get('bultos', 1)}
-- Peso: {guia_data.get('peso', 0)} kg
-- Observaciones: {guia_data.get('observaciones', 'Ninguna')}
-- Marca: {guia_data.get('marca')}
-
-Responde con este JSON exacto:
-{{
-  "resumen_operacional": "resumen breve de 1 oración",
-  "riesgo_detectado": "BAJO|MEDIO|ALTO",
-  "acciones_sugeridas": ["acción1", "acción2"],
-  "correo_sugerido": "asunto sugerido para correo de notificación",
-  "prioridad_operativa": "NORMAL|ALTA|CRITICA"
-}}
-"""
-    respuesta = _ejecutar_prompt(prompt, json.dumps(fallback))
-    try:
-        return json.loads(respuesta)
-    except Exception:
-        return fallback
 
 # ============================================================================
 # GENERACIÓN DE PDF PROFESIONAL
@@ -475,7 +441,7 @@ def _dibujar_etiqueta_en_canvas(c, guia_data: dict, label_width, label_height):
     
     c.setFillColor(color_oscuro)
     c.setFont("Helvetica-Bold", 24)
-    c.drawCentredString(label_width / 2.0, y_medio + 7*mm, f"{tot_prendas:,}")
+    c.drawCentredString(label_width / 2.0, y_medio + 7*mm, f"{tot_prendas}")
     c.setFont("Helvetica", 8)
     c.drawCentredString(label_width / 2.0, y_medio + 2*mm, "TOTAL PRENDAS")
 
@@ -672,7 +638,7 @@ def generar_guia_backend(tienda_sel, destinatario, direccion, telefono, ciudad, 
     try:
         import threading
         bot = TelegramBot()
-        msg_text = f"🚚 *NUEVA GUÍA EMITIDA*\\n📄 Guía: `{nuevo_numero}`\\n🏪 Tienda: {tienda_sel}\\n🔄 Transferencia: {numero_transferencia}\\n📦 Prendas: {total_prendas:,}\\n👤 Usuario: {usuario_activo}"
+        msg_text = f"🚚 *NUEVA GUÍA EMITIDA*\\n📄 Guía: `{nuevo_numero}`\\n🏪 Tienda: {tienda_sel}\\n🔄 Transferencia: {numero_transferencia}\\n📦 Prendas: {total_prendas}\\n👤 Usuario: {usuario_activo}"
         threading.Thread(target=bot.enviar_mensaje, args=(msg_text,)).start()
     except: pass
     
@@ -1010,7 +976,7 @@ def _show_generar_guias_impl():
                     else:
                         st.warning("No se pudo extraer el número de transferencia. Puedes ingresarlo manualmente.")
                     if total_prendas:
-                        st.info(f"Total prendas extraídas: **{total_prendas:,}**")
+                        st.info(f"Total prendas extraídas: **{total_prendas}**")
                     else:
                         total_prendas = 0
                 else:
@@ -1138,7 +1104,7 @@ def _show_generar_guias_impl():
                             f"🚚 *NUEVA GUÍA EMITIDA*\n"
                             f"📄 Guía: {_guia_num}\n"
                             f"🔄 Transferencia: {_num_trans}\n"
-                            f"📦 Prendas: {_tot_prendas:,}\n\n"
+                            f"📦 Prendas: {_tot_prendas}\n\n"
                             f"🔗 *URL Transferencia:*\n{_qr_url}"
                         )
                         tel_wa = ""
@@ -1161,7 +1127,7 @@ def _show_generar_guias_impl():
         if manifiesto:
             met = manifiesto.get("metricas", {})
             mc1, mc2, mc3 = st.columns(3)
-            mc1.metric("Total Prendas", f"{met.get('total_prendas', 0):,}")
+            mc1.metric("Total Prendas", f"{met.get('total_prendas', 0)}")
             mc2.metric("Total Bultos", met.get("total_bultos", 0))
             mc3.metric("Guías en manifiesto", len(manifiesto.get("guias", [])))
             guias_ids = manifiesto.get("guias", [])
@@ -1253,7 +1219,7 @@ def _show_generar_guias_impl():
                             <div style="background: linear-gradient(145deg, rgba(30,41,59,0.8), rgba(15,23,42,0.9)); border: 1px solid #f59e0b; border-radius: 15px; padding: 25px 15px; text-align: center; box-shadow: 0 8px 32px rgba(0,0,0,0.2);">
                                 <div style="font-size: 2.5rem; margin-bottom: 5px;">🏆</div>
                                 <h2 style="margin: 0; color: #f8fafc; font-size: 1.3rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{usr}</h2>
-                                <h1 style="margin: 10px 0; color: #f59e0b; font-size: 3rem; font-weight: 800;">{total_p:,}</h1>
+                                <h1 style="margin: 10px 0; color: #f59e0b; font-size: 3rem; font-weight: 800;">{total_p}</h1>
                                 <p style="margin: 0; color: #94a3b8; font-weight: 600; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 1px;">Total Final del Día</p>
                             </div>
                             """, unsafe_allow_html=True)
@@ -1293,7 +1259,7 @@ def _show_generar_guias_impl():
                             <div style="background: linear-gradient(145deg, rgba(30,41,59,0.8), rgba(15,23,42,0.9)); border: 1px solid #38bdf8; border-radius: 15px; padding: 25px 15px; text-align: center; box-shadow: 0 8px 32px rgba(0,0,0,0.2);">
                                 <div style="font-size: 3rem; margin-bottom: 5px;">📦</div>
                                 <h2 style="margin: 0; color: #f8fafc; font-size: 1.4rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{usr}</h2>
-                                <h1 style="margin: 10px 0; color: #38bdf8; font-size: 3.2rem; font-weight: 800;">{total_p:,}</h1>
+                                <h1 style="margin: 10px 0; color: #38bdf8; font-size: 3.2rem; font-weight: 800;">{total_p}</h1>
                                 <p style="margin: 0; color: #94a3b8; font-weight: 600; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px;">Prendas Hoy</p>
                             </div>
                             """, unsafe_allow_html=True)
@@ -1464,7 +1430,7 @@ def _show_generar_guias_impl():
                     st.markdown(f"**Estado:** {_badge_estado(doc_det.get('estado', ''))}", unsafe_allow_html=True)
                     st.markdown(f"**Transferencia:** {doc_det.get('numero_transferencia', '')}")
                 with d2:
-                    st.markdown(f"**Total prendas:** {doc_det.get('total_prendas', 0):,}")
+                    st.markdown(f"**Total prendas:** {doc_det.get('total_prendas', 0)}")
                     st.markdown(f"**Bultos:** {doc_det.get('bultos', 0)}")
                     st.markdown(f"**Generado por:** {doc_det.get('usuario_genera', '')}")
                 ai = doc_det.get("ai_analysis", {})

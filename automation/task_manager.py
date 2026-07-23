@@ -6,7 +6,6 @@ Gestión automática de tareas basadas en incidencias de recepción.
 import streamlit as st
 from datetime import datetime, timedelta
 from database.manager import local_db
-from ai.supply_chain_ai import _ejecutar_prompt
 
 TASK_COLLECTION = "tareas_automaticas"
 
@@ -103,12 +102,7 @@ def completar_tarea(tarea_id):
 
 
 def generar_sugerencia_ia(tarea: dict) -> str:
-    prompt = f"""
-Eres un supervisor de logística de Aeropostale Ecuador. Ante la siguiente tarea pendiente:
-"{tarea.get('descripcion')}"
-Sugiere una acción concreta para resolverla (máx. 2 líneas).
-"""
-    sugerencia = _ejecutar_prompt(prompt, "Revisar manualmente.")
+    sugerencia = "Revisar manualmente. (IA desactivada)"
     local_db.update(
         TASK_COLLECTION,
         {"_id": tarea["_id"]},
@@ -118,9 +112,4 @@ Sugiere una acción concreta para resolverla (máx. 2 líneas).
 
 
 def generar_recordatorio(tarea: dict) -> str:
-    prompt = f"""
-Redacta un mensaje de recordatorio profesional para {tarea.get('asignado_a')} sobre la tarea:
-"{tarea.get('descripcion')}"
-El tono debe ser cordial pero firme. Incluye la fecha actual ({datetime.now().strftime('%d/%m/%Y')}).
-"""
-    return _ejecutar_prompt(prompt, "Recordatorio no disponible.")
+    return f"Recordatorio automático: Por favor, revisa la tarea '{tarea.get('descripcion')}'. (IA desactivada)"

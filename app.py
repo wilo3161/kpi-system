@@ -119,6 +119,7 @@ def main():
         logging.error(traceback.format_exc())
         
         st.error(f"❌ **Ha ocurrido un error inesperado en el módulo '{current_page}'**")
+        st.exception(e)
         st.warning("Por favor, contacta al administrador del sistema si el problema persiste.")
         if st.button("🏠 Volver al inicio"):
             st.session_state.current_page = "Inicio"

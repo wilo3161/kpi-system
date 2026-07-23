@@ -17,7 +17,6 @@ import traceback
 from database.manager import local_db
 from utils.ui import add_back_button, show_module_header
 from services.notifications import GestorCorreo
-from ai.supply_chain_ai import _ejecutar_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -90,14 +89,12 @@ def _listar_correos(gestor: GestorCorreo, carpeta: str = "INBOX", limite: int = 
         logger.exception(e)
         return [{"id": "err", "asunto": f"Excepción: {e}"}]
 
-    except Exception as e:
-        logger.error(f"Error en análisis IA: {e}")
-        return "Error al procesar la solicitud de IA."
+
 
 def show_gestor_correos():
     try:
         add_back_button(key="back_correos")
-        show_module_header("📧 Gestión de Correos", "Bandeja · Redactar · Análisis con IA")
+        show_module_header("📧 Gestión de Correos", "Bandeja · Redactar")
 
         gestor = GestorCorreo()
 
@@ -121,7 +118,7 @@ def show_gestor_correos():
                     st.error("No se pudo conectar al servidor IMAP.")
                 st.rerun()
 
-        tab1, tab2, tab3 = st.tabs(["📥 Bandeja", "✏️ Redactar", "🤖 Análisis IA"])
+        tab1, tab2 = st.tabs(["📥 Bandeja", "✏️ Redactar"])
 
         with tab1:
             if st.session_state.correos_lista:

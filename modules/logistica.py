@@ -24,7 +24,6 @@ from config.stores_data import (
     VENTAS_POR_MAYOR, TIENDA_WEB, FALLAS, COLORS, GRADIENTS, COLOR_KEYS
 )
 from services.data_processing import procesar_archivos
-from ai.supply_chain_ai import _ejecutar_prompt, transcribir_audio as transcribir_audio_central
 
 logger = logging.getLogger(__name__)
 
@@ -267,7 +266,7 @@ def _render_kpi_cards_historico(cat_agg: dict, total_unidades: int, tiendas_agg:
                     <span style="background: {color}20; color: {color}; padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: bold;">HIST</span>
                 </div>
                 <div style="display: flex; align-items: baseline; gap: 8px; margin-bottom: 16px;">
-                    <span style="font-size: 42px; font-weight: 800; color: #ffffff; letter-spacing: -1px;">{unidades:,}</span>
+                    <span style="font-size: 42px; font-weight: 800; color: #ffffff; letter-spacing: -1px;">{unidades}</span>
                     <span style="font-size: 14px; font-weight: 500; color: {color};">unidades</span>
                 </div>
                 <div style="display: flex; justify-content: space-between; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 12px;">
@@ -371,21 +370,7 @@ def detectar_anomalias(df, col='unidades'):
     out['anomalia'] = (pd.to_numeric(df[col], errors='coerce') - m).abs() > 2 * std
     return out
 
-# =============================================================================
-# ASISTENTE IA
-# =============================================================================
-def _contexto_ia(df_c, df_d, regs):
-    cats = {c: _safe_int((df_c[df_c['CATEGORIA_FINAL']==c]['FUNDAS'].sum() if c=='Fundas' else df_c[df_c['CATEGORIA_FINAL']==c]['PRENDAS'].sum())) for c in CATEGORIAS_LIST}
-    return f"Eres asistente de logística Aeropostale. Prendas: {df_c['PRENDAS'].sum():,}, Fundas: {df_c['FUNDAS'].sum():,}. Cats: {cats}. Responde breve."
 
-def _responder_ia(preg, df_c, df_d, regs):
-    p = preg.lower().strip()
-    if 'cuántas' in p or 'cuantas' in p:
-        if 'funda' in p: return f"Total fundas: {df_c['FUNDAS'].sum():,}"
-        if 'prenda' in p: return f"Total prendas: {df_c['PRENDAS'].sum():,}"
-    return _ejecutar_prompt(f"{_contexto_ia(df_c, df_d, regs)}\nPregunta: {preg}", "No pude procesar la consulta.")
-
-def transcribir_audio(audio_bytes): return transcribir_audio_central(audio_bytes)
 
 @st.cache_data(show_spinner="Procesando archivo de análisis...")
 def procesar_archivo_analisis(archivo_bytes):
@@ -416,7 +401,7 @@ def mostrar_dashboard_transferencias():
         inject_acumatica_css()
         st.markdown("<div class='main-header'><h1 class='header-title'>🚚 Dashboard de Logística</h1><div class='header-subtitle'>Análisis inteligente de distribución</div></div>", unsafe_allow_html=True)
 
-        tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["📂 Carga y Cruce", "📈 KPIs por Categoría", "🏪 Desglose por Tienda", "🎽 Análisis de Productos", "📅 Histórico + Forecast", "🤖 Asistente IA"])
+        tab1, tab2, tab3, tab4, tab5 = st.tabs(["📂 Carga y Cruce", "📈 KPIs por Categoría", "🏪 Desglose por Tienda", "🎽 Análisis de Productos", "📅 Histórico + Forecast"])
 
         # ==================== TAB 1 (CORREGIDA CON GOOGLE DRIVE) ====================
         with tab1:
@@ -518,9 +503,9 @@ def mostrar_dashboard_transferencias():
                 st.markdown("---")
                 st.subheader("Resumen del último cruce")
                 c1,c2,c3,c4 = st.columns(4)
-                c1.metric("Total Unidades", f"{df['PRENDAS'].sum()+df['FUNDAS'].sum():,}")
-                c2.metric("Prendas", f"{df['PRENDAS'].sum():,}")
-                c3.metric("Fundas", f"{df['FUNDAS'].sum():,}")
+                c1.metric("Total Unidades", f"{df['PRENDAS'].sum()+df['FUNDAS'].sum()}")
+                c2.metric("Prendas", f"{df['PRENDAS'].sum()}")
+                c3.metric("Fundas", f"{df['FUNDAS'].sum()}")
                 c4.metric("Transferencias", df['SECUENCIAL'].nunique())
 
         # ==================== TAB 2 ====================
@@ -541,7 +526,7 @@ def mostrar_dashboard_transferencias():
                         st.markdown(f'''
                         <div style="background: rgba(15,23,42,0.7); backdrop-filter: blur(12px); padding: 24px; border-radius: 16px; border-left: 6px solid {color}; box-shadow: 0 10px 25px rgba(0,0,0,0.2); margin-bottom: 20px;">
                             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;"> <span style="font-size: 13px; font-weight: 600; color: #94a3b8; letter-spacing: 1px; text-transform: uppercase;">{DISPLAY_NAMES[cat]}</span> <span style="background: {color}20; color: {color}; padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: bold;">KPI</span> </div>
-                            <div style="display: flex; align-items: baseline; gap: 8px; margin-bottom: 16px;"> <span style="font-size: 42px; font-weight: 800; color: #ffffff; letter-spacing: -1px;">{und:,}</span> <span style="font-size: 14px; font-weight: 500; color: {color};">unidades</span> </div>
+                            <div style="display: flex; align-items: baseline; gap: 8px; margin-bottom: 16px;"> <span style="font-size: 42px; font-weight: 800; color: #ffffff; letter-spacing: -1px;">{und}</span> <span style="font-size: 14px; font-weight: 500; color: {color};">unidades</span> </div>
                             <div style="display: flex; justify-content: space-between; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 12px;"> <div style="display: flex; flex-direction: column;"> <span style="font-size: 11px; color: #64748b; margin-bottom: 2px;">Sucursales Activas</span> <span style="font-size: 14px; font-weight: 600; color: #e2e8f0;">{t_act}</span> </div> <div style="display: flex; flex-direction: column; text-align: right;"> <span style="font-size: 11px; color: #64748b; margin-bottom: 2px;">Meta / Esperadas</span> <span style="font-size: 14px; font-weight: 600; color: #e2e8f0;">{esp if esp else 'N/A'}</span> </div> </div>
                             <div style="margin-top: 12px; width: 100%; background: rgba(255,255,255,0.1); height: 6px; border-radius: 3px; overflow: hidden;"> <div style="width: {prog}%; background: {color}; height: 100%; border-radius: 3px;"></div> </div>
                         </div>
@@ -558,8 +543,8 @@ def mostrar_dashboard_transferencias():
                 with colD:
                     tot = df['PRENDAS'].sum()+df['FUNDAS'].sum()
                     st.subheader("TOTAL GENERAL")
-                    st.markdown(f"<div style='text-align:center;font-size:36px;font-weight:bold;'>{tot:,}</div>", unsafe_allow_html=True)
-                    st.markdown(acu_metric("PROMEDIO X TRANSFERENCIA", f"{tot/max(df['SECUENCIAL'].nunique(),1):,.0f}", color="blue", icon="📈"), unsafe_allow_html=True)
+                    st.markdown(f"<div style='text-align:center;font-size:36px;font-weight:bold;'>{tot}</div>", unsafe_allow_html=True)
+                    st.markdown(acu_metric("PROMEDIO X TRANSFERENCIA", f"{tot/max(df['SECUENCIAL'].nunique(),1):.0f}", color="blue", icon="📈"), unsafe_allow_html=True)
                     st.markdown(acu_metric("CATEGORÍAS ACTIVAS", f"{sum(1 for c in CATEGORIAS_LIST if df[df['CATEGORIA_FINAL']==c].shape[0] >0)}/6", color="green", icon="✅"), unsafe_allow_html=True)
                     st.markdown(acu_metric("% FUNDAS", f"{df['FUNDAS'].sum()/tot*100 if tot else 0:.1f}%", color="yellow", icon="🛍️"), unsafe_allow_html=True)
 
@@ -579,7 +564,7 @@ def mostrar_dashboard_transferencias():
                     tU = tU.sort_values('Unidades', ascending=False)
                     c1,c2,c3 = st.columns(3)
                     c1.markdown(acu_metric("Total Tiendas", len(tU), color="blue", icon="🏪"), unsafe_allow_html=True)
-                    c2.markdown(acu_metric("Total Unidades", f"{tU['Unidades'].sum():,}", color="green", icon="📦"), unsafe_allow_html=True)
+                    c2.markdown(acu_metric("Total Unidades", f"{tU['Unidades'].sum()}", color="green", icon="📦"), unsafe_allow_html=True)
                     c3.markdown(acu_metric("Total Costo", f"${tU['Costo'].sum():,.2f}", color="yellow", icon="💲"), unsafe_allow_html=True)
                     st.markdown("---")
                     st.markdown("### 📊 Peso Relativo por Tienda (Treemap)")
@@ -593,7 +578,7 @@ def mostrar_dashboard_transferencias():
                         cb1,cb2 = st.columns([3,2])
                         with cb1:
                             figTop = px.bar(top10, x='Unidades', y='TIENDA', orientation='h', text='Unidades', color='Unidades', color_continuous_scale='Blues')
-                            figTop.update_traces(texttemplate='%{text:,}', textposition='outside')
+                            figTop.update_traces(texttemplate='%{text}', textposition='outside')
                             figTop.update_layout(template="plotly_dark", height=500)
                             st.plotly_chart(figTop, use_container_width=True)
                         with cb2:
@@ -609,8 +594,8 @@ def mostrar_dashboard_transferencias():
                         st.write(f"### {tSel} ({catS if catS!='Todas' else 'Todas'})")
                         prodT = dfDE[dfDE['SECUENCIAL'].isin(transT['SECUENCIAL'])][['SECUENCIAL','PRODUCTO_BASE','TIPO_PRENDA_ES','COLOR_NORM','TALLA','CANTIDAD','ES_FUNDA','CATEGORIA']].rename(columns={'SECUENCIAL':'Transferencia','PRODUCTO_BASE':'Producto Base','TIPO_PRENDA_ES':'Tipo','COLOR_NORM':'Color','TALLA':'Talla','CANTIDAD':'Cantidad','ES_FUNDA':'Es Funda','CATEGORIA':'Categoría'})
                         cM1,cM2 = st.columns(2)
-                        cM1.metric("Prendas", f"{_safe_int(transT['PRENDAS'].sum()):,}")
-                        cM2.metric("Fundas", f"{_safe_int(transT['FUNDAS'].sum()):,}")
+                        cM1.metric("Prendas", f"{_safe_int(transT['PRENDAS'].sum())}")
+                        cM2.metric("Fundas", f"{_safe_int(transT['FUNDAS'].sum())}")
                         st.markdown("---")
                         st.markdown("#### 📦 Productos agrupados")
                         prodAg = dfDE[dfDE['SECUENCIAL'].isin(transT['SECUENCIAL'])].groupby('PRODUCTO_BASE')['CANTIDAD'].sum().sort_values(ascending=False).reset_index()
@@ -620,7 +605,7 @@ def mostrar_dashboard_transferencias():
                         with ca2:
                             if not prodAg.empty:
                                 figP = px.bar(prodAg.head(15), x='Cantidad Total', y='Producto Base', orientation='h', text='Cantidad Total', title=f"Top 15 -> {tSel}")
-                                figP.update_traces(texttemplate='%{text:,}', textposition='outside')
+                                figP.update_traces(texttemplate='%{text}', textposition='outside')
                                 figP.update_layout(template="plotly_dark")
                                 st.plotly_chart(figP, use_container_width=True)
                         st.markdown("---")
@@ -745,7 +730,7 @@ def mostrar_dashboard_transferencias():
                             else:
                                 st.success(f"Se encontraron {len(df_f)} registros de productos.")
                                 m1, m2, m3 = st.columns(3)
-                                if 'cantidad' in df_f.columns: m1.metric("Unidades Enviadas", f"{df_f['cantidad'].sum():,.0f}")
+                                if 'cantidad' in df_f.columns: m1.metric("Unidades Enviadas", f"{df_f['cantidad'].sum():.0f}")
                                 if 'total' in df_f.columns: m2.metric("Monto Total", f"${df_f['total'].sum():,.2f}")
                                 if 'tienda' in df_f.columns: m3.metric("Tiendas Impactadas", df_f['tienda'].nunique())
                                 
@@ -872,9 +857,9 @@ def mostrar_dashboard_transferencias():
                             daily['acum'] = daily['und'].cumsum()
                             # KPIs Verticales (Arriba)
                             c1, c2, c3 = st.columns(3)
-                            c1.markdown(acu_metric("Total Unidades", f"{daily['und'].sum():,.0f}", color="blue", icon="📦"), unsafe_allow_html=True)
+                            c1.markdown(acu_metric("Total Unidades", f"{daily['und'].sum():.0f}", color="blue", icon="📦"), unsafe_allow_html=True)
                             c2.markdown(acu_metric("Días Procesados", daily['fecha'].nunique(), color="green", icon="📅"), unsafe_allow_html=True)
-                            c3.markdown(acu_metric("Promedio/Día", f"{daily['und'].sum()/max(daily['fecha'].nunique(),1):,.0f}", color="yellow", icon="⚡"), unsafe_allow_html=True)
+                            c3.markdown(acu_metric("Promedio/Día", f"{daily['und'].sum()/max(daily['fecha'].nunique(),1):.0f}", color="yellow", icon="⚡"), unsafe_allow_html=True)
                             
                             st.write("") # Espaciador
                             
@@ -900,13 +885,13 @@ def mostrar_dashboard_transferencias():
                         agg = dfH.groupby('periodo')['und'].sum().reset_index()
                         st.markdown(f"**{inicio.strftime('%d/%m/%Y')} – {fin.strftime('%d/%m/%Y')}**")
                         figD = px.bar(agg, x='periodo', y='und', text='und', title=f"Despachos por Día")
-                        figD.update_traces(texttemplate='%{text:,}', textposition='outside', marker_color='#f59e0b')
+                        figD.update_traces(texttemplate='%{text}', textposition='outside', marker_color='#f59e0b')
                         figD.update_layout(template="plotly_dark")
                         st.plotly_chart(figD, use_container_width=True)
                         m1,m2,m3,m4 = st.columns(4)
-                        m1.metric("Total", f"{agg['und'].sum():,.0f}")
-                        m2.metric("Promedio", f"{agg['und'].mean():,.0f}")
-                        m3.metric("Máximo", f"{agg['und'].max():,.0f}")
+                        m1.metric("Total", f"{agg['und'].sum():.0f}")
+                        m2.metric("Promedio", f"{agg['und'].mean():.0f}")
+                        m3.metric("Máximo", f"{agg['und'].max():.0f}")
                         m4.metric("Registros", len(agg))
                         st.dataframe(agg.rename(columns={'periodo':'Período','und':'Unidades'}), use_container_width=True)
                         st.markdown("---")
@@ -942,9 +927,9 @@ def mostrar_dashboard_transferencias():
                         if rSin > 0: 
                             st.warning(f"⚠️ {rSin} registros históricos antiguos no contienen desglose por categoría. Por favor, vuelve a procesar (Reemplazar) esos días en la pestaña 1.")
                         m1,m2,m3,m4 = st.columns(4)
-                        m1.metric("📦 Unidades", f"{tU:,.0f}")
-                        m2.metric("🎽 Prendas", f"{tP:,.0f}")
-                        m3.metric("🛍️ Fundas", f"{tF:,.0f}")
+                        m1.metric("📦 Unidades", f"{tU:.0f}")
+                        m2.metric("🎽 Prendas", f"{tP:.0f}")
+                        m3.metric("🛍️ Fundas", f"{tF:.0f}")
                         m4.metric("📅 Días", dfH['fecha'].nunique())
                         st.markdown("##### Detalle")
                         _render_kpi_cards_historico(cAgg, tU, tAgg)
@@ -961,8 +946,8 @@ def mostrar_dashboard_transferencias():
                                 st.info("No hay datos de categoría desglosados en este rango de fechas para graficar el pastel.")
                         with colD:
                             st.subheader("TOTAL RANGO")
-                            st.markdown(f"<div style='text-align:center;font-size:36px;font-weight:bold;'>{sum(cAgg.values()):,}</div>", unsafe_allow_html=True)
-                            st.markdown(acu_metric("PROMEDIO X TRANSFERENCIA", f"{tU/max(tTrans,1):,.0f}", color="blue", icon="📈"), unsafe_allow_html=True)
+                            st.markdown(f"<div style='text-align:center;font-size:36px;font-weight:bold;'>{sum(cAgg.values())}</div>", unsafe_allow_html=True)
+                            st.markdown(acu_metric("PROMEDIO X TRANSFERENCIA", f"{tU/max(tTrans,1):.0f}", color="blue", icon="📈"), unsafe_allow_html=True)
                             st.markdown(acu_metric("CATEGORÍAS ACTIVAS", f"{sum(1 for c in CATEGORIAS_LIST if cAgg.get(c, 0) > 0)}/6", color="green", icon="✅"), unsafe_allow_html=True)
                             st.markdown(acu_metric("% FUNDAS HISTÓRICO", f"{(tF/tU)*100 if tU else 0:.1f}%", color="yellow", icon="🛍️"), unsafe_allow_html=True)
                         
@@ -983,7 +968,7 @@ def mostrar_dashboard_transferencias():
                                 if len(ms)==2:
                                     act, ant = at[at['mes']==ms[1]]['und'].sum(), at[at['mes']==ms[0]]['und'].sum()
                                     delta = (act-ant)/ant*100 if ant else 0
-                                    st.metric(f"Mes {ms[1]} vs {ms[0]}", f"{act:,.0f}", delta=f"{'▲' if delta >=0 else '▼'} {abs(delta):.1f}%", delta_color="normal" if delta >=0 else "inverse")
+                                    st.metric(f"Mes {ms[1]} vs {ms[0]}", f"{act:.0f}", delta=f"{'▲' if delta >=0 else '▼'} {abs(delta):.1f}%", delta_color="normal" if delta >=0 else "inverse")
                             except: pass
                 else: st.info("ℹ️ Mínimo 3 días requeridos.")
             else:
@@ -1006,32 +991,7 @@ def mostrar_dashboard_transferencias():
                     st.dataframe(fc.rename(columns={'ds':'Fecha','yhat':'Predicción','yhat_lower':'Límite inf','yhat_upper':'Límite sup'}))
                 else: st.info("Datos insuficientes (<10 registros)." + (" Instala Prophet" if not PROPHET_AVAILABLE else ""))
 
-        # ==================== TAB 6 ====================
-        with tab6:
-            st.subheader("🤖 Asistente IA")
-            if 'chat_history' not in st.session_state: st.session_state.chat_history = []
-            modo = st.radio("Entrada", ["⌨️ Texto", "🎙️ Voz"], key="radio_ia")
-            if modo=="🎙️ Voz":
-                ab = st.audio_input("Habla tu pregunta", key="audio_input")
-                if ab:
-                    with st.spinner("Transcribiendo..."):
-                        preg = transcribir_audio(ab.read())
-                        if preg:
-                            st.session_state.chat_history.append({"role": "user", "content":preg})
-                            with st.spinner("Analizando..."):
-                                resp = _responder_ia(preg, st.session_state.get('df_cruce'), st.session_state.get('df_detalle_enr'), []) if 'df_cruce' in st.session_state else "Carga archivos primero."
-                            st.session_state.chat_history.append({"role": "assistant", "content":resp})
-            else:
-                preg = st.text_input("Escribe tu pregunta: ", key="text_input_ia")
-                if preg:
-                    st.session_state.chat_history.append({"role": "user", "content":preg})
-                    with st.spinner("Analizando..."):
-                        resp = _responder_ia(preg, st.session_state.get('df_cruce'), st.session_state.get('df_detalle_enr'), []) if 'df_cruce' in st.session_state else "Carga archivos primero."
-                    st.session_state.chat_history.append({"role": "assistant", "content":resp})
-            if st.session_state.chat_history:
-                with st.expander("📜 Historial"):
-                    for m in st.session_state.chat_history:
-                        st.markdown(f"**🧑 Usuario:** {m['content']}" if m['role']=='user' else f"**🤖 Asistente:** {m['content']}")
+
 
     except Exception as e:
         st.error(f"Error general en el dashboard logístico: {e}")

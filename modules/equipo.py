@@ -10,7 +10,6 @@ def obtener_hora_ecuador():
     return datetime.now(TZ_GUAYAQUIL)
 from database.manager import local_db
 from utils.ui import add_back_button, show_module_header
-from ai.supply_chain_ai import _ejecutar_prompt  # wilo IA (OpenAI)
 
 # ------------------------------------------------------------------------------
 # DATOS INICIALES DEL EQUIPO (fuente única de verdad)
@@ -39,45 +38,7 @@ def seed_equipo_if_empty():
             local_db.insert("equipo_logistico", m)
 
 
-# ------------------------------------------------------------------------------
-# ASISTENTE IA (wilo IA)
-# ------------------------------------------------------------------------------
-def llamar_asistente_ia(prompt_usuario: str, contexto_equipo: dict) -> str:
-    """
-    Prepara un prompt con el contexto del equipo y la consulta del usuario,
-    y lo envía a wilo IA a través del servicio centralizado.
-    """
-    # Construir descripción textual del equipo
-    equipo_txt = "EQUIPO DE TRABAJO DEL CENTRO DE DISTRIBUCIÓN AEROPOSTALE:\n"
-    for area, miembros in contexto_equipo.items():
-        equipo_txt += f"\nÁrea: {area}\n"
-        for m in miembros:
-            wa = m.get("whatsapp", "no registrado")
-            em = m.get("email", "no registrado")
-            equipo_txt += (
-                f"  - {m['nombre']} | Cargo: {m['cargo']} | "
-                f"WhatsApp: {wa} | Email: {em}\n"
-            )
 
-    system_prompt = f"""Eres el asistente inteligente de Wilson Pérez, Jefe de Logística del Centro de Distribución de Aeropostale Ecuador. Su jefe superior es Miguel.
-
-{equipo_txt}
-
-Tu función principal es ayudar a Wilson con la comunicación hacia su equipo:
-- Redactar mensajes para enviar por WhatsApp o Email a miembros concretos o grupos.
-- Generar reportes breves que se puedan reenviar a Miguel.
-- Cuando Wilson pida “enviar un mensaje a…” o “comunicar…”, debes:
-    1. Identificar al destinatario exacto (nombre o grupo).
-    2. Redactar el texto del mensaje de forma profesional, clara y directa.
-    3. Indicar el canal recomendado (WhatsApp si hay número, Email si hay correo).
-    4. Mostrar el texto listo para que Wilson lo copie y envíe manualmente.
-    5. Si tienes un número de WhatsApp, incluir también un enlace wa.me con el mensaje codificado.
-- Si Wilson hace preguntas generales sobre logística, el equipo o las operaciones, responde con información útil y concisa.
-- Responde siempre en español formal pero directo. Sé proactivo.
-Fecha y hora actual: {obtener_hora_ecuador().strftime('%d/%m/%Y %H:%M')}"""
-
-    prompt_completo = f"{system_prompt}\n\nPregunta del usuario: {prompt_usuario}"
-    return _ejecutar_prompt(prompt_completo, "Lo siento, el asistente no está disponible en este momento.")
 
 
 # ------------------------------------------------------------------------------
@@ -125,7 +86,7 @@ def show_gestion_equipo():
         total_personas = sum(len(miembros) for miembros in EQUIPO_LOGISTICO.values())
         total_areas = len(EQUIPO_LOGISTICO)
         jefe_doc = local_db.find_one("equipo_logistico", {"area": "Liderazgo"})
-        jefe = jefe_doc["nombre"] if jefe_doc else "Sin Asignar"
+        jefe = jefe_doc.get("nombre", "Sin Asignar") if jefe_doc else "Sin Asignar"
 
         col1, col2, col3 = st.columns(3)
         col1.metric("👥 Total colaboradores", total_personas)
@@ -385,7 +346,7 @@ def show_gestion_equipo():
             fecha_consulta = st.date_input("Consultar registros por fecha:", obtener_hora_ecuador().date())
             fecha_str = fecha_consulta.strftime("%Y-%m-%d")
             
-            if st.button("Generar Registro con IA ✨", type="primary", use_container_width=True):
+            if st.button("Generar Registro", type="primary", use_container_width=True):
                 # Registrar que se emitió el reporte para habilitar la plataforma
                 now_str = obtener_hora_ecuador().isoformat()
                 estado_cierre = local_db.find_one("estado_sistema", {"id": "cierre_reporte"})
@@ -418,34 +379,14 @@ def show_gestion_equipo():
                             texto_crudo += f"{t}\n"
                         texto_crudo += "\n"
                     
-                    # Generar reporte con IA
-                    with st.spinner("✨ Generando reporte profesional con IA..."):
-                        prompt = f"""Eres un asistente logístico del Centro de Distribución Aeropostale Ecuador.
-
-Recibes el siguiente reporte crudo de actividades del día {fecha_formateada}:
-
-{texto_crudo}
-
-Tu tarea es reformatear este reporte en un formato PROFESIONAL y LIMPIO siguiendo EXACTAMENTE estas reglas:
-1. Encabezado: "Reporte de actividades - {fecha_formateada}"
-2. Por cada colaborador, agrupa sus actividades en categorías lógicas (Transferencias, Distribución, Logística, Control, etc.)
-3. Cada categoría debe tener: Nombre de la categoría seguido de dos puntos, luego una descripción clara y concisa de lo realizado.
-4. ELIMINA toda información repetida — si la misma actividad aparece más de una vez para el mismo colaborador, solo inclúyela una vez.
-5. Si el texto menciona cantidades (prendas, cartones, etc.), incorpóralas.
-6. El tono debe ser profesional pero directo. En español formal.
-7. NO incluyas al colaborador "Wilson Pérez" ni su texto "Reporte diario" como actividad.
-8. Devuelve SOLO el reporte formateado, sin explicaciones adicionales.
-
-Ejemplo de formato esperado:
-Reporte de actividades - 07 de Mayo de 2026
-
-Colaborador:
-
-Categoría 1: Descripción detallada de lo que realizó.
-
-Categoría 2: Descripción detallada de lo que realizó.
-"""
-                        reporte_ia = _ejecutar_prompt(prompt, texto_crudo)
+                    # Generar reporte sin IA
+                    with st.spinner("✨ Generando reporte..."):
+                        reporte_ia = f"Reporte de actividades - {fecha_formateada}\n\n"
+                        for emp, textos in acts_por_emp.items():
+                            reporte_ia += f"Colaborador: {emp}\n"
+                            for t in textos:
+                                reporte_ia += f"- {t}\n"
+                            reporte_ia += "\n"
                     
                     # ── GUARDAR EN BASE DE DATOS ──
                     # Si ya existe un reporte para esa fecha, lo reemplazamos

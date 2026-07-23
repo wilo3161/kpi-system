@@ -211,7 +211,7 @@ def procesar_gastos_reconciliacion(manifesto, facturas, config):
         df_m["DESTINATARIO"] = "TIENDA " + df_m["CIUDAD"]
     
     total_manifiesto_calc = df_m["SUBTOTAL_MANIFIESTO"].sum()
-    st.success(f"Manifiesto: {len(df_m)} registros, piezas: {df_m['PIEZAS'].sum():,.0f}, total manifiesto: ${total_manifiesto_calc:,.2f}")
+    st.success(f"Manifiesto: {len(df_m)} registros, piezas: {df_m['PIEZAS'].sum():.0f}, total manifiesto: ${total_manifiesto_calc:,.2f}")
     
     # 2. Procesar facturas
     st.info("🧾 Procesando facturas...")
@@ -465,11 +465,11 @@ def generar_pdf_reporte(metricas, resumen, validacion):
             ["Total Facturado", f"${validacion['total_facturas']:,.2f}"],
             ["Total Manifiesto", f"${validacion['total_manifiesto']:,.2f}"],
             ["Diferencia", f"${validacion['diferencia']:,.2f} ({validacion['porcentaje']:.2f}%)"],
-            ["Guías Procesadas", f"{validacion['guias_procesadas']:,}"],
-            ["Guías Facturadas", f"{validacion['guias_facturadas']:,} ({validacion['porcentaje_facturadas']:.1f}%)"],
-            ["Guías Anuladas", f"{validacion['guias_anuladas']:,} ({validacion['porcentaje_anuladas']:.1f}%)"],
-            ["Piezas Totales", f"{validacion['piezas_totales']:,}"],
-            ["Grupos Identificados", f"{validacion['grupos_identificados']:,}"]
+            ["Guías Procesadas", f"{validacion['guias_procesadas']}"],
+            ["Guías Facturadas", f"{validacion['guias_facturadas']} ({validacion['porcentaje_facturadas']:.1f}%)"],
+            ["Guías Anuladas", f"{validacion['guias_anuladas']} ({validacion['porcentaje_anuladas']:.1f}%)"],
+            ["Piezas Totales", f"{validacion['piezas_totales']}"],
+            ["Grupos Identificados", f"{validacion['grupos_identificados']}"]
         ]
         metricas_table = Table(metricas_data, colWidths=[200,150])
         metricas_table.setStyle(TableStyle([
@@ -648,10 +648,10 @@ def show_reconciliacion_v8():
         with tabs[0]:
             st.header("📊 Resumen Ejecutivo")
             col1, col2, col3, col4, col5 = st.columns(5)
-            col1.metric("Grupos de Tiendas", f"{validacion['grupos_identificados']:,}")
-            col2.metric("Total Guías", f"{validacion['guias_procesadas']:,}")
-            col3.metric("Guías Facturadas", f"{validacion['guias_facturadas']:,}")
-            col4.metric("Guías Anuladas", f"{validacion['guias_anuladas']:,}")
+            col1.metric("Grupos de Tiendas", f"{validacion['grupos_identificados']}")
+            col2.metric("Total Guías", f"{validacion['guias_procesadas']}")
+            col3.metric("Guías Facturadas", f"{validacion['guias_facturadas']}")
+            col4.metric("Guías Anuladas", f"{validacion['guias_anuladas']}")
             col5.metric("Total Facturado", f"${validacion['total_facturas']:,.2f}")
             st.subheader("Distribución por Tipo de Tienda")
             if not resumen.empty:

@@ -17,7 +17,6 @@ from core.kpi_engine import KPIEngine
 from modules.main_page import show_module_header
 from utils.ui import add_back_button, apply_plotly_theme
 from utils.backgrounds import set_module_background
-from ai.supply_chain_ai import _ejecutar_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -347,8 +346,8 @@ def show_dashboard_kpis():
                                  use_container_width=True)
                     total_semana = df_pred['prediccion'].sum()
                     dia_pico = df_pred.loc[df_pred['prediccion'].idxmax()]
-                    st.markdown(acu_metric("Total proyectado semana", f"{total_semana:,}", color="blue", icon="📊"), unsafe_allow_html=True)
-                    st.info(f"📌 Día pico: **{dia_pico['fecha'].strftime('%A %d/%m')}** con **{dia_pico['prediccion']:,}** unidades.")
+                    st.markdown(acu_metric("Total proyectado semana", f"{total_semana}", color="blue", icon="📊"), unsafe_allow_html=True)
+                    st.info(f"📌 Día pico: **{dia_pico['fecha'].strftime('%A %d/%m')}** con **{dia_pico['prediccion']}** unidades.")
 
         st.markdown('</div>', unsafe_allow_html=True)
     except Exception as e:
