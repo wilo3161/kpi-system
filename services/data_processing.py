@@ -265,8 +265,9 @@ def procesar_archivos(df_transferencias, df_detalle):
         df_trans['FECHA'] = pd.Timestamp.today().date()
 
     df_cruce = df_trans.merge(grupo_det, on='SECUENCIAL', how='left')
-    df_cruce['CANTIDAD_TOTAL_DETALLE'] = df_cruce['CANTIDAD_TOTAL_DETALLE'].fillna(df_cruce['CANTIDAD_TRANS'])
-    df_cruce['PRENDAS'] = df_cruce['PRENDAS'].fillna(df_cruce['CANTIDAD_TRANS']).astype(int) 
+    import numpy as np
+    df_cruce['CANTIDAD_TOTAL_DETALLE'] = df_cruce['CANTIDAD_TOTAL_DETALLE'].replace(0, np.nan).fillna(df_cruce['CANTIDAD_TRANS'])
+    df_cruce['PRENDAS'] = df_cruce['PRENDAS'].replace(0, np.nan).fillna(df_cruce['CANTIDAD_TRANS']).astype(int) 
     df_cruce['FUNDAS'] = df_cruce['FUNDAS'].fillna(0).astype(int)
     df_cruce['COSTO_TOTAL'] = df_cruce['COSTO_TOTAL'].fillna(0)
     df_cruce['CATEGORIA_DET'] = df_cruce['CATEGORIA_DET'].fillna('')
