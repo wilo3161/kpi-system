@@ -143,8 +143,14 @@ def clasificar_categoria(bodega_destino, categoria_detalle, grupo):
     if 'FALLAS' in bodega_norm: return 'Fallas'
     return 'Tiendas'
 
+def clean_corrupted_quantity(val):
+    num = extraer_entero(val)
+    if num > 100000 and num % 100000 == 0:
+        return int(num / 1000000)
+    return num
+
 def _safe_numeric_int(series):
-    return series.apply(extraer_entero)
+    return series.apply(clean_corrupted_quantity)
 
 def extraer_float(val):
     if pd.isna(val): return 0.0
@@ -166,8 +172,9 @@ def _is_true_quantity(df, col_name):
         sample = df[col_name].dropna().head(100)
         for val in sample:
             num = extraer_entero(val)
-            if num > 1000000:  # Barcodes/Secuenciales will be millions/billions
-                return False
+            if num > 100000:
+                if num % 100000 != 0:
+                    return False
         return True
     except:
         return False
