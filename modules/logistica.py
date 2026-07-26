@@ -285,6 +285,13 @@ def _render_kpi_cards_historico(cat_agg: dict, total_unidades: int, tiendas_agg:
 def guardar_historico_diario(df_cruce, df_det, archivo_nombre, usuario, accion="fusionar"):
     fecha_hoy = date.today()
     fechas = df_cruce['FECHA'].unique() if 'FECHA' in df_cruce.columns and not df_cruce['FECHA'].isna().all() else [fecha_hoy]
+    
+    # Check if any dates exist before processing to return a meaningful status
+    try:
+        from database.manager import borrar_historico_dia
+    except ImportError:
+        borrar_historico_dia = None
+        
     for orig_dia in fechas:
         if pd.isna(orig_dia): 
             dia = fecha_hoy
@@ -313,30 +320,21 @@ def guardar_historico_diario(df_cruce, df_det, archivo_nombre, usuario, accion="
             sub = df_cruce_dia[df_cruce_dia['CATEGORIA_FINAL'] == cat]
             met['por_categoria'][cat] = _safe_int(sub['FUNDAS'].sum()) if cat == 'Fundas' and not sub.empty else (_safe_int(sub['PRENDAS'].sum()) if not sub.empty else 0)
             met['tiendas_activas_por_categoria'][cat] = int(sub['TIENDA'].nunique()) if not sub.empty else 0
+            
         met_san = sanitize_for_mongo(met)
         existe = existe_historico_dia(dia, "Transferencias Diarias")
-        try:
-            from database.manager import borrar_historico_dia
-        except ImportError:
-            borrar_historico_dia = None
-        if accion == "eliminar":
+        
+        if accion == "eliminar" or accion == "reemplazar":
             if existe and borrar_historico_dia:
                 borrar_historico_dia(dia, "Transferencias Diarias")
             guardar_historico("dashboard_logistico", "Transferencias Diarias", pd.DataFrame(), met_san, archivo_nombre, dia, usuario)
-            return True, dia, "eliminado_y_guardado"
-        elif accion == "reemplazar":
-            if existe and borrar_historico_dia:
-                borrar_historico_dia(dia, "Transferencias Diarias")
-            guardar_historico("dashboard_logistico", "Transferencias Diarias", pd.DataFrame(), met_san, archivo_nombre, dia, usuario)
-            return True, dia, "reemplazado"
         else:
             if existe:
                 fusionar_historico_dia(dia, met_san, "Transferencias Diarias")
-                return True, dia, "fusionado"
             else:
                 guardar_historico("dashboard_logistico", "Transferencias Diarias", pd.DataFrame(), met_san, archivo_nombre, dia, usuario)
-                return True, dia, "guardado"
-    return True, fecha_hoy, "guardado"
+                
+    return True, list(fechas), accion
 
 # =============================================================================
 # FORECASTING & ANOMALÍAS
@@ -484,18 +482,21 @@ def mostrar_dashboard_transferencias():
                     st.error(f"Error procesando datos: {e}")
 
             if st.session_state.get('procesado_archivos_logistica'):
-                existe = existe_historico_dia(st.session_state.fecha_d_logistica, "Transferencias Diarias")
-                if existe:
-                    st.warning(f"⚠️ Ya existe información para **{st.session_state.fecha_d_logistica.strftime('%Y-%m-%d')}**")
-                    acc = st.radio("¿Qué deseas hacer?", ["♻️ Reemplazar", "🗑️ Eliminar y guardar nuevo"], key="accion_guardado")
+                # Handle multi-day checks
+                fechas = st.session_state.df_cruce['FECHA'].unique() if 'FECHA' in st.session_state.df_cruce.columns and not st.session_state.df_cruce['FECHA'].isna().all() else [st.session_state.fecha_d_logistica]
+                fechas_existentes = [f for f in fechas if existe_historico_dia(f, "Transferencias Diarias")]
+                
+                if fechas_existentes:
+                    st.warning(f"⚠️ Ya existe información para {len(fechas_existentes)} de los {len(fechas)} días procesados (ej. {fechas_existentes[0].strftime('%Y-%m-%d')})")
+                    acc = st.radio("¿Qué deseas hacer con los registros que ya existen?", ["♻️ Reemplazar", "🗑️ Eliminar y guardar nuevo", "➕ Fusionar"], key="accion_guardado")
                     if st.button("Confirmar guardado", type="primary"):
-                        ac = "reemplazar" if "Reemplazar" in acc else "eliminar"
+                        ac = "reemplazar" if "Reemplazar" in acc else ("eliminar" if "Eliminar" in acc else "fusionar")
                         _, _, estado = guardar_historico_diario(st.session_state.df_cruce, st.session_state.df_detalle_enr, st.session_state.archT_name, st.session_state.get("username", "admin"), accion=ac)
-                        st.success(f"✅ {estado.replace('_',' ').capitalize()} correctamente.")
+                        st.success(f"✅ Datos guardados/actualizados correctamente ({len(fechas)} días procesados).")
                         st.session_state.procesado_archivos_logistica = False
                 else:
                     guardar_historico_diario(st.session_state.df_cruce, st.session_state.df_detalle_enr, st.session_state.archT_name, st.session_state.get("username", "admin"))
-                    st.success("✅ Procesado y guardado correctamente.")
+                    st.success(f"✅ Procesado y guardado correctamente ({len(fechas)} días procesados).")
                     st.session_state.procesado_archivos_logistica = False
 
             if 'df_cruce' in st.session_state:
