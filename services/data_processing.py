@@ -231,9 +231,11 @@ def procesar_archivos(df_transferencias, df_detalle):
         
     cond_funda = (
         df_det['CATEGORIA'].str.upper().str.contains('FUNDA', na=False) |
+        df_det['CATEGORIA'].str.upper().str.contains('BAG', na=False) |
+        df_det['PRODUCTO_ORIGINAL'].str.upper().str.startswith('FUNDA LENTES DE SOL', na=False) |
+        df_det['PRODUCTO_ORIGINAL'].str.upper().str.startswith('AERO PLASTIC BAG', na=False) |
         df_det['PRODUCTO_ORIGINAL'].str.upper().str.contains('FUNDA', na=False) |
         df_det['PRODUCTO_ORIGINAL'].str.upper().str.contains('BAG', na=False) |
-        df_det['PRODUCTO_ORIGINAL'].str.upper().str.contains('PLASTIG', na=False) |
         df_det['PRODUCTO_ORIGINAL'].str.upper().str.contains('PLASTIC', na=False)
     )
     df_det['ES_FUNDA'] = cond_funda
