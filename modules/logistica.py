@@ -317,9 +317,13 @@ def guardar_historico_diario(df_cruce, df_det, archivo_nombre, usuario, accion="
             "por_genero": prendas.groupby('GENERO')['CANTIDAD'].sum().to_dict() if not prendas.empty else {}
         }
         for cat in CATEGORIAS_LIST:
-            sub = df_cruce_dia[df_cruce_dia['CATEGORIA_FINAL'] == cat]
-            met['por_categoria'][cat] = _safe_int(sub['FUNDAS'].sum()) if cat == 'Fundas' and not sub.empty else (_safe_int(sub['PRENDAS'].sum()) if not sub.empty else 0)
-            met['tiendas_activas_por_categoria'][cat] = int(sub['TIENDA'].nunique()) if not sub.empty else 0
+            if cat == 'Fundas':
+                met['por_categoria'][cat] = _safe_int(df_cruce_dia['FUNDAS'].sum())
+                met['tiendas_activas_por_categoria'][cat] = int(df_cruce_dia[df_cruce_dia['FUNDAS'] > 0]['TIENDA'].nunique())
+            else:
+                sub = df_cruce_dia[df_cruce_dia['CATEGORIA_FINAL'] == cat]
+                met['por_categoria'][cat] = _safe_int(sub['PRENDAS'].sum()) if not sub.empty else 0
+                met['tiendas_activas_por_categoria'][cat] = int(sub['TIENDA'].nunique()) if not sub.empty else 0
             
         met_san = sanitize_for_mongo(met)
         existe = existe_historico_dia(dia, "Transferencias Diarias")
