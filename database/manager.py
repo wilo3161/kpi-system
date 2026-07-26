@@ -622,8 +622,22 @@ def fusionar_historico_dia(fecha: date, metricas_nuevas: dict, pestaña="Transfe
         for clave, valor in metricas_nuevas.items():
             if isinstance(valor, dict):
                 met_existente.setdefault(clave, {})
-                for subclave, subvalor in valor.items(): met_existente[clave][subclave] = met_existente[clave].get(subclave, 0) + subvalor
-            else: met_existente[clave] = met_existente.get(clave, 0) + valor
+                for subclave, subvalor in valor.items():
+                    try:
+                        ant = float(met_existente[clave].get(subclave, 0))
+                        nuev = float(subvalor)
+                        res = ant + nuev
+                        met_existente[clave][subclave] = int(res) if res.is_integer() else res
+                    except (ValueError, TypeError):
+                        pass
+            else:
+                try:
+                    ant = float(met_existente.get(clave, 0))
+                    nuev = float(valor)
+                    res = ant + nuev
+                    met_existente[clave] = int(res) if res.is_integer() else res
+                except (ValueError, TypeError):
+                    met_existente[clave] = valor
         db.update("historico", {"_id": existente["_id"]}, {"$set": {"metricas": met_existente, "fecha_carga": datetime.utcnow()}})
         return True
     return False
