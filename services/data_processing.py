@@ -276,8 +276,11 @@ def procesar_archivos(df_transferencias, df_detalle):
     df_cruce = df_trans.merge(grupo_det, on='SECUENCIAL', how='left')
     import numpy as np
     df_cruce['CANTIDAD_TOTAL_DETALLE'] = df_cruce['CANTIDAD_TOTAL_DETALLE'].replace(0, np.nan).fillna(df_cruce['CANTIDAD_TRANS'])
-    df_cruce['PRENDAS'] = df_cruce['PRENDAS'].replace(0, np.nan).fillna(df_cruce['CANTIDAD_TRANS']).astype(int) 
+    # Si prendas es 0 pero hay fundas, no sobreescribir prendas con la cantidad de la transferencia.
     df_cruce['FUNDAS'] = df_cruce['FUNDAS'].fillna(0).astype(int)
+    mask_reemplazo = (df_cruce['PRENDAS'] == 0) & (df_cruce['FUNDAS'] == 0)
+    df_cruce.loc[mask_reemplazo, 'PRENDAS'] = df_cruce.loc[mask_reemplazo, 'CANTIDAD_TRANS']
+    df_cruce['PRENDAS'] = df_cruce['PRENDAS'].fillna(df_cruce['CANTIDAD_TRANS']).astype(int)
     df_cruce['COSTO_TOTAL'] = df_cruce['COSTO_TOTAL'].fillna(0)
     df_cruce['CATEGORIA_DET'] = df_cruce['CATEGORIA_DET'].fillna('')
     df_cruce['GRUPO'] = df_cruce['GRUPO'].fillna('')
