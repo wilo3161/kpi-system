@@ -521,9 +521,13 @@ def mostrar_dashboard_transferencias():
                 st.header("📈 Indicadores por Categoría")
                 cols = st.columns(3)
                 for i, cat in enumerate(CATEGORIAS_LIST):
-                    sub = df[df['CATEGORIA_FINAL']==cat]
-                    und = _safe_int(sub['FUNDAS'].sum() if cat=='Fundas' else sub['PRENDAS'].sum())
-                    t_act = sub['TIENDA'].nunique()
+                    if cat == 'Fundas':
+                        und = _safe_int(df['FUNDAS'].sum())
+                        t_act = df[df['FUNDAS'] > 0]['TIENDA'].nunique()
+                    else:
+                        sub = df[df['CATEGORIA_FINAL']==cat]
+                        und = _safe_int(sub['PRENDAS'].sum())
+                        t_act = sub['TIENDA'].nunique()
                     color = COLORS[COLOR_KEYS[cat]]
                     esp = len(PRICE_CLUBS) if cat=='Price Club' else (len(TIENDAS_REGULARES) if cat=='Tiendas' else 0)
                     prog = min(100, int((t_act/esp)*100)) if esp else 100
@@ -539,7 +543,16 @@ def mostrar_dashboard_transferencias():
                     if i%3==2: cols = st.columns(3)
                 colI, colD = st.columns([2,1])
                 with colI:
-                    dfP = pd.DataFrame([{"Categoria": DISPLAY_NAMES[c], "Unidades": _safe_int(df[df['CATEGORIA_FINAL']==c]['FUNDAS'].sum() if c=='Fundas' else df[df['CATEGORIA_FINAL']==c]['PRENDAS'].sum())} for c in CATEGORIAS_LIST if df[df['CATEGORIA_FINAL']==c].shape[0] >0])
+                    data_pie = []
+                    for c in CATEGORIAS_LIST:
+                        if c == 'Fundas':
+                            suma = _safe_int(df['FUNDAS'].sum())
+                            if suma > 0: data_pie.append({"Categoria": DISPLAY_NAMES[c], "Unidades": suma})
+                        else:
+                            sub = df[df['CATEGORIA_FINAL']==c]
+                            suma = _safe_int(sub['PRENDAS'].sum())
+                            if suma > 0: data_pie.append({"Categoria": DISPLAY_NAMES[c], "Unidades": suma})
+                    dfP = pd.DataFrame(data_pie)
                     if not dfP.empty:
                         fig = px.pie(dfP, names='Categoria', values='Unidades', title="Distribución por Categoría", color='Categoria', color_discrete_map={DISPLAY_NAMES[k]: COLORS[COLOR_KEYS[k]] for k in CATEGORIAS_LIST})
                         fig.update_traces(textposition='inside', textinfo='percent+label')
@@ -550,7 +563,10 @@ def mostrar_dashboard_transferencias():
                     st.subheader("TOTAL GENERAL")
                     st.markdown(f"<div style='text-align:center;font-size:36px;font-weight:bold;'>{tot}</div>", unsafe_allow_html=True)
                     st.markdown(acu_metric("PROMEDIO X TRANSFERENCIA", f"{tot/max(df['SECUENCIAL'].nunique(),1):.0f}", color="blue", icon="📈"), unsafe_allow_html=True)
-                    st.markdown(acu_metric("CATEGORÍAS ACTIVAS", f"{sum(1 for c in CATEGORIAS_LIST if df[df['CATEGORIA_FINAL']==c].shape[0] >0)}/6", color="green", icon="✅"), unsafe_allow_html=True)
+                    def is_active(c, df):
+                        if c == 'Fundas': return df['FUNDAS'].sum() > 0
+                        return df[df['CATEGORIA_FINAL']==c].shape[0] > 0
+                    st.markdown(acu_metric("CATEGORÍAS ACTIVAS", f"{sum(1 for c in CATEGORIAS_LIST if is_active(c, df))}/6", color="green", icon="✅"), unsafe_allow_html=True)
                     st.markdown(acu_metric("% FUNDAS", f"{df['FUNDAS'].sum()/tot*100 if tot else 0:.1f}%", color="yellow", icon="🛍️"), unsafe_allow_html=True)
 
         # ==================== TAB 3 ====================
@@ -562,7 +578,13 @@ def mostrar_dashboard_transferencias():
                 dfDE = st.session_state['df_detalle_enr']
                 st.subheader("🏪 Desglose por Tienda - Peso Relativo")
                 catT = st.selectbox("Categoría para peso relativo: ", ['Todas']+CATEGORIAS_LIST, key="tab3_cat_treemap")
-                dfF = dfC[dfC['CATEGORIA_FINAL']==catT] if catT!='Todas' else dfC
+                if catT == 'Todas':
+                    dfF = dfC
+                elif catT == 'Fundas':
+                    dfF = dfC[dfC['FUNDAS'] > 0]
+                else:
+                    dfF = dfC[dfC['CATEGORIA_FINAL']==catT]
+                
                 if not dfF.empty:
                     tU = dfF.groupby('TIENDA').agg(Prendas=('PRENDAS','sum'), Fundas=('FUNDAS','sum'), Costo=('COSTO_TOTAL','sum')).reset_index()
                     tU['Unidades'] = tU['Prendas']+tU['Fundas']
@@ -591,7 +613,12 @@ def mostrar_dashboard_transferencias():
                 st.markdown("---")
                 st.subheader("Detalle por Tienda Individual")
                 catS = st.selectbox("Categoría comercial", ['Todas']+CATEGORIAS_LIST, key="tab3_cat")
-                tiendas = sorted(dfC[dfC['CATEGORIA_FINAL']==catS]['TIENDA'].unique()) if catS!='Todas' else sorted(dfC['TIENDA'].unique())
+                if catS == 'Todas':
+                    tiendas = sorted(dfC['TIENDA'].unique())
+                elif catS == 'Fundas':
+                    tiendas = sorted(dfC[dfC['FUNDAS'] > 0]['TIENDA'].unique())
+                else:
+                    tiendas = sorted(dfC[dfC['CATEGORIA_FINAL']==catS]['TIENDA'].unique())
                 tSel = st.selectbox("Tienda", tiendas, key="tab3_tienda")
                 if tSel:
                     transT = dfC[dfC['TIENDA']==tSel]
