@@ -37,15 +37,18 @@ def _extraer_digitos(valor):
 
 def extraer_entero(val):
     if pd.isna(val): return 0
-    if isinstance(val, (int, float)): return int(val)
+    if isinstance(val, (int, float)): return int(round(val))
     s = str(val).strip()
-    s = s.replace('.', '')
-    s = s.replace(',', '.')
     try:
-        return int(float(s))
+        s_norm = s.replace(',', '.')
+        parts = s_norm.split('.')
+        if len(parts) > 2:
+            s_norm = ''.join(parts[:-1]) + '.' + parts[-1]
+        flt = float(s_norm)
+        return int(round(flt))
     except ValueError:
-        s = re.sub(r'\D', '', s)
-        return int(s) if s else 0
+        s_digits = re.sub(r'\D', '', s)
+        return int(s_digits) if s_digits else 0
 
 def parse_producto_color_talla(descripcion):
     """Separa una descripción de producto en (producto, color, talla)."""
@@ -131,21 +134,26 @@ _MAPEO_DIRECTO = {
 }
 _MAPEO_DIRECTO_NORM = {normalizar_para_mapeo(k): v for k, v in _MAPEO_DIRECTO.items()}
 
-def clasificar_categoria(bodega_destino, categoria_detalle, grupo):
+def clasificar_categoria(bodega_destino, categoria_detalle="", grupo=""):
     cat_det = str(categoria_detalle).upper() if not pd.isna(categoria_detalle) else ""
-    if 'FUNDA' in cat_det: return 'Fundas'
-    if 'ACCESORIOS PRICE CLUB' in cat_det: return 'Price Club'
+    grp = str(grupo).upper() if not pd.isna(grupo) else ""
+    if 'FUNDA' in cat_det or 'BAG' in cat_det or 'FUNDA' in grp or 'BAG' in grp or 'PLASTIC' in grp: 
+        return 'Fundas'
+    if 'ACCESORIOS PRICE CLUB' in cat_det: 
+        return 'Price Club'
+        
     bodega_norm = normalizar_para_mapeo(bodega_destino)
-    if bodega_norm in _MAPEO_DIRECTO_NORM: return _MAPEO_DIRECTO_NORM[bodega_norm]
     if any(p in bodega_norm for p in ['PRICE', 'OIL']): return 'Price Club'
     if any(p in bodega_norm for p in ['VENTAS POR MAYOR', 'MAYORISTA']): return 'Ventas por Mayor'
     if any(p in bodega_norm for p in ['TIENDA WEB', 'MOVIL', 'WEB']): return 'Tienda Web'
     if 'FALLAS' in bodega_norm: return 'Fallas'
+    if 'AERO' in bodega_norm: return 'Tiendas'
+    if bodega_norm in _MAPEO_DIRECTO_NORM: return _MAPEO_DIRECTO_NORM[bodega_norm]
     return 'Tiendas'
 
 def clean_corrupted_quantity(val):
     num = extraer_entero(val)
-    if num > 100000 and num % 100000 == 0:
+    if num > 10000000 and num % 1000000 == 0:
         return int(num / 1000000)
     return num
 
@@ -172,8 +180,8 @@ def _is_true_quantity(df, col_name):
         sample = df[col_name].dropna().head(100)
         for val in sample:
             num = extraer_entero(val)
-            if num > 100000:
-                if num % 100000 != 0:
+            if num > 10000000:
+                if num % 1000000 != 0:
                     return False
         return True
     except:
@@ -265,7 +273,16 @@ def procesar_archivos(df_transferencias, df_detalle):
     trans_cols = {normalizar_para_mapeo(c): c for c in df_transferencias.columns}
     sec_col_t = next((trans_cols[k] for k in trans_cols if any(x in k for x in ['SECUENCIAL', 'TRANSFERENCIA', 'NUMERO', 'FACTURA', 'GUIA', 'DOCUMENTO', 'SEC', 'NRO'])), None)
     cant_col_t = _find_true_quantity_col(df_transferencias, trans_cols)
-    tienda_col = next((trans_cols[k] for k in trans_cols if any(x in k for x in ['BODEGA DESTINO', 'SUCURSAL DESTINO', 'DESTINO', 'BODEGA', 'TIENDA', 'SUCURSAL', 'RECIBE'])), None)
+    
+    # Preferir BODEGA DESTINO o BODEGA RECIBE sobre SUCURSAL DESTINO
+    tienda_col = None
+    for exact in ['BODEGA DESTINO', 'BODEGA RECIBE', 'DESTINO']:
+        if exact in trans_cols:
+            tienda_col = trans_cols[exact]
+            break
+    if not tienda_col:
+        tienda_col = next((trans_cols[k] for k in trans_cols if any(x in k for x in ['SUCURSAL DESTINO', 'BODEGA', 'TIENDA', 'SUCURSAL', 'RECIBE'])), None)
+        
     fecha_col_t = next((trans_cols[k] for k in trans_cols if 'FECHA' in k), None)
 
     if not all([sec_col_t, cant_col_t, tienda_col]):
