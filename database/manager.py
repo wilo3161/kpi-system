@@ -596,26 +596,41 @@ def consultar_historico(modulo, pestaña=None, fecha_desde=None, fecha_hasta=Non
     if usuario: query["usuario"] = usuario
     return db.find("historico", query, sort=[("fecha_archivo", -1)], limit=limit)
 
-def existe_historico_dia(fecha: date, pestaña="Transferencias Diarias"):
+def _safe_to_date(f):
+    if isinstance(f, datetime): return f.date()
+    if isinstance(f, date): return f
+    if isinstance(f, str):
+        try: return pd.to_datetime(f).date()
+        except: pass
+    if hasattr(f, 'date'):
+        try: return f.date()
+        except: pass
+    return date.today()
+
+def existe_historico_dia(fecha, pestaña="Transferencias Diarias"):
     db = get_db_v2()
-    inicio = datetime(fecha.year, fecha.month, fecha.day)
-    fin = datetime(fecha.year, fecha.month, fecha.day, 23, 59, 59)
+    d = _safe_to_date(fecha)
+    inicio = datetime(d.year, d.month, d.day)
+    fin = datetime(d.year, d.month, d.day, 23, 59, 59)
     return db.count("historico", {"modulo": "dashboard_logistico", "pestaña": pestaña, "fecha_archivo": {"$gte": inicio, "$lte": fin}}) > 0
 
-def obtener_historico_por_fecha(fecha: date, pestaña="Transferencias Diarias"):
+def obtener_historico_por_fecha(fecha, pestaña="Transferencias Diarias"):
     db = get_db_v2()
-    inicio = datetime(fecha.year, fecha.month, fecha.day); fin = datetime(fecha.year, fecha.month, fecha.day, 23, 59, 59)
+    d = _safe_to_date(fecha)
+    inicio = datetime(d.year, d.month, d.day); fin = datetime(d.year, d.month, d.day, 23, 59, 59)
     docs = db.find("historico", {"modulo": "dashboard_logistico", "pestaña": pestaña, "fecha_archivo": {"$gte": inicio, "$lte": fin}}, limit=1)
     return docs[0] if docs else None
 
-def borrar_historico_dia(fecha: date, pestaña="Transferencias Diarias"):
+def borrar_historico_dia(fecha, pestaña="Transferencias Diarias"):
     db = get_db_v2()
-    inicio = datetime(fecha.year, fecha.month, fecha.day); fin = datetime(fecha.year, fecha.month, fecha.day, 23, 59, 59)
+    d = _safe_to_date(fecha)
+    inicio = datetime(d.year, d.month, d.day); fin = datetime(d.year, d.month, d.day, 23, 59, 59)
     db.delete("historico", {"modulo": "dashboard_logistico", "pestaña": pestaña, "fecha_archivo": {"$gte": inicio, "$lte": fin}})
 
-def fusionar_historico_dia(fecha: date, metricas_nuevas: dict, pestaña="Transferencias Diarias"):
+def fusionar_historico_dia(fecha, metricas_nuevas: dict, pestaña="Transferencias Diarias"):
     db = get_db_v2()
-    inicio = datetime(fecha.year, fecha.month, fecha.day); fin = datetime(fecha.year, fecha.month, fecha.day, 23, 59, 59)
+    d = _safe_to_date(fecha)
+    inicio = datetime(d.year, d.month, d.day); fin = datetime(d.year, d.month, d.day, 23, 59, 59)
     existente = db.find_one("historico", {"modulo": "dashboard_logistico", "pestaña": pestaña, "fecha_archivo": {"$gte": inicio, "$lte": fin}})
     if existente:
         met_existente = existente.get("metricas", {})

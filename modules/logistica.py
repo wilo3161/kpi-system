@@ -853,10 +853,17 @@ def mostrar_dashboard_transferencias():
             with c2: fin = st.date_input("Hasta", value=st.session_state.hist_fin, key="hist_fin_wdg")
             if inicio > fin: st.error("⚠️ 'Desde' no puede ser posterior a 'Hasta'.")
             else:
-                if st.button("🔍 Consultar histórico", use_container_width=True, type="primary", key="btn_consultar"):
+                col_btn1, col_btn2 = st.columns(2)
+                with col_btn1:
+                    btn_cons = st.button("🔍 Consultar histórico", use_container_width=True, type="primary", key="btn_consultar")
+                with col_btn2:
+                    btn_del = st.button("🗑️ Borrar histórico de este rango", use_container_width=True, type="secondary", key="btn_borrar_rango")
+                
+                if btn_cons:
                     st.session_state.hist_inicio = inicio
                     st.session_state.hist_fin = fin
                     st.session_state.hist_regs = None
+                    st.session_state.pop('hist_regs_all', None)
                     try:
                         with st.spinner("Consultando base de datos..."):
                             regs = consultar_historico("dashboard_logistico", "Transferencias Diarias", inicio, fin)
@@ -864,6 +871,22 @@ def mostrar_dashboard_transferencias():
                     except Exception as e: st.error(f"❌ Error DB: {e}"); regs = []
                     if not regs: st.warning("⚠️ Sin datos. Procesa archivos en Tab 1.")
                     else: st.session_state.hist_regs = regs; st.success(f"✅ {len(regs)} registros encontrados")
+                    
+                if btn_del:
+                    try:
+                        from database.manager import borrar_historico_dia
+                        cur = inicio
+                        borrados = 0
+                        while cur <= fin:
+                            borrar_historico_dia(cur, "Transferencias Diarias")
+                            cur += timedelta(days=1)
+                            borrados += 1
+                        st.session_state.hist_regs = None
+                        st.session_state.pop('hist_regs_all', None)
+                        st.success(f"✅ Registros del {inicio} al {fin} borrados de la base de datos.")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Error borrando histórico: {e}")
             regs = st.session_state.get('hist_regs', None)
             if regs:
                 st.markdown("---")
