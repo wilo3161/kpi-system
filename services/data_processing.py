@@ -180,12 +180,16 @@ def _is_true_quantity(df, col_name):
         return False
 
 def _find_true_quantity_col(df, cols_dict):
-    for exact in ['CANTIDAD', 'TOTAL PRENDAS', 'CANT_PRENDA', 'CANTIDAD TOTAL', 'CANTIDAD TRANSFERIDA']:
+    for exact in ['CANTIDAD', 'TOTAL PRENDAS', 'CANT_PRENDA', 'CANTIDAD TOTAL', 'CANTIDAD TRANSFERIDA', 'UNIDADES', 'PRENDAS', 'CANT', 'QTY']:
         col = cols_dict.get(exact)
         if col and _is_true_quantity(df, col):
             return col
     for k, col in cols_dict.items():
-        if ('CANTIDAD' in k or 'CANT_' in k or 'TOTAL' in k or 'PRENDA' in k) and 'BARRA' not in k and 'CODIGO' not in k and 'PRECIO' not in k:
+        if any(x in k for x in ['CANTIDAD', 'CANT', 'TOTAL', 'PRENDA', 'UNIDAD', 'UNID', 'QTY']) and 'BARRA' not in k and 'CODIGO' not in k and 'PRECIO' not in k:
+            if _is_true_quantity(df, col):
+                return col
+    for k, col in cols_dict.items():
+        if not any(x in k for x in ['BARRA', 'CODIGO', 'PRECIO', 'SECUENCIAL', 'NUMERO', 'RUC', 'FECHA', 'TIENDA', 'BODEGA']):
             if _is_true_quantity(df, col):
                 return col
     return None
@@ -194,16 +198,20 @@ def _find_true_quantity_col(df, cols_dict):
 def procesar_archivos(df_transferencias, df_detalle):
     # --- Detalle ---
     det_cols = {normalizar_para_mapeo(c): c for c in df_detalle.columns}
-    sec_col = next((det_cols[k] for k in det_cols if 'SECUENCIAL' in k), None)
+    sec_col = next((det_cols[k] for k in det_cols if any(x in k for x in ['SECUENCIAL', 'TRANSFERENCIA', 'NUMERO', 'FACTURA', 'GUIA', 'DOCUMENTO', 'SEC', 'NRO'])), None)
     cant_col = _find_true_quantity_col(df_detalle, det_cols)
-    prod_col = next((det_cols[k] for k in det_cols if 'PRODUCTO' in k), None)
-    cat_col = next((det_cols[k] for k in det_cols if 'CATEGORIA' in k), None)
-    grupo_col = next((det_cols[k] for k in det_cols if 'GRUPO' in k), None)
-    costo_col = next((det_cols[k] for k in det_cols if 'COSTO' in k), None)
-    bodega_recibe_col = next((det_cols[k] for k in det_cols if 'BODEGA RECIBE' in k or 'BODEGA' in k), None)
+    prod_col = next((det_cols[k] for k in det_cols if any(x in k for x in ['PRODUCTO', 'DESCRIPCION', 'ITEM', 'ARTICULO', 'NOMBRE', 'PROD', 'DETALLE'])), None)
+    cat_col = next((det_cols[k] for k in det_cols if 'CATEGORIA' in k or 'CAT' in k), None)
+    grupo_col = next((det_cols[k] for k in det_cols if 'GRUPO' in k or 'GRP' in k), None)
+    costo_col = next((det_cols[k] for k in det_cols if 'COSTO' in k or 'PRECIO' in k or 'VALOR' in k), None)
+    bodega_recibe_col = next((det_cols[k] for k in det_cols if any(x in k for x in ['BODEGA RECIBE', 'BODEGA', 'DESTINO', 'TIENDA', 'SUCURSAL'])), None)
     
     if not all([sec_col, cant_col, prod_col]):
-        raise ValueError("El archivo de detalle debe tener al menos: Secuencial, Cantidad, Producto.")
+        missing = []
+        if not sec_col: missing.append("Secuencial/Transferencia")
+        if not cant_col: missing.append("Cantidad")
+        if not prod_col: missing.append("Producto/Descripción")
+        raise ValueError(f"El archivo de detalle debe tener al menos: {', '.join(missing)}.")
 
     df_det = df_detalle.copy()
     df_det['SECUENCIAL'] = df_det[sec_col].apply(_extraer_digitos).astype(str)
@@ -255,13 +263,17 @@ def procesar_archivos(df_transferencias, df_detalle):
 
     # --- Transferencias ---
     trans_cols = {normalizar_para_mapeo(c): c for c in df_transferencias.columns}
-    sec_col_t = next((trans_cols[k] for k in trans_cols if 'SECUENCIAL' in k), None)
+    sec_col_t = next((trans_cols[k] for k in trans_cols if any(x in k for x in ['SECUENCIAL', 'TRANSFERENCIA', 'NUMERO', 'FACTURA', 'GUIA', 'DOCUMENTO', 'SEC', 'NRO'])), None)
     cant_col_t = _find_true_quantity_col(df_transferencias, trans_cols)
-    tienda_col = next((trans_cols[k] for k in trans_cols if 'BODEGA DESTINO' in k or 'SUCURSAL DESTINO' in k), None)
+    tienda_col = next((trans_cols[k] for k in trans_cols if any(x in k for x in ['BODEGA DESTINO', 'SUCURSAL DESTINO', 'DESTINO', 'BODEGA', 'TIENDA', 'SUCURSAL', 'RECIBE'])), None)
     fecha_col_t = next((trans_cols[k] for k in trans_cols if 'FECHA' in k), None)
 
     if not all([sec_col_t, cant_col_t, tienda_col]):
-        raise ValueError("El archivo de transferencias debe tener: Secuencial, Cantidad, Bodega/Sucursal Destino.")
+        missing_t = []
+        if not sec_col_t: missing_t.append("Secuencial/Transferencia")
+        if not cant_col_t: missing_t.append("Cantidad")
+        if not tienda_col: missing_t.append("Bodega/Sucursal Destino")
+        raise ValueError(f"El archivo de transferencias debe tener al menos: {', '.join(missing_t)}.")
 
     df_trans = df_transferencias.copy()
     df_trans['SECUENCIAL'] = df_trans[sec_col_t].apply(_extraer_digitos).astype(str)
