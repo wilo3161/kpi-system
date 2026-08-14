@@ -261,198 +261,220 @@ def show_gestion_equipo():
     # PESTAÑA 4 – REGISTRO DIARIO DE ACTIVIDADES
     # =====================================================================
     with tabs[3] if is_admin else tabs[2]:
-        st.markdown("### 📝 Registro de Actividades Diarias")
-        
-        # Filtrar a Wilson Perez y obtener todos los miembros
-        miembros_completos = [m.get("nombre") for m in db_equipo if m.get("nombre")]
-        miembros_ingreso = [m for m in miembros_completos if m.lower() != "wilson perez"]
-        
         from datetime import timedelta
         from datetime import time as dt_time
-        
-        # Fecha de registro (el corte es a las 20:00, a partir de ahí cuenta para el día siguiente)
+        from utils.telegram_helper import enviar_mensaje_telegram
+
+        st.markdown("""
+        <style>
+        .report-header-card {
+            background: linear-gradient(135deg, rgba(30,41,59,0.9) 0%, rgba(15,23,42,0.9) 100%);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+        }
+        .status-badge-ok {
+            background: rgba(16,185,129,0.15);
+            color: #10b981;
+            border: 1px solid rgba(16,185,129,0.3);
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+        .status-badge-pending {
+            background: rgba(239,68,68,0.15);
+            color: #ef4444;
+            border: 1px solid rgba(239,68,68,0.3);
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+        </style>
+        """, unsafe_allow_html=True)
+
+        st.markdown("### 📝 Registro Diario de Actividades")
+
+        # Excluir a Wilson Perez (El Jefe) del reporte obligatorio
+        miembros_completos = [m.get("nombre") for m in db_equipo if m.get("nombre")]
+        miembros_ingreso = [
+            m for m in miembros_completos 
+            if "wilson" not in m.lower() or "perez" not in m.lower()
+        ]
+
+        # Hora actual en Ecuador y fecha de registro
         ahora = obtener_hora_ecuador()
         if ahora.hour >= 20:
             fecha_hoy = (ahora + timedelta(days=1)).strftime("%Y-%m-%d")
         else:
             fecha_hoy = ahora.strftime("%Y-%m-%d")
-        
-        # Consultar quiénes ya han registrado para la fecha en curso
+
+        # Consultar quienes han registrado hoy
         acts_hoy = local_db.find("actividades_diarias", {"fecha": fecha_hoy})
-        empleados_con_registro = {a.get("empleado") for a in acts_hoy if a.get("empleado")}
-        
-        col_form, col_status = st.columns([0.65, 0.35])
-        
-        with col_status:
-            st.markdown("#### 📌 Estado de Ingresos Hoy")
-            estado_html = "<div style='background: rgba(255,255,255,0.05); padding: 15px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.1);'>"
-            for emp in miembros_ingreso:
-                if emp in empleados_con_registro:
-                    estado_html += f"<div style='margin-bottom: 5px; font-weight: 500; color: #10b981;'>🟢 {emp}</div>"
-                else:
-                    estado_html += f"<div style='margin-bottom: 5px; color: #ef4444;'>🔴 {emp}</div>"
-            estado_html += "</div>"
-            st.markdown(estado_html, unsafe_allow_html=True)
-        
+        registros_dict = {a.get("empleado"): a for a in acts_hoy if a.get("empleado")}
+        empleados_con_registro = set(registros_dict.keys())
+
+        # ────── DASHBOARD DE ESTADO DE REPORTES ──────
+        st.markdown("#### 📊 Estado de Reportes del Equipo (Corte 20:00 PM)")
+        total_esperados = len(miembros_ingreso)
+        total_reportados = len(empleados_con_registro.intersection(set(miembros_ingreso)))
+        total_pendientes = max(0, total_esperados - total_reportados)
+
+        c_met1, c_met2, c_met3 = st.columns(3)
+        c_met1.metric("👥 Personal Esperado", f"{total_esperados}")
+        c_met2.metric("🟢 Han Reportado", f"{total_reportados}")
+        c_met3.metric("🔴 Sin Reportar", f"{total_pendientes}")
+
+        st.write("")
+        col_ok, col_pending = st.columns(2)
+
+        with col_ok:
+            st.markdown("##### 🟢 Personal que ya reportó")
+            if not empleados_con_registro:
+                st.info("Aún nadie ha registrado actividades para este ciclo.")
+            else:
+                for emp in miembros_ingreso:
+                    if emp in empleados_con_registro:
+                        reg = registros_dict.get(emp, {})
+                        hora_reg = reg.get("hora_registro", "Registrado")
+                        st.markdown(f"""
+                        <div style="background: rgba(16,185,129,0.06); border-left: 4px solid #10b981; padding: 10px 14px; border-radius: 8px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;">
+                            <span style="font-weight:600; color:#e2e8f0;">{emp}</span>
+                            <span class="status-badge-ok">🕒 {hora_reg}</span>
+                        </div>
+                        """, unsafe_allow_html=True)
+
+        with col_pending:
+            st.markdown("##### 🔴 Pendientes por reportar")
+            pendientes = [m for m in miembros_ingreso if m not in empleados_con_registro]
+            if not pendientes:
+                st.success("🎉 ¡Excelente! Todo el equipo ha completado su reporte de hoy.")
+            else:
+                for emp in pendientes:
+                    st.markdown(f"""
+                    <div style="background: rgba(239,68,68,0.06); border-left: 4px solid #ef4444; padding: 10px 14px; border-radius: 8px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;">
+                        <span style="font-weight:600; color:#e2e8f0;">{emp}</span>
+                        <span class="status-badge-pending">⏳ Pendiente</span>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+        st.divider()
+
+        # ────── FORMULARIO DE INGRESO ──────
+        col_form, col_info = st.columns([0.65, 0.35])
+
         with col_form:
-            now = obtener_hora_ecuador()
-            hora_actual = now.time()
+            st.subheader("✍️ Ingresar tus Actividades del Día")
+            hora_actual = ahora.time()
             hora_limite = dt_time(20, 0)
-            
-            # Consultar última emisión del reporte
-            estado_cierre = local_db.find_one("estado_sistema", {"id": "cierre_reporte"})
-            if not estado_cierre:
-                ultima_emision_dt = datetime(1970, 1, 1)
-            else:
-                ultima_emision_dt = datetime.fromisoformat(estado_cierre.get("ultima_emision", "1970-01-01T00:00:00"))
-            
-            bloqueado = False
-            if not is_admin:
-                if hora_actual >= hora_limite:
-                    limite_hoy = datetime.combine(now.date(), hora_limite)
-                    # Si ya son pasadas las 20:00 y no se ha emitido el reporte después de las 20:00 de hoy
-                    if ultima_emision_dt < limite_hoy:
-                        bloqueado = True
-            
-            if bloqueado:
-                st.error("⏰ El horario de registro ha finalizado (corte a las 20:00). Estará habilitado nuevamente una vez que el Administrador emita el reporte de hoy.")
-            else:
-                if ahora.hour >= 20:
-                    st.info("🌙 Registro habilitado para el día de MAÑANA.")
-                    
-                with st.form("form_actividades"):
-                    st.subheader("Ingresar Actividad")
-                    empleado = st.selectbox("Selecciona tu nombre", [""] + miembros_ingreso)
-                    actividad = st.text_area("Describe tus actividades (ej. Transferencias: Ejecución de transferencias de 2,000 prendas...)", height=150)
-                    
-                    if st.form_submit_button("Guardar Información", use_container_width=True):
-                        if empleado and actividad:
-                            local_db.insert("actividades_diarias", {
-                                "fecha": fecha_hoy,
-                                "empleado": empleado,
-                                "actividad": actividad,
-                                "hora_registro": obtener_hora_ecuador().strftime("%H:%M:%S")
-                            })
-                            st.success(f"✅ Información guardada correctamente para {empleado}.")
-                            st.rerun()
-                        else:
-                            st.error("Por favor, selecciona tu nombre y describe la actividad.")
-        
-        # SECCIÓN EXCLUSIVA PARA EL ADMINISTRADOR
+
+            if ahora.hour >= 20:
+                st.info("🌙 Registro habilitado para el próximo turno de trabajo.")
+
+            with st.form("form_actividades_diarias", clear_on_submit=True):
+                empleado_sel = st.selectbox("Selecciona tu Nombre:", ["-- Selecciona tu nombre --"] + miembros_ingreso)
+                actividades_txt = st.text_area(
+                    "Describe tus actividades diarias (separa tareas por línea o categoría):",
+                    placeholder="Ejemplo:\nTransferencias: Ejecución de transferencias de 2,000 prendas...\nProcesamiento: Realizó el 'pitado' y enfundado...",
+                    height=180
+                )
+                btn_guardar = st.form_submit_button("📤 Enviar Mi Reporte Diario", type="primary", use_container_width=True)
+
+                if btn_guardar:
+                    if empleado_sel and empleado_sel != "-- Selecciona tu nombre --" and actividades_txt.strip():
+                        # Guardar o actualizar registro del colaborador
+                        local_db.insert("actividades_diarias", {
+                            "fecha": fecha_hoy,
+                            "empleado": empleado_sel,
+                            "actividad": actividades_txt.strip(),
+                            "hora_registro": obtener_hora_ecuador().strftime("%H:%M:%S")
+                        })
+
+                        # Extraer el primer nombre para la respuesta personalizada
+                        primer_nombre = empleado_sel.strip().split()[0].title()
+                        st.success(f"🎉 ¡Gracias {primer_nombre} por tu reporte de hoy! Tu actividad fue registrada con éxito.")
+                        st.rerun()
+                    else:
+                        st.error("⚠️ Por favor selecciona tu nombre e ingresa el detalle de tus actividades.")
+
+        with col_info:
+            st.markdown("""
+            <div class="report-header-card">
+                <h4 style="color:#38bdf8; margin-top:0;">💡 Guía para el Registro</h4>
+                <ul style="color:#94a3b8; font-size:0.9rem; padding-left:20px;">
+                    <li><b>Horario de corte:</b> 20:00 PM (8:00 PM).</li>
+                    <li><b>Formato sugerido:</b> Agrupa por áreas (<i>Transferencias, Procesamiento, Logística, etc.</i>).</li>
+                    <li><b>Jefatura:</b> Wilson Pérez no realiza reporte diario.</li>
+                    <li><b>Telegram:</b> El reporte consolidado se envía automáticamente al Telegram de Gerencia.</li>
+                </ul>
+            </div>
+            """, unsafe_allow_html=True)
+
+        # ────── SECCIÓN ADMINISTRADOR / CONSOLIDADO ──────
         if is_admin:
             st.divider()
-            st.subheader("📊 Reporte Consolidado (Administrador)")
+            st.subheader("🚀 Consolidación de Reportes Diarios y Envío a Telegram")
             
-            fecha_consulta = st.date_input("Consultar registros por fecha:", obtener_hora_ecuador().date())
-            fecha_str = fecha_consulta.strftime("%Y-%m-%d")
-            
-            if st.button("Generar Registro", type="primary", use_container_width=True):
-                # Registrar que se emitió el reporte para habilitar la plataforma
-                now_str = obtener_hora_ecuador().isoformat()
-                estado_cierre = local_db.find_one("estado_sistema", {"id": "cierre_reporte"})
-                if estado_cierre:
-                    if hasattr(local_db, 'data') and 'estado_sistema' in local_db.data:
-                        local_db.data["estado_sistema"] = [x for x in local_db.data["estado_sistema"] if x.get("id") != "cierre_reporte"]
-                    else:
-                        local_db.delete("estado_sistema", {"id": "cierre_reporte"})
-                local_db.insert("estado_sistema", {"id": "cierre_reporte", "ultima_emision": now_str})
+            f_sel = st.date_input("Fecha del reporte:", obtener_hora_ecuador().date())
+            f_str = f_sel.strftime("%Y-%m-%d")
+
+            col_b1, col_b2 = st.columns(2)
+            with col_b1:
+                btn_generar = st.button("📋 Generar y Consolidar Reporte", type="primary", use_container_width=True)
+            with col_b2:
+                btn_telegram = st.button("✈️ Enviar Consolidado a Telegram", use_container_width=True)
+
+            if btn_generar or btn_telegram:
+                acts_registradas = local_db.find("actividades_diarias", {"fecha": f_str})
                 
-                acts_consulta = local_db.find("actividades_diarias", {"fecha": fecha_str})
-                if acts_consulta:
-                    meses = ["", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
-                    fecha_formateada = f"{fecha_consulta.day:02d} de {meses[fecha_consulta.month]} de {fecha_consulta.year}"
-                    
-                    # Agrupar por empleado y DEDUPLICAR — solo conservar actividades únicas
-                    acts_por_emp = {}
-                    for a in acts_consulta:
-                        emp = a.get("empleado", "Desconocido")
-                        texto = a.get("actividad", "").strip()
-                        if emp not in acts_por_emp:
-                            acts_por_emp[emp] = set()
-                        acts_por_emp[emp].add(texto)
-                    
-                    # Construir texto crudo para enviar a la IA
-                    texto_crudo = f"Fecha: {fecha_formateada}\n\n"
-                    for emp, textos in acts_por_emp.items():
-                        texto_crudo += f"{emp}:\n"
-                        for t in textos:
-                            texto_crudo += f"{t}\n"
-                        texto_crudo += "\n"
-                    
-                    # Generar reporte sin IA
-                    with st.spinner("✨ Generando reporte..."):
-                        reporte_ia = f"Reporte de actividades - {fecha_formateada}\n\n"
-                        for emp, textos in acts_por_emp.items():
-                            reporte_ia += f"Colaborador: {emp}\n"
-                            for t in textos:
-                                reporte_ia += f"- {t}\n"
-                            reporte_ia += "\n"
-                    
-                    # ── GUARDAR EN BASE DE DATOS ──
-                    # Si ya existe un reporte para esa fecha, lo reemplazamos
-                    reporte_existente = local_db.find_one("reportes_diarios", {"fecha": fecha_str})
-                    if reporte_existente:
-                        if hasattr(local_db, 'data') and 'reportes_diarios' in local_db.data:
-                            local_db.data["reportes_diarios"] = [x for x in local_db.data["reportes_diarios"] if x.get("fecha") != fecha_str]
+                # Nombres de meses en español
+                meses = ["", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
+                fecha_fmt = f"{f_sel.day:02d} de {meses[f_sel.month]} de {f_sel.year}"
+
+                # Mapear actividades por empleado
+                dict_actividades = {}
+                for a in acts_registradas:
+                    emp = a.get("empleado")
+                    txt = a.get("actividad", "").strip()
+                    if emp and txt:
+                        if emp not in dict_actividades:
+                            dict_actividades[emp] = []
+                        dict_actividades[emp].append(txt)
+
+                # Construir el texto en el formato profesional exacto solicitado
+                lineas_reporte = [f"*Reporte de actividades - {fecha_fmt}*\n"]
+
+                # Primero agregar quienes sí reportaron
+                for emp in miembros_ingreso:
+                    if emp in dict_actividades:
+                        lineas_reporte.append(f"*{emp}:*")
+                        for act_block in dict_actividades[emp]:
+                            for line in act_block.split("\n"):
+                                if line.strip():
+                                    lineas_reporte.append(line.strip())
+                        lineas_reporte.append("") # Línea en blanco entre personas
+
+                # Luego agregar a quienes NO reportaron
+                for emp in miembros_ingreso:
+                    if emp not in dict_actividades:
+                        lineas_reporte.append(f"*{emp}:* No reportó sus actividades diarias.\n")
+
+                reporte_consolidado = "\n".join(lineas_reporte).strip()
+
+                # Mostrar vista previa profesional
+                st.markdown("#### 📄 Vista Previa del Reporte Consolidado:")
+                st.code(reporte_consolidado, language="text")
+
+                # Enviar a Telegram si fue solicitado
+                if btn_telegram:
+                    with st.spinner("Enviando reporte a Telegram..."):
+                        res_tg = enviar_mensaje_telegram(reporte_consolidado)
+                        if res_tg.get("success"):
+                            st.success("✈️ ¡Reporte consolidado enviado exitosamente a Telegram!")
                         else:
-                            local_db.delete("reportes_diarios", {"fecha": fecha_str})
-                    local_db.insert("reportes_diarios", {
-                        "fecha": fecha_str,
-                        "fecha_formateada": fecha_formateada,
-                        "reporte": reporte_ia,
-                        "generado_por": st.session_state.get("username", "Admin"),
-                        "generado_en": obtener_hora_ecuador().isoformat(),
-                        "colaboradores": list(acts_por_emp.keys()),
-                    })
-
-                    # Mostrar el reporte generado listo para copiar
-                    st.success("✅ Reporte generado y guardado correctamente")
-                    st.markdown("#### 📋 Reporte Listo para Copiar:")
-                    st.code(reporte_ia, language="text")
-                    
-                    # Botón de descarga como archivo .txt
-                    st.download_button(
-                        label="📥 Descargar reporte .txt",
-                        data=reporte_ia,
-                        file_name=f"reporte_actividades_{fecha_str}.txt",
-                        mime="text/plain",
-                        use_container_width=True
-                    )
-                else:
-                    st.warning(f"Aún no hay actividades registradas para la fecha: {fecha_str}.")
-
-            # ── HISTORIAL DE REPORTES GUARDADOS ──
-            st.divider()
-            st.subheader("📚 Historial de Reportes Diarios")
-            reportes_guardados = local_db.find("reportes_diarios", sort=[("fecha", -1)], limit=60)
-            if not reportes_guardados:
-                st.info("Aún no hay reportes guardados. Genera el primer reporte con el botón de arriba.")
-            else:
-                # Selector de fecha con los reportes disponibles
-                fechas_disponibles = [r.get("fecha_formateada", r.get("fecha")) for r in reportes_guardados]
-                fechas_raw = [r.get("fecha") for r in reportes_guardados]
-                fecha_sel_label = st.selectbox(
-                    "📅 Seleccionar reporte por fecha:",
-                    options=range(len(fechas_disponibles)),
-                    format_func=lambda i: fechas_disponibles[i]
-                )
-                reporte_sel = reportes_guardados[fecha_sel_label]
-                gen_por = reporte_sel.get("generado_por", "—")
-                gen_en = reporte_sel.get("generado_en", "")[:16].replace("T", " ")
-                colaboradores = ", ".join(reporte_sel.get("colaboradores", []))
-                st.markdown(f"""
-                <div style='background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; padding: 12px 18px; margin-bottom: 10px;'>
-                    <span style='color:#94a3b8; font-size:0.85rem;'>Generado por <b>{gen_por}</b> el {gen_en} &nbsp;|&nbsp; Colaboradores: {colaboradores}</span>
-                </div>
-                """, unsafe_allow_html=True)
-                st.code(reporte_sel.get("reporte", ""), language="text")
-                st.download_button(
-                    label=f"📥 Descargar {fechas_disponibles[fecha_sel_label]}.txt",
-                    data=reporte_sel.get("reporte", ""),
-                    file_name=f"reporte_{fechas_raw[fecha_sel_label]}.txt",
-                    mime="text/plain",
-                    use_container_width=True,
-                    key=f"dl_hist_{fecha_sel_label}"
-                )
+                            st.warning(f"⚠️ Nota de Telegram: {res_tg.get('message', 'No se pudo enviar. Verifica credenciales.')}")
 
     st.markdown('</div>', unsafe_allow_html=True)
