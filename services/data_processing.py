@@ -206,13 +206,18 @@ def _find_true_quantity_col(df, cols_dict):
 def procesar_archivos(df_transferencias, df_detalle):
     # --- Detalle ---
     det_cols = {normalizar_para_mapeo(c): c for c in df_detalle.columns}
-    sec_col = next((det_cols[k] for k in det_cols if any(x in k for x in ['SECUENCIAL', 'TRANSFERENCIA', 'NUMERO', 'FACTURA', 'GUIA', 'DOCUMENTO', 'SEC', 'NRO'])), None)
+    sec_col = det_cols.get('SECUENCIAL') or det_cols.get('SECUENCIAL FACTURA') or next((det_cols[k] for k in det_cols if any(x in k for x in ['SECUENCIAL', 'TRANSFERENCIA', 'NUMERO', 'FACTURA', 'GUIA', 'DOCUMENTO', 'SEC', 'NRO'])), None)
     cant_col = _find_true_quantity_col(df_detalle, det_cols)
-    prod_col = next((det_cols[k] for k in det_cols if any(x in k for x in ['PRODUCTO', 'DESCRIPCION', 'ITEM', 'ARTICULO', 'NOMBRE', 'PROD', 'DETALLE'])), None)
-    cat_col = next((det_cols[k] for k in det_cols if 'CATEGORIA' in k or 'CAT' in k), None)
-    grupo_col = next((det_cols[k] for k in det_cols if 'GRUPO' in k or 'GRP' in k), None)
-    costo_col = next((det_cols[k] for k in det_cols if 'COSTO' in k or 'PRECIO' in k or 'VALOR' in k), None)
-    bodega_recibe_col = next((det_cols[k] for k in det_cols if any(x in k for x in ['BODEGA RECIBE', 'BODEGA', 'DESTINO', 'TIENDA', 'SUCURSAL'])), None)
+    
+    # Priorizar coincidencias exactas para producto para evitar confundir 'Codigo Producto' con 'Producto'
+    prod_col = det_cols.get('PRODUCTO') or det_cols.get('DESCRIPCION') or det_cols.get('ITEM') or det_cols.get('NOMBRE')
+    if not prod_col:
+        prod_col = next((det_cols[k] for k in det_cols if any(x in k for x in ['PRODUCTO', 'DESCRIPCION', 'ITEM', 'ARTICULO', 'NOMBRE', 'PROD', 'DETALLE']) and not any(y in k for y in ['CODIGO', 'COD', 'BARRA', 'ID'])), None)
+        
+    cat_col = det_cols.get('CATEGORIA') or next((det_cols[k] for k in det_cols if 'CATEGORIA' in k or 'CAT' in k), None)
+    grupo_col = det_cols.get('GRUPO') or next((det_cols[k] for k in det_cols if 'GRUPO' in k or 'GRP' in k), None)
+    costo_col = det_cols.get('COSTO') or next((det_cols[k] for k in det_cols if 'COSTO' in k or 'PRECIO' in k or 'VALOR' in k), None)
+    bodega_recibe_col = det_cols.get('BODEGA RECIBE') or next((det_cols[k] for k in det_cols if any(x in k for x in ['BODEGA RECIBE', 'BODEGA', 'DESTINO', 'TIENDA', 'SUCURSAL'])), None)
     
     if not all([sec_col, cant_col, prod_col]):
         missing = []
