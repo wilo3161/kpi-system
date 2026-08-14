@@ -413,7 +413,130 @@ def show_gestion_equipo():
             </div>
             """, unsafe_allow_html=True)
 
-        # ────── SECCIÓN ADMINISTRADOR / CONSOLIDADO ──────
+        # ────── DASHBOARD DE ANÁLISIS DE CUMPLIMIENTO Y REINCIDENTES ──────
+        st.divider()
+        st.markdown("### 📈 Dashboard de Cumplimiento y Analítica de Reincidentes")
+        from utils.ui import inject_acumatica_css, acu_metric
+        import plotly.express as px
+
+        inject_acumatica_css()
+
+        c_fil1, c_fil2 = st.columns([1, 1])
+        with c_fil1:
+            periodo_sel = st.selectbox(
+                "📅 Selecciona Período de Análisis:",
+                ["Últimos 7 Días (Semanal)", "Últimos 30 Días (Mensual)", "Este Año (Anual)", "Rango Personalizado"],
+                key="sel_periodo_cumplimiento"
+            )
+        with c_fil2:
+            if periodo_sel == "Rango Personalizado":
+                c_d1, c_d2 = st.columns(2)
+                f_ini_analisis = c_d1.date_input("Desde", ahora.date() - timedelta(days=30), key="d_ini_an")
+                f_fin_analisis = c_d2.date_input("Hasta", ahora.date(), key="d_fin_an")
+            elif periodo_sel == "Últimos 7 Días (Semanal)":
+                f_ini_analisis = ahora.date() - timedelta(days=7)
+                f_fin_analisis = ahora.date()
+            elif periodo_sel == "Este Año (Anual)":
+                f_ini_analisis = datetime(ahora.year, 1, 1).date()
+                f_fin_analisis = ahora.date()
+            else: # 30 Días
+                f_ini_analisis = ahora.date() - timedelta(days=30)
+                f_fin_analisis = ahora.date()
+
+        # Calcular días laborales/evaluados en el rango
+        dias_rango = (f_fin_analisis - f_ini_analisis).days + 1
+        dias_rango = max(1, dias_rango)
+
+        # Consultar todos los registros en el rango de fechas
+        todas_actividades = local_db.find("actividades_diarias") or []
+        
+        # Filtrar registros en el rango
+        acts_filtradas = []
+        for a in todas_actividades:
+            try:
+                f_act = pd.to_datetime(a.get("fecha")).date()
+                if f_ini_analisis <= f_act <= f_fin_analisis:
+                    acts_filtradas.append(a)
+            except: pass
+
+        # Agrupar por empleado y por día
+        conteo_por_emp = {m: set() for m in miembros_ingreso}
+        for a in acts_filtradas:
+            emp = a.get("empleado")
+            f_str = a.get("fecha")
+            if emp in conteo_por_emp and f_str:
+                conteo_por_emp[emp].add(f_str)
+
+        total_esperados_rango = len(miembros_ingreso) * dias_rango
+        total_recibidos_rango = sum(len(dias) for dias in conteo_por_emp.values())
+        cumplimiento_global = (total_recibidos_rango / total_esperados_rango * 100) if total_esperados_rango > 0 else 0
+        tasa_incumplimiento = 100 - cumplimiento_global
+
+        # Renderizar TARJETAS KPI idénticas a la imagen del usuario usando acu_metric
+        col_k1, col_k2, col_k3, col_k4 = st.columns(4)
+        col_k1.markdown(acu_metric("CUMPLIMIENTO GLOBAL", f"{cumplimiento_global:.1f}%", color="blue", icon="🎯"), unsafe_allow_html=True)
+        col_k2.markdown(acu_metric("DÍAS EVALUADOS", f"{dias_rango} días", color="yellow", icon="⏱️"), unsafe_allow_html=True)
+        col_k3.markdown(acu_metric("TASA INCUMPLIMIENTO", f"{tasa_incumplimiento:.1f}%", color="red", icon="📉"), unsafe_allow_html=True)
+        col_k4.markdown(acu_metric("REPORTES RECIBIDOS", total_recibidos_rango, color="green", icon="📦"), unsafe_allow_html=True)
+
+        st.write("")
+
+        # ────── TABLA Y RANKING DE REINCIDENTES ──────
+        st.subheader("⚠️ Ranking de Reincidencia y Cumplimiento por Colaborador")
+        tabla_datos = []
+        for emp, dias_reportados in conteo_por_emp.items():
+            cant_entregados = len(dias_reportados)
+            cant_faltas = max(0, dias_rango - cant_entregados)
+            pct = (cant_entregados / dias_rango * 100) if dias_rango > 0 else 0
+
+            if pct >= 90:
+                alerta = "🟢 Excelente"
+            elif pct >= 75:
+                alerta = "🟡 Alerta Moderada"
+            else:
+                alerta = "🔴 Reincidente Crítico"
+
+            tabla_datos.append({
+                "Colaborador": emp,
+                "Esperados": dias_rango,
+                "Entregados": cant_entregados,
+                "Faltas / Reincidencias": cant_faltas,
+                "% Cumplimiento": f"{pct:.1f}%",
+                "Nivel de Alerta": alerta,
+                "_pct_val": pct
+            })
+
+        df_rank = pd.DataFrame(tabla_datos).sort_values("_pct_val", ascending=True)
+
+        col_tbl, col_chart = st.columns([0.55, 0.45])
+
+        with col_tbl:
+            st.markdown("##### 📋 Detalle de Colaboradores")
+            st.dataframe(
+                df_rank[["Colaborador", "Entregados", "Faltas / Reincidencias", "% Cumplimiento", "Nivel de Alerta"]],
+                use_container_width=True,
+                hide_index=True
+            )
+
+        with col_chart:
+            st.markdown("##### 📊 Comparativo de Cumplimiento (%)")
+            if not df_rank.empty:
+                fig_comp = px.bar(
+                    df_rank,
+                    x="_pct_val",
+                    y="Colaborador",
+                    orientation="h",
+                    text="_pct_val",
+                    color="_pct_val",
+                    color_continuous_scale=["#ef4444", "#f59e0b", "#10b981"],
+                    range_x=[0, 100],
+                    labels={"_pct_val": "% Cumplimiento"}
+                )
+                fig_comp.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
+                fig_comp.update_layout(template="plotly_dark", height=320, coloraxis_showscale=False)
+                st.plotly_chart(fig_comp, use_container_width=True)
+
+        # ────── SECCIÓN ADMINISTRADOR / CONSOLIDADO Y TELEGRAM ──────
         if is_admin:
             st.divider()
             st.subheader("🚀 Consolidación de Reportes Diarios y Envío a Telegram")
