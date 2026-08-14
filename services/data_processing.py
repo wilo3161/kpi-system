@@ -32,8 +32,13 @@ def normalizar_para_mapeo(texto):
     return texto
 
 def _extraer_digitos(valor):
-    s = str(valor) if not pd.isna(valor) else ""
-    return re.sub(r'\D', '', s)
+    if pd.isna(valor): return ""
+    s = str(valor).strip()
+    try:
+        flt = float(s)
+        return str(int(round(flt)))
+    except ValueError:
+        return re.sub(r'\D', '', s)
 
 def extraer_entero(val):
     if pd.isna(val): return 0
