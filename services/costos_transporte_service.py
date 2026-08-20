@@ -342,43 +342,191 @@ def cargar_y_limpiar_factura(file_or_bytes) -> Tuple[pd.DataFrame, pd.DataFrame,
 # ==============================================================================
 
 CATALOGO_SUCURSALES_OFICIAL = [
-    {"codigo": "1.001", "sucursal": "MATRIZ / CD IBARRA", "keywords": ["MATRIZ", "CD IBARRA", "BODEGA IBARRA", "CENTRO DE DISTRIBUCION", "CENTRO DISTRIBUCION IBARRA"]},
-    {"codigo": "2001", "sucursal": "MALL DEL RIO CUENCA", "keywords": ["MALL DEL RIO CUENCA", "CUENCA MALL", "MALL DEL RIO", "AERO CUENCA", "AEROPOSTALE CUENCA"]},
-    {"codigo": "2002", "sucursal": "RIOBAMBA", "keywords": ["MULTIPLAZA RIOBAMBA", "PASEO RIOBAMBA", "AERO RIOBAMBA", "RIOBAMBA"]},
-    {"codigo": "2003", "sucursal": "PASEO AMBATO", "keywords": ["PASEO AMBATO", "AMBATO PASEO", "MALL DE LOS ANDES", "AERO AMBATO", "AMBATO"]},
-    {"codigo": "2004", "sucursal": "MALL DEL PACIFICO MANTA", "keywords": ["MALL DEL PACIFICO", "PACIFICO MANTA", "MANTA PACIFICO", "AERO MANTA"]},
-    {"codigo": "2005", "sucursal": "CONDADO SHOPPING", "keywords": ["CONDADO SHOPPING", "EL CONDADO", "CONDADO", "AERO CONDADO"]},
-    {"codigo": "2006", "sucursal": "SAN LUIS SHOPPING", "keywords": ["SAN LUIS SHOPPING", "SAN LUIS", "AERO SAN LUIS", "SANGOLQUI"]},
-    {"codigo": "2007", "sucursal": "SANTO DOMINGO", "keywords": ["SANTO DOMINGO", "BOMBOLI", "AERO SANTO DOMINGO"]},
-    {"codigo": "2008", "sucursal": "MALL DEL SUR GUAYAQUIL", "keywords": ["MALL DEL SUR", "SUR GUAYAQUIL", "AERO SUR"]},
-    {"codigo": "2009", "sucursal": "MALL DEL SOL GUAYAQUIL", "keywords": ["MALL DEL SOL", "SOL GUAYAQUIL", "AERO SOL"]},
-    {"codigo": "2010", "sucursal": "RIOCENTRO EL DORADO", "keywords": ["RIOCENTRO EL DORADO", "EL DORADO", "DORADO GUAYAQUIL", "DORADO DAULE"]},
-    {"codigo": "2011", "sucursal": "RIOCENTRO NORTE", "keywords": ["RIOCENTRO NORTE", "NORTE GUAYAQUIL", "AERO NORTE"]},
-    {"codigo": "2012", "sucursal": "RIOCENTRO CEIBOS", "keywords": ["RIOCENTRO CEIBOS", "LOS CEIBOS", "CEIBOS", "AERO CEIBOS"]},
-    {"codigo": "2013", "sucursal": "PASEO SHOPPING PORTOVIEJO", "keywords": ["PASEO SHOPPING PORTOVIEJO", "PASEO PORTOVIEJO", "AERO PORTOVIEJO"]},
-    {"codigo": "2014", "sucursal": "PASEO SHOPPING MACHALA", "keywords": ["PASEO SHOPPING MACHALA", "PASEO MACHALA", "AERO MACHALA"]},
-    {"codigo": "2015", "sucursal": "PASEO SHOPPING DURAN", "keywords": ["PASEO SHOPPING DURAN", "PASEO DURAN", "AERO DURAN", "DURAN"]},
-    {"codigo": "2016", "sucursal": "PASEO SHOPPING QUEVEDO", "keywords": ["PASEO SHOPPING QUEVEDO", "PASEO QUEVEDO", "AERO QUEVEDO", "QUEVEDO"]},
-    {"codigo": "2017", "sucursal": "PASEO SHOPPING BABAHOYO", "keywords": ["PASEO SHOPPING BABAHOYO", "PASEO BABAHOYO", "AERO BABAHOYO", "BABAHOYO"]},
-    {"codigo": "2018", "sucursal": "CCI IÑAQUITO", "keywords": ["CCI INAQUITO", "AERO CCI", "CCI", "INAQUITO"]},
-    {"codigo": "2019", "sucursal": "6 DE DICIEMBRE", "keywords": ["RIOCENTRO 6 DE DICIEMBRE", "AEROPOSTALE 6 DE DICIEMBRE", "6 DE DICIEMBRE", "SEIS DE DICIEMBRE"]},
-    {"codigo": "2020", "sucursal": "CARAPUNGO", "keywords": ["PORTAL SHOPPING", "EL PORTAL", "CARAPUNGO", "PORTAL QUITO"]},
-    {"codigo": "2021", "sucursal": "LA PLAZA SHOPPING MANTA", "keywords": ["LA PLAZA SHOPPING", "LA PLAZA MANTA", "PLAZA MANTA"]},
-    {"codigo": "2022", "sucursal": "CAYAMBE", "keywords": ["CAYAMBE", "AERO CAYAMBE"]},
-    {"codigo": "2023", "sucursal": "EL COCA", "keywords": ["EL COCA", "COCA", "FRANCISCO DE ORELLANA", "ORELLANA"]},
-    {"codigo": "2024", "sucursal": "LAGO AGRIO", "keywords": ["LAGO AGRIO", "NUEVA LOJA", "AERO LAGO AGRIO"]},
-    {"codigo": "2025", "sucursal": "PEDERNALES", "keywords": ["PEDERNALES", "AERO PEDERNALES"]},
-    {"codigo": "2026", "sucursal": "PASAJE", "keywords": ["PASAJE", "AERO PASAJE"]},
-    {"codigo": "2027", "sucursal": "DAULE", "keywords": ["DAULE", "PASEO DAULE"]},
-    {"codigo": "2028", "sucursal": "PLAYAS", "keywords": ["GENERAL VILLAMIL", "VILLAMIL PLAYAS", "PLAYAS"]},
-    {"codigo": "2029", "sucursal": "PENINSULA", "keywords": ["PENINSULA", "SANTA ELENA", "SALINAS", "LA LIBERTAD", "PASEO PENINSULA"]},
-    {"codigo": "2030", "sucursal": "BAHIA DE CARAQUEZ", "keywords": ["BAHIA DE CARAQUEZ", "BAHIA", "AERO BAHIA"]},
-    {"codigo": "2031", "sucursal": "MILAGRO", "keywords": ["PASEO MILAGRO", "MILAGRO", "AERO MILAGRO"]},
-    {"codigo": "3001", "sucursal": "PRICE CLUB IBARRA", "keywords": ["PRICE CLUB IBARRA", "PRICE IBARRA", "PRICE CLUB CD IBARRA"]},
-    {"codigo": "3002", "sucursal": "PRICE CLUB PORTOVIEJO", "keywords": ["PRICE CLUB PORTOVIEJO", "PRICE PORTOVIEJO", "PRICE CLUB MANABI"]},
-    {"codigo": "3003", "sucursal": "PRICE CLUB MACHALA", "keywords": ["PRICE CLUB MACHALA", "PRICE MACHALA", "PRICE CLUB EL ORO"]},
-    {"codigo": "3004", "sucursal": "PRICE CLUB GUAYAQUIL", "keywords": ["PRICE CLUB GUAYAQUIL", "PRICE GUAYAQUIL", "PRICE CLUB GYE"]},
-    {"codigo": "3005", "sucursal": "PRICE CLUB CUENCA", "keywords": ["PRICE CLUB CUENCA", "PRICE CUENCA", "PRICE CLUB AZUAY"]},
+    {
+        "codigo": "1.001", 
+        "sucursal": "MATRIZ / CD IBARRA", 
+        "keywords": ["MATRIZ", "CD IBARRA", "BODEGA IBARRA", "CENTRO DE DISTRIBUCION", "CENTRO DISTRIBUCION IBARRA", "CENTRO LOGISTICO IBARRA"]
+    },
+    {
+        "codigo": "2001", 
+        "sucursal": "MALL DEL RIO CUENCA", 
+        "keywords": ["MALL DEL RIO CUENCA", "AEROPOSTALE (CUENCA) MALL DEL RIO", "AEROPOSTALE ALTOS DEL RIO", "ALTOS DEL RIO", "CUENCA MALL", "MALL DEL RIO", "AERO CUENCA", "AEROPOSTALE CUENCA", "FELIPE II", "MARCO ERAS", "ADRIAN"]
+    },
+    {
+        "codigo": "2002", 
+        "sucursal": "RIOBAMBA", 
+        "keywords": ["MULTIPLAZA RIOBAMBA", "PASEO SHOPPING RIOBAMBA", "PESO SHOPPING RIOBAMBA", "PASEO RIOBAMBA", "AERO RIOBAMBA", "LIZARZABURU", "MARIA FERNANDA IBARRA", "JENNIFER JIMENEZ", "RIOBAMBA"]
+    },
+    {
+        "codigo": "2003", 
+        "sucursal": "PASEO AMBATO", 
+        "keywords": ["PASEO SHOPPING AMBATO", "PASEO AMBATO", "AMBATO PASEO", "MALL DE LOS ANDES", "AERO AMBATO", "PIO BAROJA", "MANUELITA SAENS", "FRANCO TORRES", "GABRIELA URRUTIA", "AMBATO"]
+    },
+    {
+        "codigo": "2004", 
+        "sucursal": "MALL DEL PACIFICO MANTA", 
+        "keywords": ["MALL DEL PACIFICO", "PACIFICO MANTA", "MANTA PACIFICO", "MANTA SHOPPING", "PASEO SHOPPING MANTA", "AERO MANTA", "KARINA FIGUEROA", "YENNY ALVIA", "4 DE NOVIEMBRE"]
+    },
+    {
+        "codigo": "2005", 
+        "sucursal": "CONDADO SHOPPING", 
+        "keywords": ["CONDADO SHOPPING", "EL CONDADO", "CONDADO", "AERO CONDADO", "MARISCAL SUCRE", "MATEO RECALDE"]
+    },
+    {
+        "codigo": "2006", 
+        "sucursal": "SAN LUIS SHOPPING", 
+        "keywords": ["SAN LUIS SHOPPING", "SAN LUIS", "AERO SAN LUIS", "SANGOLQUI", "GENERAL RUMINAHUI", "KARINA PROANO"]
+    },
+    {
+        "codigo": "2007", 
+        "sucursal": "SANTO DOMINGO", 
+        "keywords": ["AEROPOSTALE BOMBOLI", "BOMBOLI SHOPPING", "BOMBOLI", "SANTO DOMINGO", "AERO SANTO DOMINGO", "JOSSELYN NAVARRETE", "MATEO FRUTO", "ABRAHAM CALAZACON"]
+    },
+    {
+        "codigo": "2008", 
+        "sucursal": "MALL DEL SUR GUAYAQUIL", 
+        "keywords": ["MALL DEL SUR", "MAL DEL SUR", "SUR GUAYAQUIL", "AERO SUR", "JUDITH ASUNCION", "HOSPITAL DE IESS"]
+    },
+    {
+        "codigo": "2009", 
+        "sucursal": "MALL DEL SOL GUAYAQUIL", 
+        "keywords": ["MALL DEL SOL", "SOL GUAYAQUIL", "AERO SOL", "KIARA DAVALOS", "JUAN TANCA MARENGO"]
+    },
+    {
+        "codigo": "2010", 
+        "sucursal": "RIOCENTRO EL DORADO", 
+        "keywords": ["RIOCENTRO EL DORADO", "RIO CENTRO DORADO", "EL DORADO", "DORADO GUAYAQUIL", "DORADO DAULE", "OSCAR ALVARADO", "FEBRES CORDERO", "AURORA"]
+    },
+    {
+        "codigo": "2011", 
+        "sucursal": "RIOCENTRO NORTE", 
+        "keywords": ["RIOCENTRO NORTE", "RIO CENTRO NORTE", "NORTE GUAYAQUIL", "AERO NORTE", "DORIS ZAMBRANO", "URB. ALCANCE"]
+    },
+    {
+        "codigo": "2012", 
+        "sucursal": "RIOCENTRO CEIBOS", 
+        "keywords": ["RIOCENTRO CEIBOS", "RIO CENTRO CEIBOS", "LOS CEIBOS", "CEIBOS", "AERO CEIBOS", "DEL BOMBERO", "SAN EDUARDO"]
+    },
+    {
+        "codigo": "2013", 
+        "sucursal": "PASEO SHOPPING PORTOVIEJO", 
+        "keywords": ["PASEO SHOPPING PORTOVIEJO", "PORTOVIEJO SHOPPING", "PASEO PORTOVIEJO", "AERO PORTOVIEJO", "GISSEL LOOR", "JORGE WASHINGTON"]
+    },
+    {
+        "codigo": "2014", 
+        "sucursal": "PASEO SHOPPING MACHALA", 
+        "keywords": ["PASEO SHOPPING MACHALA", "PASEO MACHALA", "AERO MACHALA", "IRIS CARPIO", "PAQUISHA", "MACHALA"]
+    },
+    {
+        "codigo": "2015", 
+        "sucursal": "PASEO SHOPPING DURAN", 
+        "keywords": ["PASEO SHOPPING DURAN", "PASEO DURAN", "AERO DURAN", "YARITZA CORDOVA", "BOLICHE", "DURAN"]
+    },
+    {
+        "codigo": "2016", 
+        "sucursal": "PASEO SHOPPING QUEVEDO", 
+        "keywords": ["PASEO SHOPPING QUEVEDO", "QUEVEDO SHOPPING", "PASEO QUEVEDO", "AERO QUEVEDO", "DAYANA LEON", "QUEVEDO"]
+    },
+    {
+        "codigo": "2017", 
+        "sucursal": "PASEO SHOPPING BABAHOYO", 
+        "keywords": ["PASEO SHOPPING BABAHOYO", "PASEO BABAHOYO", "AERO BABAHOYO", "YOMAIRA SELLAN", "PONCE LUQUE", "BABAHOYO"]
+    },
+    {
+        "codigo": "2018", 
+        "sucursal": "CCI IÑAQUITO", 
+        "keywords": ["AERO CCI", "CCI INAQUITO", "MALL CCI", "INAQUITO", "CAROLINA PROCEL", "NACIONES UNIDAS"]
+    },
+    {
+        "codigo": "2019", 
+        "sucursal": "6 DE DICIEMBRE", 
+        "keywords": ["AEROPOSTALE 6 DE DICIEMBRE", "RIOCENTRO 6 DE DICIEMBRE", "RIOCENTRO UIO", "6 DE DICIEMBRE", "SEIS DE DICIEMBRE", "MICAELA YEPEZ", "THOMAS DE BERLANGA"]
+    },
+    {
+        "codigo": "2020", 
+        "sucursal": "CARAPUNGO", 
+        "keywords": ["PORTAL SHOPPING", "CC CARAPUNGO", "EL PORTAL", "CARAPUNGO", "PORTAL QUITO", "MARIA JOSE BENALCAZAR", "GIOVANNI CALLES"]
+    },
+    {
+        "codigo": "2021", 
+        "sucursal": "LA PLAZA SHOPPING MANTA", 
+        "keywords": ["LA PLAZA SHOPPING", "LA PLAZA MANTA", "PLAZA MANTA"]
+    },
+    {
+        "codigo": "2022", 
+        "sucursal": "CAYAMBE", 
+        "keywords": ["AEROPOSTALE CAYAMBE", "ALTOS DE CAYAMBE", "CAYAMBE", "AERO CAYAMBE", "CELESTE CONTRERAS"]
+    },
+    {
+        "codigo": "2023", 
+        "sucursal": "EL COCA", 
+        "keywords": ["AEROPOSTALE EL COCA", "EL COCA", "PUERTO FRANCISCO DE ORELLANA", "ORELLANA", "ADRIANA ZURITA", "RIO CURARAY"]
+    },
+    {
+        "codigo": "2024", 
+        "sucursal": "LAGO AGRIO", 
+        "keywords": ["AERO LAGO AGRIO", "LAGO AGRIO", "NUEVA LOJA", "ANGIE MALDONADO", "PASAJE BRAZIL"]
+    },
+    {
+        "codigo": "2025", 
+        "sucursal": "PEDERNALES", 
+        "keywords": ["AEROPOSTALE PEDERNALES", "PEDERNALES", "AERO PEDERNALES", "MONICA MUNOZ", "GARCIA MORENO"]
+    },
+    {
+        "codigo": "2026", 
+        "sucursal": "PASAJE", 
+        "keywords": ["AEROPOSTALE PASAJE", "PASAJE", "AERO PASAJE", "JHONNY CUN", "REDONDEL DEL LEON"]
+    },
+    {
+        "codigo": "2027", 
+        "sucursal": "DAULE", 
+        "keywords": ["AERO DAULE", "DAULE", "PASEO DAULE", "ALISSON RAMIREZ", "PIEDRAHITA"]
+    },
+    {
+        "codigo": "2028", 
+        "sucursal": "PLAYAS", 
+        "keywords": ["AERO PLAYAS", "PASEO SHOPPING PLAYAS", "GENERAL VILLAMIL", "VILLAMIL PLAYAS", "PLAYAS", "STEVEN ORTIZ"]
+    },
+    {
+        "codigo": "2029", 
+        "sucursal": "PENINSULA", 
+        "keywords": ["PASEO SHOPPING LA PENINSULA", "PASEO PENINSULA", "PENINSULA", "SANTA ELENA", "SALINAS", "LA LIBERTAD", "KENNY BOHORQUEZ", "CARLOS ESPINOSA"]
+    },
+    {
+        "codigo": "2030", 
+        "sucursal": "BAHIA DE CARAQUEZ", 
+        "keywords": ["PASEO SHOPPING BAHIA", "BAHIA DE CARAQUEZ", "BAHIA DE CARAQUE", "BAHIA", "AERO BAHIA", "NAYELY OREJUELA", "3 DE NOVIEMBRE"]
+    },
+    {
+        "codigo": "2031", 
+        "sucursal": "MILAGRO", 
+        "keywords": ["PASEO SHOPPING MILAGRO", "PASEO MILAGRO", "MILAGRO", "AERO MILAGRO", "LADY SILVA", "12 DE OCTUBRE"]
+    },
+    {
+        "codigo": "3001", 
+        "sucursal": "PRICE CLUB IBARRA", 
+        "keywords": ["PRICE CLUB IBARRA", "PRICE IBARRA", "PRICE CLUB CD IBARRA", "SILVIA URCUANGO", "LA BOMBONERA"]
+    },
+    {
+        "codigo": "3002", 
+        "sucursal": "PRICE CLUB PORTOVIEJO", 
+        "keywords": ["PRICE CLUB PORTOVIEJO", "PRICE PORTOVIEJO", "PRICE CLUB MANABI", "DAYANA MERCHAN"]
+    },
+    {
+        "codigo": "3003", 
+        "sucursal": "PRICE CLUB MACHALA", 
+        "keywords": ["PRICE CLUB MACHALA", "PRICE MACHALA", "PRICE CLUB EL ORO", "YULEYSI DELGADO", "ORO PLAZA"]
+    },
+    {
+        "codigo": "3004", 
+        "sucursal": "PRICE CLUB GUAYAQUIL", 
+        "keywords": ["PRICE CLUB GUAYAQUIL", "PRICE GUAYAQUIL", "PRICE CLUB GYE", "PRICE CLUB CITY MALL", "CITY MALL", "ANGIE DELGADO", "JORDAN GUALE", "PEDRO CARBO", "ESTUARDO SANCHEZ"]
+    },
+    {
+        "codigo": "3005", 
+        "sucursal": "PRICE CLUB CUENCA", 
+        "keywords": ["PRICE CLUB CUENCA", "PRICE CUENCA", "PRICE CLUB AZUAY"]
+    },
 ]
 
 def clasificar_sucursal_guia(destinatario: str, direccion: str = "", ciudad_destino: str = "") -> Tuple[str, str]:
