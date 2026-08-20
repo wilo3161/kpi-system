@@ -338,309 +338,89 @@ def cargar_y_limpiar_factura(file_or_bytes) -> Tuple[pd.DataFrame, pd.DataFrame,
     return df_car, df_doc, df_seg
 
 # ==============================================================================
-# 4. MOTOR DE CRUCE Y CONCILIACIÓN
-# ==============================================================================
-
-def procesar_costos_transporte(df_manifiesto: pd.DataFrame, df_carga: pd.DataFrame, df_doc: pd.DataFrame, df_seguro: pd.DataFrame) -> Dict[str, Any]:
-    """
-    Ejecuta el cruce completo de punta a punta:
-    - Cruce Factura Carga + Manifiesto + Seguro
-    - Cruce Factura Documentos + Manifiesto
-    - Identificación de Guías Anuladas / No Facturadas
-    - Cálculo de métricas ejecutivas, ciudad-ciudad y contenido
-    """
-    mapa_seguro = {}
-    if not df_seguro.empty and "GUIA" in df_seguro.columns:
-        col_costo_seg = "SUBTOTAL" if "SUBTOTAL" in df_seguro.columns else ("SEGURO" if "SEGURO" in df_seguro.columns else df_seguro.columns[-1])
-        for _, row in df_seguro.iterrows():
-            g = row["GUIA"]
-            val_seg = parse_float_seguro(row.get(col_costo_seg, 0.0))
-            mapa_seguro[g] = val_seg
-
-    mapa_manifiesto = {}
-    if not df_manifiesto.empty and "GUIA" in df_manifiesto.columns:
-        for _, row in df_manifiesto.iterrows():
-            g = row["GUIA"]
-            mapa_manifiesto[g] = row.to_dict()
-
-    guias_manifiesto_set = set(df_manifiesto["GUIA"].unique()) if not df_manifiesto.empty else set()
-    guias_facturadas_set = set()
-
-    # 3. Procesar Carga Facturada
-    detalle_carga_list = []
-    if not df_carga.empty:
-        for _, row in df_carga.iterrows():
-            guia = row["GUIA"]
-            guias_facturadas_set.add(guia)
-            
-            ciu_ori = row.get("CIUDAD ORIGEN", "IBARRA")
-            ciu_des = row.get("CIUDAD DESTINO", "")
-            tipo_mov = "DESDE CD IBARRA" if ciu_ori == "IBARRA" else "CIUDAD-CIUDAD"
-            
-            flete = parse_float_seguro(row.get("FLETE", row.get("SUBTOTAL", 0.0)))
-            seguro = mapa_seguro.get(guia, 0.0)
-            costo_total = flete + seguro
-            
-            manif_data = mapa_manifiesto.get(guia, {})
-            contenido = manif_data.get("CONTENIDO", "")
-            producto = manif_data.get("PRODUCTO", "")
-            categoria = clasificar_contenido_transporte(contenido, producto)
-            
-            detalle_carga_list.append({
-                "GUIA": guia,
-                "FECHA ENVIO": row.get("FECHA REM", row.get("FECHA", manif_data.get("FECHA CREACION", ""))),
-                "CIUDAD ORIGEN": ciu_ori,
-                "CIUDAD DESTINO": ciu_des if ciu_des else manif_data.get("CIUDAD DESTINO", ""),
-                "TIPO MOVIMIENTO": tipo_mov,
-                "DESTINATARIO": manif_data.get("DESTINATARIO", ""),
-                "TELEFONO": manif_data.get("TELEFONO", ""),
-                "DIRECCION": manif_data.get("DIRECCION DESTINATARIO", ""),
-                "CONTENIDO": contenido,
-                "CATEGORIA": categoria,
-                "TRAYECTO": row.get("TRAYECTO", ""),
-                "PIEZAS": row.get("PIEZAS", 1),
-                "PESO": row.get("PESO", manif_data.get("PESO", 0.0)),
-                "FLETE": flete,
-                "SEGURO": seguro,
-                "COSTO TOTAL": costo_total,
-                "VALOR DECLARADO": manif_data.get("VALOR DECLARADO", 0.0),
-                "ESTADO ENTREGA": manif_data.get("ESTADO", "FACTURADO"),
-                "FECHA ENTREGA": manif_data.get("FECHA ENTREGA", ""),
-                "RECIBE": manif_data.get("RECIBE", ""),
-                "TIPO_SERVICIO": "CARGA"
-            })
-            
-    df_det_carga = pd.DataFrame(detalle_carga_list)
-
-    # 4. Procesar Documentos Facturados
-    detalle_doc_list = []
-    if not df_doc.empty:
-        for _, row in df_doc.iterrows():
-            guia = row["GUIA"]
-            guias_facturadas_set.add(guia)
-            
-            ciu_ori = row.get("CIUDAD ORIGEN", "IBARRA")
-            ciu_des = row.get("CIUDAD DESTINO", "")
-            tipo_mov = "DESDE CD IBARRA" if ciu_ori == "IBARRA" else "CIUDAD-CIUDAD"
-            
-            flete = parse_float_seguro(row.get("FLETE", row.get("SUBTOTAL", 0.0)))
-            seguro = 0.0
-            costo_total = flete
-            
-            manif_data = mapa_manifiesto.get(guia, {})
-            contenido = manif_data.get("CONTENIDO", "DOCUMENTOS")
-            producto = manif_data.get("PRODUCTO", "DOCUMENTOS_SERV")
-            categoria = "DOCUMENTOS"
-            
-            detalle_doc_list.append({
-                "GUIA": guia,
-                "FECHA ENVIO": row.get("FECHA REM", row.get("FECHA", manif_data.get("FECHA CREACION", ""))),
-                "CIUDAD ORIGEN": ciu_ori,
-                "CIUDAD DESTINO": ciu_des if ciu_des else manif_data.get("CIUDAD DESTINO", ""),
-                "TIPO MOVIMIENTO": tipo_mov,
-                "DESTINATARIO": manif_data.get("DESTINATARIO", ""),
-                "TELEFONO": manif_data.get("TELEFONO", ""),
-                "DIRECCION": manif_data.get("DIRECCION DESTINATARIO", ""),
-                "CONTENIDO": contenido,
-                "CATEGORIA": categoria,
-                "TRAYECTO": row.get("TRAYECTO", ""),
-                "PIEZAS": row.get("PIEZAS", 1),
-                "PESO": row.get("PESO", 0.0),
-                "FLETE": flete,
-                "SEGURO": seguro,
-                "COSTO TOTAL": costo_total,
-                "VALOR DECLARADO": 0.0,
-                "ESTADO ENTREGA": manif_data.get("ESTADO", "FACTURADO"),
-                "FECHA ENTREGA": manif_data.get("FECHA ENTREGA", ""),
-                "RECIBE": manif_data.get("RECIBE", ""),
-                "TIPO_SERVICIO": "DOCUMENTOS"
-            })
-            
-    df_det_doc = pd.DataFrame(detalle_doc_list)
-
-    # 5. Procesar Detalle Seguro
-    detalle_seg_list = []
-    if not df_seguro.empty:
-        col_costo_seg = "SUBTOTAL" if "SUBTOTAL" in df_seguro.columns else ("SEGURO" if "SEGURO" in df_seguro.columns else df_seguro.columns[-1])
-        for _, row in df_seguro.iterrows():
-            guia = row["GUIA"]
-            manif_data = mapa_manifiesto.get(guia, {})
-            costo_seg = parse_float_seguro(row.get(col_costo_seg, 0.0))
-            
-            flete_asoc = 0.0
-            if not df_det_carga.empty:
-                match_c = df_det_carga[df_det_carga["GUIA"] == guia]
-                if not match_c.empty:
-                    flete_asoc = match_c.iloc[0]["FLETE"]
-                    
-            detalle_seg_list.append({
-                "GUIA": guia,
-                "FECHA/HORA POLIZA": row.get("FECHA", ""),
-                "ORIGEN": row.get("CIUDAD ORIGEN", row.get("ORIGEN", "IBARRA")),
-                "DESTINO": row.get("CIUDAD DESTINO", row.get("DESTINO", "")),
-                "TRAYECTO": row.get("TRAYECTO", ""),
-                "VALOR DECLARADO": parse_float_seguro(row.get("VALOR DECLARADO", row.get("VAL. DEC.", manif_data.get("VALOR DECLARADO", 0.0)))),
-                "TASA SEGURO": row.get("SEGURO_TASA", row.get("SEGURO", "0.00%")),
-                "COSTO SEGURO": costo_seg,
-                "FLETE ASOCIADO": flete_asoc,
-                "COSTO TOTAL GUIA": costo_seg + flete_asoc,
-                "DESTINATARIO": manif_data.get("DESTINATARIO", ""),
-                "CONTENIDO": manif_data.get("CONTENIDO", ""),
-                "CATEGORIA": clasificar_contenido_transporte(manif_data.get("CONTENIDO", ""), manif_data.get("PRODUCTO", "")),
-                "ESTADO": manif_data.get("ESTADO", "ASEGURADO")
-            })
-    df_det_seg = pd.DataFrame(detalle_seg_list)
-
-    # 6. Guías Anuladas / No Facturadas
-    guias_anuladas_list = []
-    for guia in guias_manifiesto_set:
-        if guia not in guias_facturadas_set:
-            manif_data = mapa_manifiesto.get(guia, {})
-            estado = normalizar_texto_transporte(manif_data.get("ESTADO", ""))
-            
-            if "NO MOVILIZADO" in estado or "NO RECOLECTADO" in estado or "ANULADO" in estado:
-                motivo = "No movilizado por el courier (no se generó recolección) - correctamente excluido de factura"
-                nivel_alerta = "NORMAL"
-            elif any(e in estado for e in ["ENTREGADO", "CON NOVEDAD", "DEVOLUCION", "ENTREGA"]):
-                motivo = "Entregada pero NO incluida en esta factura - revisar con courier (posible corte de periodo o guía omitida)"
-                nivel_alerta = "REVISION_URGENTE"
-            else:
-                motivo = "Requiere revisión manual con el courier"
-                nivel_alerta = "ATENCION"
-                
-            ciu_ori = manif_data.get("CIUDAD ORIGEN", "IBARRA")
-            tipo_mov = "DESDE CD IBARRA" if ciu_ori == "IBARRA" else "CIUDAD-CIUDAD"
-            
-            guias_anuladas_list.append({
-                "GUIA": guia,
-                "TIPO GUIA": "CARGA" if manif_data.get("PRODUCTO") != "DOCUMENTOS_SERV" else "DOCUMENTO",
-                "TIPO MOVIMIENTO": tipo_mov,
-                "CIUDAD ORIGEN": ciu_ori,
-                "CIUDAD DESTINO": manif_data.get("CIUDAD DESTINO", ""),
-                "DESTINATARIO": manif_data.get("DESTINATARIO", ""),
-                "CONTENIDO": manif_data.get("CONTENIDO", ""),
-                "CATEGORIA": clasificar_contenido_transporte(manif_data.get("CONTENIDO", ""), manif_data.get("PRODUCTO", "")),
-                "VALOR DECLARADO": manif_data.get("VALOR DECLARADO", 0.0),
-                "ESTADO EN MANIFIESTO": manif_data.get("ESTADO", "NO FACTURADO"),
-                "FECHA CREACION": manif_data.get("FECHA CREACION", ""),
-                "FECHA ENTREGA": manif_data.get("FECHA ENTREGA", ""),
-                "MOTIVO": motivo,
-                "NIVEL_ALERTA": nivel_alerta
-            })
-            
-    df_guias_anuladas = pd.DataFrame(guias_anuladas_list)
-
-    df_todas_facturadas = pd.concat([df_det_carga, df_det_doc], ignore_index=True) if (not df_det_carga.empty or not df_det_doc.empty) else pd.DataFrame()
-
-    total_manifiesto = len(df_manifiesto)
-    total_carga = len(df_det_carga)
-    total_doc = len(df_det_doc)
-    total_seg = len(df_det_seg)
-    total_anuladas = len(df_guias_anuladas)
-    pct_anulacion = (total_anuladas / total_manifiesto * 100) if total_manifiesto > 0 else 0.0
-    
-    costo_flete_carga = df_det_carga["FLETE"].sum() if not df_det_carga.empty else 0.0
-    costo_flete_doc = df_det_doc["FLETE"].sum() if not df_det_doc.empty else 0.0
-    costo_seguro_total = df_det_carga["SEGURO"].sum() if not df_det_carga.empty else (df_det_seg["COSTO SEGURO"].sum() if not df_det_seg.empty else 0.0)
-    costo_total_periodo = costo_flete_carga + costo_flete_doc + costo_seguro_total
-    costo_promedio_guia = (costo_total_periodo / (total_carga + total_doc)) if (total_carga + total_doc) > 0 else 0.0
-
-    resumen_movimiento = []
-    if not df_todas_facturadas.empty:
-        for tipo in ["DESDE CD IBARRA", "CIUDAD-CIUDAD"]:
-            sub = df_todas_facturadas[df_todas_facturadas["TIPO MOVIMIENTO"] == tipo]
-            n_g = len(sub)
-            c_tot = sub["COSTO TOTAL"].sum()
-            pct_c = (c_tot / costo_total_periodo * 100) if costo_total_periodo > 0 else 0.0
-            resumen_movimiento.append({
-                "TIPO DE MOVIMIENTO": tipo,
-                "N° GUIAS": n_g,
-                "COSTO TOTAL (USD)": c_tot,
-                "% DEL COSTO TOTAL": pct_c
-            })
-    df_resumen_mov = pd.DataFrame(resumen_movimiento)
-
-    df_top_ciudades = pd.DataFrame()
-    if not df_todas_facturadas.empty and "CIUDAD DESTINO" in df_todas_facturadas.columns:
-        top_c = df_todas_facturadas.groupby("CIUDAD DESTINO").agg(
-            N_GUIAS=("GUIA", "count"),
-            COSTO_TOTAL=("COSTO TOTAL", "sum")
-        ).reset_index()
-        top_c["PCT_COSTO_TOTAL"] = (top_c["COSTO_TOTAL"] / costo_total_periodo * 100) if costo_total_periodo > 0 else 0.0
-        df_top_ciudades = top_c.sort_values("COSTO_TOTAL", ascending=False).head(15).copy()
-
-    df_resumen_contenido = pd.DataFrame()
-    if not df_todas_facturadas.empty and "CATEGORIA" in df_todas_facturadas.columns:
-        cont_c = df_todas_facturadas.groupby("CATEGORIA").agg(
-            N_GUIAS=("GUIA", "count"),
-            COSTO_TOTAL=("COSTO TOTAL", "sum")
-        ).reset_index()
-        tot_g = len(df_todas_facturadas)
-        cont_c["PCT_GUIAS"] = (cont_c["N_GUIAS"] / tot_g * 100) if tot_g > 0 else 0.0
-        cont_c["PCT_COSTO"] = (cont_c["COSTO_TOTAL"] / costo_total_periodo * 100) if costo_total_periodo > 0 else 0.0
-# ==============================================================================
 # 4. DISTRIBUCIÓN LOGÍSTICA POR SUCURSAL (GENERADA AUTOMÁTICAMENTE)
 # ==============================================================================
 
 CATALOGO_SUCURSALES_OFICIAL = [
-    {"codigo": "1.001", "sucursal": "MATRIZ / CD IBARRA", "keywords": ["MATRIZ", "CD IBARRA", "BODEGA IBARRA", "CENTRO DE DISTRIBUCION"]},
-    {"codigo": "2001", "sucursal": "MALL DEL RIO CUENCA", "keywords": ["MALL DEL RIO CUENCA", "CUENCA MALL", "MALL DEL RIO", "AERO CUENCA", "CUENCA"]},
-    {"codigo": "2002", "sucursal": "RIOBAMBA", "keywords": ["RIOBAMBA", "MULTIPLAZA RIOBAMBA", "PASEO RIOBAMBA"]},
-    {"codigo": "2003", "sucursal": "PASEO AMBATO", "keywords": ["PASEO AMBATO", "AMBATO PASEO", "AMBATO"]},
-    {"codigo": "2004", "sucursal": "MALL DEL PACIFICO MANTA", "keywords": ["MALL DEL PACIFICO", "PACIFICO MANTA", "MANTA PACIFICO"]},
-    {"codigo": "2005", "sucursal": "CONDADO SHOPPING", "keywords": ["CONDADO", "EL CONDADO", "CONDADO SHOPPING"]},
-    {"codigo": "2006", "sucursal": "SAN LUIS SHOPPING", "keywords": ["SAN LUIS", "SAN LUIS SHOPPING"]},
-    {"codigo": "2007", "sucursal": "SANTO DOMINGO", "keywords": ["SANTO DOMINGO", "BOMBOLI"]},
-    {"codigo": "2008", "sucursal": "MALL DEL SUR GUAYAQUIL", "keywords": ["MALL DEL SUR", "SUR GUAYAQUIL"]},
-    {"codigo": "2009", "sucursal": "MALL DEL SOL GUAYAQUIL", "keywords": ["MALL DEL SOL", "SOL GUAYAQUIL"]},
-    {"codigo": "2010", "sucursal": "RIOCENTRO EL DORADO", "keywords": ["EL DORADO", "RIOCENTRO EL DORADO", "DORADO"]},
-    {"codigo": "2011", "sucursal": "RIOCENTRO NORTE", "keywords": ["RIOCENTRO NORTE", "NORTE GUAYAQUIL"]},
-    {"codigo": "2012", "sucursal": "RIOCENTRO CEIBOS", "keywords": ["CEIBOS", "RIOCENTRO CEIBOS"]},
-    {"codigo": "2013", "sucursal": "PASEO SHOPPING PORTOVIEJO", "keywords": ["PORTOVIEJO", "PASEO PORTOVIEJO"]},
-    {"codigo": "2014", "sucursal": "PASEO SHOPPING MACHALA", "keywords": ["MACHALA", "PASEO MACHALA"]},
-    {"codigo": "2015", "sucursal": "PASEO SHOPPING DURAN", "keywords": ["DURAN", "PASEO DURAN"]},
-    {"codigo": "2016", "sucursal": "PASEO SHOPPING QUEVEDO", "keywords": ["QUEVEDO", "PASEO QUEVEDO"]},
-    {"codigo": "2017", "sucursal": "PASEO SHOPPING BABAHOYO", "keywords": ["BABAHOYO", "PASEO BABAHOYO"]},
-    {"codigo": "2018", "sucursal": "CCI IÑAQUITO", "keywords": ["CCI", "INAQUITO", "AERO CCI"]},
-    {"codigo": "2019", "sucursal": "6 DE DICIEMBRE", "keywords": ["6 DE DICIEMBRE", "SEIS DE DICIEMBRE", "RIOCENTRO 6 DE DICIEMBRE", "AEROPOSTALE 6 DE DICIEMBRE"]},
-    {"codigo": "2020", "sucursal": "CARAPUNGO", "keywords": ["CARAPUNGO", "PORTAL SHOPPING", "EL PORTAL"]},
-    {"codigo": "2021", "sucursal": "LA PLAZA SHOPPING MANTA", "keywords": ["LA PLAZA", "PLAZA MANTA"]},
-    {"codigo": "2022", "sucursal": "CAYAMBE", "keywords": ["CAYAMBE"]},
-    {"codigo": "2023", "sucursal": "EL COCA", "keywords": ["COCA", "EL COCA"]},
-    {"codigo": "2024", "sucursal": "LAGO AGRIO", "keywords": ["LAGO AGRIO"]},
-    {"codigo": "2025", "sucursal": "PEDERNALES", "keywords": ["PEDERNALES"]},
-    {"codigo": "2026", "sucursal": "PASAJE", "keywords": ["PASAJE"]},
-    {"codigo": "2027", "sucursal": "DAULE", "keywords": ["DAULE"]},
-    {"codigo": "2028", "sucursal": "PLAYAS", "keywords": ["PLAYAS", "VILLAMIL PLAYAS"]},
-    {"codigo": "2029", "sucursal": "PENINSULA", "keywords": ["PENINSULA", "SANTA ELENA", "SALINAS"]},
-    {"codigo": "2030", "sucursal": "BAHIA DE CARAQUEZ", "keywords": ["BAHIA", "BAHIA DE CARAQUEZ"]},
-    {"codigo": "2031", "sucursal": "MILAGRO", "keywords": ["MILAGRO", "PASEO MILAGRO"]},
-    {"codigo": "3001", "sucursal": "PRICE CLUB IBARRA", "keywords": ["PRICE CLUB IBARRA", "PRICE IBARRA"]},
-    {"codigo": "3002", "sucursal": "PRICE CLUB PORTOVIEJO", "keywords": ["PRICE CLUB PORTOVIEJO", "PRICE PORTOVIEJO"]},
-    {"codigo": "3003", "sucursal": "PRICE CLUB MACHALA", "keywords": ["PRICE CLUB MACHALA", "PRICE MACHALA"]},
-    {"codigo": "3004", "sucursal": "PRICE CLUB GUAYAQUIL", "keywords": ["PRICE CLUB GUAYAQUIL", "PRICE GUAYAQUIL"]},
-    {"codigo": "3005", "sucursal": "PRICE CLUB CUENCA", "keywords": ["PRICE CLUB CUENCA", "PRICE CUENCA"]},
+    {"codigo": "1.001", "sucursal": "MATRIZ / CD IBARRA", "keywords": ["MATRIZ", "CD IBARRA", "BODEGA IBARRA", "CENTRO DE DISTRIBUCION", "CENTRO DISTRIBUCION IBARRA"]},
+    {"codigo": "2001", "sucursal": "MALL DEL RIO CUENCA", "keywords": ["MALL DEL RIO CUENCA", "CUENCA MALL", "MALL DEL RIO", "AERO CUENCA", "AEROPOSTALE CUENCA"]},
+    {"codigo": "2002", "sucursal": "RIOBAMBA", "keywords": ["MULTIPLAZA RIOBAMBA", "PASEO RIOBAMBA", "AERO RIOBAMBA", "RIOBAMBA"]},
+    {"codigo": "2003", "sucursal": "PASEO AMBATO", "keywords": ["PASEO AMBATO", "AMBATO PASEO", "MALL DE LOS ANDES", "AERO AMBATO", "AMBATO"]},
+    {"codigo": "2004", "sucursal": "MALL DEL PACIFICO MANTA", "keywords": ["MALL DEL PACIFICO", "PACIFICO MANTA", "MANTA PACIFICO", "AERO MANTA"]},
+    {"codigo": "2005", "sucursal": "CONDADO SHOPPING", "keywords": ["CONDADO SHOPPING", "EL CONDADO", "CONDADO", "AERO CONDADO"]},
+    {"codigo": "2006", "sucursal": "SAN LUIS SHOPPING", "keywords": ["SAN LUIS SHOPPING", "SAN LUIS", "AERO SAN LUIS", "SANGOLQUI"]},
+    {"codigo": "2007", "sucursal": "SANTO DOMINGO", "keywords": ["SANTO DOMINGO", "BOMBOLI", "AERO SANTO DOMINGO"]},
+    {"codigo": "2008", "sucursal": "MALL DEL SUR GUAYAQUIL", "keywords": ["MALL DEL SUR", "SUR GUAYAQUIL", "AERO SUR"]},
+    {"codigo": "2009", "sucursal": "MALL DEL SOL GUAYAQUIL", "keywords": ["MALL DEL SOL", "SOL GUAYAQUIL", "AERO SOL"]},
+    {"codigo": "2010", "sucursal": "RIOCENTRO EL DORADO", "keywords": ["RIOCENTRO EL DORADO", "EL DORADO", "DORADO GUAYAQUIL", "DORADO DAULE"]},
+    {"codigo": "2011", "sucursal": "RIOCENTRO NORTE", "keywords": ["RIOCENTRO NORTE", "NORTE GUAYAQUIL", "AERO NORTE"]},
+    {"codigo": "2012", "sucursal": "RIOCENTRO CEIBOS", "keywords": ["RIOCENTRO CEIBOS", "LOS CEIBOS", "CEIBOS", "AERO CEIBOS"]},
+    {"codigo": "2013", "sucursal": "PASEO SHOPPING PORTOVIEJO", "keywords": ["PASEO SHOPPING PORTOVIEJO", "PASEO PORTOVIEJO", "AERO PORTOVIEJO"]},
+    {"codigo": "2014", "sucursal": "PASEO SHOPPING MACHALA", "keywords": ["PASEO SHOPPING MACHALA", "PASEO MACHALA", "AERO MACHALA"]},
+    {"codigo": "2015", "sucursal": "PASEO SHOPPING DURAN", "keywords": ["PASEO SHOPPING DURAN", "PASEO DURAN", "AERO DURAN", "DURAN"]},
+    {"codigo": "2016", "sucursal": "PASEO SHOPPING QUEVEDO", "keywords": ["PASEO SHOPPING QUEVEDO", "PASEO QUEVEDO", "AERO QUEVEDO", "QUEVEDO"]},
+    {"codigo": "2017", "sucursal": "PASEO SHOPPING BABAHOYO", "keywords": ["PASEO SHOPPING BABAHOYO", "PASEO BABAHOYO", "AERO BABAHOYO", "BABAHOYO"]},
+    {"codigo": "2018", "sucursal": "CCI IÑAQUITO", "keywords": ["CCI INAQUITO", "AERO CCI", "CCI", "INAQUITO"]},
+    {"codigo": "2019", "sucursal": "6 DE DICIEMBRE", "keywords": ["RIOCENTRO 6 DE DICIEMBRE", "AEROPOSTALE 6 DE DICIEMBRE", "6 DE DICIEMBRE", "SEIS DE DICIEMBRE"]},
+    {"codigo": "2020", "sucursal": "CARAPUNGO", "keywords": ["PORTAL SHOPPING", "EL PORTAL", "CARAPUNGO", "PORTAL QUITO"]},
+    {"codigo": "2021", "sucursal": "LA PLAZA SHOPPING MANTA", "keywords": ["LA PLAZA SHOPPING", "LA PLAZA MANTA", "PLAZA MANTA"]},
+    {"codigo": "2022", "sucursal": "CAYAMBE", "keywords": ["CAYAMBE", "AERO CAYAMBE"]},
+    {"codigo": "2023", "sucursal": "EL COCA", "keywords": ["EL COCA", "COCA", "FRANCISCO DE ORELLANA", "ORELLANA"]},
+    {"codigo": "2024", "sucursal": "LAGO AGRIO", "keywords": ["LAGO AGRIO", "NUEVA LOJA", "AERO LAGO AGRIO"]},
+    {"codigo": "2025", "sucursal": "PEDERNALES", "keywords": ["PEDERNALES", "AERO PEDERNALES"]},
+    {"codigo": "2026", "sucursal": "PASAJE", "keywords": ["PASAJE", "AERO PASAJE"]},
+    {"codigo": "2027", "sucursal": "DAULE", "keywords": ["DAULE", "PASEO DAULE"]},
+    {"codigo": "2028", "sucursal": "PLAYAS", "keywords": ["GENERAL VILLAMIL", "VILLAMIL PLAYAS", "PLAYAS"]},
+    {"codigo": "2029", "sucursal": "PENINSULA", "keywords": ["PENINSULA", "SANTA ELENA", "SALINAS", "LA LIBERTAD", "PASEO PENINSULA"]},
+    {"codigo": "2030", "sucursal": "BAHIA DE CARAQUEZ", "keywords": ["BAHIA DE CARAQUEZ", "BAHIA", "AERO BAHIA"]},
+    {"codigo": "2031", "sucursal": "MILAGRO", "keywords": ["PASEO MILAGRO", "MILAGRO", "AERO MILAGRO"]},
+    {"codigo": "3001", "sucursal": "PRICE CLUB IBARRA", "keywords": ["PRICE CLUB IBARRA", "PRICE IBARRA", "PRICE CLUB CD IBARRA"]},
+    {"codigo": "3002", "sucursal": "PRICE CLUB PORTOVIEJO", "keywords": ["PRICE CLUB PORTOVIEJO", "PRICE PORTOVIEJO", "PRICE CLUB MANABI"]},
+    {"codigo": "3003", "sucursal": "PRICE CLUB MACHALA", "keywords": ["PRICE CLUB MACHALA", "PRICE MACHALA", "PRICE CLUB EL ORO"]},
+    {"codigo": "3004", "sucursal": "PRICE CLUB GUAYAQUIL", "keywords": ["PRICE CLUB GUAYAQUIL", "PRICE GUAYAQUIL", "PRICE CLUB GYE"]},
+    {"codigo": "3005", "sucursal": "PRICE CLUB CUENCA", "keywords": ["PRICE CLUB CUENCA", "PRICE CUENCA", "PRICE CLUB AZUAY"]},
 ]
 
 def clasificar_sucursal_guia(destinatario: str, direccion: str = "", ciudad_destino: str = "") -> Tuple[str, str]:
-    """Determina el código y nombre de la sucursal a partir de los datos de la guía."""
+    """Determina con precisión contable el código y nombre de la sucursal a partir de los datos de la guía."""
     dest_norm = normalizar_texto_transporte(destinatario)
     dir_norm = normalizar_texto_transporte(direccion)
     ciu_norm = normalizar_texto_transporte(ciudad_destino)
-    full_text = f"{dest_norm} {dir_norm} {ciu_norm}"
+    full_text = f"{dest_norm} {dir_norm} {ciu_norm}".strip()
     
-    # Primero búsqueda exacta o de frase clave
+    # 1. Regla Especial Price Club
+    if "PRICE" in dest_norm or "PRICE" in dir_norm:
+        for item in [s for s in CATALOGO_SUCURSALES_OFICIAL if str(s["codigo"]).startswith("300")]:
+            for kw in sorted(item["keywords"], key=len, reverse=True):
+                if kw in full_text:
+                    return item["codigo"], item["sucursal"]
+        if ciu_norm:
+            for item in [s for s in CATALOGO_SUCURSALES_OFICIAL if str(s["codigo"]).startswith("300")]:
+                if any(c in item["sucursal"] for c in ciu_norm.split()):
+                    return item["codigo"], item["sucursal"]
+
+    # 2. Búsqueda por palabras clave compuestas ordenadas de mayor a menor longitud
+    lista_reglas = []
     for item in CATALOGO_SUCURSALES_OFICIAL:
         for kw in item["keywords"]:
-            if kw in dest_norm or (len(kw) > 5 and kw in full_text):
-                return item["codigo"], item["sucursal"]
-                
-    # Fallback por ciudad de destino si destinatario contiene AERO o TIENDA
-    if "AERO" in dest_norm or "TIENDA" in dest_norm or "LOCAL" in dest_norm:
-        for item in CATALOGO_SUCURSALES_OFICIAL:
-            for kw in item["keywords"]:
-                if kw in ciu_norm:
-                    return item["codigo"], item["sucursal"]
+            lista_reglas.append((kw, len(kw), item["codigo"], item["sucursal"]))
+    lista_reglas.sort(key=lambda x: x[1], reverse=True)
+    
+    # Evaluar destinatario y dirección
+    for kw, _, cod, suc in lista_reglas:
+        if kw in dest_norm or kw in dir_norm:
+            return cod, suc
+            
+    # Evaluar texto completo si la palabra clave es larga (>5 letras)
+    for kw, l_kw, cod, suc in lista_reglas:
+        if l_kw > 5 and kw in full_text:
+            return cod, suc
+
+    # 3. Fallback: Si el destinatario indica tienda física / Aeropostale / Fashion Club
+    if any(tag in dest_norm for tag in ["AERO", "TIENDA", "LOCAL", "FASHION", "SUCURSAL", "MODA"]):
+        for kw, _, cod, suc in lista_reglas:
+            if kw in ciu_norm:
+                return cod, suc
 
     return "9999", "OTROS (VENTA WEB / CLIENTES / PROVEEDORES)"
 
