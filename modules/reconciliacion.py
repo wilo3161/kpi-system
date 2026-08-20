@@ -762,14 +762,30 @@ def show_reconciliacion_v8():
                         st.plotly_chart(fig_cont, use_container_width=True)
 
             with subtabs_det[1]:
-                st.subheader("Rutas y Pares Origen-Destino")
+                st.subheader("Análisis de Costos: Desde CD Ibarra vs. Movimientos Ciudad-Ciudad")
+                st.caption("Ciudad-Ciudad = guías cuya CIUDAD ORIGEN no es Ibarra (no salieron del Centro de Distribución).")
+                
+                df_mov_res = cruce["df_resumen_mov"].copy()
+                if not df_mov_res.empty:
+                    df_mov_res_disp = pd.DataFrame({
+                        "TIPO DE MOVIMIENTO": df_mov_res["TIPO DE MOVIMIENTO"],
+                        "N° GUÍAS": df_mov_res["N° GUIAS"],
+                        "COSTO TOTAL (USD)": df_mov_res["COSTO TOTAL (USD)"].apply(lambda x: f"${x:,.2f}"),
+                        "% GUÍAS": df_mov_res.get("% GUIAS", pd.Series([0,0])).apply(lambda x: f"{x:.1f}%"),
+                        "% COSTO": df_mov_res["% DEL COSTO TOTAL"].apply(lambda x: f"{x:.1f}%")
+                    })
+                    st.dataframe(df_mov_res_disp, hide_index=True, use_container_width=True)
+
+                st.markdown("#### Detalle por Par Ciudad Origen ➔ Ciudad Destino (Solo Ciudad-Ciudad)")
                 df_rutas_show = cruce["df_pares_rutas"].copy()
                 if not df_rutas_show.empty:
-                    df_rutas_disp = df_rutas_show.copy()
-                    if "COSTO_TOTAL" in df_rutas_disp.columns:
-                        df_rutas_disp["COSTO TOTAL (USD)"] = df_rutas_disp["COSTO_TOTAL"].apply(lambda x: f"${x:,.2f}")
-                    if "COSTO PROMEDIO" in df_rutas_disp.columns:
-                        df_rutas_disp["COSTO PROMEDIO"] = df_rutas_disp["COSTO PROMEDIO"].apply(lambda x: f"${x:,.2f}")
+                    df_rutas_disp = pd.DataFrame({
+                        "CIUDAD ORIGEN": df_rutas_show["CIUDAD ORIGEN"],
+                        "CIUDAD DESTINO": df_rutas_show["CIUDAD DESTINO"],
+                        "N° GUÍAS": df_rutas_show["N_GUIAS"],
+                        "COSTO TOTAL (USD)": df_rutas_show["COSTO_TOTAL"].apply(lambda x: f"${x:,.2f}"),
+                        "COSTO PROMEDIO / GUÍA (USD)": df_rutas_show["COSTO PROMEDIO"].apply(lambda x: f"${x:,.2f}")
+                    })
                     st.dataframe(df_rutas_disp, hide_index=True, use_container_width=True)
 
             with subtabs_det[2]:

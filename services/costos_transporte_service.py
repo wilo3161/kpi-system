@@ -38,22 +38,26 @@ def limpiar_numero_guia(val) -> str:
     return s
 
 def es_guia_valida(guia: str) -> bool:
-    """Valida que la guía tenga formato de guía real y no sea fila de cierre."""
+    """Valida que la guía tenga formato de guía real y no sea fila de cierre ni conteo."""
     if not guia:
         return False
-    g = guia.strip().upper()
-    # Descartar palabras clave de pie de página de manifiesto
+    g = str(guia).strip().upper()
     palabras_invalidas = [
         "TOTAL", "ENTREGADO", "FIRMA", "DESPACHADO", "RECOLECCION", 
-        "FECHA", "RECIBE", "MANIFIESTO", "SUBTOTAL", "OBSERVACION"
+        "FECHA", "RECIBE", "MANIFIESTO", "SUBTOTAL", "OBSERVACION",
+        "SUMA", "PIEZAS", "GUIAS", "GUIA", "FLETE", "VALOR", "NAN", "NONE"
     ]
     if any(p in g for p in palabras_invalidas):
         return False
-    # Validar formato: debe contener dígitos o prefijos típicos (LC, G, etc.)
-    if re.match(r"^(LC\d+|G\d+|\d+|[A-Z0-9\-]{5,})$", g):
+    if g.endswith(".0"):
+        g = g[:-2]
+    # Descartar conteos simples de filas (ej. 1440, 169)
+    if g.isdigit() and len(g) < 6:
+        return False
+    # Guías válidas: LC + dígitos, G + dígitos, o números de 6 o más dígitos
+    if re.match(r"^(LC\d+|G\d+|\d{6,})$", g):
         return True
-    # Si tiene al menos 4 dígitos, es válida
-    if len(re.sub(r"\D", "", g)) >= 4:
+    if len(g) >= 6 and re.search(r"\d", g) and len(g) <= 25:
         return True
     return False
 
@@ -98,39 +102,40 @@ def clasificar_contenido_transporte(contenido_raw: str, producto_raw: str = "") 
     prod = normalizar_texto_transporte(producto_raw)
     
     # 1. DOCUMENTOS
-    if prod == "DOCUMENTOS_SERV" or any(w in cont for w in ["DOC", "DOCS", "DOCUMENTO", "DOCUMENTOS", "SOBRE"]):
+    if prod == "DOCUMENTOS_SERV" or any(w in cont for w in ["DOCUMENTO", "DOCUMENTOS", "DOCS", "DOC ", " SOBRE", "SOBRE "]) or cont == "DOC":
         return "DOCUMENTOS"
     
     # 2. SIN ESPECIFICAR
-    if not cont or cont in ["", "NAN", "NONE", "NULL", "-"]:
+    if not cont or cont in ["", "NAN", "NONE", "NULL", "-", "SD", "S/D"]:
         return "SIN ESPECIFICAR"
     
     # 3. PUBLICIDAD
-    if "PUBLICID" in cont or "BANNER" in cont or "POP" in cont:
+    if any(p in cont for p in ["PUBLICID", "BANNER", "POP", "AFICHE", "DISPLAY"]):
         return "PUBLICIDAD"
     
     # 4. VENTA WEB
-    if "WEB" in cont or "ECOMMERCE" in cont or "E-COMMERCE" in cont:
+    if any(w in cont for w in ["VENTA WEB", "WEB", "ECOMMERCE", "E-COMMERCE"]):
         return "VENTA WEB"
     
     # 5. DEVOLUCIÓN
-    if "DEVOLU" in cont or "CAMBIO" in cont:
+    if any(d in cont for d in ["DEVOLU", "CAMBIO"]):
         return "DEVOLUCIÓN"
     
     # 6. MERCADERÍA
-    if "MERCADER" in cont or cont == "CARGA" or cont == "PRENDAS":
+    if any(m in cont for m in ["MERCADER", "CARGA", "FALLAS", "PACK"]):
         return "MERCADERÍA"
     
     # 7. ACCESORIOS / PRENDAS
     accesorios_keywords = [
         "GAFA", "GORRA", "FUNDA", "MANIQUI", "PERFUME", "SANDALIA", 
-        "ZANDALIA", "PRENDA", "UNIFORME", "ZAPATO", "CAMISETA", "JEAN", "ROPA", "POLO"
+        "ZANDALIA", "PRENDA", "UNIFORME", "ZAPATO", "CAMISETA", "JEAN", 
+        "ROPA", "POLO", "ZAPATILLA", "KID"
     ]
     if any(k in cont for k in accesorios_keywords):
         return "ACCESORIOS / PRENDAS"
     
     # 8. MOBILIARIO / EQUIPOS
-    mobiliario_keywords = ["MUEBLE", "PLANCHA", "EQUIPO", "COMPUTADORA", "IMPRESORA", "SILLA", "MESA"]
+    mobiliario_keywords = ["MUEBLE", "PLANCHA", "EQUIPO", "COMPUTADORA", "IMPRESORA", "SILLA", "MESA", "INTERNET", "CANASTILLA"]
     if any(k in cont for k in mobiliario_keywords):
         return "MOBILIARIO / EQUIPOS"
     
@@ -149,6 +154,11 @@ def clasificar_contenido_transporte(contenido_raw: str, producto_raw: str = "") 
 # 3. PARSERS DE ARCHIVOS
 # ==============================================================================
 
+def _es_fila_total(row) -> bool:
+    """Detecta si una fila es de resumen, total o firma."""
+    row_str = " ".join([str(v).upper() for v in row.values if pd.notna(v)])
+    return any(k in row_str for k in ["TOTAL GENERAL", "TOTAL A ENTREGAR", "TOTAL CARGA", "TOTAL DOC", "TOTAL:", "FIRMA", "CANTIDAD DE GUIAS", "CANTIDAD GUIAS"])
+
 def _extraer_serie_limpia(df: pd.DataFrame, col_name: str, default_val: Any = "") -> pd.Series:
     """Extrae una columna como Series de forma segura, incluso si hay columnas duplicadas."""
     if col_name not in df.columns:
@@ -164,7 +174,6 @@ def cargar_y_limpiar_manifiesto(file_or_bytes) -> pd.DataFrame:
         file_or_bytes.seek(0)
         
     excel_file = pd.ExcelFile(file_or_bytes)
-    # Buscar hoja adecuada
     sheet_name = excel_file.sheet_names[0]
     for s in excel_file.sheet_names:
         if "GUIA" in s.upper() or "MANIF" in s.upper():
@@ -182,7 +191,9 @@ def cargar_y_limpiar_manifiesto(file_or_bytes) -> pd.DataFrame:
             
     df = pd.read_excel(excel_file, sheet_name=sheet_name, header=header_idx)
     
-    # Normalizar nombres de columnas
+    # Filtrar filas de totales del pie
+    df = df[~df.apply(_es_fila_total, axis=1)].copy()
+    
     col_map = {}
     for c in df.columns:
         c_norm = normalizar_texto_transporte(c)
@@ -203,7 +214,6 @@ def cargar_y_limpiar_manifiesto(file_or_bytes) -> pd.DataFrame:
         elif "COSTO FLETE" in c_norm or "FLETE" in c_norm: col_map[c] = "COSTO FLETE"
         
     df = df.rename(columns=col_map)
-    # Eliminar duplicados de nombres de columnas si hubieron
     df = df.loc[:, ~df.columns.duplicated(keep='first')].copy()
     
     if "GUIA" not in df.columns:
@@ -213,7 +223,6 @@ def cargar_y_limpiar_manifiesto(file_or_bytes) -> pd.DataFrame:
     df["GUIA"] = guia_series.apply(limpiar_numero_guia)
     df = df[df["GUIA"].apply(es_guia_valida)].copy()
     
-    # Normalizar campos de texto
     for col in ["CIUDAD ORIGEN", "CIUDAD DESTINO", "DESTINATARIO", "TELEFONO", "DIRECCION DESTINATARIO", "CONTENIDO", "PRODUCTO", "ESTADO", "RECIBE", "FECHA CREACION", "FECHA ENTREGA"]:
         s_col = _extraer_serie_limpia(df, col, default_val="")
         df[col] = s_col.fillna("").astype(str).str.strip()
@@ -254,14 +263,8 @@ def cargar_y_limpiar_factura(file_or_bytes) -> Tuple[pd.DataFrame, pd.DataFrame,
                 break
                 
         df_sheet = pd.read_excel(excel_file, sheet_name=sheet, header=header_idx)
+        df_sheet = df_sheet[~df_sheet.apply(_es_fila_total, axis=1)].copy()
         
-        if len(df_sheet) > 0:
-            last_row_str = " ".join([str(v).upper() for v in df_sheet.iloc[-1].values if pd.notna(v)])
-            if "TOTAL" in last_row_str or len(df_sheet) > 1:
-                val_guia = str(df_sheet.iloc[-1].get("GUIA", df_sheet.iloc[-1, 1] if len(df_sheet.columns)>1 else ""))
-                if "TOTAL" in last_row_str or not es_guia_valida(limpiar_numero_guia(val_guia)):
-                    df_sheet = df_sheet.iloc[:-1].copy()
-                    
         col_map = {}
         for c in df_sheet.columns:
             cn = normalizar_texto_transporte(c)
@@ -575,16 +578,24 @@ def procesar_costos_transporte(df_manifiesto: pd.DataFrame, df_carga: pd.DataFra
         tot_g = len(df_todas_facturadas)
         cont_c["PCT_GUIAS"] = (cont_c["N_GUIAS"] / tot_g * 100) if tot_g > 0 else 0.0
         cont_c["PCT_COSTO"] = (cont_c["COSTO_TOTAL"] / costo_total_periodo * 100) if costo_total_periodo > 0 else 0.0
-        df_resumen_contenido = cont_c.sort_values("COSTO_TOTAL", ascending=False).copy()
+        orden_oficial = [
+            "DOCUMENTOS", "PUBLICIDAD", "VENTA WEB", "MERCADERÍA", 
+            "DEVOLUCIÓN", "ACCESORIOS / PRENDAS", "MOBILIARIO / EQUIPOS", 
+            "INSUMOS / ADMINISTRATIVO", "OTROS", "SIN ESPECIFICAR"
+        ]
+        cont_c["ORDEN"] = cont_c["CATEGORIA"].apply(lambda x: orden_oficial.index(x) if x in orden_oficial else 99)
+        df_resumen_contenido = cont_c.sort_values("ORDEN").drop(columns=["ORDEN"]).copy()
 
     df_pares_rutas = pd.DataFrame()
     if not df_todas_facturadas.empty:
-        pares = df_todas_facturadas.groupby(["CIUDAD ORIGEN", "CIUDAD DESTINO", "TIPO MOVIMIENTO"]).agg(
-            N_GUIAS=("GUIA", "count"),
-            COSTO_TOTAL=("COSTO TOTAL", "sum")
-        ).reset_index()
-        pares["COSTO PROMEDIO"] = pares["COSTO_TOTAL"] / pares["N_GUIAS"]
-        df_pares_rutas = pares.sort_values("COSTO_TOTAL", ascending=False)
+        df_cc_only = df_todas_facturadas[df_todas_facturadas["TIPO MOVIMIENTO"] == "CIUDAD-CIUDAD"]
+        if not df_cc_only.empty:
+            pares = df_cc_only.groupby(["CIUDAD ORIGEN", "CIUDAD DESTINO"]).agg(
+                N_GUIAS=("GUIA", "count"),
+                COSTO_TOTAL=("COSTO TOTAL", "sum")
+            ).reset_index()
+            pares["COSTO PROMEDIO"] = pares["COSTO_TOTAL"] / pares["N_GUIAS"]
+            df_pares_rutas = pares.sort_values("COSTO_TOTAL", ascending=False).copy()
 
     return {
         "kpis": {
