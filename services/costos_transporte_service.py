@@ -644,101 +644,238 @@ def clasificar_sucursal_guia(destinatario: str, direccion: str = "", ciudad_dest
 
     return "9999", "OTROS (VENTA WEB / CLIENTES / PROVEEDORES)"
 
-def generar_distribucion_logistica(df_det_carga: pd.DataFrame, df_det_doc: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, Any]]:
+def construir_resumen_sucursal_especifico(df_items: pd.DataFrame, tipo: str = "CONSOLIDADO") -> Tuple[pd.DataFrame, Dict[str, Any]]:
     """
-    Genera automáticamente la tabla de Distribución Logística por Sucursal a partir de las guías facturadas.
-    Calcula Flete, Seguro, Total Transporte, N° Guías y % Distribución Logística por cada sucursal.
+    Construye la tabla de distribución por sucursal para un tipo específico:
+    - CONSOLIDADO (Carga + Documentos + Seguro)
+    - CARGA (Detalle Carga)
+    - DOCUMENTOS (Detalle Documentos)
+    - SEGURO (Detalle Seguro)
     """
-    df_fact = pd.concat([df_det_carga, df_det_doc], ignore_index=True) if (not df_det_carga.empty or not df_det_doc.empty) else pd.DataFrame()
-    
-    if df_fact.empty:
+    if df_items is None or df_items.empty:
         return pd.DataFrame(), {}
         
+    df_work = df_items.copy()
+    
     codigos = []
     sucursales = []
-    for _, row in df_fact.iterrows():
+    for _, row in df_work.iterrows():
         cod, suc = clasificar_sucursal_guia(
             destinatario=row.get("DESTINATARIO", ""),
             direccion=row.get("DIRECCION", ""),
-            ciudad_destino=row.get("CIUDAD DESTINO", "")
+            ciudad_destino=row.get("CIUDAD DESTINO", row.get("DESTINO", ""))
         )
         codigos.append(cod)
         sucursales.append(suc)
         
-    df_fact["COD_SUCURSAL"] = codigos
-    df_fact["NOM_SUCURSAL"] = sucursales
+    df_work["COD_SUCURSAL"] = codigos
+    df_work["NOM_SUCURSAL"] = sucursales
     
-    tot_general_transporte = df_fact["COSTO TOTAL"].sum()
-    tot_guias_general = len(df_fact)
-    
-    agrup = df_fact.groupby(["COD_SUCURSAL", "NOM_SUCURSAL"]).agg(
-        GUIAS=("GUIA", "count"),
-        FLETE=("FLETE", "sum"),
-        SEGURO=("SEGURO", "sum"),
-        TOTAL=("COSTO TOTAL", "sum")
-    ).reset_index()
-    
-    df_tiendas = agrup[agrup["COD_SUCURSAL"] != "9999"].sort_values("TOTAL", ascending=False).copy()
-    df_otros = agrup[agrup["COD_SUCURSAL"] == "9999"].copy()
-    
-    filas_dist = []
-    n_idx = 1
-    for _, r in df_tiendas.iterrows():
-        pct = (r["TOTAL"] / tot_general_transporte * 100) if tot_general_transporte > 0 else 0.0
-        filas_dist.append({
-            "N.-": str(n_idx),
-            "Código": r["COD_SUCURSAL"],
-            "SUCURSAL": r["NOM_SUCURSAL"],
-            "N° Guías": int(r["GUIAS"]),
-            "Costo Flete": r["FLETE"],
-            "Costo Seguro": r["SEGURO"],
-            "Costo Total Transporte": r["TOTAL"],
-            "% Distribución Logística": pct
-        })
-        n_idx += 1
+    if tipo == "SEGURO":
+        tot_general = df_work["COSTO SEGURO"].sum()
+        tot_guias_general = len(df_work)
+        tot_val_dec_general = df_work["VALOR DECLARADO"].sum() if "VALOR DECLARADO" in df_work.columns else 0.0
         
-    if not df_otros.empty:
-        r_o = df_otros.iloc[0]
-        pct_o = (r_o["TOTAL"] / tot_general_transporte * 100) if tot_general_transporte > 0 else 0.0
-        filas_dist.append({
-            "N.-": str(n_idx),
-            "Código": "9999",
-            "SUCURSAL": "OTROS (VENTA WEB / CLIENTES / PROVEEDORES)",
-            "N° Guías": int(r_o["GUIAS"]),
-            "Costo Flete": r_o["FLETE"],
-            "Costo Seguro": r_o["SEGURO"],
-            "Costo Total Transporte": r_o["TOTAL"],
-            "% Distribución Logística": pct_o
-        })
+        agrup = df_work.groupby(["COD_SUCURSAL", "NOM_SUCURSAL"]).agg(
+            GUIAS=("GUIA", "count"),
+            VAL_DEC=("VALOR DECLARADO", "sum"),
+            COSTO_SEG=("COSTO SEGURO", "sum")
+        ).reset_index()
         
-    df_tabla = pd.DataFrame(filas_dist)
-    
-    fila_total = {
-        "N.-": "",
-        "Código": "TOTAL",
-        "SUCURSAL": "TOTAL GENERAL",
-        "N° Guías": int(tot_guias_general),
-        "Costo Flete": df_tabla["Costo Flete"].sum() if not df_tabla.empty else 0.0,
-        "Costo Seguro": df_tabla["Costo Seguro"].sum() if not df_tabla.empty else 0.0,
-        "Costo Total Transporte": df_tabla["Costo Total Transporte"].sum() if not df_tabla.empty else 0.0,
-        "% Distribución Logística": 100.0
-    }
-    
-    df_final = pd.concat([df_tabla, pd.DataFrame([fila_total])], ignore_index=True)
-    
-    top5 = df_tabla[df_tabla["Código"] != "9999"].head(5).copy()
-    
-    stats = {
-        "total_transporte": tot_general_transporte,
-        "total_guias": tot_guias_general,
-        "df_top_5": top5,
-        "otros_costo": df_otros.iloc[0]["TOTAL"] if not df_otros.empty else 0.0,
-        "otros_guias": int(df_otros.iloc[0]["GUIAS"]) if not df_otros.empty else 0,
-        "col_codigo": "Código",
-        "col_sucursal": "SUCURSAL"
-    }
-    
-    return df_final, stats
+        df_tiendas = agrup[agrup["COD_SUCURSAL"] != "9999"].sort_values("COSTO_SEG", ascending=False).copy()
+        df_otros = agrup[agrup["COD_SUCURSAL"] == "9999"].copy()
+        
+        filas_dist = []
+        n_idx = 1
+        for _, r in df_tiendas.iterrows():
+            pct = (r["COSTO_SEG"] / tot_general * 100) if tot_general > 0 else 0.0
+            filas_dist.append({
+                "N.-": str(n_idx),
+                "Código": r["COD_SUCURSAL"],
+                "SUCURSAL": r["NOM_SUCURSAL"],
+                "N° Guías": int(r["GUIAS"]),
+                "Valor Declarado": r["VAL_DEC"],
+                "Costo Seguro": r["COSTO_SEG"],
+                "% Distribución Seguro": pct
+            })
+            n_idx += 1
+            
+        if not df_otros.empty:
+            r_o = df_otros.iloc[0]
+            pct_o = (r_o["COSTO_SEG"] / tot_general * 100) if tot_general > 0 else 0.0
+            filas_dist.append({
+                "N.-": str(n_idx),
+                "Código": "9999",
+                "SUCURSAL": "OTROS (VENTA WEB / CLIENTES / PROVEEDORES)",
+                "N° Guías": int(r_o["GUIAS"]),
+                "Valor Declarado": r_o["VAL_DEC"],
+                "Costo Seguro": r_o["COSTO_SEG"],
+                "% Distribución Seguro": pct_o
+            })
+            
+        df_tabla = pd.DataFrame(filas_dist)
+        fila_total = {
+            "N.-": "",
+            "Código": "TOTAL",
+            "SUCURSAL": "TOTAL GENERAL",
+            "N° Guías": int(tot_guias_general),
+            "Valor Declarado": tot_val_dec_general,
+            "Costo Seguro": tot_general,
+            "% Distribución Seguro": 100.0
+        }
+        df_final = pd.concat([df_tabla, pd.DataFrame([fila_total])], ignore_index=True)
+        top5 = df_tabla[df_tabla["Código"] != "9999"].head(5).copy()
+        stats = {
+            "total_costo": tot_general,
+            "total_guias": tot_guias_general,
+            "df_top_5": top5,
+            "otros_costo": df_otros.iloc[0]["COSTO_SEG"] if not df_otros.empty else 0.0,
+            "otros_guias": int(df_otros.iloc[0]["GUIAS"]) if not df_otros.empty else 0,
+            "col_codigo": "Código",
+            "col_sucursal": "SUCURSAL",
+            "col_total": "Costo Seguro"
+        }
+        return df_final, stats
+
+    elif tipo == "DOCUMENTOS":
+        tot_general = df_work["COSTO TOTAL"].sum()
+        tot_guias_general = len(df_work)
+        
+        agrup = df_work.groupby(["COD_SUCURSAL", "NOM_SUCURSAL"]).agg(
+            GUIAS=("GUIA", "count"),
+            FLETE=("FLETE", "sum"),
+            TOTAL=("COSTO TOTAL", "sum")
+        ).reset_index()
+        
+        df_tiendas = agrup[agrup["COD_SUCURSAL"] != "9999"].sort_values("TOTAL", ascending=False).copy()
+        df_otros = agrup[agrup["COD_SUCURSAL"] == "9999"].copy()
+        
+        filas_dist = []
+        n_idx = 1
+        for _, r in df_tiendas.iterrows():
+            pct = (r["TOTAL"] / tot_general * 100) if tot_general > 0 else 0.0
+            filas_dist.append({
+                "N.-": str(n_idx),
+                "Código": r["COD_SUCURSAL"],
+                "SUCURSAL": r["NOM_SUCURSAL"],
+                "N° Guías": int(r["GUIAS"]),
+                "Costo Flete": r["FLETE"],
+                "Costo Total Transporte": r["TOTAL"],
+                "% Distribución Documentos": pct
+            })
+            n_idx += 1
+            
+        if not df_otros.empty:
+            r_o = df_otros.iloc[0]
+            pct_o = (r_o["TOTAL"] / tot_general * 100) if tot_general > 0 else 0.0
+            filas_dist.append({
+                "N.-": str(n_idx),
+                "Código": "9999",
+                "SUCURSAL": "OTROS (VENTA WEB / CLIENTES / PROVEEDORES)",
+                "N° Guías": int(r_o["GUIAS"]),
+                "Costo Flete": r_o["FLETE"],
+                "Costo Total Transporte": r_o["TOTAL"],
+                "% Distribución Documentos": pct_o
+            })
+            
+        df_tabla = pd.DataFrame(filas_dist)
+        fila_total = {
+            "N.-": "",
+            "Código": "TOTAL",
+            "SUCURSAL": "TOTAL GENERAL",
+            "N° Guías": int(tot_guias_general),
+            "Costo Flete": df_tabla["Costo Flete"].sum() if not df_tabla.empty else 0.0,
+            "Costo Total Transporte": tot_general,
+            "% Distribución Documentos": 100.0
+        }
+        df_final = pd.concat([df_tabla, pd.DataFrame([fila_total])], ignore_index=True)
+        top5 = df_tabla[df_tabla["Código"] != "9999"].head(5).copy()
+        stats = {
+            "total_costo": tot_general,
+            "total_guias": tot_guias_general,
+            "df_top_5": top5,
+            "otros_costo": df_otros.iloc[0]["TOTAL"] if not df_otros.empty else 0.0,
+            "otros_guias": int(df_otros.iloc[0]["GUIAS"]) if not df_otros.empty else 0,
+            "col_codigo": "Código",
+            "col_sucursal": "SUCURSAL",
+            "col_total": "Costo Total Transporte"
+        }
+        return df_final, stats
+
+    else: # CARGA o CONSOLIDADO
+        tot_general = df_work["COSTO TOTAL"].sum()
+        tot_guias_general = len(df_work)
+        
+        agrup = df_work.groupby(["COD_SUCURSAL", "NOM_SUCURSAL"]).agg(
+            GUIAS=("GUIA", "count"),
+            FLETE=("FLETE", "sum"),
+            SEGURO=("SEGURO", "sum"),
+            TOTAL=("COSTO TOTAL", "sum")
+        ).reset_index()
+        
+        df_tiendas = agrup[agrup["COD_SUCURSAL"] != "9999"].sort_values("TOTAL", ascending=False).copy()
+        df_otros = agrup[agrup["COD_SUCURSAL"] == "9999"].copy()
+        
+        filas_dist = []
+        n_idx = 1
+        pct_col_name = "% Distribución Logística" if tipo == "CONSOLIDADO" else "% Distribución Carga"
+        for _, r in df_tiendas.iterrows():
+            pct = (r["TOTAL"] / tot_general * 100) if tot_general > 0 else 0.0
+            filas_dist.append({
+                "N.-": str(n_idx),
+                "Código": r["COD_SUCURSAL"],
+                "SUCURSAL": r["NOM_SUCURSAL"],
+                "N° Guías": int(r["GUIAS"]),
+                "Costo Flete": r["FLETE"],
+                "Costo Seguro": r["SEGURO"],
+                "Costo Total Transporte": r["TOTAL"],
+                pct_col_name: pct
+            })
+            n_idx += 1
+            
+        if not df_otros.empty:
+            r_o = df_otros.iloc[0]
+            pct_o = (r_o["TOTAL"] / tot_general * 100) if tot_general > 0 else 0.0
+            filas_dist.append({
+                "N.-": str(n_idx),
+                "Código": "9999",
+                "SUCURSAL": "OTROS (VENTA WEB / CLIENTES / PROVEEDORES)",
+                "N° Guías": int(r_o["GUIAS"]),
+                "Costo Flete": r_o["FLETE"],
+                "Costo Seguro": r_o["SEGURO"],
+                "Costo Total Transporte": r_o["TOTAL"],
+                pct_col_name: pct_o
+            })
+            
+        df_tabla = pd.DataFrame(filas_dist)
+        fila_total = {
+            "N.-": "",
+            "Código": "TOTAL",
+            "SUCURSAL": "TOTAL GENERAL",
+            "N° Guías": int(tot_guias_general),
+            "Costo Flete": df_tabla["Costo Flete"].sum() if not df_tabla.empty else 0.0,
+            "Costo Seguro": df_tabla["Costo Seguro"].sum() if not df_tabla.empty else 0.0,
+            "Costo Total Transporte": df_tabla["Costo Total Transporte"].sum() if not df_tabla.empty else 0.0,
+            pct_col_name: 100.0
+        }
+        df_final = pd.concat([df_tabla, pd.DataFrame([fila_total])], ignore_index=True)
+        top5 = df_tabla[df_tabla["Código"] != "9999"].head(5).copy()
+        stats = {
+            "total_costo": tot_general,
+            "total_guias": tot_guias_general,
+            "df_top_5": top5,
+            "otros_costo": df_otros.iloc[0]["TOTAL"] if not df_otros.empty else 0.0,
+            "otros_guias": int(df_otros.iloc[0]["GUIAS"]) if not df_otros.empty else 0,
+            "col_codigo": "Código",
+            "col_sucursal": "SUCURSAL",
+            "col_total": "Costo Total Transporte"
+        }
+        return df_final, stats
+
+def generar_distribucion_logistica(df_det_carga: pd.DataFrame, df_det_doc: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, Any]]:
+    """Alias para compatibilidad."""
+    df_fact = pd.concat([df_det_carga, df_det_doc], ignore_index=True) if (not df_det_carga.empty or not df_det_doc.empty) else pd.DataFrame()
+    return construir_resumen_sucursal_especifico(df_fact, tipo="CONSOLIDADO")
 
 def procesar_costos_transporte(df_manifiesto: pd.DataFrame, df_carga: pd.DataFrame, df_doc: pd.DataFrame, df_seguro: pd.DataFrame) -> Dict[str, Any]:
     """
@@ -747,7 +884,7 @@ def procesar_costos_transporte(df_manifiesto: pd.DataFrame, df_carga: pd.DataFra
     - Cruce Factura Documentos + Manifiesto
     - Identificación de Guías Anuladas / No Facturadas
     - Cálculo de métricas ejecutivas, ciudad-ciudad y contenido
-    - Generación automática de la tabla de Distribución Logística por Sucursal
+    - Generación de las 4 Distribuciones Logísticas por Sucursal (Consolidado, Carga, Documentos, Seguro)
     """
     mapa_seguro = {}
     if not df_seguro.empty and "GUIA" in df_seguro.columns:
@@ -888,6 +1025,11 @@ def procesar_costos_transporte(df_manifiesto: pd.DataFrame, df_carga: pd.DataFra
                 "FECHA": row.get("FECHA", manif_data.get("FECHA CREACION", "")),
                 "CIUDAD ORIGEN": row.get("ORIGEN", manif_data.get("CIUDAD ORIGEN", "IBARRA")),
                 "CIUDAD DESTINO": row.get("DESTINO", manif_data.get("CIUDAD DESTINO", "")),
+                "DESTINATARIO": manif_data.get("DESTINATARIO", ""),
+                "DIRECCION": manif_data.get("DIRECCION DESTINATARIO", ""),
+                "CONTENIDO": manif_data.get("CONTENIDO", ""),
+                "CATEGORIA": clasificar_contenido_transporte(manif_data.get("CONTENIDO", ""), manif_data.get("PRODUCTO", "")),
+                "ESTADO": manif_data.get("ESTADO", "FACTURADO"),
                 "TRAYECTO": row.get("TRAYECTO", ""),
                 "VALOR DECLARADO": parse_float_seguro(row.get("VALOR DECLARADO", row.get("VAL. DEC.", manif_data.get("VALOR DECLARADO", 0.0)))),
                 "TASA SEGURO": row.get("SEGURO_TASA", row.get("SEGURO", "1%")),
@@ -1003,8 +1145,11 @@ def procesar_costos_transporte(df_manifiesto: pd.DataFrame, df_carga: pd.DataFra
             pares["COSTO PROMEDIO"] = pares["COSTO_TOTAL"] / pares["N_GUIAS"]
             df_pares_rutas = pares.sort_values("COSTO_TOTAL", ascending=False).copy()
 
-    # Distribución logística generada automáticamente por sucursal
-    df_dist_enriquecida, stats_sucursales = generar_distribucion_logistica(df_det_carga, df_det_doc)
+    # Generación de las 4 distribuciones logísticas por sucursal
+    df_dist_consolidada, stats_consolidada = construir_resumen_sucursal_especifico(df_todas_facturadas, tipo="CONSOLIDADO")
+    df_dist_carga, stats_carga = construir_resumen_sucursal_especifico(df_det_carga, tipo="CARGA")
+    df_dist_doc, stats_doc = construir_resumen_sucursal_especifico(df_det_doc, tipo="DOCUMENTOS")
+    df_dist_seguro, stats_seguro = construir_resumen_sucursal_especifico(df_det_seg, tipo="SEGURO")
 
     return {
         "kpis": {
@@ -1028,8 +1173,14 @@ def procesar_costos_transporte(df_manifiesto: pd.DataFrame, df_carga: pd.DataFra
         "df_top_ciudades": df_top_ciudades,
         "df_resumen_contenido": df_resumen_contenido,
         "df_pares_rutas": df_pares_rutas,
-        "df_dist_enriquecida": df_dist_enriquecida,
-        "stats_sucursales": stats_sucursales
+        "df_dist_enriquecida": df_dist_consolidada,
+        "df_dist_carga": df_dist_carga,
+        "df_dist_doc": df_dist_doc,
+        "df_dist_seguro": df_dist_seguro,
+        "stats_sucursales": stats_consolidada,
+        "stats_carga": stats_carga,
+        "stats_doc": stats_doc,
+        "stats_seguro": stats_seguro
     }
 
 # ==============================================================================
@@ -1038,15 +1189,18 @@ def procesar_costos_transporte(df_manifiesto: pd.DataFrame, df_carga: pd.DataFra
 
 def generar_excel_costos_transporte(datos_cruce: Dict[str, Any], mes_nombre: str = "PERIODO", anio: str = "2026") -> bytes:
     """
-    Genera el libro oficial .xlsx con 8 pestañas corporativas:
-    1. Distribución Logística
-    2. Resumen Ejecutivo
-    3. Analisis Ciudad-Ciudad
-    4. Analisis Contenido
-    5. Detalle Carga
-    6. Detalle Documentos
-    7. Detalle Seguro
-    8. Guias Anuladas
+    Genera el libro oficial .xlsx con 11 pestañas corporativas:
+    1. Distribución Consolidada
+    2. Distribución - Carga
+    3. Distribución - Documentos
+    4. Distribución - Seguro
+    5. Resumen Ejecutivo
+    6. Analisis Ciudad-Ciudad
+    7. Analisis Contenido
+    8. Detalle Carga
+    9. Detalle Documentos
+    10. Detalle Seguro
+    11. Guias Anuladas
     """
     wb = openpyxl.Workbook()
     
@@ -1077,38 +1231,36 @@ def generar_excel_costos_transporte(datos_cruce: Dict[str, Any], mes_nombre: str
     df_doc = datos_cruce["df_det_doc"]
     df_seg = datos_cruce["df_det_seg"]
     df_anul = datos_cruce["df_guias_anuladas"]
-    df_dist_enr = datos_cruce.get("df_dist_enriquecida")
 
-    # --------------------------------------------------------------------------
-    # PESTAÑA 1: Distribución Logística
-    # --------------------------------------------------------------------------
-    if df_dist_enr is not None and not df_dist_enr.empty:
-        ws_dist = wb.create_sheet(title="Distribución Logística")
-        ws_dist["A1"] = f"DISTRIBUCIÓN LOGÍSTICA DE COSTOS DE TRANSPORTE POR SUCURSAL - {mes_nombre} {anio}"
-        ws_dist["A1"].font = FONT_TITLE
+    def _escribir_hoja_distribucion(sheet_title: str, df_dist_data: pd.DataFrame, header_title_text: str):
+        if df_dist_data is None or df_dist_data.empty:
+            return
+        ws_d = wb.create_sheet(title=sheet_title)
+        ws_d["A1"] = f"{header_title_text} - {mes_nombre} {anio}"
+        ws_d["A1"].font = FONT_TITLE
         
-        headers_dist = list(df_dist_enr.columns)
-        ws_dist.append([])
-        ws_dist.append(headers_dist)
-        r_dist_h = 3
-        for c_i in range(1, len(headers_dist) + 1):
-            cell = ws_dist.cell(row=r_dist_h, column=c_i)
+        headers_d = list(df_dist_data.columns)
+        ws_d.append([])
+        ws_d.append(headers_d)
+        r_d_h = 3
+        for c_i in range(1, len(headers_d) + 1):
+            cell = ws_d.cell(row=r_d_h, column=c_i)
             cell.fill = NAVY_FILL
             cell.font = FONT_HEADER
             cell.alignment = Alignment(horizontal="center")
             
-        num_dist_rows = len(df_dist_enr)
-        for idx, row in df_dist_enr.iterrows():
+        num_d_rows = len(df_dist_data)
+        for idx, row in df_dist_data.iterrows():
             r = 4 + idx
             row_vals = []
-            for col_name in headers_dist:
+            for col_name in headers_d:
                 val = row.get(col_name, "")
                 row_vals.append(val)
-            ws_dist.append(row_vals)
+            ws_d.append(row_vals)
             
-            es_tot_row = (idx == num_dist_rows - 1)
-            for c_i, col_name in enumerate(headers_dist, 1):
-                cell = ws_dist.cell(row=r, column=c_i)
+            es_tot_row = (idx == num_d_rows - 1)
+            for c_i, col_name in enumerate(headers_d, 1):
+                cell = ws_d.cell(row=r, column=c_i)
                 if es_tot_row:
                     cell.font = FONT_TOTAL
                     cell.border = BORDER_TOTAL
@@ -1119,13 +1271,22 @@ def generar_excel_costos_transporte(datos_cruce: Dict[str, Any], mes_nombre: str
                         cell.fill = LIGHT_GRAY_FILL
                 
                 cn = str(col_name).upper()
-                if "FLETE" in cn or "SEGURO" in cn or "TOTAL TRANSPORTE" in cn or "MARGEN BRUTO" in cn or "SUBTOTAL" in cn or "IVA" in cn or "TOTAL" in cn:
+                if "FLETE" in cn or "SEGURO" in cn or "TOTAL TRANSPORTE" in cn or "VALOR DECLARADO" in cn or "TOTAL" in cn:
                     if "%" not in cn and "GUIAS" not in cn and "PIEZAS" not in cn and "N.-" not in cn:
                         cell.number_format = '$#,##0.00'
                 if "%" in cn or "DISTRIBUCION" in cn:
                     if isinstance(cell.value, (int, float)) and cell.value > 1.0:
                         cell.value = cell.value / 100.0
                     cell.number_format = '0.00%'
+
+    # 1. Distribución Consolidada
+    _escribir_hoja_distribucion("Distribución Consolidada", datos_cruce.get("df_dist_enriquecida"), "DISTRIBUCIÓN LOGÍSTICA DE COSTOS DE TRANSPORTE POR SUCURSAL")
+    # 2. Distribución Carga
+    _escribir_hoja_distribucion("Distribución Carga", datos_cruce.get("df_dist_carga"), "DISTRIBUCIÓN LOGÍSTICA - GUÍAS DE CARGA POR SUCURSAL")
+    # 3. Distribución Documentos
+    _escribir_hoja_distribucion("Distribución Documentos", datos_cruce.get("df_dist_doc"), "DISTRIBUCIÓN LOGÍSTICA - GUÍAS DE DOCUMENTOS POR SUCURSAL")
+    # 4. Distribución Seguro
+    _escribir_hoja_distribucion("Distribución Seguro", datos_cruce.get("df_dist_seguro"), "DISTRIBUCIÓN LOGÍSTICA - SEGURO CONTRATADO POR SUCURSAL")
 
     # --------------------------------------------------------------------------
     # PESTAÑA 4: Detalle Carga

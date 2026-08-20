@@ -754,25 +754,67 @@ def show_reconciliacion_v8():
             tab_idx_res = 7
 
             with subtabs_det[tab_idx_dist]:
-                st.subheader("Distribución Logística de Costos de Transporte por Sucursal")
-                st.caption("Asignación automática de costos de transporte (Flete + Seguro) hacia cada sucursal/tienda física a partir de las guías facturadas.")
+                st.subheader("Distribución Logística de Costos por Sucursal")
+                st.caption("Asignación trazable de costos de transporte hacia cada tienda/sucursal física a partir de las facturas de Carga, Documentos y Seguro.")
                 
-                df_dist_disp = cruce["df_dist_enriquecida"].copy()
-                if not df_dist_disp.empty:
-                    st.dataframe(df_dist_disp, hide_index=True, use_container_width=True)
+                tabs_dist_tipo = st.tabs([
+                    "📊 Consolidado Total",
+                    "📦 Solo Carga",
+                    "📑 Solo Documentos",
+                    "🛡️ Solo Seguro"
+                ])
                 
-                st.markdown("---")
-                st.markdown("#### 🏆 Top 5 Sucursales con Mayor Costo de Transporte")
-                stats_s = cruce.get("stats_sucursales", {})
-                if "df_top_5" in stats_s and not stats_s["df_top_5"].empty:
-                    col_t5_1, col_t5_2 = st.columns([0.55, 0.45])
-                    with col_t5_1:
-                        df_t5 = stats_s["df_top_5"][[stats_s["col_codigo"], stats_s["col_sucursal"], "N° Guías", "Costo Flete", "Costo Seguro", "Costo Total Transporte", "% Distribución Logística"]].copy()
-                        st.dataframe(df_t5, hide_index=True, use_container_width=True)
-                    with col_t5_2:
-                        fig_t5 = px.bar(stats_s["df_top_5"], x=stats_s["col_sucursal"], y="Costo Total Transporte", title="Top 5 Sucursales por Costo Logístico", text_auto="$.2s")
-                        fig_t5.update_layout(template="plotly_dark", height=280)
-                        st.plotly_chart(fig_t5, use_container_width=True)
+                with tabs_dist_tipo[0]:
+                    st.markdown("##### 📊 Distribución Logística Total (Carga + Documentos + Seguro)")
+                    df_dist_disp = cruce["df_dist_enriquecida"].copy()
+                    if not df_dist_disp.empty:
+                        st.dataframe(df_dist_disp, hide_index=True, use_container_width=True)
+                    
+                    st.markdown("---")
+                    st.markdown("#### 🏆 Top 5 Sucursales con Mayor Costo Consolidado")
+                    stats_s = cruce.get("stats_sucursales", {})
+                    if "df_top_5" in stats_s and not stats_s["df_top_5"].empty:
+                        col_t5_1, col_t5_2 = st.columns([0.55, 0.45])
+                        with col_t5_1:
+                            df_t5 = stats_s["df_top_5"][[stats_s["col_codigo"], stats_s["col_sucursal"], "N° Guías", "Costo Flete", "Costo Seguro", "Costo Total Transporte", "% Distribución Logística"]].copy()
+                            st.dataframe(df_t5, hide_index=True, use_container_width=True)
+                        with col_t5_2:
+                            fig_t5 = px.bar(stats_s["df_top_5"], x=stats_s["col_sucursal"], y="Costo Total Transporte", title="Top 5 Sucursales por Costo Consolidado", text_auto="$.2s")
+                            fig_t5.update_layout(template="plotly_dark", height=280)
+                            st.plotly_chart(fig_t5, use_container_width=True)
+
+                with tabs_dist_tipo[1]:
+                    st.markdown("##### 📦 Distribución Logística — Exclusivo Guías de Carga")
+                    df_c_disp = cruce.get("df_dist_carga", pd.DataFrame()).copy()
+                    if not df_c_disp.empty:
+                        st.dataframe(df_c_disp, hide_index=True, use_container_width=True)
+                    stats_c = cruce.get("stats_carga", {})
+                    if "df_top_5" in stats_c and not stats_c["df_top_5"].empty:
+                        fig_tc = px.bar(stats_c["df_top_5"], x=stats_c["col_sucursal"], y="Costo Total Transporte", title="Top 5 Sucursales Carga", text_auto="$.2s")
+                        fig_tc.update_layout(template="plotly_dark", height=260)
+                        st.plotly_chart(fig_tc, use_container_width=True)
+
+                with tabs_dist_tipo[2]:
+                    st.markdown("##### 📑 Distribución Logística — Exclusivo Guías de Documentos")
+                    df_d_disp = cruce.get("df_dist_doc", pd.DataFrame()).copy()
+                    if not df_d_disp.empty:
+                        st.dataframe(df_d_disp, hide_index=True, use_container_width=True)
+                    stats_d = cruce.get("stats_doc", {})
+                    if "df_top_5" in stats_d and not stats_d["df_top_5"].empty:
+                        fig_td = px.bar(stats_d["df_top_5"], x=stats_d["col_sucursal"], y="Costo Total Transporte", title="Top 5 Sucursales Documentos", text_auto="$.2s")
+                        fig_td.update_layout(template="plotly_dark", height=260)
+                        st.plotly_chart(fig_td, use_container_width=True)
+
+                with tabs_dist_tipo[3]:
+                    st.markdown("##### 🛡️ Distribución Logística — Exclusivo Seguro Contratado")
+                    df_s_disp = cruce.get("df_dist_seguro", pd.DataFrame()).copy()
+                    if not df_s_disp.empty:
+                        st.dataframe(df_s_disp, hide_index=True, use_container_width=True)
+                    stats_seg = cruce.get("stats_seguro", {})
+                    if "df_top_5" in stats_seg and not stats_seg["df_top_5"].empty:
+                        fig_ts = px.bar(stats_seg["df_top_5"], x=stats_seg["col_sucursal"], y="Costo Seguro", title="Top 5 Sucursales Seguro", text_auto="$.2s")
+                        fig_ts.update_layout(template="plotly_dark", height=260)
+                        st.plotly_chart(fig_ts, use_container_width=True)
 
             with subtabs_det[tab_idx_cont]:
                 st.subheader("Análisis de Costos por Categoría de Contenido")
