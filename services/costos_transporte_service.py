@@ -897,9 +897,9 @@ def generar_excel_costos_transporte(datos_cruce: Dict[str, Any], mes_nombre: str
                 ws_cc.cell(row=r, column=c_i).border = BORDER_TOTAL
 
     ws_cc.append([])
-    ws_cc.append(["DETALLE POR RUTAS Y PARES (ORIGEN -> DESTINO)"])
+    ws_cc.append(["DETALLE POR PAR CIUDAD ORIGEN -> CIUDAD DESTINO (solo movimientos que NO salen del CD Ibarra)"])
     ws_cc.cell(row=ws_cc.max_row, column=1).font = FONT_TITLE
-    headers_rutas = ["CIUDAD ORIGEN", "CIUDAD DESTINO", "TIPO MOVIMIENTO", "N° GUÍAS", "COSTO TOTAL (USD)", "COSTO PROMEDIO"]
+    headers_rutas = ["CIUDAD ORIGEN", "CIUDAD DESTINO", "N° GUÍAS", "COSTO TOTAL (USD)", "COSTO PROMEDIO / GUÍA (USD)"]
     ws_cc.append(headers_rutas)
     r_rutas_h = ws_cc.max_row
     for c_i in range(1, len(headers_rutas) + 1):
@@ -911,12 +911,15 @@ def generar_excel_costos_transporte(datos_cruce: Dict[str, Any], mes_nombre: str
     for r_idx, row in df_pares.iterrows():
         curr_r = ws_cc.max_row + 1
         ws_cc.append([
-            row["CIUDAD ORIGEN"], row["CIUDAD DESTINO"], row["TIPO MOVIMIENTO"],
-            row["N_GUIAS"], row["COSTO_TOTAL"], row["COSTO PROMEDIO"]
+            row.get("CIUDAD ORIGEN", ""), row.get("CIUDAD DESTINO", ""),
+            row.get("N_GUIAS", 0), row.get("COSTO_TOTAL", 0.0), row.get("COSTO PROMEDIO", 0.0)
         ])
-        ws_cc.cell(row=curr_r, column=4).number_format = '#,##0'
+        ws_cc.cell(row=curr_r, column=3).number_format = '#,##0'
+        ws_cc.cell(row=curr_r, column=4).number_format = '$#,##0.00'
         ws_cc.cell(row=curr_r, column=5).number_format = '$#,##0.00'
-        ws_cc.cell(row=curr_r, column=6).number_format = '$#,##0.00'
+        if curr_r % 2 == 0:
+            for c_i in range(1, len(headers_rutas) + 1):
+                ws_cc.cell(row=curr_r, column=c_i).fill = LIGHT_GRAY_FILL
 
     # --------------------------------------------------------------------------
     # PESTAÑA 3: Analisis Contenido
