@@ -149,11 +149,28 @@ def clasificar_contenido_transporte(contenido_raw: str, producto_raw: str = "") 
 # 3. PARSERS DE ARCHIVOS
 # ==============================================================================
 
+def _extraer_serie_limpia(df: pd.DataFrame, col_name: str, default_val: Any = "") -> pd.Series:
+    """Extrae una columna como Series de forma segura, incluso si hay columnas duplicadas."""
+    if col_name not in df.columns:
+        return pd.Series([default_val] * len(df), index=df.index)
+    col_data = df[col_name]
+    if isinstance(col_data, pd.DataFrame):
+        col_data = col_data.iloc[:, 0]
+    return col_data
+
 def cargar_y_limpiar_manifiesto(file_or_bytes) -> pd.DataFrame:
     """Carga el archivo de manifiesto detectando encabezado y filtrando filas basura."""
+    if hasattr(file_or_bytes, "seek"):
+        file_or_bytes.seek(0)
+        
     excel_file = pd.ExcelFile(file_or_bytes)
-    sheet_name = "Guias" if "Guias" in excel_file.sheet_names else excel_file.sheet_names[0]
-    
+    # Buscar hoja adecuada
+    sheet_name = excel_file.sheet_names[0]
+    for s in excel_file.sheet_names:
+        if "GUIA" in s.upper() or "MANIF" in s.upper():
+            sheet_name = s
+            break
+            
     df_raw = pd.read_excel(excel_file, sheet_name=sheet_name, header=None)
     
     header_idx = 1
@@ -165,6 +182,7 @@ def cargar_y_limpiar_manifiesto(file_or_bytes) -> pd.DataFrame:
             
     df = pd.read_excel(excel_file, sheet_name=sheet_name, header=header_idx)
     
+    # Normalizar nombres de columnas
     col_map = {}
     for c in df.columns:
         c_norm = normalizar_texto_transporte(c)
@@ -185,38 +203,26 @@ def cargar_y_limpiar_manifiesto(file_or_bytes) -> pd.DataFrame:
         elif "COSTO FLETE" in c_norm or "FLETE" in c_norm: col_map[c] = "COSTO FLETE"
         
     df = df.rename(columns=col_map)
+    # Eliminar duplicados de nombres de columnas si hubieron
+    df = df.loc[:, ~df.columns.duplicated(keep='first')].copy()
     
     if "GUIA" not in df.columns:
         raise ValueError("El manifiesto no contiene una columna 'GUIA' identificable.")
         
-    df["GUIA"] = df["GUIA"].apply(limpiar_numero_guia)
+    guia_series = _extraer_serie_limpia(df, "GUIA")
+    df["GUIA"] = guia_series.apply(limpiar_numero_guia)
     df = df[df["GUIA"].apply(es_guia_valida)].copy()
     
-    if "CIUDAD ORIGEN" in df.columns:
-        df["CIUDAD ORIGEN"] = df["CIUDAD ORIGEN"].apply(normalizar_texto_transporte)
-    else:
-        df["CIUDAD ORIGEN"] = "IBARRA"
+    # Normalizar campos de texto
+    for col in ["CIUDAD ORIGEN", "CIUDAD DESTINO", "DESTINATARIO", "TELEFONO", "DIRECCION DESTINATARIO", "CONTENIDO", "PRODUCTO", "ESTADO", "RECIBE", "FECHA CREACION", "FECHA ENTREGA"]:
+        s_col = _extraer_serie_limpia(df, col, default_val="")
+        df[col] = s_col.fillna("").astype(str).str.strip()
         
-    if "CIUDAD DESTINO" in df.columns:
-        df["CIUDAD DESTINO"] = df["CIUDAD DESTINO"].apply(normalizar_texto_transporte)
-    else:
-        df["CIUDAD DESTINO"] = ""
-        
-    for col in ["DESTINATARIO", "TELEFONO", "DIRECCION DESTINATARIO", "CONTENIDO", "PRODUCTO", "ESTADO", "RECIBE"]:
-        if col not in df.columns:
-            df[col] = ""
-        else:
-            df[col] = df[col].fillna("").astype(str).str.strip()
-            
-    if "VALOR DECLARADO" in df.columns:
-        df["VALOR DECLARADO"] = df["VALOR DECLARADO"].apply(parse_float_seguro)
-    else:
-        df["VALOR DECLARADO"] = 0.0
-        
-    if "PESO" in df.columns:
-        df["PESO"] = df["PESO"].apply(parse_float_seguro)
-    else:
-        df["PESO"] = 0.0
+    df["CIUDAD ORIGEN"] = df["CIUDAD ORIGEN"].apply(lambda x: normalizar_texto_transporte(x) if x else "IBARRA")
+    df["CIUDAD DESTINO"] = df["CIUDAD DESTINO"].apply(normalizar_texto_transporte)
+    
+    df["VALOR DECLARADO"] = _extraer_serie_limpia(df, "VALOR DECLARADO", default_val=0.0).apply(parse_float_seguro)
+    df["PESO"] = _extraer_serie_limpia(df, "PESO", default_val=0.0).apply(parse_float_seguro)
 
     return df
 
@@ -228,6 +234,9 @@ def cargar_y_limpiar_factura(file_or_bytes) -> Tuple[pd.DataFrame, pd.DataFrame,
     - Seguro
     Elimina la última fila de total de cada pestaña.
     """
+    if hasattr(file_or_bytes, "seek"):
+        file_or_bytes.seek(0)
+        
     excel_file = pd.ExcelFile(file_or_bytes)
     sheet_names = excel_file.sheet_names
     
@@ -274,19 +283,25 @@ def cargar_y_limpiar_factura(file_or_bytes) -> Tuple[pd.DataFrame, pd.DataFrame,
             elif "SEGURO" in cn: col_map[c] = "SEGURO_TASA" if "TASA" in cn or "%" in cn else "SEGURO"
             
         df_sheet = df_sheet.rename(columns=col_map)
+        df_sheet = df_sheet.loc[:, ~df_sheet.columns.duplicated(keep='first')].copy()
         
         if "GUIA" not in df_sheet.columns:
             continue
             
-        df_sheet["GUIA"] = df_sheet["GUIA"].apply(limpiar_numero_guia)
+        guia_s = _extraer_serie_limpia(df_sheet, "GUIA")
+        df_sheet["GUIA"] = guia_s.apply(limpiar_numero_guia)
         df_sheet = df_sheet[df_sheet["GUIA"].apply(es_guia_valida)].copy()
         
         sheet_upper = sheet.upper()
         cols_upper = [str(c).upper() for c in df_sheet.columns]
         
+        serv_series = _extraer_serie_limpia(df_sheet, "SERVICIO", default_val="")
+        has_doc_serv = serv_series.fillna("").astype(str).str.upper().str.contains("DOC").any()
+        has_car_serv = serv_series.fillna("").astype(str).str.upper().str.contains("CAR").any()
+        
         es_seguro = "SEGURO" in sheet_upper or "SEGURO" in cols_upper or "VALOR DECLARADO" in df_sheet.columns
-        es_doc = "DOC" in sheet_upper or ("SERVICIO" in df_sheet.columns and df_sheet["SERVICIO"].astype(str).str.upper().str.contains("DOC").any())
-        es_car = "CAR" in sheet_upper or "CARGA" in sheet_upper or ("SERVICIO" in df_sheet.columns and df_sheet["SERVICIO"].astype(str).str.upper().str.contains("CAR").any())
+        es_doc = "DOC" in sheet_upper or has_doc_serv
+        es_car = "CAR" in sheet_upper or "CARGA" in sheet_upper or has_car_serv
         
         if es_seguro and df_seg.empty:
             df_seg = df_sheet
@@ -305,17 +320,17 @@ def cargar_y_limpiar_factura(file_or_bytes) -> Tuple[pd.DataFrame, pd.DataFrame,
     for df_curr in [df_car, df_doc, df_seg]:
         if not df_curr.empty:
             if "FLETE" in df_curr.columns:
-                df_curr["FLETE"] = df_curr["FLETE"].apply(parse_float_seguro)
+                df_curr["FLETE"] = _extraer_serie_limpia(df_curr, "FLETE", default_val=0.0).apply(parse_float_seguro)
             if "SUBTOTAL" in df_curr.columns:
-                df_curr["SUBTOTAL"] = df_curr["SUBTOTAL"].apply(parse_float_seguro)
+                df_curr["SUBTOTAL"] = _extraer_serie_limpia(df_curr, "SUBTOTAL", default_val=0.0).apply(parse_float_seguro)
             if "PIEZAS" in df_curr.columns:
-                df_curr["PIEZAS"] = pd.to_numeric(df_curr["PIEZAS"], errors="coerce").fillna(1).astype(int)
+                df_curr["PIEZAS"] = pd.to_numeric(_extraer_serie_limpia(df_curr, "PIEZAS", default_val=1), errors="coerce").fillna(1).astype(int)
             if "PESO" in df_curr.columns:
-                df_curr["PESO"] = df_curr["PESO"].apply(parse_float_seguro)
+                df_curr["PESO"] = _extraer_serie_limpia(df_curr, "PESO", default_val=0.0).apply(parse_float_seguro)
             if "CIUDAD ORIGEN" in df_curr.columns:
-                df_curr["CIUDAD ORIGEN"] = df_curr["CIUDAD ORIGEN"].apply(normalizar_texto_transporte)
+                df_curr["CIUDAD ORIGEN"] = _extraer_serie_limpia(df_curr, "CIUDAD ORIGEN", default_val="IBARRA").apply(normalizar_texto_transporte)
             if "CIUDAD DESTINO" in df_curr.columns:
-                df_curr["CIUDAD DESTINO"] = df_curr["CIUDAD DESTINO"].apply(normalizar_texto_transporte)
+                df_curr["CIUDAD DESTINO"] = _extraer_serie_limpia(df_curr, "CIUDAD DESTINO", default_val="").apply(normalizar_texto_transporte)
                 
     return df_car, df_doc, df_seg
 
