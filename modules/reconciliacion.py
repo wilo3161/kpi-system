@@ -596,28 +596,21 @@ def show_reconciliacion_v8():
                 "anio": "2026"
             }
 
-        # ── Formulario de Carga de Archivos ──
-        col_up1, col_up2, col_up3 = st.columns(3)
+        # ── Formulario de Carga de Archivos (Solo 2 archivos) ──
+        col_up1, col_up2 = st.columns(2)
         with col_up1:
-            st.markdown("##### 📦 1. Manifiesto (`.xlsx`)")
+            st.markdown("##### 📦 1. Manifiesto de Recolección (`.xlsx`)")
             file_manifiesto = st.file_uploader(
-                "Manifiesto de Recolección (Hoja Guias)",
+                "Carga el Manifiesto de Recolección del mes (Hoja Guias)",
                 type=["xlsx", "xls"],
                 key="uploader_manifiesto_transporte"
             )
         with col_up2:
-            st.markdown("##### 📑 2. Factura Courier (`.xlsx`)")
+            st.markdown("##### 📑 2. Factura del Courier (`.xlsx`)")
             file_factura = st.file_uploader(
-                "Factura Courier (Carga, Documentos, Seguro)",
+                "Carga la Factura del Courier (Pestañas: Carga, Documentos, Seguro)",
                 type=["xlsx", "xls"],
                 key="uploader_factura_transporte"
-            )
-        with col_up3:
-            st.markdown("##### 📊 3. Ventas x Sucursal (`.xlsx`) *(Opcional)*")
-            file_distribucion = st.file_uploader(
-                "Reporte de Ventas por Sucursal (Distribucción_*.xlsx)",
-                type=["xlsx", "xls"],
-                key="uploader_distribucion_transporte"
             )
 
         col_m1, col_m2, col_m3 = st.columns([1, 1, 2])
@@ -628,31 +621,26 @@ def show_reconciliacion_v8():
         with col_m2:
             anio_sel = st.text_input("Año:", value=str(datetime.now().year), key="inp_anio_transporte")
 
-        btn_procesar = st.button("🚀 Procesar Conciliación e Integración de Costos", type="primary", use_container_width=True)
+        btn_procesar = st.button("🚀 Procesar Conciliación e Integración de Distribución", type="primary", use_container_width=True)
 
         if btn_procesar:
             if not file_manifiesto or not file_factura:
-                st.error("⚠️ Debes cargar obligatoriamente al menos los 2 primeros archivos: 1) Manifiesto de Recolección y 2) Factura del Courier.")
+                st.error("⚠️ Debes cargar obligatoriamente los 2 archivos: 1) Manifiesto de Recolección y 2) Factura del Courier.")
             else:
-                with st.spinner("Ejecutando limpieza, cruce de guías, costeo e integración por sucursal..."):
+                with st.spinner("Ejecutando cruce de guías, costeo y cálculo de distribución por sucursal..."):
                     try:
                         # 1. Cargar y limpiar
                         df_manif_limpio = cargar_y_limpiar_manifiesto(file_manifiesto)
                         df_car, df_doc, df_seg = cargar_y_limpiar_factura(file_factura)
-                        
-                        df_dist_orig = None
-                        if file_distribucion:
-                            df_dist_orig, _, _ = leer_distribucion_original(file_distribucion)
 
-                        # 2. Cruce y costeo
-                        cruce_resultado = procesar_costos_transporte(df_manif_limpio, df_car, df_doc, df_seg, df_distribucion=df_dist_orig)
+                        # 2. Cruce y costeo completo
+                        cruce_resultado = procesar_costos_transporte(df_manif_limpio, df_car, df_doc, df_seg)
 
                         st.session_state.transporte_datos["procesado"] = True
                         st.session_state.transporte_datos["cruce"] = cruce_resultado
                         st.session_state.transporte_datos["mes"] = mes_sel
                         st.session_state.transporte_datos["anio"] = anio_sel
-                        st.session_state.transporte_datos["tiene_ventas"] = (df_dist_orig is not None)
-                        st.success(f"✅ ¡Conciliación e integración completada exitosamente para {mes_sel} {anio_sel}!")
+                        st.success(f"✅ ¡Conciliación y Distribución Logística completada exitosamente para {mes_sel} {anio_sel}!")
                     except Exception as e:
                         st.error(f"❌ Error al procesar los archivos: {str(e)}")
                         logger.exception(e)
@@ -663,16 +651,12 @@ def show_reconciliacion_v8():
             kpis = cruce["kpis"]
             mes_n = st.session_state.transporte_datos["mes"]
             anio_n = st.session_state.transporte_datos["anio"]
-            tiene_ventas = st.session_state.transporte_datos.get("tiene_ventas", False)
 
             st.divider()
 
             # Botón de Descarga Excel Oficial al inicio
             excel_bytes = generar_excel_costos_transporte(cruce, mes_nombre=mes_n, anio=anio_n)
-            if tiene_ventas:
-                nombre_archivo_excel = f"Reporte_Ventas_y_Costos_Transporte_Fashion_Club_{mes_n}_{anio_n}.xlsx"
-            else:
-                nombre_archivo_excel = f"Analisis_Costos_Transporte_Fashion_Club_{mes_n}_{anio_n}.xlsx"
+            nombre_archivo_excel = f"Analisis_Costos_Transporte_y_Distribucion_Fashion_Club_{mes_n}_{anio_n}.xlsx"
 
             st.download_button(
                 label=f"📥 Descargar Libro Oficial Excel ({nombre_archivo_excel})",
@@ -751,62 +735,45 @@ def show_reconciliacion_v8():
             st.write("")
 
             # Pestañas de Detalle y Análisis Adicionales
-            if tiene_ventas and not cruce["df_dist_enriquecida"].empty:
-                subtabs_det = st.tabs([
-                    "🏬 Distribución con Costos",
-                    "📊 Análisis por Contenido",
-                    "🏙️ Rutas Ciudad-Ciudad",
-                    "🚫 Guías Anuladas / Alertas",
-                    "📦 Detalle Carga",
-                    "📑 Detalle Documentos",
-                    "🛡️ Detalle Seguro",
-                    "💬 Resumen Ejecutivo"
-                ])
-                tab_idx_dist = 0
-                tab_idx_cont = 1
-                tab_idx_rutas = 2
-                tab_idx_anul = 3
-                tab_idx_car = 4
-                tab_idx_doc = 5
-                tab_idx_seg = 6
-                tab_idx_res = 7
+            subtabs_det = st.tabs([
+                "🏬 Distribución Logística",
+                "📊 Análisis por Contenido",
+                "🏙️ Rutas Ciudad-Ciudad",
+                "🚫 Guías Anuladas / Alertas",
+                "📦 Detalle Carga",
+                "📑 Detalle Documentos",
+                "🛡️ Detalle Seguro",
+                "💬 Resumen Ejecutivo"
+            ])
+            tab_idx_dist = 0
+            tab_idx_cont = 1
+            tab_idx_rutas = 2
+            tab_idx_anul = 3
+            tab_idx_car = 4
+            tab_idx_doc = 5
+            tab_idx_seg = 6
+            tab_idx_res = 7
 
-                with subtabs_det[tab_idx_dist]:
-                    st.subheader("Reporte de Ventas por Sucursal con Costos de Transporte")
-                    st.caption("Estructura original enriquecida con Costo Flete, Costo Seguro, Costo Total y % Distribución Logística.")
-                    
-                    df_dist_disp = cruce["df_dist_enriquecida"].copy()
+            with subtabs_det[tab_idx_dist]:
+                st.subheader("Distribución Logística de Costos de Transporte por Sucursal")
+                st.caption("Asignación automática de costos de transporte (Flete + Seguro) hacia cada sucursal/tienda física a partir de las guías facturadas.")
+                
+                df_dist_disp = cruce["df_dist_enriquecida"].copy()
+                if not df_dist_disp.empty:
                     st.dataframe(df_dist_disp, hide_index=True, use_container_width=True)
-                    
-                    st.markdown("---")
-                    st.markdown("#### 🏆 Top 5 Sucursales con Mayor Costo de Transporte")
-                    stats_s = cruce.get("stats_sucursales", {})
-                    if "df_top_5" in stats_s and not stats_s["df_top_5"].empty:
-                        col_t5_1, col_t5_2 = st.columns([0.55, 0.45])
-                        with col_t5_1:
-                            df_t5 = stats_s["df_top_5"][[stats_s["col_codigo"], stats_s["col_sucursal"], "Costo Flete", "Costo Seguro", "Costo Total Transporte", "% Distribución Logística"]].copy()
-                            st.dataframe(df_t5, hide_index=True, use_container_width=True)
-                        with col_t5_2:
-                            fig_t5 = px.bar(stats_s["df_top_5"], x=stats_s["col_sucursal"], y="Costo Total Transporte", title="Top 5 Sucursales por Costo", text_auto="$.2s")
-                            fig_t5.update_layout(template="plotly_dark", height=280)
-                            st.plotly_chart(fig_t5, use_container_width=True)
-            else:
-                subtabs_det = st.tabs([
-                    "📊 Análisis por Contenido",
-                    "🏙️ Rutas Ciudad-Ciudad",
-                    "🚫 Guías Anuladas / Alertas",
-                    "📦 Detalle Carga",
-                    "📑 Detalle Documentos",
-                    "🛡️ Detalle Seguro",
-                    "💬 Resumen Ejecutivo"
-                ])
-                tab_idx_cont = 0
-                tab_idx_rutas = 1
-                tab_idx_anul = 2
-                tab_idx_car = 3
-                tab_idx_doc = 4
-                tab_idx_seg = 5
-                tab_idx_res = 6
+                
+                st.markdown("---")
+                st.markdown("#### 🏆 Top 5 Sucursales con Mayor Costo de Transporte")
+                stats_s = cruce.get("stats_sucursales", {})
+                if "df_top_5" in stats_s and not stats_s["df_top_5"].empty:
+                    col_t5_1, col_t5_2 = st.columns([0.55, 0.45])
+                    with col_t5_1:
+                        df_t5 = stats_s["df_top_5"][[stats_s["col_codigo"], stats_s["col_sucursal"], "N° Guías", "Costo Flete", "Costo Seguro", "Costo Total Transporte", "% Distribución Logística"]].copy()
+                        st.dataframe(df_t5, hide_index=True, use_container_width=True)
+                    with col_t5_2:
+                        fig_t5 = px.bar(stats_s["df_top_5"], x=stats_s["col_sucursal"], y="Costo Total Transporte", title="Top 5 Sucursales por Costo Logístico", text_auto="$.2s")
+                        fig_t5.update_layout(template="plotly_dark", height=280)
+                        st.plotly_chart(fig_t5, use_container_width=True)
 
             with subtabs_det[tab_idx_cont]:
                 st.subheader("Análisis de Costos por Categoría de Contenido")

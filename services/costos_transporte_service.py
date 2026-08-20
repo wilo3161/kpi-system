@@ -578,189 +578,176 @@ def procesar_costos_transporte(df_manifiesto: pd.DataFrame, df_carga: pd.DataFra
         tot_g = len(df_todas_facturadas)
         cont_c["PCT_GUIAS"] = (cont_c["N_GUIAS"] / tot_g * 100) if tot_g > 0 else 0.0
         cont_c["PCT_COSTO"] = (cont_c["COSTO_TOTAL"] / costo_total_periodo * 100) if costo_total_periodo > 0 else 0.0
-def leer_distribucion_original(file_or_bytes) -> Tuple[Optional[pd.DataFrame], int, str]:
-    """
-    Lee el archivo de distribución de ventas preservando todas sus columnas y formato original.
-    Retorna (df_distribucion, header_row, sheet_name).
-    """
-    if file_or_bytes is None:
-        return None, 0, ""
-    if hasattr(file_or_bytes, "seek"):
-        file_or_bytes.seek(0)
-    
-    excel_file = pd.ExcelFile(file_or_bytes)
-    sheet_name = excel_file.sheet_names[0]
-    for s in excel_file.sheet_names:
-        if "DISTRIB" in s.upper() or "VENTA" in s.upper() or "SUCURSAL" in s.upper():
-            sheet_name = s
-            break
-            
-    df_raw = pd.read_excel(excel_file, sheet_name=sheet_name, header=None)
-    header_row = 0
-    for idx, row in df_raw.head(15).iterrows():
-        row_vals = [normalizar_texto_transporte(x) for x in row.values if pd.notna(x)]
-        if any("CODIGO" in v or "COD" in v or "N.-" in v for v in row_vals) and any("SUCURSAL" in v or "TIENDA" in v or "LOCAL" in v for v in row_vals):
-            header_row = idx
-            break
-            
-    dist = pd.read_excel(excel_file, sheet_name=sheet_name, header=header_row)
-    dist = dist.dropna(how="all").copy()
-    
-    return dist, header_row, sheet_name
+# ==============================================================================
+# 4. DISTRIBUCIÓN LOGÍSTICA POR SUCURSAL (GENERADA AUTOMÁTICAMENTE)
+# ==============================================================================
 
-def integrar_costos_en_distribucion(df_distribucion: pd.DataFrame, df_det_carga: pd.DataFrame, df_det_doc: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, Any]]:
-    """
-    Mapea las guías facturadas hacia las sucursales del reporte de ventas y añade las columnas:
-    - Costo Flete
-    - Costo Seguro
-    - Costo Total Transporte
-    - % Distribución Logística
-    - Costo / Margen Bruto (si existe margen bruto)
-    """
-    if df_distribucion is None or df_distribucion.empty:
-        return pd.DataFrame(), {}
-        
-    df_dist = df_distribucion.copy()
-    col_codigo = None
-    col_sucursal = None
-    col_margen = None
+CATALOGO_SUCURSALES_OFICIAL = [
+    {"codigo": "1.001", "sucursal": "MATRIZ / CD IBARRA", "keywords": ["MATRIZ", "CD IBARRA", "BODEGA IBARRA", "CENTRO DE DISTRIBUCION"]},
+    {"codigo": "2001", "sucursal": "MALL DEL RIO CUENCA", "keywords": ["MALL DEL RIO CUENCA", "CUENCA MALL", "MALL DEL RIO", "AERO CUENCA", "CUENCA"]},
+    {"codigo": "2002", "sucursal": "RIOBAMBA", "keywords": ["RIOBAMBA", "MULTIPLAZA RIOBAMBA", "PASEO RIOBAMBA"]},
+    {"codigo": "2003", "sucursal": "PASEO AMBATO", "keywords": ["PASEO AMBATO", "AMBATO PASEO", "AMBATO"]},
+    {"codigo": "2004", "sucursal": "MALL DEL PACIFICO MANTA", "keywords": ["MALL DEL PACIFICO", "PACIFICO MANTA", "MANTA PACIFICO"]},
+    {"codigo": "2005", "sucursal": "CONDADO SHOPPING", "keywords": ["CONDADO", "EL CONDADO", "CONDADO SHOPPING"]},
+    {"codigo": "2006", "sucursal": "SAN LUIS SHOPPING", "keywords": ["SAN LUIS", "SAN LUIS SHOPPING"]},
+    {"codigo": "2007", "sucursal": "SANTO DOMINGO", "keywords": ["SANTO DOMINGO", "BOMBOLI"]},
+    {"codigo": "2008", "sucursal": "MALL DEL SUR GUAYAQUIL", "keywords": ["MALL DEL SUR", "SUR GUAYAQUIL"]},
+    {"codigo": "2009", "sucursal": "MALL DEL SOL GUAYAQUIL", "keywords": ["MALL DEL SOL", "SOL GUAYAQUIL"]},
+    {"codigo": "2010", "sucursal": "RIOCENTRO EL DORADO", "keywords": ["EL DORADO", "RIOCENTRO EL DORADO", "DORADO"]},
+    {"codigo": "2011", "sucursal": "RIOCENTRO NORTE", "keywords": ["RIOCENTRO NORTE", "NORTE GUAYAQUIL"]},
+    {"codigo": "2012", "sucursal": "RIOCENTRO CEIBOS", "keywords": ["CEIBOS", "RIOCENTRO CEIBOS"]},
+    {"codigo": "2013", "sucursal": "PASEO SHOPPING PORTOVIEJO", "keywords": ["PORTOVIEJO", "PASEO PORTOVIEJO"]},
+    {"codigo": "2014", "sucursal": "PASEO SHOPPING MACHALA", "keywords": ["MACHALA", "PASEO MACHALA"]},
+    {"codigo": "2015", "sucursal": "PASEO SHOPPING DURAN", "keywords": ["DURAN", "PASEO DURAN"]},
+    {"codigo": "2016", "sucursal": "PASEO SHOPPING QUEVEDO", "keywords": ["QUEVEDO", "PASEO QUEVEDO"]},
+    {"codigo": "2017", "sucursal": "PASEO SHOPPING BABAHOYO", "keywords": ["BABAHOYO", "PASEO BABAHOYO"]},
+    {"codigo": "2018", "sucursal": "CCI IÑAQUITO", "keywords": ["CCI", "INAQUITO", "AERO CCI"]},
+    {"codigo": "2019", "sucursal": "6 DE DICIEMBRE", "keywords": ["6 DE DICIEMBRE", "SEIS DE DICIEMBRE", "RIOCENTRO 6 DE DICIEMBRE", "AEROPOSTALE 6 DE DICIEMBRE"]},
+    {"codigo": "2020", "sucursal": "CARAPUNGO", "keywords": ["CARAPUNGO", "PORTAL SHOPPING", "EL PORTAL"]},
+    {"codigo": "2021", "sucursal": "LA PLAZA SHOPPING MANTA", "keywords": ["LA PLAZA", "PLAZA MANTA"]},
+    {"codigo": "2022", "sucursal": "CAYAMBE", "keywords": ["CAYAMBE"]},
+    {"codigo": "2023", "sucursal": "EL COCA", "keywords": ["COCA", "EL COCA"]},
+    {"codigo": "2024", "sucursal": "LAGO AGRIO", "keywords": ["LAGO AGRIO"]},
+    {"codigo": "2025", "sucursal": "PEDERNALES", "keywords": ["PEDERNALES"]},
+    {"codigo": "2026", "sucursal": "PASAJE", "keywords": ["PASAJE"]},
+    {"codigo": "2027", "sucursal": "DAULE", "keywords": ["DAULE"]},
+    {"codigo": "2028", "sucursal": "PLAYAS", "keywords": ["PLAYAS", "VILLAMIL PLAYAS"]},
+    {"codigo": "2029", "sucursal": "PENINSULA", "keywords": ["PENINSULA", "SANTA ELENA", "SALINAS"]},
+    {"codigo": "2030", "sucursal": "BAHIA DE CARAQUEZ", "keywords": ["BAHIA", "BAHIA DE CARAQUEZ"]},
+    {"codigo": "2031", "sucursal": "MILAGRO", "keywords": ["MILAGRO", "PASEO MILAGRO"]},
+    {"codigo": "3001", "sucursal": "PRICE CLUB IBARRA", "keywords": ["PRICE CLUB IBARRA", "PRICE IBARRA"]},
+    {"codigo": "3002", "sucursal": "PRICE CLUB PORTOVIEJO", "keywords": ["PRICE CLUB PORTOVIEJO", "PRICE PORTOVIEJO"]},
+    {"codigo": "3003", "sucursal": "PRICE CLUB MACHALA", "keywords": ["PRICE CLUB MACHALA", "PRICE MACHALA"]},
+    {"codigo": "3004", "sucursal": "PRICE CLUB GUAYAQUIL", "keywords": ["PRICE CLUB GUAYAQUIL", "PRICE GUAYAQUIL"]},
+    {"codigo": "3005", "sucursal": "PRICE CLUB CUENCA", "keywords": ["PRICE CLUB CUENCA", "PRICE CUENCA"]},
+]
+
+def clasificar_sucursal_guia(destinatario: str, direccion: str = "", ciudad_destino: str = "") -> Tuple[str, str]:
+    """Determina el código y nombre de la sucursal a partir de los datos de la guía."""
+    dest_norm = normalizar_texto_transporte(destinatario)
+    dir_norm = normalizar_texto_transporte(direccion)
+    ciu_norm = normalizar_texto_transporte(ciudad_destino)
+    full_text = f"{dest_norm} {dir_norm} {ciu_norm}"
     
-    for c in df_dist.columns:
-        cn = normalizar_texto_transporte(c)
-        if ("CODIGO" in cn or "COD" in cn or "N.-" in cn) and not col_codigo:
-            col_codigo = c
-        elif ("SUCURSAL" in cn or "TIENDA" in cn or "LOCAL" in cn) and not col_sucursal:
-            col_sucursal = c
-        elif ("MARGEN BRUTO" in cn or "MARGEN" in cn) and "%" not in cn and not col_margen:
-            col_margen = c
-            
-    if not col_codigo: col_codigo = df_dist.columns[0]
-    if not col_sucursal: col_sucursal = df_dist.columns[1] if len(df_dist.columns) > 1 else df_dist.columns[0]
-        
+    # Primero búsqueda exacta o de frase clave
+    for item in CATALOGO_SUCURSALES_OFICIAL:
+        for kw in item["keywords"]:
+            if kw in dest_norm or (len(kw) > 5 and kw in full_text):
+                return item["codigo"], item["sucursal"]
+                
+    # Fallback por ciudad de destino si destinatario contiene AERO o TIENDA
+    if "AERO" in dest_norm or "TIENDA" in dest_norm or "LOCAL" in dest_norm:
+        for item in CATALOGO_SUCURSALES_OFICIAL:
+            for kw in item["keywords"]:
+                if kw in ciu_norm:
+                    return item["codigo"], item["sucursal"]
+
+    return "9999", "OTROS (VENTA WEB / CLIENTES / PROVEEDORES)"
+
+def generar_distribucion_logistica(df_det_carga: pd.DataFrame, df_det_doc: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, Any]]:
+    """
+    Genera automáticamente la tabla de Distribución Logística por Sucursal a partir de las guías facturadas.
+    Calcula Flete, Seguro, Total Transporte, N° Guías y % Distribución Logística por cada sucursal.
+    """
     df_fact = pd.concat([df_det_carga, df_det_doc], ignore_index=True) if (not df_det_carga.empty or not df_det_doc.empty) else pd.DataFrame()
     
-    mapeo_suc_cod = {}
-    for _, r in df_dist.iterrows():
-        cod = str(r[col_codigo]).strip() if pd.notna(r[col_codigo]) else ""
-        suc = normalizar_texto_transporte(r[col_sucursal])
-        if cod and suc and "TOTAL" not in cod.upper() and "TOTAL" not in suc:
-            mapeo_suc_cod[suc] = cod
-            
-    def buscar_codigo(destinatario: str) -> str:
-        dest = normalizar_texto_transporte(destinatario)
-        if not dest:
-            return "9999"
-        if dest in mapeo_suc_cod:
-            return mapeo_suc_cod[dest]
-        for suc_name, cod in mapeo_suc_cod.items():
-            if len(suc_name) >= 4 and (suc_name in dest or dest in suc_name):
-                return cod
-        return "9999"
+    if df_fact.empty:
+        return pd.DataFrame(), {}
         
-    if not df_fact.empty:
-        df_fact["COD_SUCURSAL"] = df_fact["DESTINATARIO"].apply(buscar_codigo)
-    else:
-        df_fact["COD_SUCURSAL"] = []
-
-    costos_por_cod = {}
-    if not df_fact.empty:
-        agrup = df_fact.groupby("COD_SUCURSAL").agg(
-            FLETE=("FLETE", "sum"),
-            SEGURO=("SEGURO", "sum"),
-            TOTAL=("COSTO TOTAL", "sum"),
-            GUIAS=("GUIA", "count")
-        ).reset_index()
-        for _, row in agrup.iterrows():
-            costos_por_cod[str(row["COD_SUCURSAL"])] = {
-                "flete": row["FLETE"],
-                "seguro": row["SEGURO"],
-                "total": row["TOTAL"],
-                "guias": row["GUIAS"]
-            }
-            
-    tot_general_transporte = sum(v["total"] for v in costos_por_cod.values()) if costos_por_cod else 0.0
-    df_clean = df_dist[~df_dist.apply(_es_fila_total, axis=1)].copy()
-    
-    fletes_col = []
-    seguros_col = []
-    totales_col = []
-    pct_dist_col = []
-    costo_margen_col = []
-    
-    for idx, row in df_clean.iterrows():
-        cod = str(row[col_codigo]).strip() if pd.notna(row[col_codigo]) else ""
-        c_info = costos_por_cod.get(cod, {"flete": 0.0, "seguro": 0.0, "total": 0.0, "guias": 0})
-        fletes_col.append(c_info["flete"])
-        seguros_col.append(c_info["seguro"])
-        totales_col.append(c_info["total"])
-        pct_dist_col.append((c_info["total"] / tot_general_transporte * 100) if tot_general_transporte > 0 else 0.0)
+    codigos = []
+    sucursales = []
+    for _, row in df_fact.iterrows():
+        cod, suc = clasificar_sucursal_guia(
+            destinatario=row.get("DESTINATARIO", ""),
+            direccion=row.get("DIRECCION", ""),
+            ciudad_destino=row.get("CIUDAD DESTINO", "")
+        )
+        codigos.append(cod)
+        sucursales.append(suc)
         
-        mb_val = parse_float_seguro(row[col_margen]) if col_margen and col_margen in row else 0.0
-        c_m = (c_info["total"] / mb_val * 100) if mb_val > 0 else 0.0
-        costo_margen_col.append(c_m)
-        
-    df_clean["Costo Flete"] = fletes_col
-    df_clean["Costo Seguro"] = seguros_col
-    df_clean["Costo Total Transporte"] = totales_col
-    df_clean["% Distribución Logística"] = pct_dist_col
-    if col_margen:
-        df_clean["Costo / Margen Bruto"] = costo_margen_col
-        
-    if "9999" in costos_por_cod and costos_por_cod["9999"]["total"] > 0:
-        c_otros = costos_por_cod["9999"]
-        fila_otros = {c: "" for c in df_clean.columns}
-        fila_otros[col_codigo] = "9999"
-        fila_otros[col_sucursal] = "OTROS (SIN SUCURSAL DIRECTA / WEB / DEV)"
-        fila_otros["Costo Flete"] = c_otros["flete"]
-        fila_otros["Costo Seguro"] = c_otros["seguro"]
-        fila_otros["Costo Total Transporte"] = c_otros["total"]
-        fila_otros["% Distribución Logística"] = (c_otros["total"] / tot_general_transporte * 100) if tot_general_transporte > 0 else 0.0
-        if col_margen:
-            fila_otros["Costo / Margen Bruto"] = 0.0
-        df_clean = pd.concat([df_clean, pd.DataFrame([fila_otros])], ignore_index=True)
-        
-    fila_total = {c: "" for c in df_clean.columns}
-    fila_total[col_codigo] = "TOTAL GENERAL"
-    fila_total[col_sucursal] = ""
-    fila_total["Costo Flete"] = df_clean["Costo Flete"].sum()
-    fila_total["Costo Seguro"] = df_clean["Costo Seguro"].sum()
-    fila_total["Costo Total Transporte"] = df_clean["Costo Total Transporte"].sum()
-    fila_total["% Distribución Logística"] = 100.0
+    df_fact["COD_SUCURSAL"] = codigos
+    df_fact["NOM_SUCURSAL"] = sucursales
     
-    for c in df_clean.columns:
-        if c not in ["Costo Flete", "Costo Seguro", "Costo Total Transporte", "% Distribución Logística", "Costo / Margen Bruto", col_codigo, col_sucursal]:
-            try:
-                s_num = pd.to_numeric(df_clean[c], errors="coerce").sum()
-                if not pd.isna(s_num) and s_num != 0:
-                    fila_total[c] = s_num
-            except Exception:
-                pass
-                
-    df_final = pd.concat([df_clean, pd.DataFrame([fila_total])], ignore_index=True)
+    tot_general_transporte = df_fact["COSTO TOTAL"].sum()
+    tot_guias_general = len(df_fact)
     
-    top_suc = df_clean[df_clean[col_codigo] != "9999"].sort_values("Costo Total Transporte", ascending=False).head(5).copy()
+    agrup = df_fact.groupby(["COD_SUCURSAL", "NOM_SUCURSAL"]).agg(
+        GUIAS=("GUIA", "count"),
+        FLETE=("FLETE", "sum"),
+        SEGURO=("SEGURO", "sum"),
+        TOTAL=("COSTO TOTAL", "sum")
+    ).reset_index()
     
-    stats_sucursales = {
-        "total_transporte": tot_general_transporte,
-        "costos_por_cod": costos_por_cod,
-        "col_codigo": col_codigo,
-        "col_sucursal": col_sucursal,
-        "col_margen": col_margen,
-        "df_top_5": top_suc,
-        "otros_costo": costos_por_cod.get("9999", {}).get("total", 0.0),
-        "otros_guias": costos_por_cod.get("9999", {}).get("guias", 0)
+    df_tiendas = agrup[agrup["COD_SUCURSAL"] != "9999"].sort_values("TOTAL", ascending=False).copy()
+    df_otros = agrup[agrup["COD_SUCURSAL"] == "9999"].copy()
+    
+    filas_dist = []
+    n_idx = 1
+    for _, r in df_tiendas.iterrows():
+        pct = (r["TOTAL"] / tot_general_transporte * 100) if tot_general_transporte > 0 else 0.0
+        filas_dist.append({
+            "N.-": str(n_idx),
+            "Código": r["COD_SUCURSAL"],
+            "SUCURSAL": r["NOM_SUCURSAL"],
+            "N° Guías": int(r["GUIAS"]),
+            "Costo Flete": r["FLETE"],
+            "Costo Seguro": r["SEGURO"],
+            "Costo Total Transporte": r["TOTAL"],
+            "% Distribución Logística": pct
+        })
+        n_idx += 1
+        
+    if not df_otros.empty:
+        r_o = df_otros.iloc[0]
+        pct_o = (r_o["TOTAL"] / tot_general_transporte * 100) if tot_general_transporte > 0 else 0.0
+        filas_dist.append({
+            "N.-": str(n_idx),
+            "Código": "9999",
+            "SUCURSAL": "OTROS (VENTA WEB / CLIENTES / PROVEEDORES)",
+            "N° Guías": int(r_o["GUIAS"]),
+            "Costo Flete": r_o["FLETE"],
+            "Costo Seguro": r_o["SEGURO"],
+            "Costo Total Transporte": r_o["TOTAL"],
+            "% Distribución Logística": pct_o
+        })
+        
+    df_tabla = pd.DataFrame(filas_dist)
+    
+    fila_total = {
+        "N.-": "",
+        "Código": "TOTAL",
+        "SUCURSAL": "TOTAL GENERAL",
+        "N° Guías": int(tot_guias_general),
+        "Costo Flete": df_tabla["Costo Flete"].sum() if not df_tabla.empty else 0.0,
+        "Costo Seguro": df_tabla["Costo Seguro"].sum() if not df_tabla.empty else 0.0,
+        "Costo Total Transporte": df_tabla["Costo Total Transporte"].sum() if not df_tabla.empty else 0.0,
+        "% Distribución Logística": 100.0
     }
     
-    return df_final, stats_sucursales
+    df_final = pd.concat([df_tabla, pd.DataFrame([fila_total])], ignore_index=True)
+    
+    top5 = df_tabla[df_tabla["Código"] != "9999"].head(5).copy()
+    
+    stats = {
+        "total_transporte": tot_general_transporte,
+        "total_guias": tot_guias_general,
+        "df_top_5": top5,
+        "otros_costo": df_otros.iloc[0]["TOTAL"] if not df_otros.empty else 0.0,
+        "otros_guias": int(df_otros.iloc[0]["GUIAS"]) if not df_otros.empty else 0,
+        "col_codigo": "Código",
+        "col_sucursal": "SUCURSAL"
+    }
+    
+    return df_final, stats
 
-def procesar_costos_transporte(df_manifiesto: pd.DataFrame, df_carga: pd.DataFrame, df_doc: pd.DataFrame, df_seguro: pd.DataFrame, df_distribucion: Optional[pd.DataFrame] = None) -> Dict[str, Any]:
+def procesar_costos_transporte(df_manifiesto: pd.DataFrame, df_carga: pd.DataFrame, df_doc: pd.DataFrame, df_seguro: pd.DataFrame) -> Dict[str, Any]:
     """
-    Ejecuta el cruce completo de punta a punta:
+    Ejecuta el cruce completo de punta a punta a partir de los 2 archivos de entrada:
     - Cruce Factura Carga + Manifiesto + Seguro
     - Cruce Factura Documentos + Manifiesto
     - Identificación de Guías Anuladas / No Facturadas
     - Cálculo de métricas ejecutivas, ciudad-ciudad y contenido
-    - Integración de costos en el reporte de ventas por sucursal (si se proporciona)
+    - Generación automática de la tabla de Distribución Logística por Sucursal
     """
     mapa_seguro = {}
     if not df_seguro.empty and "GUIA" in df_seguro.columns:
@@ -1016,8 +1003,8 @@ def procesar_costos_transporte(df_manifiesto: pd.DataFrame, df_carga: pd.DataFra
             pares["COSTO PROMEDIO"] = pares["COSTO_TOTAL"] / pares["N_GUIAS"]
             df_pares_rutas = pares.sort_values("COSTO_TOTAL", ascending=False).copy()
 
-    # Integración con reporte de ventas (si existe)
-    df_dist_enriquecida, stats_sucursales = integrar_costos_en_distribucion(df_distribucion, df_det_carga, df_det_doc) if df_distribucion is not None else (pd.DataFrame(), {})
+    # Distribución logística generada automáticamente por sucursal
+    df_dist_enriquecida, stats_sucursales = generar_distribucion_logistica(df_det_carga, df_det_doc)
 
     return {
         "kpis": {
@@ -1051,14 +1038,15 @@ def procesar_costos_transporte(df_manifiesto: pd.DataFrame, df_carga: pd.DataFra
 
 def generar_excel_costos_transporte(datos_cruce: Dict[str, Any], mes_nombre: str = "PERIODO", anio: str = "2026") -> bytes:
     """
-    Genera el libro oficial .xlsx con 7 pestañas, fórmulas vivas de Excel y estilos corporativos:
-    1. Resumen Ejecutivo
-    2. Analisis Ciudad-Ciudad
-    3. Analisis Contenido
-    4. Detalle Carga
-    5. Detalle Documentos
-    6. Detalle Seguro
-    7. Guias Anuladas
+    Genera el libro oficial .xlsx con 8 pestañas corporativas:
+    1. Distribución Logística
+    2. Resumen Ejecutivo
+    3. Analisis Ciudad-Ciudad
+    4. Analisis Contenido
+    5. Detalle Carga
+    6. Detalle Documentos
+    7. Detalle Seguro
+    8. Guias Anuladas
     """
     wb = openpyxl.Workbook()
     
@@ -1092,11 +1080,11 @@ def generar_excel_costos_transporte(datos_cruce: Dict[str, Any], mes_nombre: str
     df_dist_enr = datos_cruce.get("df_dist_enriquecida")
 
     # --------------------------------------------------------------------------
-    # PESTAÑA: Distribución con Costos (si existe reporte de ventas)
+    # PESTAÑA 1: Distribución Logística
     # --------------------------------------------------------------------------
     if df_dist_enr is not None and not df_dist_enr.empty:
-        ws_dist = wb.create_sheet(title="Distribución con Costos")
-        ws_dist["A1"] = f"REPORTE DE VENTAS Y DISTRIBUCION CON COSTOS DE TRANSPORTE - {mes_nombre} {anio}"
+        ws_dist = wb.create_sheet(title="Distribución Logística")
+        ws_dist["A1"] = f"DISTRIBUCIÓN LOGÍSTICA DE COSTOS DE TRANSPORTE POR SUCURSAL - {mes_nombre} {anio}"
         ws_dist["A1"].font = FONT_TITLE
         
         headers_dist = list(df_dist_enr.columns)
