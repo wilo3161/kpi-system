@@ -578,6 +578,425 @@ def procesar_costos_transporte(df_manifiesto: pd.DataFrame, df_carga: pd.DataFra
         tot_g = len(df_todas_facturadas)
         cont_c["PCT_GUIAS"] = (cont_c["N_GUIAS"] / tot_g * 100) if tot_g > 0 else 0.0
         cont_c["PCT_COSTO"] = (cont_c["COSTO_TOTAL"] / costo_total_periodo * 100) if costo_total_periodo > 0 else 0.0
+def leer_distribucion_original(file_or_bytes) -> Tuple[Optional[pd.DataFrame], int, str]:
+    """
+    Lee el archivo de distribución de ventas preservando todas sus columnas y formato original.
+    Retorna (df_distribucion, header_row, sheet_name).
+    """
+    if file_or_bytes is None:
+        return None, 0, ""
+    if hasattr(file_or_bytes, "seek"):
+        file_or_bytes.seek(0)
+    
+    excel_file = pd.ExcelFile(file_or_bytes)
+    sheet_name = excel_file.sheet_names[0]
+    for s in excel_file.sheet_names:
+        if "DISTRIB" in s.upper() or "VENTA" in s.upper() or "SUCURSAL" in s.upper():
+            sheet_name = s
+            break
+            
+    df_raw = pd.read_excel(excel_file, sheet_name=sheet_name, header=None)
+    header_row = 0
+    for idx, row in df_raw.head(15).iterrows():
+        row_vals = [normalizar_texto_transporte(x) for x in row.values if pd.notna(x)]
+        if any("CODIGO" in v or "COD" in v or "N.-" in v for v in row_vals) and any("SUCURSAL" in v or "TIENDA" in v or "LOCAL" in v for v in row_vals):
+            header_row = idx
+            break
+            
+    dist = pd.read_excel(excel_file, sheet_name=sheet_name, header=header_row)
+    dist = dist.dropna(how="all").copy()
+    
+    return dist, header_row, sheet_name
+
+def integrar_costos_en_distribucion(df_distribucion: pd.DataFrame, df_det_carga: pd.DataFrame, df_det_doc: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, Any]]:
+    """
+    Mapea las guías facturadas hacia las sucursales del reporte de ventas y añade las columnas:
+    - Costo Flete
+    - Costo Seguro
+    - Costo Total Transporte
+    - % Distribución Logística
+    - Costo / Margen Bruto (si existe margen bruto)
+    """
+    if df_distribucion is None or df_distribucion.empty:
+        return pd.DataFrame(), {}
+        
+    df_dist = df_distribucion.copy()
+    col_codigo = None
+    col_sucursal = None
+    col_margen = None
+    
+    for c in df_dist.columns:
+        cn = normalizar_texto_transporte(c)
+        if ("CODIGO" in cn or "COD" in cn or "N.-" in cn) and not col_codigo:
+            col_codigo = c
+        elif ("SUCURSAL" in cn or "TIENDA" in cn or "LOCAL" in cn) and not col_sucursal:
+            col_sucursal = c
+        elif ("MARGEN BRUTO" in cn or "MARGEN" in cn) and "%" not in cn and not col_margen:
+            col_margen = c
+            
+    if not col_codigo: col_codigo = df_dist.columns[0]
+    if not col_sucursal: col_sucursal = df_dist.columns[1] if len(df_dist.columns) > 1 else df_dist.columns[0]
+        
+    df_fact = pd.concat([df_det_carga, df_det_doc], ignore_index=True) if (not df_det_carga.empty or not df_det_doc.empty) else pd.DataFrame()
+    
+    mapeo_suc_cod = {}
+    for _, r in df_dist.iterrows():
+        cod = str(r[col_codigo]).strip() if pd.notna(r[col_codigo]) else ""
+        suc = normalizar_texto_transporte(r[col_sucursal])
+        if cod and suc and "TOTAL" not in cod.upper() and "TOTAL" not in suc:
+            mapeo_suc_cod[suc] = cod
+            
+    def buscar_codigo(destinatario: str) -> str:
+        dest = normalizar_texto_transporte(destinatario)
+        if not dest:
+            return "9999"
+        if dest in mapeo_suc_cod:
+            return mapeo_suc_cod[dest]
+        for suc_name, cod in mapeo_suc_cod.items():
+            if len(suc_name) >= 4 and (suc_name in dest or dest in suc_name):
+                return cod
+        return "9999"
+        
+    if not df_fact.empty:
+        df_fact["COD_SUCURSAL"] = df_fact["DESTINATARIO"].apply(buscar_codigo)
+    else:
+        df_fact["COD_SUCURSAL"] = []
+
+    costos_por_cod = {}
+    if not df_fact.empty:
+        agrup = df_fact.groupby("COD_SUCURSAL").agg(
+            FLETE=("FLETE", "sum"),
+            SEGURO=("SEGURO", "sum"),
+            TOTAL=("COSTO TOTAL", "sum"),
+            GUIAS=("GUIA", "count")
+        ).reset_index()
+        for _, row in agrup.iterrows():
+            costos_por_cod[str(row["COD_SUCURSAL"])] = {
+                "flete": row["FLETE"],
+                "seguro": row["SEGURO"],
+                "total": row["TOTAL"],
+                "guias": row["GUIAS"]
+            }
+            
+    tot_general_transporte = sum(v["total"] for v in costos_por_cod.values()) if costos_por_cod else 0.0
+    df_clean = df_dist[~df_dist.apply(_es_fila_total, axis=1)].copy()
+    
+    fletes_col = []
+    seguros_col = []
+    totales_col = []
+    pct_dist_col = []
+    costo_margen_col = []
+    
+    for idx, row in df_clean.iterrows():
+        cod = str(row[col_codigo]).strip() if pd.notna(row[col_codigo]) else ""
+        c_info = costos_por_cod.get(cod, {"flete": 0.0, "seguro": 0.0, "total": 0.0, "guias": 0})
+        fletes_col.append(c_info["flete"])
+        seguros_col.append(c_info["seguro"])
+        totales_col.append(c_info["total"])
+        pct_dist_col.append((c_info["total"] / tot_general_transporte * 100) if tot_general_transporte > 0 else 0.0)
+        
+        mb_val = parse_float_seguro(row[col_margen]) if col_margen and col_margen in row else 0.0
+        c_m = (c_info["total"] / mb_val * 100) if mb_val > 0 else 0.0
+        costo_margen_col.append(c_m)
+        
+    df_clean["Costo Flete"] = fletes_col
+    df_clean["Costo Seguro"] = seguros_col
+    df_clean["Costo Total Transporte"] = totales_col
+    df_clean["% Distribución Logística"] = pct_dist_col
+    if col_margen:
+        df_clean["Costo / Margen Bruto"] = costo_margen_col
+        
+    if "9999" in costos_por_cod and costos_por_cod["9999"]["total"] > 0:
+        c_otros = costos_por_cod["9999"]
+        fila_otros = {c: "" for c in df_clean.columns}
+        fila_otros[col_codigo] = "9999"
+        fila_otros[col_sucursal] = "OTROS (SIN SUCURSAL DIRECTA / WEB / DEV)"
+        fila_otros["Costo Flete"] = c_otros["flete"]
+        fila_otros["Costo Seguro"] = c_otros["seguro"]
+        fila_otros["Costo Total Transporte"] = c_otros["total"]
+        fila_otros["% Distribución Logística"] = (c_otros["total"] / tot_general_transporte * 100) if tot_general_transporte > 0 else 0.0
+        if col_margen:
+            fila_otros["Costo / Margen Bruto"] = 0.0
+        df_clean = pd.concat([df_clean, pd.DataFrame([fila_otros])], ignore_index=True)
+        
+    fila_total = {c: "" for c in df_clean.columns}
+    fila_total[col_codigo] = "TOTAL GENERAL"
+    fila_total[col_sucursal] = ""
+    fila_total["Costo Flete"] = df_clean["Costo Flete"].sum()
+    fila_total["Costo Seguro"] = df_clean["Costo Seguro"].sum()
+    fila_total["Costo Total Transporte"] = df_clean["Costo Total Transporte"].sum()
+    fila_total["% Distribución Logística"] = 100.0
+    
+    for c in df_clean.columns:
+        if c not in ["Costo Flete", "Costo Seguro", "Costo Total Transporte", "% Distribución Logística", "Costo / Margen Bruto", col_codigo, col_sucursal]:
+            try:
+                s_num = pd.to_numeric(df_clean[c], errors="coerce").sum()
+                if not pd.isna(s_num) and s_num != 0:
+                    fila_total[c] = s_num
+            except Exception:
+                pass
+                
+    df_final = pd.concat([df_clean, pd.DataFrame([fila_total])], ignore_index=True)
+    
+    top_suc = df_clean[df_clean[col_codigo] != "9999"].sort_values("Costo Total Transporte", ascending=False).head(5).copy()
+    
+    stats_sucursales = {
+        "total_transporte": tot_general_transporte,
+        "costos_por_cod": costos_por_cod,
+        "col_codigo": col_codigo,
+        "col_sucursal": col_sucursal,
+        "col_margen": col_margen,
+        "df_top_5": top_suc,
+        "otros_costo": costos_por_cod.get("9999", {}).get("total", 0.0),
+        "otros_guias": costos_por_cod.get("9999", {}).get("guias", 0)
+    }
+    
+    return df_final, stats_sucursales
+
+def procesar_costos_transporte(df_manifiesto: pd.DataFrame, df_carga: pd.DataFrame, df_doc: pd.DataFrame, df_seguro: pd.DataFrame, df_distribucion: Optional[pd.DataFrame] = None) -> Dict[str, Any]:
+    """
+    Ejecuta el cruce completo de punta a punta:
+    - Cruce Factura Carga + Manifiesto + Seguro
+    - Cruce Factura Documentos + Manifiesto
+    - Identificación de Guías Anuladas / No Facturadas
+    - Cálculo de métricas ejecutivas, ciudad-ciudad y contenido
+    - Integración de costos en el reporte de ventas por sucursal (si se proporciona)
+    """
+    mapa_seguro = {}
+    if not df_seguro.empty and "GUIA" in df_seguro.columns:
+        col_costo_seg = "SUBTOTAL" if "SUBTOTAL" in df_seguro.columns else ("SEGURO" if "SEGURO" in df_seguro.columns else df_seguro.columns[-1])
+        for _, row in df_seguro.iterrows():
+            g = row["GUIA"]
+            val_seg = parse_float_seguro(row.get(col_costo_seg, 0.0))
+            mapa_seguro[g] = val_seg
+
+    mapa_manifiesto = {}
+    if not df_manifiesto.empty and "GUIA" in df_manifiesto.columns:
+        for _, row in df_manifiesto.iterrows():
+            g = row["GUIA"]
+            mapa_manifiesto[g] = row.to_dict()
+
+    guias_manifiesto_set = set(df_manifiesto["GUIA"].unique()) if not df_manifiesto.empty else set()
+    guias_facturadas_set = set()
+
+    # 3. Procesar Carga Facturada
+    detalle_carga_list = []
+    if not df_carga.empty:
+        for _, row in df_carga.iterrows():
+            guia = row["GUIA"]
+            guias_facturadas_set.add(guia)
+            manif_data = mapa_manifiesto.get(guia, {})
+            
+            ciu_ori = normalizar_texto_transporte(row.get("CIUDAD ORIGEN", ""))
+            if not ciu_ori:
+                ciu_ori = normalizar_texto_transporte(manif_data.get("CIUDAD ORIGEN", "IBARRA"))
+            ciu_des = normalizar_texto_transporte(row.get("CIUDAD DESTINO", ""))
+            if not ciu_des:
+                ciu_des = normalizar_texto_transporte(manif_data.get("CIUDAD DESTINO", ""))
+                
+            tipo_mov = "DESDE CD IBARRA" if ciu_ori == "IBARRA" or "IBARRA" in ciu_ori else "CIUDAD-CIUDAD"
+            
+            flete = parse_float_seguro(row.get("FLETE", row.get("SUBTOTAL", 0.0)))
+            seguro = mapa_seguro.get(guia, 0.0)
+            costo_total = flete + seguro
+            
+            contenido = manif_data.get("CONTENIDO", "")
+            producto = manif_data.get("PRODUCTO", "")
+            categoria = clasificar_contenido_transporte(contenido, producto)
+            
+            detalle_carga_list.append({
+                "GUIA": guia,
+                "FECHA ENVIO": row.get("FECHA REM", row.get("FECHA", manif_data.get("FECHA CREACION", ""))),
+                "CIUDAD ORIGEN": ciu_ori,
+                "CIUDAD DESTINO": ciu_des,
+                "TIPO MOVIMIENTO": tipo_mov,
+                "DESTINATARIO": manif_data.get("DESTINATARIO", ""),
+                "TELEFONO": manif_data.get("TELEFONO", ""),
+                "DIRECCION": manif_data.get("DIRECCION DESTINATARIO", ""),
+                "CONTENIDO": contenido,
+                "CATEGORIA": categoria,
+                "TRAYECTO": row.get("TRAYECTO", ""),
+                "PIEZAS": row.get("PIEZAS", 1),
+                "PESO": row.get("PESO", manif_data.get("PESO", 0.0)),
+                "FLETE": flete,
+                "SEGURO": seguro,
+                "COSTO TOTAL": costo_total,
+                "VALOR DECLARADO": manif_data.get("VALOR DECLARADO", 0.0),
+                "ESTADO ENTREGA": manif_data.get("ESTADO", "FACTURADO"),
+                "FECHA ENTREGA": manif_data.get("FECHA ENTREGA", ""),
+                "RECIBE": manif_data.get("RECIBE", ""),
+                "TIPO_SERVICIO": "CARGA"
+            })
+            
+    df_det_carga = pd.DataFrame(detalle_carga_list)
+
+    # 4. Procesar Documentos Facturados
+    detalle_doc_list = []
+    if not df_doc.empty:
+        for _, row in df_doc.iterrows():
+            guia = row["GUIA"]
+            guias_facturadas_set.add(guia)
+            manif_data = mapa_manifiesto.get(guia, {})
+            
+            ciu_ori = normalizar_texto_transporte(row.get("CIUDAD ORIGEN", ""))
+            if not ciu_ori:
+                ciu_ori = normalizar_texto_transporte(manif_data.get("CIUDAD ORIGEN", "IBARRA"))
+            ciu_des = normalizar_texto_transporte(row.get("CIUDAD DESTINO", ""))
+            if not ciu_des:
+                ciu_des = normalizar_texto_transporte(manif_data.get("CIUDAD DESTINO", ""))
+                
+            tipo_mov = "DESDE CD IBARRA" if ciu_ori == "IBARRA" or "IBARRA" in ciu_ori else "CIUDAD-CIUDAD"
+            
+            flete = parse_float_seguro(row.get("FLETE", row.get("SUBTOTAL", 0.0)))
+            seguro = 0.0
+            costo_total = flete
+            
+            contenido = manif_data.get("CONTENIDO", "DOCUMENTOS")
+            producto = manif_data.get("PRODUCTO", "DOCUMENTOS_SERV")
+            categoria = "DOCUMENTOS"
+            
+            detalle_doc_list.append({
+                "GUIA": guia,
+                "FECHA ENVIO": row.get("FECHA REM", row.get("FECHA", manif_data.get("FECHA CREACION", ""))),
+                "CIUDAD ORIGEN": ciu_ori,
+                "CIUDAD DESTINO": ciu_des,
+                "TIPO MOVIMIENTO": tipo_mov,
+                "DESTINATARIO": manif_data.get("DESTINATARIO", ""),
+                "TELEFONO": manif_data.get("TELEFONO", ""),
+                "DIRECCION": manif_data.get("DIRECCION DESTINATARIO", ""),
+                "CONTENIDO": contenido,
+                "CATEGORIA": categoria,
+                "TRAYECTO": row.get("TRAYECTO", ""),
+                "PIEZAS": row.get("PIEZAS", 1),
+                "PESO": row.get("PESO", 0.0),
+                "FLETE": flete,
+                "SEGURO": seguro,
+                "COSTO TOTAL": costo_total,
+                "VALOR DECLARADO": 0.0,
+                "ESTADO ENTREGA": manif_data.get("ESTADO", "FACTURADO"),
+                "FECHA ENTREGA": manif_data.get("FECHA ENTREGA", ""),
+                "RECIBE": manif_data.get("RECIBE", ""),
+                "TIPO_SERVICIO": "DOCUMENTOS"
+            })
+            
+    df_det_doc = pd.DataFrame(detalle_doc_list)
+
+    # 5. Procesar Seguro Facturado
+    detalle_seg_list = []
+    if not df_seguro.empty:
+        col_costo_seg = "SUBTOTAL" if "SUBTOTAL" in df_seguro.columns else ("SEGURO" if "SEGURO" in df_seguro.columns else df_seguro.columns[-1])
+        for _, row in df_seguro.iterrows():
+            guia = row["GUIA"]
+            manif_data = mapa_manifiesto.get(guia, {})
+            costo_seg = parse_float_seguro(row.get(col_costo_seg, 0.0))
+            
+            flete_asoc = 0.0
+            if not df_det_carga.empty:
+                match_c = df_det_carga[df_det_carga["GUIA"] == guia]
+                if not match_c.empty:
+                    flete_asoc = match_c.iloc[0]["FLETE"]
+                    
+            detalle_seg_list.append({
+                "GUIA": guia,
+                "FECHA": row.get("FECHA", manif_data.get("FECHA CREACION", "")),
+                "CIUDAD ORIGEN": row.get("ORIGEN", manif_data.get("CIUDAD ORIGEN", "IBARRA")),
+                "CIUDAD DESTINO": row.get("DESTINO", manif_data.get("CIUDAD DESTINO", "")),
+                "TRAYECTO": row.get("TRAYECTO", ""),
+                "VALOR DECLARADO": parse_float_seguro(row.get("VALOR DECLARADO", row.get("VAL. DEC.", manif_data.get("VALOR DECLARADO", 0.0)))),
+                "TASA SEGURO": row.get("SEGURO_TASA", row.get("SEGURO", "1%")),
+                "COSTO SEGURO": costo_seg,
+                "FLETE ASOCIADO": flete_asoc
+            })
+    df_det_seg = pd.DataFrame(detalle_seg_list)
+
+    # 6. Identificar Guías Anuladas / No Facturadas
+    guias_anuladas_set = guias_manifiesto_set - guias_facturadas_set
+    guias_anuladas_list = []
+    for guia in guias_anuladas_set:
+        manif_data = mapa_manifiesto.get(guia, {})
+        estado = normalizar_texto_transporte(manif_data.get("ESTADO", ""))
+        
+        if "NO MOVILIZADO" in estado or "NO RECOLECTADO" in estado or "ANULADO" in estado:
+            motivo = "No movilizado por el courier (no se generó recolección) - correctamente excluido de factura"
+            nivel_alerta = "NORMAL"
+        elif any(e in estado for e in ["ENTREGADO", "CON NOVEDAD", "DEVOLUCION", "ENTREGA"]):
+            motivo = "Entregada pero NO incluida en esta factura - revisar con courier (posible corte de periodo o guía omitida)"
+            nivel_alerta = "REVISION_URGENTE"
+        else:
+            motivo = "Requiere revisión manual con el courier"
+            nivel_alerta = "ATENCION"
+            
+        ciu_ori = manif_data.get("CIUDAD ORIGEN", "IBARRA")
+        tipo_mov = "DESDE CD IBARRA" if ciu_ori == "IBARRA" else "CIUDAD-CIUDAD"
+        
+        guias_anuladas_list.append({
+            "GUIA": guia,
+            "TIPO GUIA": "CARGA" if manif_data.get("PRODUCTO") != "DOCUMENTOS_SERV" else "DOCUMENTO",
+            "TIPO MOVIMIENTO": tipo_mov,
+            "CIUDAD ORIGEN": ciu_ori,
+            "CIUDAD DESTINO": manif_data.get("CIUDAD DESTINO", ""),
+            "DESTINATARIO": manif_data.get("DESTINATARIO", ""),
+            "CONTENIDO": manif_data.get("CONTENIDO", ""),
+            "CATEGORIA": clasificar_contenido_transporte(manif_data.get("CONTENIDO", ""), manif_data.get("PRODUCTO", "")),
+            "VALOR DECLARADO": manif_data.get("VALOR DECLARADO", 0.0),
+            "ESTADO EN MANIFIESTO": manif_data.get("ESTADO", "NO FACTURADO"),
+            "FECHA CREACION": manif_data.get("FECHA CREACION", ""),
+            "FECHA ENTREGA": manif_data.get("FECHA ENTREGA", ""),
+            "MOTIVO": motivo,
+            "NIVEL_ALERTA": nivel_alerta
+        })
+    df_guias_anuladas = pd.DataFrame(guias_anuladas_list)
+
+    df_todas_facturadas = pd.concat([df_det_carga, df_det_doc], ignore_index=True) if (not df_det_carga.empty or not df_det_doc.empty) else pd.DataFrame()
+
+    total_manifiesto = len(df_manifiesto)
+    total_carga = len(df_det_carga)
+    total_doc = len(df_det_doc)
+    total_seg = len(df_det_seg)
+    total_anuladas = len(df_guias_anuladas)
+    pct_anulacion = (total_anuladas / total_manifiesto * 100) if total_manifiesto > 0 else 0.0
+    
+    costo_flete_carga = df_det_carga["FLETE"].sum() if not df_det_carga.empty else 0.0
+    costo_flete_doc = df_det_doc["FLETE"].sum() if not df_det_doc.empty else 0.0
+    costo_seguro_total = df_det_carga["SEGURO"].sum() if not df_det_carga.empty else (df_det_seg["COSTO SEGURO"].sum() if not df_det_seg.empty else 0.0)
+    costo_total_periodo = costo_flete_carga + costo_flete_doc + costo_seguro_total
+    costo_promedio_guia = (costo_total_periodo / (total_carga + total_doc)) if (total_carga + total_doc) > 0 else 0.0
+
+    resumen_movimiento = []
+    if not df_todas_facturadas.empty:
+        for tipo in ["DESDE CD IBARRA", "CIUDAD-CIUDAD"]:
+            sub = df_todas_facturadas[df_todas_facturadas["TIPO MOVIMIENTO"] == tipo]
+            n_g = len(sub)
+            c_tot = sub["COSTO TOTAL"].sum()
+            pct_c = (c_tot / costo_total_periodo * 100) if costo_total_periodo > 0 else 0.0
+            pct_g = (n_g / len(df_todas_facturadas) * 100) if len(df_todas_facturadas) > 0 else 0.0
+            resumen_movimiento.append({
+                "TIPO DE MOVIMIENTO": tipo,
+                "N° GUIAS": n_g,
+                "COSTO TOTAL (USD)": c_tot,
+                "% GUIAS": pct_g,
+                "% DEL COSTO TOTAL": pct_c
+            })
+    df_resumen_mov = pd.DataFrame(resumen_movimiento)
+
+    df_top_ciudades = pd.DataFrame()
+    if not df_todas_facturadas.empty and "CIUDAD DESTINO" in df_todas_facturadas.columns:
+        top_c = df_todas_facturadas.groupby("CIUDAD DESTINO").agg(
+            N_GUIAS=("GUIA", "count"),
+            COSTO_TOTAL=("COSTO TOTAL", "sum")
+        ).reset_index()
+        top_c["PCT_COSTO_TOTAL"] = (top_c["COSTO_TOTAL"] / costo_total_periodo * 100) if costo_total_periodo > 0 else 0.0
+        df_top_ciudades = top_c.sort_values("COSTO_TOTAL", ascending=False).head(15).copy()
+
+    df_resumen_contenido = pd.DataFrame()
+    if not df_todas_facturadas.empty and "CATEGORIA" in df_todas_facturadas.columns:
+        cont_c = df_todas_facturadas.groupby("CATEGORIA").agg(
+            N_GUIAS=("GUIA", "count"),
+            COSTO_TOTAL=("COSTO TOTAL", "sum")
+        ).reset_index()
+        tot_g = len(df_todas_facturadas)
+        cont_c["PCT_GUIAS"] = (cont_c["N_GUIAS"] / tot_g * 100) if tot_g > 0 else 0.0
+        cont_c["PCT_COSTO"] = (cont_c["COSTO_TOTAL"] / costo_total_periodo * 100) if costo_total_periodo > 0 else 0.0
         orden_oficial = [
             "DOCUMENTOS", "PUBLICIDAD", "VENTA WEB", "MERCADERÍA", 
             "DEVOLUCIÓN", "ACCESORIOS / PRENDAS", "MOBILIARIO / EQUIPOS", 
@@ -596,6 +1015,9 @@ def procesar_costos_transporte(df_manifiesto: pd.DataFrame, df_carga: pd.DataFra
             ).reset_index()
             pares["COSTO PROMEDIO"] = pares["COSTO_TOTAL"] / pares["N_GUIAS"]
             df_pares_rutas = pares.sort_values("COSTO_TOTAL", ascending=False).copy()
+
+    # Integración con reporte de ventas (si existe)
+    df_dist_enriquecida, stats_sucursales = integrar_costos_en_distribucion(df_distribucion, df_det_carga, df_det_doc) if df_distribucion is not None else (pd.DataFrame(), {})
 
     return {
         "kpis": {
@@ -618,7 +1040,9 @@ def procesar_costos_transporte(df_manifiesto: pd.DataFrame, df_carga: pd.DataFra
         "df_resumen_mov": df_resumen_mov,
         "df_top_ciudades": df_top_ciudades,
         "df_resumen_contenido": df_resumen_contenido,
-        "df_pares_rutas": df_pares_rutas
+        "df_pares_rutas": df_pares_rutas,
+        "df_dist_enriquecida": df_dist_enriquecida,
+        "stats_sucursales": stats_sucursales
     }
 
 # ==============================================================================
@@ -665,6 +1089,55 @@ def generar_excel_costos_transporte(datos_cruce: Dict[str, Any], mes_nombre: str
     df_doc = datos_cruce["df_det_doc"]
     df_seg = datos_cruce["df_det_seg"]
     df_anul = datos_cruce["df_guias_anuladas"]
+    df_dist_enr = datos_cruce.get("df_dist_enriquecida")
+
+    # --------------------------------------------------------------------------
+    # PESTAÑA: Distribución con Costos (si existe reporte de ventas)
+    # --------------------------------------------------------------------------
+    if df_dist_enr is not None and not df_dist_enr.empty:
+        ws_dist = wb.create_sheet(title="Distribución con Costos")
+        ws_dist["A1"] = f"REPORTE DE VENTAS Y DISTRIBUCION CON COSTOS DE TRANSPORTE - {mes_nombre} {anio}"
+        ws_dist["A1"].font = FONT_TITLE
+        
+        headers_dist = list(df_dist_enr.columns)
+        ws_dist.append([])
+        ws_dist.append(headers_dist)
+        r_dist_h = 3
+        for c_i in range(1, len(headers_dist) + 1):
+            cell = ws_dist.cell(row=r_dist_h, column=c_i)
+            cell.fill = NAVY_FILL
+            cell.font = FONT_HEADER
+            cell.alignment = Alignment(horizontal="center")
+            
+        num_dist_rows = len(df_dist_enr)
+        for idx, row in df_dist_enr.iterrows():
+            r = 4 + idx
+            row_vals = []
+            for col_name in headers_dist:
+                val = row.get(col_name, "")
+                row_vals.append(val)
+            ws_dist.append(row_vals)
+            
+            es_tot_row = (idx == num_dist_rows - 1)
+            for c_i, col_name in enumerate(headers_dist, 1):
+                cell = ws_dist.cell(row=r, column=c_i)
+                if es_tot_row:
+                    cell.font = FONT_TOTAL
+                    cell.border = BORDER_TOTAL
+                    cell.fill = TOTAL_FILL
+                else:
+                    cell.border = BORDER_THIN
+                    if r % 2 == 0:
+                        cell.fill = LIGHT_GRAY_FILL
+                
+                cn = str(col_name).upper()
+                if "FLETE" in cn or "SEGURO" in cn or "TOTAL TRANSPORTE" in cn or "MARGEN BRUTO" in cn or "SUBTOTAL" in cn or "IVA" in cn or "TOTAL" in cn:
+                    if "%" not in cn and "GUIAS" not in cn and "PIEZAS" not in cn and "N.-" not in cn:
+                        cell.number_format = '$#,##0.00'
+                if "%" in cn or "DISTRIBUCION" in cn:
+                    if isinstance(cell.value, (int, float)) and cell.value > 1.0:
+                        cell.value = cell.value / 100.0
+                    cell.number_format = '0.00%'
 
     # --------------------------------------------------------------------------
     # PESTAÑA 4: Detalle Carga
@@ -790,11 +1263,13 @@ def generar_excel_costos_transporte(datos_cruce: Dict[str, Any], mes_nombre: str
     for r_idx, row in df_seg.iterrows():
         r = r_idx + 2
         ws_seg.append([
-            row["GUIA"], str(row["FECHA/HORA POLIZA"])[:19], row["ORIGEN"], row["DESTINO"], row["TRAYECTO"],
-            row["VALOR DECLARADO"], row["TASA SEGURO"], row["COSTO SEGURO"],
+            row.get("GUIA", ""), str(row.get("FECHA", row.get("FECHA/HORA POLIZA", "")))[:19],
+            row.get("ORIGEN", row.get("CIUDAD ORIGEN", "")), row.get("DESTINO", row.get("CIUDAD DESTINO", "")),
+            row.get("TRAYECTO", ""), row.get("VALOR DECLARADO", 0.0), row.get("TASA SEGURO", "1%"),
+            row.get("COSTO SEGURO", 0.0),
             f'=IFERROR(INDEX(\'Detalle Carga\'!$N:$N,MATCH(A{r},\'Detalle Carga\'!$A:$A,0)),0)',
             f'=H{r}+I{r}',
-            row["DESTINATARIO"], row["CONTENIDO"], row["CATEGORIA"], row["ESTADO"]
+            row.get("DESTINATARIO", ""), row.get("CONTENIDO", ""), row.get("CATEGORIA", ""), row.get("ESTADO", "")
         ])
         ws_seg.cell(row=r, column=6).number_format = '$#,##0.00'
         ws_seg.cell(row=r, column=8).number_format = '$#,##0.00'
@@ -838,9 +1313,11 @@ def generar_excel_costos_transporte(datos_cruce: Dict[str, Any], mes_nombre: str
     for r_idx, row in df_anul.iterrows():
         r = r_idx + 2
         ws_anul.append([
-            row["GUIA"], row["TIPO GUIA"], row["TIPO MOVIMIENTO"], row["CIUDAD ORIGEN"], row["CIUDAD DESTINO"],
-            row["DESTINATARIO"], row["CONTENIDO"], row["CATEGORIA"], row["VALOR DECLARADO"],
-            row["ESTADO EN MANIFIESTO"], str(row["FECHA CREACION"])[:10], str(row["FECHA ENTREGA"])[:10], row["MOTIVO"]
+            row.get("GUIA", ""), row.get("TIPO GUIA", ""), row.get("TIPO MOVIMIENTO", ""),
+            row.get("CIUDAD ORIGEN", ""), row.get("CIUDAD DESTINO", ""),
+            row.get("DESTINATARIO", ""), row.get("CONTENIDO", ""), row.get("CATEGORIA", ""), row.get("VALOR DECLARADO", 0.0),
+            row.get("ESTADO EN MANIFIESTO", ""), str(row.get("FECHA CREACION", ""))[:10],
+            str(row.get("FECHA ENTREGA", ""))[:10], row.get("MOTIVO", "")
         ])
         ws_anul.cell(row=r, column=9).number_format = '$#,##0.00'
         if row.get("NIVEL_ALERTA") == "REVISION_URGENTE":
