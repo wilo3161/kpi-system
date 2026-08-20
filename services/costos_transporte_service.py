@@ -1586,3 +1586,12 @@ def generar_excel_costos_transporte(datos_cruce: Dict[str, Any], mes_nombre: str
     wb.save(output)
     output.seek(0)
     return output.getvalue()
+
+def leer_distribucion_original(*args, **kwargs):
+    """Alias de compatibilidad previa."""
+    return None, 0, ""
+
+def integrar_costos_en_distribucion(*args, **kwargs):
+    """Alias de compatibilidad previa."""
+    return pd.DataFrame(), {}
+
