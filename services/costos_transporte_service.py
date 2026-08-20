@@ -529,27 +529,75 @@ CATALOGO_SUCURSALES_OFICIAL = [
     },
 ]
 
-def clasificar_sucursal_guia(destinatario: str, direccion: str = "", ciudad_destino: str = "") -> Tuple[str, str]:
-    """Determina con precisión contable el código y nombre de la sucursal a partir de los datos de la guía."""
+def obtener_catalogo_tiendas_dinamico() -> List[Dict[str, Any]]:
+    """
+    Combina el catálogo contable oficial base con cualquier tienda
+    registrada dinámicamente en el módulo central de configuración (config.stores_data.TIENDAS_DATA).
+    Esto garantiza que si el usuario añade o edita tiendas en el sistema, se reconozcan de inmediato.
+    """
+    import copy
+    catalogo = copy.deepcopy(CATALOGO_SUCURSALES_OFICIAL)
+    try:
+        from config.stores_data import TIENDAS_DATA, reload_stores_data
+        reload_stores_data()
+        
+        for tienda in TIENDAS_DATA:
+            nom_tienda = tienda.get("Nombre de Tienda", "")
+            empresa = tienda.get("Empresa", "")
+            contacto = tienda.get("Contacto", "")
+            direccion = tienda.get("Dirección", "")
+            destino = tienda.get("Destino", "")
+            ciudad = tienda.get("Ciudad", "")
+            
+            encontrado = False
+            nom_norm = normalizar_texto_transporte(nom_tienda)
+            for item in catalogo:
+                kw_item = [normalizar_texto_transporte(k) for k in item["keywords"]]
+                if nom_norm in kw_item or any(kw in nom_norm for kw in kw_item if len(kw) > 5):
+                    for extra in [contacto, direccion, destino, ciudad, nom_tienda]:
+                        if extra:
+                            ex_n = normalizar_texto_transporte(extra)
+                            if ex_n and len(ex_n) >= 4 and ex_n not in item["keywords"]:
+                                item["keywords"].append(ex_n)
+                    encontrado = True
+                    break
+                    
+            if not encontrado and nom_tienda:
+                codigo_sug = "3099" if "PRICE" in empresa.upper() else "2099"
+                kw_extra = [normalizar_texto_transporte(x) for x in [nom_tienda, contacto, direccion, destino, ciudad] if x]
+                catalogo.append({
+                    "codigo": codigo_sug,
+                    "sucursal": normalizar_texto_transporte(nom_tienda),
+                    "keywords": [k for k in kw_extra if len(k) >= 3]
+                })
+    except Exception:
+        pass
+        
+    return catalogo
+
+def clasificar_sucursal_guia(destinatario: str, direccion: str = "", ciudad_destino: str = "", catalogo: Optional[List[Dict[str, Any]]] = None) -> Tuple[str, str]:
+    """Determina con precisión contable el código y nombre de la sucursal a partir de los datos de la guía y la BD del sistema."""
     dest_norm = normalizar_texto_transporte(destinatario)
     dir_norm = normalizar_texto_transporte(direccion)
     ciu_norm = normalizar_texto_transporte(ciudad_destino)
     full_text = f"{dest_norm} {dir_norm} {ciu_norm}".strip()
     
+    cat_uso = catalogo if catalogo is not None else obtener_catalogo_tiendas_dinamico()
+    
     # 1. Regla Especial Price Club
     if "PRICE" in dest_norm or "PRICE" in dir_norm:
-        for item in [s for s in CATALOGO_SUCURSALES_OFICIAL if str(s["codigo"]).startswith("300")]:
+        for item in [s for s in cat_uso if str(s["codigo"]).startswith("300")]:
             for kw in sorted(item["keywords"], key=len, reverse=True):
                 if kw in full_text:
                     return item["codigo"], item["sucursal"]
         if ciu_norm:
-            for item in [s for s in CATALOGO_SUCURSALES_OFICIAL if str(s["codigo"]).startswith("300")]:
+            for item in [s for s in cat_uso if str(s["codigo"]).startswith("300")]:
                 if any(c in item["sucursal"] for c in ciu_norm.split()):
                     return item["codigo"], item["sucursal"]
 
     # 2. Búsqueda por palabras clave compuestas ordenadas de mayor a menor longitud
     lista_reglas = []
-    for item in CATALOGO_SUCURSALES_OFICIAL:
+    for item in cat_uso:
         for kw in item["keywords"]:
             lista_reglas.append((kw, len(kw), item["codigo"], item["sucursal"]))
     lista_reglas.sort(key=lambda x: x[1], reverse=True)
@@ -585,13 +633,15 @@ def construir_resumen_sucursal_especifico(df_items: pd.DataFrame, tipo: str = "C
         
     df_work = df_items.copy()
     
+    cat_dinamico = obtener_catalogo_tiendas_dinamico()
     codigos = []
     sucursales = []
     for _, row in df_work.iterrows():
         cod, suc = clasificar_sucursal_guia(
             destinatario=row.get("DESTINATARIO", ""),
             direccion=row.get("DIRECCION", ""),
-            ciudad_destino=row.get("CIUDAD DESTINO", row.get("DESTINO", ""))
+            ciudad_destino=row.get("CIUDAD DESTINO", row.get("DESTINO", "")),
+            catalogo=cat_dinamico
         )
         codigos.append(cod)
         sucursales.append(suc)
