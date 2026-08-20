@@ -696,9 +696,13 @@ def show_reconciliacion_v8():
                 st.caption("Ver detalle completo en la pestaña 'Analisis Ciudad-Ciudad'")
                 df_mov_show = cruce["df_resumen_mov"].copy()
                 if not df_mov_show.empty:
-                    df_mov_show["COSTO TOTAL (USD)"] = df_mov_show["COSTO TOTAL (USD)"].apply(lambda x: f"${x:,.2f}")
-                    df_mov_show["% DEL COSTO TOTAL"] = df_mov_show["% DEL COSTO TOTAL"].apply(lambda x: f"{x:.1f}%")
-                    st.dataframe(df_mov_show, hide_index=True, use_container_width=True)
+                    df_mov_disp = pd.DataFrame({
+                        "TIPO DE MOVIMIENTO": df_mov_show["TIPO DE MOVIMIENTO"],
+                        "N° GUÍAS": df_mov_show["N° GUIAS"],
+                        "COSTO TOTAL (USD)": df_mov_show["COSTO TOTAL (USD)"].apply(lambda x: f"${x:,.2f}"),
+                        "% DEL COSTO TOTAL": df_mov_show["% DEL COSTO TOTAL"].apply(lambda x: f"{x:.1f}%")
+                    })
+                    st.dataframe(df_mov_disp, hide_index=True, use_container_width=True)
 
             with col_der:
                 # 2. COSTOS DEL PERIODO (USD)
@@ -717,9 +721,13 @@ def show_reconciliacion_v8():
                 st.caption("Ver detalle completo por ciudad-ciudad y por contenido")
                 df_top_show = cruce["df_top_ciudades"].copy()
                 if not df_top_show.empty:
-                    df_top_show["COSTO TOTAL (USD)"] = df_top_show["COSTO TOTAL (USD)"].apply(lambda x: f"${x:,.2f}")
-                    df_top_show["% DEL COSTO TOTAL"] = df_top_show["% DEL COSTO TOTAL"].apply(lambda x: f"{x:.1f}%")
-                    st.dataframe(df_top_show.head(8), hide_index=True, use_container_width=True)
+                    df_top_disp = pd.DataFrame({
+                        "CIUDAD DESTINO": df_top_show["CIUDAD DESTINO"],
+                        "N° GUÍAS": df_top_show["N_GUIAS"],
+                        "COSTO TOTAL (USD)": df_top_show["COSTO_TOTAL"].apply(lambda x: f"${x:,.2f}"),
+                        "% DEL COSTO TOTAL": df_top_show["PCT_COSTO_TOTAL"].apply(lambda x: f"{x:.1f}%")
+                    })
+                    st.dataframe(df_top_disp.head(8), hide_index=True, use_container_width=True)
 
             st.write("")
 
@@ -740,19 +748,29 @@ def show_reconciliacion_v8():
                 if not df_cont_show.empty:
                     col_t_c, col_g_c = st.columns([0.6, 0.4])
                     with col_t_c:
-                        df_cont_disp = df_cont_show.copy()
-                        df_cont_disp["COSTO TOTAL (USD)"] = df_cont_disp["COSTO TOTAL (USD)"].apply(lambda x: f"${x:,.2f}")
-                        df_cont_disp["% GUÍAS"] = df_cont_disp["% GUÍAS"].apply(lambda x: f"{x:.1f}%")
-                        df_cont_disp["% COSTO"] = df_cont_disp["% COSTO"].apply(lambda x: f"{x:.1f}%")
+                        df_cont_disp = pd.DataFrame({
+                            "CATEGORÍA": df_cont_show["CATEGORIA"],
+                            "N° GUÍAS": df_cont_show["N_GUIAS"],
+                            "COSTO TOTAL (USD)": df_cont_show["COSTO_TOTAL"].apply(lambda x: f"${x:,.2f}"),
+                            "% GUÍAS": df_cont_show["PCT_GUIAS"].apply(lambda x: f"{x:.1f}%"),
+                            "% COSTO": df_cont_show["PCT_COSTO"].apply(lambda x: f"{x:.1f}%")
+                        })
                         st.dataframe(df_cont_disp, hide_index=True, use_container_width=True)
                     with col_g_c:
-                        fig_cont = px.pie(df_cont_show, values="COSTO TOTAL (USD)", names="CATEGORÍA", title="Distribución de Costo por Contenido", hole=0.35)
+                        fig_cont = px.pie(df_cont_show, values="COSTO_TOTAL", names="CATEGORIA", title="Distribución de Costo por Contenido", hole=0.35)
                         fig_cont.update_layout(template="plotly_dark", height=320)
                         st.plotly_chart(fig_cont, use_container_width=True)
 
             with subtabs_det[1]:
                 st.subheader("Rutas y Pares Origen-Destino")
-                st.dataframe(cruce["df_pares_rutas"], hide_index=True, use_container_width=True)
+                df_rutas_show = cruce["df_pares_rutas"].copy()
+                if not df_rutas_show.empty:
+                    df_rutas_disp = df_rutas_show.copy()
+                    if "COSTO_TOTAL" in df_rutas_disp.columns:
+                        df_rutas_disp["COSTO TOTAL (USD)"] = df_rutas_disp["COSTO_TOTAL"].apply(lambda x: f"${x:,.2f}")
+                    if "COSTO PROMEDIO" in df_rutas_disp.columns:
+                        df_rutas_disp["COSTO PROMEDIO"] = df_rutas_disp["COSTO PROMEDIO"].apply(lambda x: f"${x:,.2f}")
+                    st.dataframe(df_rutas_disp, hide_index=True, use_container_width=True)
 
             with subtabs_det[2]:
                 st.subheader("Guías Anuladas o No Facturadas (Auditoría)")
@@ -780,8 +798,8 @@ def show_reconciliacion_v8():
 
             with subtabs_det[6]:
                 st.subheader("💬 Resumen Ejecutivo para Chat / Reporte")
-                cat_top = cruce["df_resumen_contenido"].iloc[0]["CATEGORÍA"] if not cruce["df_resumen_contenido"].empty else "N/A"
-                cat_top_val = cruce["df_resumen_contenido"].iloc[0]["COSTO TOTAL (USD)"] if not cruce["df_resumen_contenido"].empty else 0.0
+                cat_top = cruce["df_resumen_contenido"].iloc[0]["CATEGORIA"] if not cruce["df_resumen_contenido"].empty else "N/A"
+                cat_top_val = cruce["df_resumen_contenido"].iloc[0]["COSTO_TOTAL"] if not cruce["df_resumen_contenido"].empty else 0.0
                 pct_cc_val = cruce["df_resumen_mov"][cruce["df_resumen_mov"]["TIPO DE MOVIMIENTO"] == "CIUDAD-CIUDAD"]["% DEL COSTO TOTAL"].values[0] if not cruce["df_resumen_mov"].empty else 0.0
 
                 resumen_texto = f"""*Resumen de Costos de Transporte — {mes_n} {anio_n} (Fashion Club / Aeropostale)*
