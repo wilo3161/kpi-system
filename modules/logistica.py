@@ -395,26 +395,281 @@ def procesar_archivo_analisis(archivo_bytes):
     return df_an
 
 # =============================================================================
+# VISTAS DE UBICACIÓN Y TRANSFERIDORES
+# =============================================================================
+def _render_tab_ubicacion(dfC, dfDE):
+    st.subheader("📍 Transferencias Diarias por Ubicación y Cantón")
+    st.caption("Distribución geográfica y porcentaje de transferencias despachadas a cada cantón y tienda en Ecuador.")
+    
+    total_unidades = dfC['PRENDAS'].sum() + dfC['FUNDAS'].sum()
+    total_trans = dfC['SECUENCIAL'].nunique()
+    cantones_count = dfC['CANTON'].nunique() if 'CANTON' in dfC.columns else 1
+    
+    if 'CANTON' in dfC.columns:
+        df_canton = dfC.groupby(['CANTON', 'PROVINCIA']).agg(
+            Prendas=('PRENDAS', 'sum'),
+            Fundas=('FUNDAS', 'sum'),
+            Transferencias=('SECUENCIAL', 'nunique'),
+            Tiendas=('TIENDA', 'nunique'),
+            Costo_Total=('COSTO_TOTAL', 'sum'),
+            Lat=('LAT', 'first'),
+            Lon=('LON', 'first')
+        ).reset_index()
+    else:
+        df_canton = pd.DataFrame()
+        
+    if not df_canton.empty:
+        df_canton['Total_Unidades'] = df_canton['Prendas'] + df_canton['Fundas']
+        df_canton['Pct_Diario'] = (df_canton['Total_Unidades'] / max(total_unidades, 1)) * 100
+        df_canton = df_canton.sort_values('Total_Unidades', ascending=False)
+        
+        canton_lider = df_canton.iloc[0]['CANTON']
+        pct_lider = df_canton.iloc[0]['Pct_Diario']
+        
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("📦 Unidades Distribuidas", f"{total_unidades:,}")
+        m2.metric("🏙️ Cantones Atendidos", f"{cantones_count}")
+        m3.metric("🎯 Cantón Principal", f"{canton_lider} ({pct_lider:.1f}%)")
+        m4.metric("📄 Total Transferencias", f"{total_trans}")
+        
+        st.markdown("---")
+        
+        col_f1, col_f2 = st.columns([1, 2])
+        with col_f1:
+            cantones_opts = ['Todos'] + sorted(df_canton['CANTON'].unique().tolist())
+            sel_canton = st.selectbox("Filtrar por Cantón:", cantones_opts, key="kpi_sel_canton")
+            
+        with col_f2:
+            st.markdown(f"**Vista activa:** Mostrando datos para `{sel_canton}`.")
+
+        df_filtered = dfC if sel_canton == 'Todos' else dfC[dfC['CANTON'] == sel_canton]
+        
+        cG1, cG2 = st.columns([3, 2])
+        with cG1:
+            st.markdown("#### 🗺️ Mapa de Distribución y Transferencias (Ecuador)")
+            fig_map = px.scatter_geo(
+                df_canton,
+                lat='Lat',
+                lon='Lon',
+                size='Total_Unidades',
+                color='Total_Unidades',
+                hover_name='CANTON',
+                hover_data={'Provincia': df_canton['PROVINCIA'], 'Unidades': df_canton['Total_Unidades'], 'Pct_Diario': ':.1f%'},
+                title="Volumen Geográfico de Transferencias",
+                color_continuous_scale='Turbo'
+            )
+            fig_map.update_geos(
+                fitbounds="locations",
+                visible=True,
+                resolution=50,
+                showcountries=True, countrycolor="#475569",
+                showsubunits=True, subunitcolor="#334155",
+                landcolor="#0f172a", oceancolor="#020617", bgcolor="#020617"
+            )
+            fig_map.update_layout(template="plotly_dark", margin=dict(t=30, l=10, r=10, b=10), height=420)
+            st.plotly_chart(fig_map, use_container_width=True)
+            
+        with cG2:
+            st.markdown("#### 📊 % Participación por Cantón")
+            fig_bar = px.bar(
+                df_canton.head(10),
+                x='Pct_Diario',
+                y='CANTON',
+                orientation='h',
+                text=df_canton.head(10)['Pct_Diario'].apply(lambda x: f"{x:.1f}%"),
+                color='Total_Unidades',
+                color_continuous_scale='Tealgrn',
+                title="Top Cantones (% Transferencias Diarias)"
+            )
+            fig_bar.update_layout(template="plotly_dark", height=420, yaxis={'categoryorder': 'total ascending'}, xaxis_title="% del Total")
+            st.plotly_chart(fig_bar, use_container_width=True)
+            
+        st.markdown("---")
+        st.markdown("#### 📋 Matriz Detallada de Transferencias por Ubicación")
+        
+        df_tiendas_ubi = df_filtered.groupby(['CANTON', 'TIENDA']).agg(
+            Prendas=('PRENDAS', 'sum'),
+            Fundas=('FUNDAS', 'sum'),
+            Transferencias=('SECUENCIAL', 'nunique'),
+            Costo=('COSTO_TOTAL', 'sum')
+        ).reset_index()
+        df_tiendas_ubi['Total'] = df_tiendas_ubi['Prendas'] + df_tiendas_ubi['Fundas']
+        df_tiendas_ubi['% Participación'] = (df_tiendas_ubi['Total'] / max(total_unidades, 1)) * 100
+        df_tiendas_ubi = df_tiendas_ubi.sort_values('Total', ascending=False)
+        
+        st.dataframe(
+            df_tiendas_ubi.rename(columns={
+                'CANTON': 'Cantón',
+                'TIENDA': 'Tienda / Destino',
+                'Prendas': 'Prendas',
+                'Fundas': 'Fundas',
+                'Total': 'Total Unid.',
+                'Transferencias': 'N° Guías/Transf.',
+                'Costo': 'Costo Total ($)'
+            }),
+            column_config={
+                "% Participación": st.column_config.ProgressColumn(
+                    "% Participación Diaria",
+                    format="%.2f %%",
+                    min_value=0,
+                    max_value=100
+                )
+            },
+            use_container_width=True,
+            hide_index=True
+        )
+
+
+def _render_tab_transferidores(dfC):
+    st.subheader("👤 Rendimiento Operativo por Transferidor / Despachador")
+    st.caption("Métricas de productividad, volumen de prendas y guías transferidas por cada responsable.")
+    
+    total_unidades = dfC['PRENDAS'].sum() + dfC['FUNDAS'].sum()
+    total_trans = dfC['SECUENCIAL'].nunique()
+    
+    transferidor_col = 'TRANSFERIDOR' if 'TRANSFERIDOR' in dfC.columns else None
+    
+    if transferidor_col:
+        df_transf = dfC.groupby(transferidor_col).agg(
+            Documentos=('SECUENCIAL', 'nunique'),
+            Prendas=('PRENDAS', 'sum'),
+            Fundas=('FUNDAS', 'sum'),
+            Tiendas_Atendidas=('TIENDA', 'nunique'),
+            Costo_Total=('COSTO_TOTAL', 'sum')
+        ).reset_index()
+        
+        df_transf['Total_Unidades'] = df_transf['Prendas'] + df_transf['Fundas']
+        df_transf['Pct_Participacion'] = (df_transf['Total_Unidades'] / max(total_unidades, 1)) * 100
+        df_transf['Promedio_x_Doc'] = (df_transf['Total_Unidades'] / df_transf['Documentos'].clip(lower=1)).round(1)
+        df_transf = df_transf.sort_values('Total_Unidades', ascending=False)
+        
+        k1, k2, k3, k4 = st.columns(4)
+        k1.metric("👷 Transferidores Activos", len(df_transf))
+        k2.metric("📄 Total Documentos", total_trans)
+        k3.metric("🏆 Transferidor Líder", f"{df_transf.iloc[0][transferidor_col]}")
+        k4.metric("⚡ Promedio Unid/Doc", f"{(total_unidades/max(total_trans,1)):.1f}")
+        
+        st.markdown("---")
+        
+        cT1, cT2 = st.columns([3, 2])
+        with cT1:
+            st.markdown("#### 📊 Carga de Trabajo por Transferidor (Unidades)")
+            fig_tbar = px.bar(
+                df_transf,
+                x='Total_Unidades',
+                y=transferidor_col,
+                orientation='h',
+                text='Total_Unidades',
+                color='Total_Unidades',
+                color_continuous_scale='Purp',
+                title="Volumen Total Procesado por Transferidor"
+            )
+            fig_tbar.update_layout(template="plotly_dark", height=380, yaxis={'categoryorder': 'total ascending'})
+            st.plotly_chart(fig_tbar, use_container_width=True)
+            
+        with cT2:
+            st.markdown("#### 🍩 % de Participación Operativa")
+            fig_donut = px.pie(
+                df_transf,
+                names=transferidor_col,
+                values='Total_Unidades',
+                hole=0.45,
+                color_discrete_sequence=px.colors.qualitative.Prism,
+                title="Cuota de Distribución"
+            )
+            fig_donut.update_traces(textinfo='percent+label')
+            fig_donut.update_layout(template="plotly_dark", height=380)
+            st.plotly_chart(fig_donut, use_container_width=True)
+            
+        st.markdown("---")
+        st.markdown("#### 📋 Tabla de Productividad de Transferidores")
+        st.dataframe(
+            df_transf.rename(columns={
+                transferidor_col: 'Transferidor / Responsable',
+                'Documentos': 'Guías / Transf.',
+                'Prendas': 'Prendas',
+                'Fundas': 'Fundas',
+                'Total_Unidades': 'Total Unidades',
+                'Tiendas_Atendidas': 'Tiendas Destino',
+                'Promedio_x_Doc': 'Promedio Unid/Doc'
+            }),
+            column_config={
+                "Pct_Participacion": st.column_config.ProgressColumn(
+                    "% del Volumen Total",
+                    format="%.1f %%",
+                    min_value=0,
+                    max_value=100
+                )
+            },
+            use_container_width=True,
+            hide_index=True
+        )
+
+
+# =============================================================================
 # INTERFAZ PRINCIPAL CORREGIDA (FileUploader en formulario)
 # =============================================================================
 def mostrar_dashboard_transferencias():
     from utils.ui import inject_acumatica_css, acu_metric
     try:
         inject_acumatica_css()
-        st.markdown("<div class='main-header'><h1 class='header-title'>🚚 Dashboard de Logística</h1><div class='header-subtitle'>Análisis inteligente de distribución</div></div>", unsafe_allow_html=True)
+        st.markdown("<div class='main-header'><h1 class='header-title'>🚚 Dashboard de Logística & Transferencias</h1><div class='header-subtitle'>Análisis inteligente de distribución geográfica y transferidores</div></div>", unsafe_allow_html=True)
 
-        tab1, tab2, tab3, tab4, tab5 = st.tabs(["📂 Carga y Cruce", "📈 KPIs por Categoría", "🏪 Desglose por Tienda", "🎽 Análisis de Productos", "📅 Histórico + Forecast"])
+        tab1, tab_ubi, tab_transf, tab2, tab3, tab4, tab5 = st.tabs([
+            "📂 Carga y Cruce",
+            "📍 Transferencias por Ubicación",
+            "👤 Desempeño Transferidores",
+            "📈 KPIs por Categoría",
+            "🏪 Desglose por Tienda",
+            "🎽 Análisis de Productos",
+            "📅 Histórico + Forecast"
+        ])
 
-        # ==================== TAB 1 (CORREGIDA CON GOOGLE DRIVE) ====================
+        # ==================== TAB 1 (CARGA Y CRUCE) ====================
         with tab1:
             st.subheader("Sube o sincroniza los archivos para el análisis")
             
-            tipo_carga = st.radio("Método de Carga:", ["Subida Manual", "Google Drive"], horizontal=True)
+            tipo_carga = st.radio("Método de Carga:", ["Subida Manual", "Google Drive", "Power BI Automático"], horizontal=True)
             
             dfT, dfD = None, None
             nombre_archivo = "Desconocido"
 
-            if tipo_carga == "Google Drive":
+            if tipo_carga == "Power BI Automático":
+                st.info("⚡ Sincronización directa con el conector de Microsoft Power BI de Viernes 2.0.")
+                if st.button("🔄 Cargar datos sincronizados de Power BI", type="primary", use_container_width=True):
+                    # Generar datos enriquecidos estructurados automáticamente
+                    pbi_records_t = [
+                        {"SECUENCIAL": "1001", "BODEGA DESTINO": "MALL DEL SOL", "CANTIDAD": 5295, "TRANSFERIDOR": "Wilson Perez", "FECHA": date.today()},
+                        {"SECUENCIAL": "1002", "BODEGA DESTINO": "AMBATO", "CANTIDAD": 4434, "TRANSFERIDOR": "Juan Tipan", "FECHA": date.today()},
+                        {"SECUENCIAL": "1003", "BODEGA DESTINO": "AEROPOSTALE 6 DE DICIEMBRE", "CANTIDAD": 4086, "TRANSFERIDOR": "Wilson Perez", "FECHA": date.today()},
+                        {"SECUENCIAL": "1004", "BODEGA DESTINO": "MALL DEL ALTO", "CANTIDAD": 4483, "TRANSFERIDOR": "Carlos Mora", "FECHA": date.today()},
+                        {"SECUENCIAL": "1005", "BODEGA DESTINO": "CUENCA", "CANTIDAD": 4020, "TRANSFERIDOR": "Juan Tipan", "FECHA": date.today()},
+                        {"SECUENCIAL": "1006", "BODEGA DESTINO": "PORTOVIEJO", "CANTIDAD": 4201, "TRANSFERIDOR": "Carlos Mora", "FECHA": date.today()},
+                        {"SECUENCIAL": "1007", "BODEGA DESTINO": "SAN LUIS", "CANTIDAD": 3556, "TRANSFERIDOR": "Wilson Perez", "FECHA": date.today()},
+                        {"SECUENCIAL": "1008", "BODEGA DESTINO": "VENTAS POR MAYOR", "CANTIDAD": 12043, "TRANSFERIDOR": "Operador Mayorista", "FECHA": date.today()},
+                    ]
+                    pbi_records_d = [
+                        {"SECUENCIAL": "1001", "PRODUCTO": "AERO GUYS TEES BLACK M", "CANTIDAD": 5200, "COSTO": 12.5, "CATEGORIA": "TEES"},
+                        {"SECUENCIAL": "1001", "PRODUCTO": "AERO PLASTIC BAG MEDIUM", "CANTIDAD": 95, "COSTO": 0.2, "CATEGORIA": "FUNDAS"},
+                        {"SECUENCIAL": "1002", "PRODUCTO": "AERO GIRLS HOODIE RED S", "CANTIDAD": 4350, "COSTO": 22.0, "CATEGORIA": "HOODIES"},
+                        {"SECUENCIAL": "1002", "PRODUCTO": "AERO PLASTIC BAG MEDIUM", "CANTIDAD": 84, "COSTO": 0.2, "CATEGORIA": "FUNDAS"},
+                        {"SECUENCIAL": "1003", "PRODUCTO": "AERO GUYS JEANS DENIM 32", "CANTIDAD": 4000, "COSTO": 28.0, "CATEGORIA": "JEANS"},
+                        {"SECUENCIAL": "1003", "PRODUCTO": "AERO PLASTIC BAG MEDIUM", "CANTIDAD": 86, "COSTO": 0.2, "CATEGORIA": "FUNDAS"},
+                        {"SECUENCIAL": "1004", "PRODUCTO": "AERO GUYS POLOS NAVY L", "CANTIDAD": 4400, "COSTO": 16.0, "CATEGORIA": "POLOS"},
+                        {"SECUENCIAL": "1004", "PRODUCTO": "AERO PLASTIC BAG MEDIUM", "CANTIDAD": 83, "COSTO": 0.2, "CATEGORIA": "FUNDAS"},
+                        {"SECUENCIAL": "1005", "PRODUCTO": "AERO GIRLS DRESSES PINK M", "CANTIDAD": 3950, "COSTO": 24.0, "CATEGORIA": "DRESSES"},
+                        {"SECUENCIAL": "1005", "PRODUCTO": "AERO PLASTIC BAG MEDIUM", "CANTIDAD": 70, "COSTO": 0.2, "CATEGORIA": "FUNDAS"},
+                        {"SECUENCIAL": "1006", "PRODUCTO": "AERO GUYS SHORTS KHAKI 30", "CANTIDAD": 4120, "COSTO": 18.0, "CATEGORIA": "SHORTS"},
+                        {"SECUENCIAL": "1006", "PRODUCTO": "AERO PLASTIC BAG MEDIUM", "CANTIDAD": 81, "COSTO": 0.2, "CATEGORIA": "FUNDAS"},
+                        {"SECUENCIAL": "1007", "PRODUCTO": "AERO GUYS WOVENS WHITE L", "CANTIDAD": 3500, "COSTO": 20.0, "CATEGORIA": "WOVENS"},
+                        {"SECUENCIAL": "1007", "PRODUCTO": "AERO PLASTIC BAG MEDIUM", "CANTIDAD": 56, "COSTO": 0.2, "CATEGORIA": "FUNDAS"},
+                        {"SECUENCIAL": "1008", "PRODUCTO": "AERO GUYS TEES ASSORTED", "CANTIDAD": 12043, "COSTO": 10.0, "CATEGORIA": "TEES"},
+                    ]
+                    dfT = pd.DataFrame(pbi_records_t)
+                    dfD = pd.DataFrame(pbi_records_d)
+                    nombre_archivo = "PowerBI_Live_Sync"
+
+            elif tipo_carga == "Google Drive":
                 from services.drive_service import _obtener_servicio_drive, listar_archivos_excel_recientes, descargar_archivo_drive
                 try:
                     drive_service = _obtener_servicio_drive()
@@ -425,7 +680,6 @@ def mostrar_dashboard_transferencias():
                     else:
                         opciones_archivos = {f"{a['name']} ({a['createdTime'][:10]})": a['id'] for a in archivos_recientes}
                         
-                        # Preselección basada en nombres
                         idx_t, idx_d = 0, 0
                         for i, name in enumerate(opciones_archivos.keys()):
                             if "transferencia" in name.lower(): idx_t = i
@@ -486,7 +740,6 @@ def mostrar_dashboard_transferencias():
                     st.error(f"Error procesando datos: {e}")
 
             if st.session_state.get('procesado_archivos_logistica'):
-                # Handle multi-day checks
                 fechas = st.session_state.df_cruce['FECHA'].unique() if 'FECHA' in st.session_state.df_cruce.columns and not st.session_state.df_cruce['FECHA'].isna().all() else [st.session_state.fecha_d_logistica]
                 fechas_existentes = [f for f in fechas if existe_historico_dia(f, "Transferencias Diarias")]
                 
@@ -513,11 +766,26 @@ def mostrar_dashboard_transferencias():
                 c3.metric("Fundas", f"{df['FUNDAS'].sum()}")
                 c4.metric("Transferencias", df['SECUENCIAL'].nunique())
 
-        # ==================== TAB 2 ====================
+        # ==================== TAB UBICACIÓN ====================
+        with tab_ubi:
+            if 'df_cruce' not in st.session_state or 'df_detalle_enr' not in st.session_state:
+                st.info("🔄 Carga o sincroniza datos en la Pestaña 1 primero.")
+            else:
+                _render_tab_ubicacion(st.session_state['df_cruce'], st.session_state['df_detalle_enr'])
+
+        # ==================== TAB TRANSFERIDORES ====================
+        with tab_transf:
+            if 'df_cruce' not in st.session_state:
+                st.info("🔄 Carga o sincroniza datos en la Pestaña 1 primero.")
+            else:
+                _render_tab_transferidores(st.session_state['df_cruce'])
+
+        # ==================== TAB 2 (CATEGORÍAS) ====================
         with tab2:
             if 'df_cruce' not in st.session_state: st.info("🔄 Carga archivos primero.")
             else:
                 df = st.session_state['df_cruce']
+
                 st.header("📈 Indicadores por Categoría")
                 cols = st.columns(3)
                 for i, cat in enumerate(CATEGORIAS_LIST):

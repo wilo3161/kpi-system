@@ -207,6 +207,43 @@ def _find_true_quantity_col(df, cols_dict):
                 return col
     return None
 
+# ─── Mapeo Geográfico y Cantonal para Ecuador ──────────────────────────────────
+CIUDADES_CANTONES = {
+    'MALL DEL SOL': {'canton': 'GUAYAQUIL', 'provincia': 'GUAYAS', 'lat': -2.1557, 'lon': -79.8944},
+    'AMBATO': {'canton': 'AMBATO', 'provincia': 'TUNGURAHUA', 'lat': -1.2491, 'lon': -78.6168},
+    'AEROPOSTALE 6 DE DICIEMBRE': {'canton': 'QUITO', 'provincia': 'PICHINCHA', 'lat': -0.1983, 'lon': -78.4833},
+    'MALL DEL ALTO': {'canton': 'QUITO', 'provincia': 'PICHINCHA', 'lat': -0.1807, 'lon': -78.4678},
+    'CUENCA': {'canton': 'CUENCA', 'provincia': 'AZUAY', 'lat': -2.9001, 'lon': -79.0059},
+    'PORTOVIEJO': {'canton': 'PORTOVIEJO', 'provincia': 'MANABI', 'lat': -1.0544, 'lon': -80.4544},
+    'QUEVEDO': {'canton': 'QUEVEDO', 'provincia': 'LOS RIOS', 'lat': -1.0286, 'lon': -79.4635},
+    'SAN LUIS': {'canton': 'RUMIÑAHUI', 'provincia': 'PICHINCHA', 'lat': -0.3167, 'lon': -78.4500},
+    'BOMBOLI': {'canton': 'SANTO DOMINGO', 'provincia': 'SANTO DOMINGO', 'lat': -0.2530, 'lon': -79.1754},
+    'PENINSULA': {'canton': 'SANTA ELENA', 'provincia': 'SANTA ELENA', 'lat': -2.2262, 'lon': -80.8587},
+    'BABAHOYO': {'canton': 'BABAHOYO', 'provincia': 'LOS RIOS', 'lat': -1.8022, 'lon': -79.5344},
+    'SANTO DOMINGO': {'canton': 'SANTO DOMINGO', 'provincia': 'SANTO DOMINGO', 'lat': -0.2530, 'lon': -79.1754},
+    'RIOCENTRO EL DORADO': {'canton': 'DAULE', 'provincia': 'GUAYAS', 'lat': -2.0667, 'lon': -79.9167},
+    'RIOBAMBA': {'canton': 'RIOBAMBA', 'provincia': 'CHIMBORAZO', 'lat': -1.6635, 'lon': -78.6546},
+    'MANTA': {'canton': 'MANTA', 'provincia': 'MANABI', 'lat': -0.9677, 'lon': -80.7089},
+    'MALL DEL PACIFICO': {'canton': 'MANTA', 'provincia': 'MANABI', 'lat': -0.9500, 'lon': -80.7333},
+    'MACHALA': {'canton': 'MACHALA', 'provincia': 'EL ORO', 'lat': -3.2581, 'lon': -79.9554},
+    'CONDADO SHOPPING': {'canton': 'QUITO', 'provincia': 'PICHINCHA', 'lat': -0.1064, 'lon': -78.4975},
+    'MATRIZ': {'canton': 'QUITO', 'provincia': 'PICHINCHA', 'lat': -0.2200, 'lon': -78.5100},
+    'CUENCA CENTRO HISTORICO': {'canton': 'CUENCA', 'provincia': 'AZUAY', 'lat': -2.8974, 'lon': -79.0045},
+    'VENTAS POR MAYOR': {'canton': 'NACIONAL', 'provincia': 'DISTRIBUCION', 'lat': -0.2200, 'lon': -78.5100},
+    'PRICE CLUB': {'canton': 'QUITO', 'provincia': 'PICHINCHA', 'lat': -0.1800, 'lon': -78.4800},
+    'TIENDA WEB': {'canton': 'DIGITAL', 'provincia': 'ECOMMERCE', 'lat': -0.2200, 'lon': -78.5100}
+}
+
+def obtener_geo_tienda(nombre_tienda: str) -> dict:
+    """Retorna cantón, provincia y coordenadas para una tienda."""
+    t_norm = normalizar_para_mapeo(nombre_tienda)
+    for k, v in CIUDADES_CANTONES.items():
+        if normalizar_para_mapeo(k) in t_norm or t_norm in normalizar_para_mapeo(k):
+            return v
+    if 'PRICE' in t_norm: return {'canton': 'QUITO', 'provincia': 'PICHINCHA', 'lat': -0.18, 'lon': -78.48}
+    if 'MAYOR' in t_norm: return {'canton': 'NACIONAL', 'provincia': 'DISTRIBUCION', 'lat': -0.22, 'lon': -78.51}
+    return {'canton': 'PICHINCHA / GENERAL', 'provincia': 'PICHINCHA', 'lat': -0.22, 'lon': -78.51}
+
 @st.cache_data(show_spinner=False)
 def procesar_archivos(df_transferencias, df_detalle):
     # --- Detalle ---
@@ -214,7 +251,6 @@ def procesar_archivos(df_transferencias, df_detalle):
     sec_col = det_cols.get('SECUENCIAL') or det_cols.get('SECUENCIAL FACTURA') or next((det_cols[k] for k in det_cols if any(x in k for x in ['SECUENCIAL', 'TRANSFERENCIA', 'NUMERO', 'FACTURA', 'GUIA', 'DOCUMENTO', 'SEC', 'NRO'])), None)
     cant_col = _find_true_quantity_col(df_detalle, det_cols)
     
-    # Priorizar coincidencias exactas para producto para evitar confundir 'Codigo Producto' con 'Producto'
     prod_col = det_cols.get('PRODUCTO') or det_cols.get('DESCRIPCION') or det_cols.get('ITEM') or det_cols.get('NOMBRE')
     if not prod_col:
         prod_col = next((det_cols[k] for k in det_cols if any(x in k for x in ['PRODUCTO', 'DESCRIPCION', 'ITEM', 'ARTICULO', 'NOMBRE', 'PROD', 'DETALLE']) and not any(y in k for y in ['CODIGO', 'COD', 'BARRA', 'ID'])), None)
@@ -265,8 +301,6 @@ def procesar_archivos(df_transferencias, df_detalle):
         df_det['PRODUCTO_ORIGINAL'].str.upper().str.contains('PLASTIC', na=False)
     )
     df_det['ES_FUNDA'] = cond_funda
-
-    # Pre-calculamos para evitar lambdas complejas en groupby
     df_det['CANT_PRENDA'] = df_det['CANTIDAD'].where(~df_det['ES_FUNDA'], 0)
     df_det['CANT_FUNDA'] = df_det['CANTIDAD'].where(df_det['ES_FUNDA'], 0)
 
@@ -284,7 +318,6 @@ def procesar_archivos(df_transferencias, df_detalle):
     sec_col_t = next((trans_cols[k] for k in trans_cols if any(x in k for x in ['SECUENCIAL', 'TRANSFERENCIA', 'NUMERO', 'FACTURA', 'GUIA', 'DOCUMENTO', 'SEC', 'NRO'])), None)
     cant_col_t = _find_true_quantity_col(df_transferencias, trans_cols)
     
-    # Preferir BODEGA DESTINO o BODEGA RECIBE sobre SUCURSAL DESTINO
     tienda_col = None
     for exact in ['BODEGA DESTINO', 'BODEGA RECIBE', 'DESTINO']:
         if exact in trans_cols:
@@ -294,6 +327,9 @@ def procesar_archivos(df_transferencias, df_detalle):
         tienda_col = next((trans_cols[k] for k in trans_cols if any(x in k for x in ['SUCURSAL DESTINO', 'BODEGA', 'TIENDA', 'SUCURSAL', 'RECIBE'])), None)
         
     fecha_col_t = next((trans_cols[k] for k in trans_cols if 'FECHA' in k), None)
+    
+    # Extraer transferidor / despachador / usuario
+    transferidor_col = next((trans_cols[k] for k in trans_cols if any(x in k for x in ['TRANSFERIDOR', 'USUARIO', 'RESPONSABLE', 'CREADO POR', 'DESPACHADOR', 'EMISOR', 'PERSONA'])), None)
 
     if not all([sec_col_t, cant_col_t, tienda_col]):
         missing_t = []
@@ -307,6 +343,13 @@ def procesar_archivos(df_transferencias, df_detalle):
     df_trans = df_trans[df_trans['SECUENCIAL'] != '']
     df_trans['CANTIDAD_TRANS'] = df_trans[cant_col_t].apply(extraer_entero)
     df_trans['TIENDA'] = df_trans[tienda_col].astype(str)
+    
+    if transferidor_col:
+        df_trans['TRANSFERIDOR'] = df_trans[transferidor_col].astype(str).str.strip().str.title()
+    else:
+        # Asignación heurística si no viene explícito
+        df_trans['TRANSFERIDOR'] = 'Despachador Central'
+
     if fecha_col_t:
         df_trans['FECHA'] = pd.to_datetime(df_trans[fecha_col_t], errors='coerce').dt.date
     else:
@@ -315,7 +358,6 @@ def procesar_archivos(df_transferencias, df_detalle):
     df_cruce = df_trans.merge(grupo_det, on='SECUENCIAL', how='left')
     import numpy as np
     df_cruce['CANTIDAD_TOTAL_DETALLE'] = df_cruce['CANTIDAD_TOTAL_DETALLE'].replace(0, np.nan).fillna(df_cruce['CANTIDAD_TRANS'])
-    # Si prendas es 0 pero hay fundas, no sobreescribir prendas con la cantidad de la transferencia.
     df_cruce['FUNDAS'] = df_cruce['FUNDAS'].fillna(0).astype(int)
     mask_reemplazo = (df_cruce['PRENDAS'] == 0) & (df_cruce['FUNDAS'] == 0)
     df_cruce.loc[mask_reemplazo, 'PRENDAS'] = df_cruce.loc[mask_reemplazo, 'CANTIDAD_TRANS']
@@ -327,8 +369,16 @@ def procesar_archivos(df_transferencias, df_detalle):
         lambda r: clasificar_categoria(r['TIENDA'], r['CATEGORIA_DET'], r['GRUPO']), axis=1
     )
     
+    # Enriquecer con Geografía
+    geo_series = df_cruce['TIENDA'].apply(obtener_geo_tienda)
+    df_cruce['CANTON'] = [g.get('canton', 'GENERAL') for g in geo_series]
+    df_cruce['PROVINCIA'] = [g.get('provincia', 'GENERAL') for g in geo_series]
+    df_cruce['LAT'] = [g.get('lat', -0.22) for g in geo_series]
+    df_cruce['LON'] = [g.get('lon', -78.51) for g in geo_series]
+    
     if 'TIENDA' in df_det.columns:
         df_det.drop(columns='TIENDA', inplace=True)
-    df_det = df_det.merge(df_cruce[['SECUENCIAL', 'CATEGORIA_FINAL', 'TIENDA']], on='SECUENCIAL', how='left')
+    df_det = df_det.merge(df_cruce[['SECUENCIAL', 'CATEGORIA_FINAL', 'TIENDA', 'CANTON', 'PROVINCIA', 'TRANSFERIDOR']], on='SECUENCIAL', how='left')
     
     return df_cruce, df_det
+

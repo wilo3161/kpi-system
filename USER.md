@@ -1,21 +1,17 @@
 # USER.md - About Your Human
 
-_Learn about the person you're helping. Update this as you go._
-
-- **Name:**
-- **What to call them:**
-- **Pronouns:** _(optional)_
-- **Timezone:**
-- **Notes:**
+- **Name:** Wilson Perez (Wilo)
+- **What to call them:** Jefe / Wilo
+- **Timezone:** America/Guayaquil (GMT-5)
 
 ## Context
 
-_(What do they care about? What projects are they working on? What annoys them? What makes them laugh? Build this over time.)_
-
----
-
-The more you know, the better you can help. But remember — you're learning about a person, not building a dossier. Respect the difference.
-
-## Related
-
-- [Agent workspace](/concepts/agent-workspace)
+- **Proyecto:** KPI System (Plataforma integral de gestión logística, guías de despacho, transferencias entre tiendas, trazabilidad QR, reconciliación de inventario y Cero Papel para retail y bodegas).
+- **Proyectos Independientes de Wilo:**
+  - VIERNES 2.0 (Asistente de IA central multi-proyecto).
+  - KPI System (Logística, distribución retail y auditoría de tiendas).
+  - Gas Azul Express (Plataforma de distribución y venta de GLP).
+- **Objetivos en KPI System:**
+  - Idempotencia y velocidad en escaneo y recepción QR en tiendas.
+  - Trazabilidad y cierre de guías en tiempo real.
+  - Reconciliación automatizada y auditoría sin papel.
