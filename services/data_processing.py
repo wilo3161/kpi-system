@@ -207,42 +207,63 @@ def _find_true_quantity_col(df, cols_dict):
                 return col
     return None
 
-# ─── Mapeo Geográfico y Cantonal para Ecuador ──────────────────────────────────
+# ─── Mapeo Geográfico y Cantonal para Ecuador (Aéropostale & Retail) ───────────
 CIUDADES_CANTONES = {
-    'MALL DEL SOL': {'canton': 'GUAYAQUIL', 'provincia': 'GUAYAS', 'lat': -2.1557, 'lon': -79.8944},
-    'AMBATO': {'canton': 'AMBATO', 'provincia': 'TUNGURAHUA', 'lat': -1.2491, 'lon': -78.6168},
-    'AEROPOSTALE 6 DE DICIEMBRE': {'canton': 'QUITO', 'provincia': 'PICHINCHA', 'lat': -0.1983, 'lon': -78.4833},
-    'MALL DEL ALTO': {'canton': 'QUITO', 'provincia': 'PICHINCHA', 'lat': -0.1807, 'lon': -78.4678},
-    'CUENCA': {'canton': 'CUENCA', 'provincia': 'AZUAY', 'lat': -2.9001, 'lon': -79.0059},
-    'PORTOVIEJO': {'canton': 'PORTOVIEJO', 'provincia': 'MANABI', 'lat': -1.0544, 'lon': -80.4544},
-    'QUEVEDO': {'canton': 'QUEVEDO', 'provincia': 'LOS RIOS', 'lat': -1.0286, 'lon': -79.4635},
-    'SAN LUIS': {'canton': 'RUMIÑAHUI', 'provincia': 'PICHINCHA', 'lat': -0.3167, 'lon': -78.4500},
-    'BOMBOLI': {'canton': 'SANTO DOMINGO', 'provincia': 'SANTO DOMINGO', 'lat': -0.2530, 'lon': -79.1754},
-    'PENINSULA': {'canton': 'SANTA ELENA', 'provincia': 'SANTA ELENA', 'lat': -2.2262, 'lon': -80.8587},
-    'BABAHOYO': {'canton': 'BABAHOYO', 'provincia': 'LOS RIOS', 'lat': -1.8022, 'lon': -79.5344},
-    'SANTO DOMINGO': {'canton': 'SANTO DOMINGO', 'provincia': 'SANTO DOMINGO', 'lat': -0.2530, 'lon': -79.1754},
-    'RIOCENTRO EL DORADO': {'canton': 'DAULE', 'provincia': 'GUAYAS', 'lat': -2.0667, 'lon': -79.9167},
-    'RIOBAMBA': {'canton': 'RIOBAMBA', 'provincia': 'CHIMBORAZO', 'lat': -1.6635, 'lon': -78.6546},
-    'MANTA': {'canton': 'MANTA', 'provincia': 'MANABI', 'lat': -0.9677, 'lon': -80.7089},
-    'MALL DEL PACIFICO': {'canton': 'MANTA', 'provincia': 'MANABI', 'lat': -0.9500, 'lon': -80.7333},
-    'MACHALA': {'canton': 'MACHALA', 'provincia': 'EL ORO', 'lat': -3.2581, 'lon': -79.9554},
-    'CONDADO SHOPPING': {'canton': 'QUITO', 'provincia': 'PICHINCHA', 'lat': -0.1064, 'lon': -78.4975},
-    'MATRIZ': {'canton': 'QUITO', 'provincia': 'PICHINCHA', 'lat': -0.2200, 'lon': -78.5100},
-    'CUENCA CENTRO HISTORICO': {'canton': 'CUENCA', 'provincia': 'AZUAY', 'lat': -2.8974, 'lon': -79.0045},
-    'VENTAS POR MAYOR': {'canton': 'NACIONAL', 'provincia': 'DISTRIBUCION', 'lat': -0.2200, 'lon': -78.5100},
-    'PRICE CLUB': {'canton': 'QUITO', 'provincia': 'PICHINCHA', 'lat': -0.1800, 'lon': -78.4800},
-    'TIENDA WEB': {'canton': 'DIGITAL', 'provincia': 'ECOMMERCE', 'lat': -0.2200, 'lon': -78.5100}
+    # ── Pichincha / Quito ──
+    'AEROPOSTALE 6 DE DICIEMBRE': {'canton': 'QUITO', 'provincia': 'PICHINCHA', 'region': 'Sierra', 'lat': -0.1874, 'lon': -78.4841},
+    'MALL DEL ALTO': {'canton': 'QUITO', 'provincia': 'PICHINCHA', 'region': 'Sierra', 'lat': -0.1789, 'lon': -78.4725},
+    'CONDADO SHOPPING': {'canton': 'QUITO', 'provincia': 'PICHINCHA', 'region': 'Sierra', 'lat': -0.1064, 'lon': -78.4975},
+    'MATRIZ': {'canton': 'QUITO', 'provincia': 'PICHINCHA', 'region': 'Sierra', 'lat': -0.2200, 'lon': -78.5100},
+    'SAN LUIS': {'canton': 'RUMIÑAHUI', 'provincia': 'PICHINCHA', 'region': 'Sierra', 'lat': -0.3167, 'lon': -78.4500},
+    'CAYAMBE': {'canton': 'CAYAMBE', 'provincia': 'PICHINCHA', 'region': 'Sierra', 'lat': 0.0416, 'lon': -78.1453},
+    'PRICE CLUB': {'canton': 'QUITO', 'provincia': 'PICHINCHA', 'region': 'Sierra', 'lat': -0.1800, 'lon': -78.4800},
+    
+    # ── Guayas ──
+    'MALL DEL SOL': {'canton': 'GUAYAQUIL', 'provincia': 'GUAYAS', 'region': 'Costa', 'lat': -2.1557, 'lon': -79.8944},
+    'RIOCENTRO EL DORADO': {'canton': 'DAULE', 'provincia': 'GUAYAS', 'region': 'Costa', 'lat': -2.0667, 'lon': -79.9167},
+    
+    # ── Tungurahua & Chimborazo ──
+    'AMBATO': {'canton': 'AMBATO', 'provincia': 'TUNGURAHUA', 'region': 'Sierra', 'lat': -1.2491, 'lon': -78.6168},
+    'RIOBAMBA': {'canton': 'RIOBAMBA', 'provincia': 'CHIMBORAZO', 'region': 'Sierra', 'lat': -1.6635, 'lon': -78.6546},
+    
+    # ── Azuay ──
+    'CUENCA': {'canton': 'CUENCA', 'provincia': 'AZUAY', 'region': 'Austro', 'lat': -2.9001, 'lon': -79.0059},
+    'CUENCA CENTRO HISTORICO': {'canton': 'CUENCA', 'provincia': 'AZUAY', 'region': 'Austro', 'lat': -2.8974, 'lon': -79.0045},
+    
+    # ── Manabí ──
+    'PORTOVIEJO': {'canton': 'PORTOVIEJO', 'provincia': 'MANABI', 'region': 'Costa', 'lat': -1.0544, 'lon': -80.4544},
+    'MANTA': {'canton': 'MANTA', 'provincia': 'MANABI', 'region': 'Costa', 'lat': -0.9677, 'lon': -80.7089},
+    'MALL DEL PACIFICO': {'canton': 'MANTA', 'provincia': 'MANABI', 'region': 'Costa', 'lat': -0.9500, 'lon': -80.7333},
+    
+    # ── Los Ríos ──
+    'QUEVEDO': {'canton': 'QUEVEDO', 'provincia': 'LOS RIOS', 'region': 'Costa', 'lat': -1.0286, 'lon': -79.4635},
+    'BABAHOYO': {'canton': 'BABAHOYO', 'provincia': 'LOS RIOS', 'region': 'Costa', 'lat': -1.8022, 'lon': -79.5344},
+    
+    # ── Santo Domingo ──
+    'SANTO DOMINGO': {'canton': 'SANTO DOMINGO', 'provincia': 'SANTO DOMINGO', 'region': 'Costa', 'lat': -0.2530, 'lon': -79.1754},
+    'BOMBOLI': {'canton': 'SANTO DOMINGO', 'provincia': 'SANTO DOMINGO', 'region': 'Costa', 'lat': -0.2450, 'lon': -79.1820},
+    
+    # ── Santa Elena & El Oro ──
+    'PENINSULA': {'canton': 'SANTA ELENA', 'provincia': 'SANTA ELENA', 'region': 'Costa', 'lat': -2.2262, 'lon': -80.8587},
+    'MACHALA': {'canton': 'MACHALA', 'provincia': 'EL ORO', 'region': 'Costa', 'lat': -3.2581, 'lon': -79.9554},
+    
+    # ── Canales Especiales ──
+    'VENTAS POR MAYOR': {'canton': 'NACIONAL', 'provincia': 'DISTRIBUCION', 'region': 'Nacional', 'lat': -0.2200, 'lon': -78.5100},
+    'TIENDA WEB': {'canton': 'DIGITAL', 'provincia': 'ECOMMERCE', 'region': 'Digital', 'lat': -0.2200, 'lon': -78.5100}
 }
 
 def obtener_geo_tienda(nombre_tienda: str) -> dict:
-    """Retorna cantón, provincia y coordenadas para una tienda."""
+    """Retorna cantón, provincia, región y coordenadas exactas para una tienda."""
     t_norm = normalizar_para_mapeo(nombre_tienda)
     for k, v in CIUDADES_CANTONES.items():
-        if normalizar_para_mapeo(k) in t_norm or t_norm in normalizar_para_mapeo(k):
+        k_norm = normalizar_para_mapeo(k)
+        if k_norm in t_norm or t_norm in k_norm:
             return v
-    if 'PRICE' in t_norm: return {'canton': 'QUITO', 'provincia': 'PICHINCHA', 'lat': -0.18, 'lon': -78.48}
-    if 'MAYOR' in t_norm: return {'canton': 'NACIONAL', 'provincia': 'DISTRIBUCION', 'lat': -0.22, 'lon': -78.51}
-    return {'canton': 'PICHINCHA / GENERAL', 'provincia': 'PICHINCHA', 'lat': -0.22, 'lon': -78.51}
+    if 'PRICE' in t_norm: return {'canton': 'QUITO', 'provincia': 'PICHINCHA', 'region': 'Sierra', 'lat': -0.18, 'lon': -78.48}
+    if 'MAYOR' in t_norm: return {'canton': 'NACIONAL', 'provincia': 'DISTRIBUCION', 'region': 'Nacional', 'lat': -0.22, 'lon': -78.51}
+    if 'WEB' in t_norm: return {'canton': 'DIGITAL', 'provincia': 'ECOMMERCE', 'region': 'Digital', 'lat': -0.22, 'lon': -78.51}
+    return {'canton': 'PICHINCHA / GENERAL', 'provincia': 'PICHINCHA', 'region': 'Sierra', 'lat': -0.22, 'lon': -78.51}
+
 
 @st.cache_data(show_spinner=False)
 def procesar_archivos(df_transferencias, df_detalle):
