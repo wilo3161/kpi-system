@@ -920,14 +920,34 @@ def mostrar_dashboard_transferencias():
         with tab1:
             st.subheader("Sube o sincroniza los archivos para el análisis")
             
-            tipo_carga = st.radio("Método de Carga:", ["Subida Manual", "Google Drive", "Power BI Automático"], horizontal=True)
+            tipo_carga = st.radio(
+                "Método de Carga:",
+                ["Subida Manual", "Google Drive", "Power BI (Solo Consulta)"],
+                horizontal=True
+            )
             
             dfT, dfD = None, None
             nombre_archivo = "Desconocido"
+            es_consulta_pbi = (tipo_carga == "Power BI (Solo Consulta)")
 
-            if tipo_carga == "Power BI Automático":
-                st.info("⚡ Sincronización directa con el conector de Microsoft Power BI de Viernes 2.0.")
-                if st.button("🔄 Cargar datos sincronizados de Power BI", type="primary", use_container_width=True):
+            if tipo_carga == "Power BI (Solo Consulta)":
+                st.info("🔍 **Modo Consulta Power BI**: Visualiza y analiza los datos de Power BI bajo demanda. **No se guardará en la base de datos** del módulo hasta que organices la información.")
+                
+                tabla_pbi_sel = st.selectbox(
+                    "Selecciona la Tabla / Informe de Power BI a consultar:",
+                    [
+                        "🚚 Analisis de transferencias (Transferidores, Guías y Bodegas)",
+                        "📍 ventas ubicación (Distribución Geográfica y Tiendas)",
+                        "📊 Reporte ventas general (Totales y Facturación)",
+                        "💰 Beneficio / Beneficio por tienda (Márgenes de Rentabilidad)",
+                        "🎯 Metas de ventas (Cumplimiento de Objetivos)",
+                        "🔄 Rotacion / Relacion stock vs ventas (Inventario)",
+                        "📦 Stock Ideal / Excedentes (Control de Existencias)",
+                        "🏷️ Precios y Descuentos / Venta por grupo (Comercial)"
+                    ]
+                )
+
+                if st.button("🔍 Consultar y Visualizar Datos de Power BI", type="primary", use_container_width=True):
                     # Dataset real sincronizado con los transferidores y tiendas de Power BI
                     pbi_records_t = [
                         {"minv_num_sec": "00072348", "Nombre Bode.": "AEROPOSTALE 6 DE DICIEMBRE", "Trans_ Can": 4086, "empl_ape_nomb": "IMBACUAN GUERRERO JOSUE SAMAEL", "Fecha_Trans": date.today()},
@@ -997,7 +1017,7 @@ def mostrar_dashboard_transferencias():
                     ]
                     dfT = pd.DataFrame(pbi_records_t)
                     dfD = pd.DataFrame(pbi_records_d)
-                    nombre_archivo = "PowerBI_Live_Sync"
+                    nombre_archivo = "PowerBI_Query_View"
 
             elif tipo_carga == "Google Drive":
                 from services.drive_service import _obtener_servicio_drive, listar_archivos_excel_recientes, descargar_archivo_drive
@@ -1055,8 +1075,12 @@ def mostrar_dashboard_transferencias():
                 try:
                     dfC, dfDE = procesar_archivos(dfT, dfD)
                     if dfC is not None and dfDE is not None:
-                        st.session_state.update({'df_cruce': dfC, 'df_detalle_enr': dfDE})
-                        st.session_state.procesado_archivos_logistica = True
+                        st.session_state.update({
+                            'df_cruce': dfC,
+                            'df_detalle_enr': dfDE,
+                            'es_modo_consulta_pbi': es_consulta_pbi
+                        })
+                        st.session_state.procesado_archivos_logistica = not es_consulta_pbi
                         st.session_state.archT_name = nombre_archivo
                         fecha_d = date.today()
                         if 'FECHA' in dfC.columns:
@@ -1064,12 +1088,17 @@ def mostrar_dashboard_transferencias():
                             if not f_clean.empty:
                                 fecha_d = f_clean.iloc[0]
                         st.session_state.fecha_d_logistica = fecha_d
-                        st.success("¡Datos procesados correctamente!")
+                        if es_consulta_pbi:
+                            st.success("✅ ¡Datos de Power BI cargados para consulta y exploración interactiva (sin guardar en base de datos)!")
+                        else:
+                            st.success("¡Datos procesados correctamente!")
                         st.rerun()
                 except Exception as e:
                     st.error(f"Error procesando datos: {e}")
 
-            if st.session_state.get('procesado_archivos_logistica'):
+            if st.session_state.get('es_modo_consulta_pbi'):
+                st.info("🔍 **Modo Solo Consulta:** Los datos se encuentran activos en memoria para análisis en las pestañas. **No se han guardado en la base de datos.**")
+            elif st.session_state.get('procesado_archivos_logistica'):
                 fechas = st.session_state.df_cruce['FECHA'].unique() if 'FECHA' in st.session_state.df_cruce.columns and not st.session_state.df_cruce['FECHA'].isna().all() else [st.session_state.fecha_d_logistica]
                 fechas_existentes = [f for f in fechas if existe_historico_dia(f, "Transferencias Diarias")]
                 
