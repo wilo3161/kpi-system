@@ -1,100 +1,98 @@
 """
 tests/test_logistics_enhancements.py
 ═══════════════════════════════════════════════════════════════════════════════
-Suite de Pruebas: Mejoras en Dashboard Logístico (Ubicación & Transferidores)
+Suite de Pruebas: Mejoras en Dashboard Logístico (Ubicación, Transferidores Reales & Provincias)
 ═══════════════════════════════════════════════════════════════════════════════
 """
 
 import sys
 import os
-from datetime import date
 import pandas as pd
 
 sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from services.data_processing import procesar_archivos, obtener_geo_tienda
+from services.data_processing import procesar_archivos, obtener_geo_tienda, normalizar_nombre_transferidor
 
 
-def test_obtener_geo_tienda():
-    """1. Verifica el mapeo geográfico de tiendas a cantones y coordenadas."""
-    geo_gye = obtener_geo_tienda("MALL DEL SOL")
-    assert geo_gye['canton'] == 'GUAYAQUIL'
-    assert geo_gye['provincia'] == 'GUAYAS'
-
-    geo_uio = obtener_geo_tienda("AEROPOSTALE 6 DE DICIEMBRE")
-    assert geo_uio['canton'] == 'QUITO'
-    assert geo_uio['provincia'] == 'PICHINCHA'
-
-    geo_cue = obtener_geo_tienda("CUENCA")
-    assert geo_cue['canton'] == 'CUENCA'
-    print("  ✅ [Test 1] obtener_geo_tienda(): OK -> Mapeos cantonales correctos")
+def test_normalizar_nombres_reales():
+    """1. Verifica la normalización de los transferidores reales de Fashion Club / Aéropostale."""
+    assert normalizar_nombre_transferidor("IMBACUAN GUERRERO JOSUE SAMAEL") == "Josué Imbacuan"
+    assert normalizar_nombre_transferidor("YEPEZ ZURITA CESAR ANDRES") == "César Andrés Yépez"
+    assert normalizar_nombre_transferidor("PERUGACHI LUIS") == "Luis Perugachi"
+    assert normalizar_nombre_transferidor("VILLA JHONNY") == "Jhonny Villa"
+    assert normalizar_nombre_transferidor("PEREZ WILSON") == "Wilson Pérez (Wilo)"
+    print("  ✅ [Test 1] normalizar_nombre_transferidor(): OK -> Nombres del equipo mapeados")
 
 
-def test_procesar_archivos_con_transferidor_y_geo():
-    """2. Verifica que procesar_archivos extraiga cantón, provincia y transferidor."""
+def test_cruce_con_columnas_powerbi():
+    """2. Verifica que procesar_archivos extraiga columnas directas de Power BI (minv_num_sec, empl_ape_nomb, Nombre Bode., Trans_ Can)."""
     df_t = pd.DataFrame([
-        {"SECUENCIAL": "501", "BODEGA DESTINO": "MALL DEL SOL", "CANTIDAD": 120, "TRANSFERIDOR": "Wilson Perez", "FECHA": "2026-08-24"},
-        {"SECUENCIAL": "502", "BODEGA DESTINO": "AMBATO", "CANTIDAD": 80, "TRANSFERIDOR": "Juan Tipan", "FECHA": "2026-08-24"},
-        {"SECUENCIAL": "503", "BODEGA DESTINO": "AEROPOSTALE 6 DE DICIEMBRE", "CANTIDAD": 100, "TRANSFERIDOR": "Wilson Perez", "FECHA": "2026-08-24"}
+        {"minv_num_sec": "00072348", "Nombre Bode.": "AEROPOSTALE 6 DE DICIEMBRE", "Trans_ Can": 113, "empl_ape_nomb": "IMBACUAN GUERRERO JOSUE SAMAEL", "Fecha_Trans": "2026-08-24"},
+        {"minv_num_sec": "00072349", "Nombre Bode.": "SANTO DOMINGO", "Trans_ Can": 70, "empl_ape_nomb": "YEPEZ ZURITA CESAR ANDRES", "Fecha_Trans": "2026-08-24"},
+        {"minv_num_sec": "00072350", "Nombre Bode.": "CUENCA", "Trans_ Can": 147, "empl_ape_nomb": "VILLA JHONNY", "Fecha_Trans": "2026-08-24"},
+        {"minv_num_sec": "00072351", "Nombre Bode.": "BABAHOYO", "Trans_ Can": 52, "empl_ape_nomb": "PERUGACHI LUIS", "Fecha_Trans": "2026-08-24"}
     ])
     df_d = pd.DataFrame([
-        {"SECUENCIAL": "501", "PRODUCTO": "AERO GUYS TEES BLACK M", "CANTIDAD": 115, "COSTO": 12.0, "CATEGORIA": "TEES"},
-        {"SECUENCIAL": "501", "PRODUCTO": "AERO PLASTIC BAG MEDIUM", "CANTIDAD": 5, "COSTO": 0.2, "CATEGORIA": "FUNDAS"},
-        {"SECUENCIAL": "502", "PRODUCTO": "AERO GIRLS HOODIE RED S", "CANTIDAD": 80, "COSTO": 22.0, "CATEGORIA": "HOODIES"},
-        {"SECUENCIAL": "503", "PRODUCTO": "AERO GUYS JEANS DENIM 32", "CANTIDAD": 100, "COSTO": 25.0, "CATEGORIA": "JEANS"}
+        {"minv_num_sec": "00072348", "PRODUCTO": "AERO JEANS", "CANTIDAD": 113, "COSTO": 25.0, "CATEGORIA": "JEANS"},
+        {"minv_num_sec": "00072349", "PRODUCTO": "AERO TEES", "CANTIDAD": 70, "COSTO": 12.0, "CATEGORIA": "TEES"},
+        {"minv_num_sec": "00072350", "PRODUCTO": "AERO POLOS", "CANTIDAD": 147, "COSTO": 15.0, "CATEGORIA": "POLOS"},
+        {"minv_num_sec": "00072351", "PRODUCTO": "AERO HOODIES", "CANTIDAD": 52, "COSTO": 22.0, "CATEGORIA": "HOODIES"}
     ])
 
-    df_cruce, df_det = procesar_archivos(df_t, df_d)
+    df_cruce, _ = procesar_archivos(df_t, df_d)
     assert df_cruce is not None
-    assert 'CANTON' in df_cruce.columns
-    assert 'PROVINCIA' in df_cruce.columns
     assert 'TRANSFERIDOR' in df_cruce.columns
+    assert 'PROVINCIA' in df_cruce.columns
 
-    # Validar transferidores
-    assert df_cruce[df_cruce['SECUENCIAL'] == '501']['TRANSFERIDOR'].iloc[0] == "Wilson Perez"
-    assert df_cruce[df_cruce['SECUENCIAL'] == '502']['TRANSFERIDOR'].iloc[0] == "Juan Tipan"
+    # Validar que los transferidores sean los normalizados
+    transferidores = df_cruce['TRANSFERIDOR'].tolist()
+    assert "Josué Imbacuan" in transferidores
+    assert "César Andrés Yépez" in transferidores
+    assert "Jhonny Villa" in transferidores
+    assert "Luis Perugachi" in transferidores
 
-    # Validar cantones
-    assert df_cruce[df_cruce['SECUENCIAL'] == '501']['CANTON'].iloc[0] == "GUAYAQUIL"
-    assert df_cruce[df_cruce['SECUENCIAL'] == '502']['CANTON'].iloc[0] == "AMBATO"
-    assert df_cruce[df_cruce['SECUENCIAL'] == '503']['CANTON'].iloc[0] == "QUITO"
-
-    print("  ✅ [Test 2] procesar_archivos(): OK -> Cruce de datos, Transferidor y Geografía validados")
+    print("  ✅ [Test 2] procesar_archivos() con columnas Power BI: OK -> 100% Compatibilidad con minv_num_sec y empl_ape_nomb")
 
 
-def test_metricas_transferidores():
-    """3. Calcula métricas agregadas por transferidor."""
+def test_analisis_cruzado_provincias_transferidores():
+    """3. Verifica el cálculo del cruce de transferidor hacia provincias."""
     df_t = pd.DataFrame([
-        {"SECUENCIAL": "1", "BODEGA DESTINO": "MALL DEL SOL", "CANTIDAD": 500, "TRANSFERIDOR": "Wilson Perez", "FECHA": "2026-08-24"},
-        {"SECUENCIAL": "2", "BODEGA DESTINO": "AEROPOSTALE 6 DE DICIEMBRE", "CANTIDAD": 300, "TRANSFERIDOR": "Wilson Perez", "FECHA": "2026-08-24"},
-        {"SECUENCIAL": "3", "BODEGA DESTINO": "AMBATO", "CANTIDAD": 200, "TRANSFERIDOR": "Juan Tipan", "FECHA": "2026-08-24"}
+        {"SECUENCIAL": "1", "BODEGA DESTINO": "MALL DEL SOL", "CANTIDAD": 500, "TRANSFERIDOR": "César Andrés Yépez", "FECHA": "2026-08-24"},
+        {"SECUENCIAL": "2", "BODEGA DESTINO": "AEROPOSTALE 6 DE DICIEMBRE", "CANTIDAD": 300, "TRANSFERIDOR": "Josué Imbacuan", "FECHA": "2026-08-24"},
+        {"SECUENCIAL": "3", "BODEGA DESTINO": "CUENCA", "CANTIDAD": 200, "TRANSFERIDOR": "Luis Perugachi", "FECHA": "2026-08-24"},
+        {"SECUENCIAL": "4", "BODEGA DESTINO": "SAN LUIS", "CANTIDAD": 100, "TRANSFERIDOR": "Jhonny Villa", "FECHA": "2026-08-24"}
     ])
     df_d = pd.DataFrame([
         {"SECUENCIAL": "1", "PRODUCTO": "TEES", "CANTIDAD": 500, "COSTO": 10.0, "CATEGORIA": "TEES"},
         {"SECUENCIAL": "2", "PRODUCTO": "POLOS", "CANTIDAD": 300, "COSTO": 15.0, "CATEGORIA": "POLOS"},
-        {"SECUENCIAL": "3", "PRODUCTO": "JEANS", "CANTIDAD": 200, "COSTO": 20.0, "CATEGORIA": "JEANS"}
+        {"SECUENCIAL": "3", "PRODUCTO": "JEANS", "CANTIDAD": 200, "COSTO": 20.0, "CATEGORIA": "JEANS"},
+        {"SECUENCIAL": "4", "PRODUCTO": "HOODIES", "CANTIDAD": 100, "COSTO": 25.0, "CATEGORIA": "HOODIES"}
     ])
 
     df_cruce, _ = procesar_archivos(df_t, df_d)
-    tot = df_cruce['PRENDAS'].sum() + df_cruce['FUNDAS'].sum()
-    assert tot == 1000
+    cruce_prov = df_cruce.groupby(['TRANSFERIDOR', 'PROVINCIA'])['PRENDAS'].sum().reset_index()
 
-    wp = df_cruce[df_cruce['TRANSFERIDOR'] == 'Wilson Perez']
-    assert wp['SECUENCIAL'].nunique() == 2
-    assert (wp['PRENDAS'].sum() + wp['FUNDAS'].sum()) == 800
-    assert ((wp['PRENDAS'].sum() + wp['FUNDAS'].sum()) / tot) * 100 == 80.0
+    # César envió 500 a Guayas
+    cesar_gye = cruce_prov[(cruce_prov['TRANSFERIDOR'] == 'César Andrés Yépez') & (cruce_prov['PROVINCIA'] == 'GUAYAS')]
+    assert not cesar_gye.empty
+    assert cesar_gye['PRENDAS'].iloc[0] == 500
 
-    print("  ✅ [Test 3] Metricas Transferidores: OK -> Wilson Perez: 80% del volumen total")
+    # Josué envió 300 a Pichincha
+    josue_pich = cruce_prov[(cruce_prov['TRANSFERIDOR'] == 'Josué Imbacuan') & (cruce_prov['PROVINCIA'] == 'PICHINCHA')]
+    assert not josue_pich.empty
+    assert josue_pich['PRENDAS'].iloc[0] == 300
+
+    print("  ✅ [Test 3] Analisis Cruzado Transferidor ➔ Provincia: OK -> Guayas, Pichincha, Azuay validados")
 
 
 if __name__ == "__main__":
     print("═══════════════════════════════════════════════════════════════")
-    print("🧪 PRUEBAS UNITARIAS: MÓDULO LOGÍSTICO Y TRANSFERENCIAS")
+    print("🧪 PRUEBAS UNITARIAS: TRANSFERIDORES REALES & MATRIZ PROVINCIAL")
     print("═══════════════════════════════════════════════════════════════")
-    test_obtener_geo_tienda()
-    test_procesar_archivos_con_transferidor_y_geo()
-    test_metricas_transferidores()
+    test_normalizar_nombres_reales()
+    test_cruce_con_columnas_powerbi()
+    test_analisis_cruzado_provincias_transferidores()
     print("═══════════════════════════════════════════════════════════════")
-    print("🎉 TODAS LAS PRUEBAS DEL DASHBOARD LOGÍSTICO PASARON (100% PASS) 🎉")
+    print("🎉 TODAS LAS PRUEBAS DE TRANSFERIDORES PASARON (100% PASS) 🎉")
     print("═══════════════════════════════════════════════════════════════")

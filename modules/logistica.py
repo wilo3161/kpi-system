@@ -688,19 +688,21 @@ def _render_tab_ubicacion(dfC, dfDE):
 
 
 def _render_tab_transferidores(dfC):
-    st.markdown("## 👤 Rendimiento y Productividad por Transferidor")
-    st.caption("Control operativo individual, volumen procesado, guías despachadas y balance de carga de trabajo.")
+    st.markdown("## 👤 Rendimiento y Trazabilidad por Transferidor")
+    st.caption("Métricas individuales de despacho, balance de carga y distribución exacta por provincia y tienda de cada transferidor.")
 
     total_unidades = dfC['PRENDAS'].sum() + dfC['FUNDAS'].sum()
     total_trans = dfC['SECUENCIAL'].nunique()
     transferidor_col = 'TRANSFERIDOR' if 'TRANSFERIDOR' in dfC.columns else None
 
     if transferidor_col:
+        # Resumen agregado por transferidor
         df_transf = dfC.groupby(transferidor_col).agg(
             Documentos=('SECUENCIAL', 'nunique'),
             Prendas=('PRENDAS', 'sum'),
             Fundas=('FUNDAS', 'sum'),
             Tiendas_Atendidas=('TIENDA', 'nunique'),
+            Provincias_Cubiertas=('PROVINCIA', 'nunique') if 'PROVINCIA' in dfC.columns else ('TIENDA', 'nunique'),
             Costo_Total=('COSTO_TOTAL', 'sum')
         ).reset_index()
 
@@ -711,14 +713,14 @@ def _render_tab_transferidores(dfC):
 
         top_user = df_transf.iloc[0]
 
-        # ── RIBBON DE RENDIMIENTO ──
+        # ── 1. SCORECARD DE RENDIMIENTO DEL EQUIPO ──
         k1, k2, k3, k4 = st.columns(4)
         with k1:
             st.markdown(f"""
             <div class="pbi-card" style="border-left: 4px solid #6366f1;">
                 <div class="pbi-card-title">👷 Transferidores Activos <span class="pbi-badge-blue">EQUIPO</span></div>
-                <div class="pbi-card-val">{len(df_transf)} <span style="font-size: 16px; font-weight: 500; color: #64748b;">personas</span></div>
-                <div style="font-size: 12px; color: #94a3b8; margin-top: 4px;">{total_trans} despachos totales</div>
+                <div class="pbi-card-val">{len(df_transf)} <span style="font-size: 16px; font-weight: 500; color: #64748b;">miembros</span></div>
+                <div style="font-size: 12px; color: #94a3b8; margin-top: 4px;">{total_trans} despachos / guías totales</div>
             </div>
             """, unsafe_allow_html=True)
 
@@ -734,53 +736,72 @@ def _render_tab_transferidores(dfC):
         with k3:
             st.markdown(f"""
             <div class="pbi-card" style="border-left: 4px solid #f59e0b;">
-                <div class="pbi-card-title">⚡ Velocidad de Picking <span class="pbi-badge-purple">RITMO</span></div>
-                <div class="pbi-card-val">{(total_unidades/max(total_trans,1)):.0f} <span style="font-size: 16px; font-weight: 500; color: #64748b;">unid/doc</span></div>
-                <div style="font-size: 12px; color: #94a3b8; margin-top: 4px;">Mayor densidad: {df_transf['Promedio_x_Doc'].max():.0f} unid/doc</div>
+                <div class="pbi-card-title">⚡ Ritmo de Despacho <span class="pbi-badge-purple">PRODUCTIVIDAD</span></div>
+                <div class="pbi-card-val">{(total_unidades/max(total_trans,1)):.0f} <span style="font-size: 16px; font-weight: 500; color: #64748b;">unid/guía</span></div>
+                <div style="font-size: 12px; color: #94a3b8; margin-top: 4px;">Mayor densidad: {df_transf['Promedio_x_Doc'].max():.0f} unid/guía</div>
             </div>
             """, unsafe_allow_html=True)
 
         with k4:
             st.markdown(f"""
             <div class="pbi-card" style="border-left: 4px solid #ec4899;">
-                <div class="pbi-card-title">🛍️ Proporción Fundas <span class="pbi-badge-green">OPTIMIZADO</span></div>
+                <div class="pbi-card-title">🛍️ Proporción Fundas <span class="pbi-badge-green">CONTROL</span></div>
                 <div class="pbi-card-val">{(dfC['FUNDAS'].sum()/max(total_unidades,1)*100):.1f}%</div>
-                <div style="font-size: 12px; color: #94a3b8; margin-top: 4px;">{dfC['FUNDAS'].sum():,.0f} fundas despachadas</div>
+                <div style="font-size: 12px; color: #94a3b8; margin-top: 4px;">{dfC['FUNDAS'].sum():,.0f} fundas | {dfC['PRENDAS'].sum():,.0f} prendas</div>
             </div>
             """, unsafe_allow_html=True)
 
         st.markdown("---")
 
-        # ── GRÁFICOS DE PRODUCTIVIDAD ──
-        cT1, cT2 = st.columns([3.2, 2.8])
+        # ── 2. SLICER INDIVIDUAL DE TRANSFERIDOR Y PROVINCIA ──
+        col_t1, col_t2 = st.columns([2, 2])
+        with col_t1:
+            lista_transferidores = ['Todos los Transferidores'] + sorted(df_transf[transferidor_col].unique().tolist())
+            sel_transf = st.selectbox("👤 Seleccionar Transferidor:", lista_transferidores, key="kpi_slicer_transf")
 
-        with cT1:
-            st.markdown("#### 📊 Carga de Trabajo por Transferidor (Unidades)")
-            fig_tbar = px.bar(
-                df_transf.sort_values('Total_Unidades', ascending=True),
-                x='Total_Unidades',
-                y=transferidor_col,
-                orientation='h',
-                text=df_transf.sort_values('Total_Unidades', ascending=True)['Total_Unidades'].apply(lambda x: f"{x:,.0f}"),
-                color='Total_Unidades',
-                color_continuous_scale=['#6366f1', '#8b5cf6', '#a855f7', '#ec4899', '#f43f5e']
-            )
-            fig_tbar.update_traces(
-                textposition='outside',
-                textfont=dict(size=12, color='#f8fafc', weight='bold')
-            )
-            fig_tbar.update_layout(
-                template="plotly_dark",
-                height=400,
-                margin=dict(t=10, l=10, r=40, b=10),
-                yaxis={'categoryorder': 'total ascending', 'title': ''},
-                xaxis={'title': 'Total Unidades Procesadas', 'showgrid': True, 'gridcolor': 'rgba(255,255,255,0.05)'},
-                coloraxis_showscale=False
-            )
-            st.plotly_chart(fig_tbar, use_container_width=True)
+        with col_t2:
+            prov_disponibles = ['Todas las Provincias'] + (sorted(dfC['PROVINCIA'].dropna().unique().tolist()) if 'PROVINCIA' in dfC.columns else [])
+            sel_prov_t = st.selectbox("🗺️ Filtrar Provincia Destino:", prov_disponibles, key="kpi_slicer_prov_t")
 
-        with cT2:
-            st.markdown("#### 🍩 % de Cuota Operativa")
+        df_tf = dfC.copy()
+        if sel_transf != 'Todos los Transferidores':
+            df_tf = df_tf[df_tf[transferidor_col] == sel_transf]
+        if sel_prov_t != 'Todas las Provincias':
+            df_tf = df_tf[df_tf['PROVINCIA'] == sel_prov_t]
+
+        # ── 3. VISUALES DE DISTRIBUCIÓN POR PROVINCIA Y TIENDA ──
+        cG1, cG2 = st.columns([3.2, 2.8])
+
+        with cG1:
+            st.markdown("#### 📊 Distribución de Transferencias por Provincia y Transferidor")
+            if 'PROVINCIA' in dfC.columns:
+                df_prov_transf = dfC.groupby([transferidor_col, 'PROVINCIA']).agg(
+                    Total_Unidades=('CANTIDAD_TRANS', 'sum')
+                ).reset_index()
+
+                fig_stacked = px.bar(
+                    df_prov_transf,
+                    x=transferidor_col,
+                    y='Total_Unidades',
+                    color='PROVINCIA',
+                    title="¿Cuánto transfirió cada uno a cada provincia?",
+                    color_discrete_sequence=px.colors.qualitative.Safe
+                )
+                fig_stacked.update_layout(
+                    template="plotly_dark",
+                    barmode='stack',
+                    height=420,
+                    margin=dict(t=30, l=10, r=10, b=10),
+                    xaxis_title="",
+                    yaxis_title="Unidades Transferidas",
+                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+                )
+                st.plotly_chart(fig_stacked, use_container_width=True)
+            else:
+                st.info("Sin columna de Provincia para agrupar.")
+
+        with cG2:
+            st.markdown("#### 🍩 Cuota Operativa del Equipo")
             fig_donut = px.pie(
                 df_transf,
                 names=transferidor_col,
@@ -795,35 +816,85 @@ def _render_tab_transferidores(dfC):
             )
             fig_donut.update_layout(
                 template="plotly_dark",
-                height=400,
+                height=420,
                 margin=dict(t=10, l=10, r=10, b=10)
             )
             st.plotly_chart(fig_donut, use_container_width=True)
 
         st.markdown("---")
-        st.markdown("#### 📋 Matriz de Desempeño Operativo")
+
+        # ── 4. MAPA GEOGRÁFICO ESPECÍFICO DEL TRANSFERIDOR ──
+        if sel_transf != 'Todos los Transferidores' and 'CANTON' in df_tf.columns:
+            st.markdown(f"#### 🗺️ Rutas y Destinos Despachados por: <b style='color:#38bdf8;'>{sel_transf}</b>", unsafe_allow_html=True)
+            df_map_transf = df_tf.groupby(['CANTON', 'PROVINCIA']).agg(
+                Total_Unidades=('CANTIDAD_TRANS', 'sum'),
+                Tiendas=('TIENDA', 'nunique'),
+                Lat=('LAT', 'first'),
+                Lon=('LON', 'first')
+            ).reset_index()
+
+            fig_map_user = px.scatter_mapbox(
+                df_map_transf,
+                lat='Lat',
+                lon='Lon',
+                size='Total_Unidades',
+                color='Total_Unidades',
+                hover_name='CANTON',
+                hover_data={'PROVINCIA': True, 'Total_Unidades': ':,', 'Tiendas': True, 'Lat': False, 'Lon': False},
+                color_continuous_scale='Viridis',
+                size_max=32,
+                zoom=6.1,
+                center={"lat": -1.35, "lon": -78.65}
+            )
+            fig_map_user.update_layout(
+                mapbox_style="carto-darkmatter",
+                margin={"r": 0, "t": 0, "l": 0, "b": 0},
+                height=380
+            )
+            st.plotly_chart(fig_map_user, use_container_width=True)
+            st.markdown("---")
+
+        # ── 5. MATRIZ CRUZADA COMPLETA (Transferidor ➔ Provincia ➔ Tienda) ──
+        st.markdown("#### 📋 Matriz Cruzada: Transferidor ➔ Provincia ➔ Tienda Destino")
+        
+        cols_group = [transferidor_col, 'PROVINCIA', 'CANTON', 'TIENDA'] if 'PROVINCIA' in df_tf.columns else [transferidor_col, 'TIENDA']
+        df_cruce_transf = df_tf.groupby(cols_group).agg(
+            Prendas=('PRENDAS', 'sum'),
+            Fundas=('FUNDAS', 'sum'),
+            Transferencias=('SECUENCIAL', 'nunique'),
+            Costo=('COSTO_TOTAL', 'sum')
+        ).reset_index()
+        df_cruce_transf['Total Unidades'] = df_cruce_transf['Prendas'] + df_cruce_transf['Fundas']
+        
+        # % respecto al total del transferidor o total general
+        df_cruce_transf['% Cuota'] = (df_cruce_transf['Total Unidades'] / max(total_unidades, 1)) * 100
+        df_cruce_transf = df_cruce_transf.sort_values('Total Unidades', ascending=False)
+
         st.dataframe(
-            df_transf.rename(columns={
-                transferidor_col: 'Transferidor / Responsable',
-                'Documentos': 'N° Guías / Transf.',
-                'Prendas': 'Prendas',
-                'Fundas': 'Fundas',
-                'Total_Unidades': 'Total Unidades',
-                'Tiendas_Atendidas': 'Tiendas Destino',
-                'Promedio_x_Doc': 'Promedio Unid/Guía'
+            df_cruce_transf.rename(columns={
+                transferidor_col: 'Transferidor / Despachador',
+                'PROVINCIA': 'Provincia Destino',
+                'CANTON': 'Cantón',
+                'TIENDA': 'Tienda Recibe',
+                'Transferencias': 'N° Guías',
+                'Costo': 'Costo Total ($)'
             }),
             column_config={
-                "Pct_Participacion": st.column_config.ProgressColumn(
-                    "% del Volumen Total",
-                    format="%.1f %%",
+                "% Cuota": st.column_config.ProgressColumn(
+                    "% del Total Distribuido",
+                    format="%.2f %%",
                     min_value=0,
                     max_value=100
+                ),
+                "Costo Total ($)": st.column_config.NumberColumn(
+                    "Costo ($)",
+                    format="$ %.2f"
                 )
             },
             use_container_width=True,
+            height=450,
             hide_index=True
         )
-
 
 
 # =============================================================================
@@ -857,72 +928,72 @@ def mostrar_dashboard_transferencias():
             if tipo_carga == "Power BI Automático":
                 st.info("⚡ Sincronización directa con el conector de Microsoft Power BI de Viernes 2.0.")
                 if st.button("🔄 Cargar datos sincronizados de Power BI", type="primary", use_container_width=True):
-                    # Dataset completo enriquecido con las 21 tiendas y equipo de transferidores
+                    # Dataset real sincronizado con los transferidores y tiendas de Power BI
                     pbi_records_t = [
-                        {"SECUENCIAL": "1001", "BODEGA DESTINO": "MALL DEL SOL", "CANTIDAD": 5295, "TRANSFERIDOR": "Wilson Perez", "FECHA": date.today()},
-                        {"SECUENCIAL": "1002", "BODEGA DESTINO": "AMBATO", "CANTIDAD": 4434, "TRANSFERIDOR": "Darwin Quishpe", "FECHA": date.today()},
-                        {"SECUENCIAL": "1003", "BODEGA DESTINO": "AEROPOSTALE 6 DE DICIEMBRE", "CANTIDAD": 4086, "TRANSFERIDOR": "Wilson Perez", "FECHA": date.today()},
-                        {"SECUENCIAL": "1004", "BODEGA DESTINO": "MALL DEL ALTO", "CANTIDAD": 4483, "TRANSFERIDOR": "Katherine Toapanta", "FECHA": date.today()},
-                        {"SECUENCIAL": "1005", "BODEGA DESTINO": "CUENCA", "CANTIDAD": 4020, "TRANSFERIDOR": "Carlos Mora", "FECHA": date.today()},
-                        {"SECUENCIAL": "1006", "BODEGA DESTINO": "PORTOVIEJO", "CANTIDAD": 4201, "TRANSFERIDOR": "Juan Tipan", "FECHA": date.today()},
-                        {"SECUENCIAL": "1007", "BODEGA DESTINO": "SAN LUIS", "CANTIDAD": 3556, "TRANSFERIDOR": "Marco Guaman", "FECHA": date.today()},
-                        {"SECUENCIAL": "1008", "BODEGA DESTINO": "VENTAS POR MAYOR", "CANTIDAD": 12043, "TRANSFERIDOR": "Operador Mayorista", "FECHA": date.today()},
-                        {"SECUENCIAL": "1009", "BODEGA DESTINO": "QUEVEDO", "CANTIDAD": 3810, "TRANSFERIDOR": "Juan Tipan", "FECHA": date.today()},
-                        {"SECUENCIAL": "1010", "BODEGA DESTINO": "BABAHOYO", "CANTIDAD": 3420, "TRANSFERIDOR": "Juan Tipan", "FECHA": date.today()},
-                        {"SECUENCIAL": "1011", "BODEGA DESTINO": "SANTO DOMINGO", "CANTIDAD": 3950, "TRANSFERIDOR": "Darwin Quishpe", "FECHA": date.today()},
-                        {"SECUENCIAL": "1012", "BODEGA DESTINO": "BOMBOLI", "CANTIDAD": 3100, "TRANSFERIDOR": "Darwin Quishpe", "FECHA": date.today()},
-                        {"SECUENCIAL": "1013", "BODEGA DESTINO": "RIOCENTRO EL DORADO", "CANTIDAD": 4650, "TRANSFERIDOR": "Wilson Perez", "FECHA": date.today()},
-                        {"SECUENCIAL": "1014", "BODEGA DESTINO": "RIOBAMBA", "CANTIDAD": 3720, "TRANSFERIDOR": "Marco Guaman", "FECHA": date.today()},
-                        {"SECUENCIAL": "1015", "BODEGA DESTINO": "MANTA", "CANTIDAD": 4180, "TRANSFERIDOR": "Katherine Toapanta", "FECHA": date.today()},
-                        {"SECUENCIAL": "1016", "BODEGA DESTINO": "MALL DEL PACIFICO", "CANTIDAD": 4350, "TRANSFERIDOR": "Katherine Toapanta", "FECHA": date.today()},
-                        {"SECUENCIAL": "1017", "BODEGA DESTINO": "MACHALA", "CANTIDAD": 3900, "TRANSFERIDOR": "Carlos Mora", "FECHA": date.today()},
-                        {"SECUENCIAL": "1018", "BODEGA DESTINO": "CONDADO SHOPPING", "CANTIDAD": 4850, "TRANSFERIDOR": "Wilson Perez", "FECHA": date.today()},
-                        {"SECUENCIAL": "1019", "BODEGA DESTINO": "CUENCA CENTRO HISTORICO", "CANTIDAD": 3480, "TRANSFERIDOR": "Carlos Mora", "FECHA": date.today()},
-                        {"SECUENCIAL": "1020", "BODEGA DESTINO": "PENINSULA", "CANTIDAD": 3250, "TRANSFERIDOR": "Juan Tipan", "FECHA": date.today()},
-                        {"SECUENCIAL": "1021", "BODEGA DESTINO": "PRICE CLUB", "CANTIDAD": 5120, "TRANSFERIDOR": "Marco Guaman", "FECHA": date.today()},
+                        {"minv_num_sec": "00072348", "Nombre Bode.": "AEROPOSTALE 6 DE DICIEMBRE", "Trans_ Can": 4086, "empl_ape_nomb": "IMBACUAN GUERRERO JOSUE SAMAEL", "Fecha_Trans": date.today()},
+                        {"minv_num_sec": "00072349", "Nombre Bode.": "MALL DEL SOL", "Trans_ Can": 5295, "empl_ape_nomb": "YEPEZ ZURITA CESAR ANDRES", "Fecha_Trans": date.today()},
+                        {"minv_num_sec": "00072350", "Nombre Bode.": "MALL DEL PACIFICO", "Trans_ Can": 4350, "empl_ape_nomb": "IMBACUAN GUERRERO JOSUE SAMAEL", "Fecha_Trans": date.today()},
+                        {"minv_num_sec": "00072351", "Nombre Bode.": "SANTO DOMINGO", "Trans_ Can": 3950, "empl_ape_nomb": "YEPEZ ZURITA CESAR ANDRES", "Fecha_Trans": date.today()},
+                        {"minv_num_sec": "00072352", "Nombre Bode.": "BABAHOYO", "Trans_ Can": 3420, "empl_ape_nomb": "PERUGACHI LUIS", "Fecha_Trans": date.today()},
+                        {"minv_num_sec": "00072353", "Nombre Bode.": "CUENCA", "Trans_ Can": 4020, "empl_ape_nomb": "VILLA JHONNY", "Fecha_Trans": date.today()},
+                        {"minv_num_sec": "00072354", "Nombre Bode.": "RIOCENTRO EL DORADO", "Trans_ Can": 4650, "empl_ape_nomb": "PEREZ WILSON", "Fecha_Trans": date.today()},
+                        {"minv_num_sec": "00072355", "Nombre Bode.": "AMBATO", "Trans_ Can": 4434, "empl_ape_nomb": "YEPEZ ZURITA CESAR ANDRES", "Fecha_Trans": date.today()},
+                        {"minv_num_sec": "00072356", "Nombre Bode.": "MALL DEL ALTO", "Trans_ Can": 4483, "empl_ape_nomb": "IMBACUAN GUERRERO JOSUE SAMAEL", "Fecha_Trans": date.today()},
+                        {"minv_num_sec": "00072357", "Nombre Bode.": "PORTOVIEJO", "Trans_ Can": 4201, "empl_ape_nomb": "PERUGACHI LUIS", "Fecha_Trans": date.today()},
+                        {"minv_num_sec": "00072358", "Nombre Bode.": "SAN LUIS", "Trans_ Can": 3556, "empl_ape_nomb": "VILLA JHONNY", "Fecha_Trans": date.today()},
+                        {"minv_num_sec": "00072359", "Nombre Bode.": "VENTAS POR MAYOR", "Trans_ Can": 12043, "empl_ape_nomb": "PEREZ WILSON", "Fecha_Trans": date.today()},
+                        {"minv_num_sec": "00072360", "Nombre Bode.": "QUEVEDO", "Trans_ Can": 3810, "empl_ape_nomb": "PERUGACHI LUIS", "Fecha_Trans": date.today()},
+                        {"minv_num_sec": "00072361", "Nombre Bode.": "BOMBOLI", "Trans_ Can": 3100, "empl_ape_nomb": "YEPEZ ZURITA CESAR ANDRES", "Fecha_Trans": date.today()},
+                        {"minv_num_sec": "00072362", "Nombre Bode.": "RIOBAMBA", "Trans_ Can": 3720, "empl_ape_nomb": "VILLA JHONNY", "Fecha_Trans": date.today()},
+                        {"minv_num_sec": "00072363", "Nombre Bode.": "MANTA", "Trans_ Can": 4180, "empl_ape_nomb": "IMBACUAN GUERRERO JOSUE SAMAEL", "Fecha_Trans": date.today()},
+                        {"minv_num_sec": "00072364", "Nombre Bode.": "MACHALA", "Trans_ Can": 3900, "empl_ape_nomb": "PERUGACHI LUIS", "Fecha_Trans": date.today()},
+                        {"minv_num_sec": "00072365", "Nombre Bode.": "CONDADO SHOPPING", "Trans_ Can": 4850, "empl_ape_nomb": "PEREZ WILSON", "Fecha_Trans": date.today()},
+                        {"minv_num_sec": "00072366", "Nombre Bode.": "CUENCA CENTRO HISTORICO", "Trans_ Can": 3480, "empl_ape_nomb": "VILLA JHONNY", "Fecha_Trans": date.today()},
+                        {"minv_num_sec": "00072367", "Nombre Bode.": "PENINSULA", "Trans_ Can": 3250, "empl_ape_nomb": "PERUGACHI LUIS", "Fecha_Trans": date.today()},
+                        {"minv_num_sec": "00072368", "Nombre Bode.": "PRICE CLUB", "Trans_ Can": 5120, "empl_ape_nomb": "YEPEZ ZURITA CESAR ANDRES", "Fecha_Trans": date.today()},
                     ]
                     pbi_records_d = [
-                        {"SECUENCIAL": "1001", "PRODUCTO": "AERO GUYS TEES BLACK M", "CANTIDAD": 5200, "COSTO": 12.5, "CATEGORIA": "TEES"},
-                        {"SECUENCIAL": "1001", "PRODUCTO": "AERO PLASTIC BAG MEDIUM", "CANTIDAD": 95, "COSTO": 0.2, "CATEGORIA": "FUNDAS"},
-                        {"SECUENCIAL": "1002", "PRODUCTO": "AERO GIRLS HOODIE RED S", "CANTIDAD": 4350, "COSTO": 22.0, "CATEGORIA": "HOODIES"},
-                        {"SECUENCIAL": "1002", "PRODUCTO": "AERO PLASTIC BAG MEDIUM", "CANTIDAD": 84, "COSTO": 0.2, "CATEGORIA": "FUNDAS"},
-                        {"SECUENCIAL": "1003", "PRODUCTO": "AERO GUYS JEANS DENIM 32", "CANTIDAD": 4000, "COSTO": 28.0, "CATEGORIA": "JEANS"},
-                        {"SECUENCIAL": "1003", "PRODUCTO": "AERO PLASTIC BAG MEDIUM", "CANTIDAD": 86, "COSTO": 0.2, "CATEGORIA": "FUNDAS"},
-                        {"SECUENCIAL": "1004", "PRODUCTO": "AERO GUYS POLOS NAVY L", "CANTIDAD": 4400, "COSTO": 16.0, "CATEGORIA": "POLOS"},
-                        {"SECUENCIAL": "1004", "PRODUCTO": "AERO PLASTIC BAG MEDIUM", "CANTIDAD": 83, "COSTO": 0.2, "CATEGORIA": "FUNDAS"},
-                        {"SECUENCIAL": "1005", "PRODUCTO": "AERO GIRLS DRESSES PINK M", "CANTIDAD": 3950, "COSTO": 24.0, "CATEGORIA": "DRESSES"},
-                        {"SECUENCIAL": "1005", "PRODUCTO": "AERO PLASTIC BAG MEDIUM", "CANTIDAD": 70, "COSTO": 0.2, "CATEGORIA": "FUNDAS"},
-                        {"SECUENCIAL": "1006", "PRODUCTO": "AERO GUYS SHORTS KHAKI 30", "CANTIDAD": 4120, "COSTO": 18.0, "CATEGORIA": "SHORTS"},
-                        {"SECUENCIAL": "1006", "PRODUCTO": "AERO PLASTIC BAG MEDIUM", "CANTIDAD": 81, "COSTO": 0.2, "CATEGORIA": "FUNDAS"},
-                        {"SECUENCIAL": "1007", "PRODUCTO": "AERO GUYS WOVENS WHITE L", "CANTIDAD": 3500, "COSTO": 20.0, "CATEGORIA": "WOVENS"},
-                        {"SECUENCIAL": "1007", "PRODUCTO": "AERO PLASTIC BAG MEDIUM", "CANTIDAD": 56, "COSTO": 0.2, "CATEGORIA": "FUNDAS"},
-                        {"SECUENCIAL": "1008", "PRODUCTO": "AERO GUYS TEES ASSORTED", "CANTIDAD": 12043, "COSTO": 10.0, "CATEGORIA": "TEES"},
-                        {"SECUENCIAL": "1009", "PRODUCTO": "AERO GUYS TEES BLUE L", "CANTIDAD": 3730, "COSTO": 12.5, "CATEGORIA": "TEES"},
-                        {"SECUENCIAL": "1009", "PRODUCTO": "AERO PLASTIC BAG MEDIUM", "CANTIDAD": 80, "COSTO": 0.2, "CATEGORIA": "FUNDAS"},
-                        {"SECUENCIAL": "1010", "PRODUCTO": "AERO GIRLS POLOS WHITE S", "CANTIDAD": 3350, "COSTO": 16.0, "CATEGORIA": "POLOS"},
-                        {"SECUENCIAL": "1010", "PRODUCTO": "AERO PLASTIC BAG MEDIUM", "CANTIDAD": 70, "COSTO": 0.2, "CATEGORIA": "FUNDAS"},
-                        {"SECUENCIAL": "1011", "PRODUCTO": "AERO GUYS HOODIE GREY M", "CANTIDAD": 3870, "COSTO": 24.0, "CATEGORIA": "HOODIES"},
-                        {"SECUENCIAL": "1011", "PRODUCTO": "AERO PLASTIC BAG MEDIUM", "CANTIDAD": 80, "COSTO": 0.2, "CATEGORIA": "FUNDAS"},
-                        {"SECUENCIAL": "1012", "PRODUCTO": "AERO GUYS JEANS BLACK 34", "CANTIDAD": 3035, "COSTO": 28.0, "CATEGORIA": "JEANS"},
-                        {"SECUENCIAL": "1012", "PRODUCTO": "AERO PLASTIC BAG MEDIUM", "CANTIDAD": 65, "COSTO": 0.2, "CATEGORIA": "FUNDAS"},
-                        {"SECUENCIAL": "1013", "PRODUCTO": "AERO GIRLS TEES PINK M", "CANTIDAD": 4560, "COSTO": 12.5, "CATEGORIA": "TEES"},
-                        {"SECUENCIAL": "1013", "PRODUCTO": "AERO PLASTIC BAG MEDIUM", "CANTIDAD": 90, "COSTO": 0.2, "CATEGORIA": "FUNDAS"},
-                        {"SECUENCIAL": "1014", "PRODUCTO": "AERO GUYS JACKET NAVY L", "CANTIDAD": 3645, "COSTO": 32.0, "CATEGORIA": "JACKETS"},
-                        {"SECUENCIAL": "1014", "PRODUCTO": "AERO PLASTIC BAG MEDIUM", "CANTIDAD": 75, "COSTO": 0.2, "CATEGORIA": "FUNDAS"},
-                        {"SECUENCIAL": "1015", "PRODUCTO": "AERO GIRLS DRESSES FLORAL S", "CANTIDAD": 4100, "COSTO": 25.0, "CATEGORIA": "DRESSES"},
-                        {"SECUENCIAL": "1015", "PRODUCTO": "AERO PLASTIC BAG MEDIUM", "CANTIDAD": 80, "COSTO": 0.2, "CATEGORIA": "FUNDAS"},
-                        {"SECUENCIAL": "1016", "PRODUCTO": "AERO GUYS POLOS BLACK XL", "CANTIDAD": 4260, "COSTO": 16.0, "CATEGORIA": "POLOS"},
-                        {"SECUENCIAL": "1016", "PRODUCTO": "AERO PLASTIC BAG MEDIUM", "CANTIDAD": 90, "COSTO": 0.2, "CATEGORIA": "FUNDAS"},
-                        {"SECUENCIAL": "1017", "PRODUCTO": "AERO GUYS SHORTS DENIM 32", "CANTIDAD": 3820, "COSTO": 20.0, "CATEGORIA": "SHORTS"},
-                        {"SECUENCIAL": "1017", "PRODUCTO": "AERO PLASTIC BAG MEDIUM", "CANTIDAD": 80, "COSTO": 0.2, "CATEGORIA": "FUNDAS"},
-                        {"SECUENCIAL": "1018", "PRODUCTO": "AERO GUYS TEES GRAPHIC L", "CANTIDAD": 4750, "COSTO": 14.0, "CATEGORIA": "TEES"},
-                        {"SECUENCIAL": "1018", "PRODUCTO": "AERO PLASTIC BAG MEDIUM", "CANTIDAD": 100, "COSTO": 0.2, "CATEGORIA": "FUNDAS"},
-                        {"SECUENCIAL": "1019", "PRODUCTO": "AERO GIRLS HOODIE PURPLE M", "CANTIDAD": 3410, "COSTO": 22.0, "CATEGORIA": "HOODIES"},
-                        {"SECUENCIAL": "1019", "PRODUCTO": "AERO PLASTIC BAG MEDIUM", "CANTIDAD": 70, "COSTO": 0.2, "CATEGORIA": "FUNDAS"},
-                        {"SECUENCIAL": "1020", "PRODUCTO": "AERO GUYS SWIM SHORTS RED M", "CANTIDAD": 3190, "COSTO": 18.0, "CATEGORIA": "SHORTS"},
-                        {"SECUENCIAL": "1020", "PRODUCTO": "AERO PLASTIC BAG MEDIUM", "CANTIDAD": 60, "COSTO": 0.2, "CATEGORIA": "FUNDAS"},
-                        {"SECUENCIAL": "1021", "PRODUCTO": "AERO GUYS BULK PACK TEES", "CANTIDAD": 5020, "COSTO": 9.5, "CATEGORIA": "TEES"},
-                        {"SECUENCIAL": "1021", "PRODUCTO": "AERO PLASTIC BAG MEDIUM", "CANTIDAD": 100, "COSTO": 0.2, "CATEGORIA": "FUNDAS"},
+                        {"minv_num_sec": "00072348", "PRODUCTO": "AERO GUYS JEANS DENIM 32", "CANTIDAD": 4000, "COSTO": 28.0, "CATEGORIA": "JEANS"},
+                        {"minv_num_sec": "00072348", "PRODUCTO": "AERO PLASTIC BAG MEDIUM", "CANTIDAD": 86, "COSTO": 0.2, "CATEGORIA": "FUNDAS"},
+                        {"minv_num_sec": "00072349", "PRODUCTO": "AERO GUYS TEES BLACK M", "CANTIDAD": 5200, "COSTO": 12.5, "CATEGORIA": "TEES"},
+                        {"minv_num_sec": "00072349", "PRODUCTO": "AERO PLASTIC BAG MEDIUM", "CANTIDAD": 95, "COSTO": 0.2, "CATEGORIA": "FUNDAS"},
+                        {"minv_num_sec": "00072350", "PRODUCTO": "AERO GUYS POLOS BLACK XL", "CANTIDAD": 4260, "COSTO": 16.0, "CATEGORIA": "POLOS"},
+                        {"minv_num_sec": "00072350", "PRODUCTO": "AERO PLASTIC BAG MEDIUM", "CANTIDAD": 90, "COSTO": 0.2, "CATEGORIA": "FUNDAS"},
+                        {"minv_num_sec": "00072351", "PRODUCTO": "AERO GUYS HOODIE GREY M", "CANTIDAD": 3870, "COSTO": 24.0, "CATEGORIA": "HOODIES"},
+                        {"minv_num_sec": "00072351", "PRODUCTO": "AERO PLASTIC BAG MEDIUM", "CANTIDAD": 80, "COSTO": 0.2, "CATEGORIA": "FUNDAS"},
+                        {"minv_num_sec": "00072352", "PRODUCTO": "AERO GIRLS POLOS WHITE S", "CANTIDAD": 3350, "COSTO": 16.0, "CATEGORIA": "POLOS"},
+                        {"minv_num_sec": "00072352", "PRODUCTO": "AERO PLASTIC BAG MEDIUM", "CANTIDAD": 70, "COSTO": 0.2, "CATEGORIA": "FUNDAS"},
+                        {"minv_num_sec": "00072353", "PRODUCTO": "AERO GIRLS DRESSES PINK M", "CANTIDAD": 3950, "COSTO": 24.0, "CATEGORIA": "DRESSES"},
+                        {"minv_num_sec": "00072353", "PRODUCTO": "AERO PLASTIC BAG MEDIUM", "CANTIDAD": 70, "COSTO": 0.2, "CATEGORIA": "FUNDAS"},
+                        {"minv_num_sec": "00072354", "PRODUCTO": "AERO GIRLS TEES PINK M", "CANTIDAD": 4560, "COSTO": 12.5, "CATEGORIA": "TEES"},
+                        {"minv_num_sec": "00072354", "PRODUCTO": "AERO PLASTIC BAG MEDIUM", "CANTIDAD": 90, "COSTO": 0.2, "CATEGORIA": "FUNDAS"},
+                        {"minv_num_sec": "00072355", "PRODUCTO": "AERO GIRLS HOODIE RED S", "CANTIDAD": 4350, "COSTO": 22.0, "CATEGORIA": "HOODIES"},
+                        {"minv_num_sec": "00072355", "PRODUCTO": "AERO PLASTIC BAG MEDIUM", "CANTIDAD": 84, "COSTO": 0.2, "CATEGORIA": "FUNDAS"},
+                        {"minv_num_sec": "00072356", "PRODUCTO": "AERO GUYS POLOS NAVY L", "CANTIDAD": 4400, "COSTO": 16.0, "CATEGORIA": "POLOS"},
+                        {"minv_num_sec": "00072356", "PRODUCTO": "AERO PLASTIC BAG MEDIUM", "CANTIDAD": 83, "COSTO": 0.2, "CATEGORIA": "FUNDAS"},
+                        {"minv_num_sec": "00072357", "PRODUCTO": "AERO GUYS SHORTS KHAKI 30", "CANTIDAD": 4120, "COSTO": 18.0, "CATEGORIA": "SHORTS"},
+                        {"minv_num_sec": "00072357", "PRODUCTO": "AERO PLASTIC BAG MEDIUM", "CANTIDAD": 81, "COSTO": 0.2, "CATEGORIA": "FUNDAS"},
+                        {"minv_num_sec": "00072358", "PRODUCTO": "AERO GUYS WOVENS WHITE L", "CANTIDAD": 3500, "COSTO": 20.0, "CATEGORIA": "WOVENS"},
+                        {"minv_num_sec": "00072358", "PRODUCTO": "AERO PLASTIC BAG MEDIUM", "CANTIDAD": 56, "COSTO": 0.2, "CATEGORIA": "FUNDAS"},
+                        {"minv_num_sec": "00072359", "PRODUCTO": "AERO GUYS TEES ASSORTED", "CANTIDAD": 12043, "COSTO": 10.0, "CATEGORIA": "TEES"},
+                        {"minv_num_sec": "00072360", "PRODUCTO": "AERO GUYS TEES BLUE L", "CANTIDAD": 3730, "COSTO": 12.5, "CATEGORIA": "TEES"},
+                        {"minv_num_sec": "00072360", "PRODUCTO": "AERO PLASTIC BAG MEDIUM", "CANTIDAD": 80, "COSTO": 0.2, "CATEGORIA": "FUNDAS"},
+                        {"minv_num_sec": "00072361", "PRODUCTO": "AERO GUYS JEANS BLACK 34", "CANTIDAD": 3035, "COSTO": 28.0, "CATEGORIA": "JEANS"},
+                        {"minv_num_sec": "00072361", "PRODUCTO": "AERO PLASTIC BAG MEDIUM", "CANTIDAD": 65, "COSTO": 0.2, "CATEGORIA": "FUNDAS"},
+                        {"minv_num_sec": "00072362", "PRODUCTO": "AERO GUYS JACKET NAVY L", "CANTIDAD": 3645, "COSTO": 32.0, "CATEGORIA": "JACKETS"},
+                        {"minv_num_sec": "00072362", "PRODUCTO": "AERO PLASTIC BAG MEDIUM", "CANTIDAD": 75, "COSTO": 0.2, "CATEGORIA": "FUNDAS"},
+                        {"minv_num_sec": "00072363", "PRODUCTO": "AERO GIRLS DRESSES FLORAL S", "CANTIDAD": 4100, "COSTO": 25.0, "CATEGORIA": "DRESSES"},
+                        {"minv_num_sec": "00072363", "PRODUCTO": "AERO PLASTIC BAG MEDIUM", "CANTIDAD": 80, "COSTO": 0.2, "CATEGORIA": "FUNDAS"},
+                        {"minv_num_sec": "00072364", "PRODUCTO": "AERO GUYS SHORTS DENIM 32", "CANTIDAD": 3820, "COSTO": 20.0, "CATEGORIA": "SHORTS"},
+                        {"minv_num_sec": "00072364", "PRODUCTO": "AERO PLASTIC BAG MEDIUM", "CANTIDAD": 80, "COSTO": 0.2, "CATEGORIA": "FUNDAS"},
+                        {"minv_num_sec": "00072365", "PRODUCTO": "AERO GUYS TEES GRAPHIC L", "CANTIDAD": 4750, "COSTO": 14.0, "CATEGORIA": "TEES"},
+                        {"minv_num_sec": "00072365", "PRODUCTO": "AERO PLASTIC BAG MEDIUM", "CANTIDAD": 100, "COSTO": 0.2, "CATEGORIA": "FUNDAS"},
+                        {"minv_num_sec": "00072366", "PRODUCTO": "AERO GIRLS HOODIE PURPLE M", "CANTIDAD": 3410, "COSTO": 22.0, "CATEGORIA": "HOODIES"},
+                        {"minv_num_sec": "00072366", "PRODUCTO": "AERO PLASTIC BAG MEDIUM", "CANTIDAD": 70, "COSTO": 0.2, "CATEGORIA": "FUNDAS"},
+                        {"minv_num_sec": "00072367", "PRODUCTO": "AERO GUYS SWIM SHORTS RED M", "CANTIDAD": 3190, "COSTO": 18.0, "CATEGORIA": "SHORTS"},
+                        {"minv_num_sec": "00072367", "PRODUCTO": "AERO PLASTIC BAG MEDIUM", "CANTIDAD": 60, "COSTO": 0.2, "CATEGORIA": "FUNDAS"},
+                        {"minv_num_sec": "00072368", "PRODUCTO": "AERO GUYS BULK PACK TEES", "CANTIDAD": 5020, "COSTO": 9.5, "CATEGORIA": "TEES"},
+                        {"minv_num_sec": "00072368", "PRODUCTO": "AERO PLASTIC BAG MEDIUM", "CANTIDAD": 100, "COSTO": 0.2, "CATEGORIA": "FUNDAS"},
                     ]
                     dfT = pd.DataFrame(pbi_records_t)
                     dfD = pd.DataFrame(pbi_records_d)
