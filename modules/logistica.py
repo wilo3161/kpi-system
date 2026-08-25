@@ -23,7 +23,7 @@ from config.stores_data import (
     TIENDAS_DATA, PRICE_CLUBS, TIENDAS_REGULARES,
     VENTAS_POR_MAYOR, TIENDA_WEB, FALLAS, COLORS, GRADIENTS, COLOR_KEYS
 )
-from services.data_processing import procesar_archivos
+from services.data_processing import procesar_archivos, calcular_metricas_transferencias
 
 logger = logging.getLogger(__name__)
 
@@ -689,212 +689,287 @@ def _render_tab_ubicacion(dfC, dfDE):
 
 def _render_tab_transferidores(dfC):
     st.markdown("## 👤 Rendimiento y Trazabilidad por Transferidor")
-    st.caption("Métricas individuales de despacho, balance de carga y distribución exacta por provincia y tienda de cada transferidor.")
+    st.caption("Analítica de Ciencia de Datos: Productividad individual, Pareto 80/20 de destinos, balance de carga y auditoría de transferencias.")
 
-    total_unidades = dfC['PRENDAS'].sum() + dfC['FUNDAS'].sum()
-    total_trans = dfC['SECUENCIAL'].nunique()
+    # Calcular métricas avanzadas
+    met = calcular_metricas_transferencias(dfC)
+    if not met:
+        st.warning("No hay datos disponibles para calcular métricas de transferidores.")
+        return
+
+    df_transf = met['df_transferidores']
+    top_user = met['transferidor_lider']
     transferidor_col = 'TRANSFERIDOR' if 'TRANSFERIDOR' in dfC.columns else None
 
-    if transferidor_col:
-        # Resumen agregado por transferidor
-        df_transf = dfC.groupby(transferidor_col).agg(
-            Documentos=('SECUENCIAL', 'nunique'),
-            Prendas=('PRENDAS', 'sum'),
-            Fundas=('FUNDAS', 'sum'),
-            Tiendas_Atendidas=('TIENDA', 'nunique'),
-            Provincias_Cubiertas=('PROVINCIA', 'nunique') if 'PROVINCIA' in dfC.columns else ('TIENDA', 'nunique'),
-            Costo_Total=('COSTO_TOTAL', 'sum')
-        ).reset_index()
+    # ── 1. SCORECARD DE CIENCIA DE DATOS Y RENDIMIENTO OPERATIVO ──
+    k1, k2, k3, k4 = st.columns(4)
+    with k1:
+        st.markdown(f"""
+        <div class="pbi-card" style="border-left: 4px solid #6366f1;">
+            <div class="pbi-card-title">👷 Transferidores Activos <span class="pbi-badge-blue">EQUIPO</span></div>
+            <div class="pbi-card-val">{len(df_transf)} <span style="font-size: 16px; font-weight: 500; color: #64748b;">miembros</span></div>
+            <div style="font-size: 12px; color: #94a3b8; margin-top: 4px;">{met['total_guias']} transferencias / guías totales</div>
+        </div>
+        """, unsafe_allow_html=True)
 
-        df_transf['Total_Unidades'] = df_transf['Prendas'] + df_transf['Fundas']
-        df_transf['Pct_Participacion'] = (df_transf['Total_Unidades'] / max(total_unidades, 1)) * 100
-        df_transf['Promedio_x_Doc'] = (df_transf['Total_Unidades'] / df_transf['Documentos'].clip(lower=1)).round(1)
-        df_transf = df_transf.sort_values('Total_Unidades', ascending=False)
+    with k2:
+        top_nom = top_user.get(transferidor_col, 'N/A')
+        top_vol = top_user.get('Total_Unidades', 0)
+        top_sh = top_user.get('Share_Pct', 0.0)
+        st.markdown(f"""
+        <div class="pbi-card" style="border-left: 4px solid #10b981;">
+            <div class="pbi-card-title">🥇 Transferidor Líder <span class="pbi-badge-green">TOP 1</span></div>
+            <div class="pbi-card-val" style="font-size: 22px;">{top_nom}</div>
+            <div style="font-size: 12px; color: #10b981; margin-top: 4px; font-weight: 600;">{top_vol:,.0f} prendas ({top_sh:.1f}% cuota)</div>
+        </div>
+        """, unsafe_allow_html=True)
 
-        top_user = df_transf.iloc[0]
+    with k3:
+        st.markdown(f"""
+        <div class="pbi-card" style="border-left: 4px solid #f59e0b;">
+            <div class="pbi-card-title">⚡ Densidad Promedio <span class="pbi-badge-purple">EFICIENCIA</span></div>
+            <div class="pbi-card-val">{met['densidad_global']:.0f} <span style="font-size: 16px; font-weight: 500; color: #64748b;">prendas/guía</span></div>
+            <div style="font-size: 12px; color: #94a3b8; margin-top: 4px;">Máx. densidad: {df_transf['Densidad_x_Guia'].max():.0f} unid/guía</div>
+        </div>
+        """, unsafe_allow_html=True)
 
-        # ── 1. SCORECARD DE RENDIMIENTO DEL EQUIPO ──
-        k1, k2, k3, k4 = st.columns(4)
-        with k1:
-            st.markdown(f"""
-            <div class="pbi-card" style="border-left: 4px solid #6366f1;">
-                <div class="pbi-card-title">👷 Transferidores Activos <span class="pbi-badge-blue">EQUIPO</span></div>
-                <div class="pbi-card-val">{len(df_transf)} <span style="font-size: 16px; font-weight: 500; color: #64748b;">miembros</span></div>
-                <div style="font-size: 12px; color: #94a3b8; margin-top: 4px;">{total_trans} despachos / guías totales</div>
-            </div>
-            """, unsafe_allow_html=True)
+    with k4:
+        cv = met['coeficiente_variacion_carga']
+        estado_cv = "Óptimo" if cv < 40 else ("Moderado" if cv < 75 else "Desbalanceado")
+        color_cv = "#10b981" if cv < 40 else ("#f59e0b" if cv < 75 else "#f43f5e")
+        st.markdown(f"""
+        <div class="pbi-card" style="border-left: 4px solid {color_cv};">
+            <div class="pbi-card-title">⚖️ Balance de Carga <span class="pbi-badge-green">{estado_cv}</span></div>
+            <div class="pbi-card-val">{cv:.1f}% <span style="font-size: 14px; font-weight: 500; color: #64748b;">(CV)</span></div>
+            <div style="font-size: 12px; color: #94a3b8; margin-top: 4px;">Equidad operativa del equipo</div>
+        </div>
+        """, unsafe_allow_html=True)
 
-        with k2:
-            st.markdown(f"""
-            <div class="pbi-card" style="border-left: 4px solid #10b981;">
-                <div class="pbi-card-title">🥇 Transferidor Líder <span class="pbi-badge-green">TOP 1</span></div>
-                <div class="pbi-card-val" style="font-size: 24px;">{top_user[transferidor_col]}</div>
-                <div style="font-size: 12px; color: #10b981; margin-top: 4px; font-weight: 600;">{top_user['Total_Unidades']:,.0f} unid. ({top_user['Pct_Participacion']:.1f}%)</div>
-            </div>
-            """, unsafe_allow_html=True)
+    st.markdown("---")
 
-        with k3:
-            st.markdown(f"""
-            <div class="pbi-card" style="border-left: 4px solid #f59e0b;">
-                <div class="pbi-card-title">⚡ Ritmo de Despacho <span class="pbi-badge-purple">PRODUCTIVIDAD</span></div>
-                <div class="pbi-card-val">{(total_unidades/max(total_trans,1)):.0f} <span style="font-size: 16px; font-weight: 500; color: #64748b;">unid/guía</span></div>
-                <div style="font-size: 12px; color: #94a3b8; margin-top: 4px;">Mayor densidad: {df_transf['Promedio_x_Doc'].max():.0f} unid/guía</div>
-            </div>
-            """, unsafe_allow_html=True)
+    # ── 2. SECCIÓN DE ANÁLISIS DE PARETO (80/20) & CONCENTRACIÓN DE TIENDAS ──
+    st.markdown("### 📊 Análisis de Pareto (80/20) — Concentración de Envíos a Tiendas")
+    st.caption("Identificación de sucursales Clase A que concentran el 80% de la mercadería despachada por el equipo.")
 
-        with k4:
-            st.markdown(f"""
-            <div class="pbi-card" style="border-left: 4px solid #ec4899;">
-                <div class="pbi-card-title">🛍️ Proporción Fundas <span class="pbi-badge-green">CONTROL</span></div>
-                <div class="pbi-card-val">{(dfC['FUNDAS'].sum()/max(total_unidades,1)*100):.1f}%</div>
-                <div style="font-size: 12px; color: #94a3b8; margin-top: 4px;">{dfC['FUNDAS'].sum():,.0f} fundas | {dfC['PRENDAS'].sum():,.0f} prendas</div>
-            </div>
-            """, unsafe_allow_html=True)
+    df_p = met['df_pareto_tiendas']
+    col_p1, col_p2 = st.columns([3.5, 2.5])
 
-        st.markdown("---")
+    with col_p1:
+        # Gráfico dual Pareto: Barras de unidades + Línea acumulada
+        fig_pareto = go.Figure()
+        fig_pareto.add_trace(go.Bar(
+            x=df_p['TIENDA'],
+            y=df_p['Unidades'],
+            name='Unidades Despachadas',
+            marker=dict(color='#38bdf8')
+        ))
+        fig_pareto.add_trace(go.Scatter(
+            x=df_p['TIENDA'],
+            y=df_p['Pct_Acumulado'],
+            name='% Acumulado (Pareto)',
+            yaxis='y2',
+            mode='lines+markers',
+            line=dict(color='#f43f5e', width=3),
+            marker=dict(size=6)
+        ))
+        # Línea de referencia 80%
+        fig_pareto.add_hline(y=80, line_dash="dot", line_color="#fbbf24", annotation_text="Umbral 80% (Clase A)", yref="y2")
 
-        # ── 2. SLICER INDIVIDUAL DE TRANSFERIDOR Y PROVINCIA ──
-        col_t1, col_t2 = st.columns([2, 2])
-        with col_t1:
-            lista_transferidores = ['Todos los Transferidores'] + sorted(df_transf[transferidor_col].unique().tolist())
-            sel_transf = st.selectbox("👤 Seleccionar Transferidor:", lista_transferidores, key="kpi_slicer_transf")
+        fig_pareto.update_layout(
+            template="plotly_dark",
+            height=380,
+            margin=dict(t=30, l=10, r=40, b=10),
+            yaxis=dict(title="Prendas Transferidas", showgrid=True, gridcolor="rgba(255,255,255,0.05)"),
+            yaxis2=dict(title="% Acumulado", overlaying='y', side='right', range=[0, 105], showgrid=False),
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+        )
+        st.plotly_chart(fig_pareto, use_container_width=True)
 
-        with col_t2:
-            prov_disponibles = ['Todas las Provincias'] + (sorted(dfC['PROVINCIA'].dropna().unique().tolist()) if 'PROVINCIA' in dfC.columns else [])
-            sel_prov_t = st.selectbox("🗺️ Filtrar Provincia Destino:", prov_disponibles, key="kpi_slicer_prov_t")
-
-        df_tf = dfC.copy()
-        if sel_transf != 'Todos los Transferidores':
-            df_tf = df_tf[df_tf[transferidor_col] == sel_transf]
-        if sel_prov_t != 'Todas las Provincias':
-            df_tf = df_tf[df_tf['PROVINCIA'] == sel_prov_t]
-
-        # ── 3. VISUALES DE DISTRIBUCIÓN POR PROVINCIA Y TIENDA ──
-        cG1, cG2 = st.columns([3.2, 2.8])
-
-        with cG1:
-            st.markdown("#### 📊 Distribución de Transferencias por Provincia y Transferidor")
-            if 'PROVINCIA' in dfC.columns:
-                df_prov_transf = dfC.groupby([transferidor_col, 'PROVINCIA']).agg(
-                    Total_Unidades=('CANTIDAD_TRANS', 'sum')
-                ).reset_index()
-
-                fig_stacked = px.bar(
-                    df_prov_transf,
-                    x=transferidor_col,
-                    y='Total_Unidades',
-                    color='PROVINCIA',
-                    title="¿Cuánto transfirió cada uno a cada provincia?",
-                    color_discrete_sequence=px.colors.qualitative.Safe
-                )
-                fig_stacked.update_layout(
-                    template="plotly_dark",
-                    barmode='stack',
-                    height=420,
-                    margin=dict(t=30, l=10, r=10, b=10),
-                    xaxis_title="",
-                    yaxis_title="Unidades Transferidas",
-                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
-                )
-                st.plotly_chart(fig_stacked, use_container_width=True)
-            else:
-                st.info("Sin columna de Provincia para agrupar.")
-
-        with cG2:
-            st.markdown("#### 🍩 Cuota Operativa del Equipo")
-            fig_donut = px.pie(
-                df_transf,
-                names=transferidor_col,
-                values='Total_Unidades',
-                hole=0.5,
-                color_discrete_sequence=['#38bdf8', '#818cf8', '#c084fc', '#f472b6', '#fb7185', '#34d399']
-            )
-            fig_donut.update_traces(
-                textposition='inside',
-                textinfo='percent+label',
-                marker=dict(line=dict(color='#0f172a', width=2))
-            )
-            fig_donut.update_layout(
-                template="plotly_dark",
-                height=420,
-                margin=dict(t=10, l=10, r=10, b=10)
-            )
-            st.plotly_chart(fig_donut, use_container_width=True)
-
-        st.markdown("---")
-
-        # ── 4. MAPA GEOGRÁFICO ESPECÍFICO DEL TRANSFERIDOR ──
-        if sel_transf != 'Todos los Transferidores' and 'CANTON' in df_tf.columns:
-            st.markdown(f"#### 🗺️ Rutas y Destinos Despachados por: <b style='color:#38bdf8;'>{sel_transf}</b>", unsafe_allow_html=True)
-            df_map_transf = df_tf.groupby(['CANTON', 'PROVINCIA']).agg(
-                Total_Unidades=('CANTIDAD_TRANS', 'sum'),
-                Tiendas=('TIENDA', 'nunique'),
-                Lat=('LAT', 'first'),
-                Lon=('LON', 'first')
-            ).reset_index()
-
-            fig_map_user = px.scatter_mapbox(
-                df_map_transf,
-                lat='Lat',
-                lon='Lon',
-                size='Total_Unidades',
-                color='Total_Unidades',
-                hover_name='CANTON',
-                hover_data={'PROVINCIA': True, 'Total_Unidades': ':,', 'Tiendas': True, 'Lat': False, 'Lon': False},
-                color_continuous_scale='Viridis',
-                size_max=32,
-                zoom=6.1,
-                center={"lat": -1.35, "lon": -78.65}
-            )
-            fig_map_user.update_layout(
-                mapbox_style="carto-darkmatter",
-                margin={"r": 0, "t": 0, "l": 0, "b": 0},
-                height=380
-            )
-            st.plotly_chart(fig_map_user, use_container_width=True)
-            st.markdown("---")
-
-        # ── 5. MATRIZ CRUZADA COMPLETA (Transferidor ➔ Provincia ➔ Tienda) ──
-        st.markdown("#### 📋 Matriz Cruzada: Transferidor ➔ Provincia ➔ Tienda Destino")
-        
-        cols_group = [transferidor_col, 'PROVINCIA', 'CANTON', 'TIENDA'] if 'PROVINCIA' in df_tf.columns else [transferidor_col, 'TIENDA']
-        df_cruce_transf = df_tf.groupby(cols_group).agg(
-            Prendas=('PRENDAS', 'sum'),
-            Fundas=('FUNDAS', 'sum'),
-            Transferencias=('SECUENCIAL', 'nunique'),
-            Costo=('COSTO_TOTAL', 'sum')
-        ).reset_index()
-        df_cruce_transf['Total Unidades'] = df_cruce_transf['Prendas'] + df_cruce_transf['Fundas']
-        
-        # % respecto al total del transferidor o total general
-        df_cruce_transf['% Cuota'] = (df_cruce_transf['Total Unidades'] / max(total_unidades, 1)) * 100
-        df_cruce_transf = df_cruce_transf.sort_values('Total Unidades', ascending=False)
-
+    with col_p2:
+        df_clase_a = df_p[df_p['Clase_Pareto'] == 'Clase A (Top 80%)']
+        st.markdown(f"#### 🎯 Sucursales Prioritarias ({len(df_clase_a)} tiendas Clase A)")
         st.dataframe(
-            df_cruce_transf.rename(columns={
-                transferidor_col: 'Transferidor / Despachador',
-                'PROVINCIA': 'Provincia Destino',
-                'CANTON': 'Cantón',
-                'TIENDA': 'Tienda Recibe',
-                'Transferencias': 'N° Guías',
-                'Costo': 'Costo Total ($)'
+            df_p[['TIENDA', 'Unidades', 'Pct_Individual', 'Clase_Pareto']].rename(columns={
+                'TIENDA': 'Tienda',
+                'Unidades': 'Prendas',
+                'Pct_Individual': '% Total',
+                'Clase_Pareto': 'Categoría Pareto'
             }),
             column_config={
-                "% Cuota": st.column_config.ProgressColumn(
-                    "% del Total Distribuido",
+                "% Total": st.column_config.ProgressColumn(
+                    "% Total",
                     format="%.2f %%",
                     min_value=0,
                     max_value=100
                 ),
-                "Costo Total ($)": st.column_config.NumberColumn(
-                    "Costo ($)",
-                    format="$ %.2f"
-                )
+                "Prendas": st.column_config.NumberColumn("Prendas", format="%d")
             },
             use_container_width=True,
-            height=450,
+            height=340,
             hide_index=True
         )
+
+    st.markdown("---")
+
+    # ── 3. SLICER INDIVIDUAL DE TRANSFERIDOR Y PROVINCIA ──
+    col_t1, col_t2 = st.columns([2, 2])
+    with col_t1:
+        lista_transferidores = ['Todos los Transferidores'] + sorted(df_transf[transferidor_col].unique().tolist())
+        sel_transf = st.selectbox("👤 Seleccionar Transferidor:", lista_transferidores, key="kpi_slicer_transf")
+
+    with col_t2:
+        prov_disponibles = ['Todas las Provincias'] + (sorted(dfC['PROVINCIA'].dropna().unique().tolist()) if 'PROVINCIA' in dfC.columns else [])
+        sel_prov_t = st.selectbox("🗺️ Filtrar Provincia Destino:", prov_disponibles, key="kpi_slicer_prov_t")
+
+    df_tf = dfC.copy()
+    if sel_transf != 'Todos los Transferidores':
+        df_tf = df_tf[df_tf[transferidor_col] == sel_transf]
+    if sel_prov_t != 'Todas las Provincias':
+        df_tf = df_tf[df_tf['PROVINCIA'] == sel_prov_t]
+
+    # ── 4. VISUALES DE DISTRIBUCIÓN POR PROVINCIA Y TIENDA ──
+    cG1, cG2 = st.columns([3.2, 2.8])
+
+    with cG1:
+        st.markdown("#### 📊 Distribución de Transferencias por Provincia y Transferidor")
+        if 'PROVINCIA' in dfC.columns:
+            df_prov_transf = dfC.groupby([transferidor_col, 'PROVINCIA']).agg(
+                Total_Unidades=('CANTIDAD_TRANS', 'sum')
+            ).reset_index()
+
+            fig_stacked = px.bar(
+                df_prov_transf,
+                x=transferidor_col,
+                y='Total_Unidades',
+                color='PROVINCIA',
+                title="¿Cuánto transfirió cada uno a cada provincia?",
+                color_discrete_sequence=px.colors.qualitative.Safe
+            )
+            fig_stacked.update_layout(
+                template="plotly_dark",
+                barmode='stack',
+                height=420,
+                margin=dict(t=30, l=10, r=10, b=10),
+                xaxis_title="",
+                yaxis_title="Unidades Transferidas",
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+            )
+            st.plotly_chart(fig_stacked, use_container_width=True)
+        else:
+            st.info("Sin columna de Provincia para agrupar.")
+
+    with cG2:
+        st.markdown("#### 🍩 Cuota Operativa del Equipo (% Share)")
+        fig_donut = px.pie(
+            df_transf,
+            names=transferidor_col,
+            values='Total_Unidades',
+            hole=0.5,
+            color_discrete_sequence=['#38bdf8', '#818cf8', '#c084fc', '#f472b6', '#fb7185', '#34d399']
+        )
+        fig_donut.update_traces(
+            textposition='inside',
+            textinfo='percent+label',
+            marker=dict(line=dict(color='#0f172a', width=2))
+        )
+        fig_donut.update_layout(
+            template="plotly_dark",
+            height=420,
+            margin=dict(t=10, l=10, r=10, b=10)
+        )
+        st.plotly_chart(fig_donut, use_container_width=True)
+
+    st.markdown("---")
+
+    # ── 5. MAPA GEOGRÁFICO ESPECÍFICO DEL TRANSFERIDOR ──
+    if sel_transf != 'Todos los Transferidores' and 'CANTON' in df_tf.columns:
+        st.markdown(f"#### 🗺️ Rutas y Destinos Despachados por: <b style='color:#38bdf8;'>{sel_transf}</b>", unsafe_allow_html=True)
+        df_map_transf = df_tf.groupby(['CANTON', 'PROVINCIA']).agg(
+            Total_Unidades=('CANTIDAD_TRANS', 'sum'),
+            Tiendas=('TIENDA', 'nunique'),
+            Lat=('LAT', 'first'),
+            Lon=('LON', 'first')
+        ).reset_index()
+
+        fig_map_user = px.scatter_mapbox(
+            df_map_transf,
+            lat='Lat',
+            lon='Lon',
+            size='Total_Unidades',
+            color='Total_Unidades',
+            hover_name='CANTON',
+            hover_data={'PROVINCIA': True, 'Total_Unidades': ':,', 'Tiendas': True, 'Lat': False, 'Lon': False},
+            color_continuous_scale='Viridis',
+            size_max=32,
+            zoom=6.1,
+            center={"lat": -1.35, "lon": -78.65}
+        )
+        fig_map_user.update_layout(
+            mapbox_style="carto-darkmatter",
+            margin={"r": 0, "t": 0, "l": 0, "b": 0},
+            height=380
+        )
+        st.plotly_chart(fig_map_user, use_container_width=True)
+        st.markdown("---")
+
+    # ── 6. AUDITORÍA DE GUÍAS ATÍPICAS (OUTLIERS IQR) ──
+    guias_out = met['guias_atipicas']
+    if not guias_out.empty:
+        st.markdown("### ⚠️ Auditoría y Control de Calidad: Guías de Alto Volumen (Outliers)")
+        st.caption(f"Transferencias con volumen superior a **{met['umbral_outlier']:,.0f} prendas** (detección por Rango Intercuartil IQR).")
+        st.dataframe(
+            guias_out[['SECUENCIAL', transferidor_col, 'TIENDA', 'PROVINCIA', 'PRENDAS']].rename(columns={
+                'SECUENCIAL': 'N° Transferencia / Guía',
+                transferidor_col: 'Transferidor Responsable',
+                'TIENDA': 'Tienda Receptora',
+                'PROVINCIA': 'Provincia',
+                'PRENDAS': 'Prendas Despachadas'
+            }),
+            use_container_width=True,
+            hide_index=True
+        )
+        st.markdown("---")
+
+    # ── 7. MATRIZ CRUZADA COMPLETA (Transferidor ➔ Provincia ➔ Tienda) ──
+    st.markdown("#### 📋 Matriz Cruzada: Transferidor ➔ Provincia ➔ Tienda Destino")
+    
+    cols_group = [transferidor_col, 'PROVINCIA', 'CANTON', 'TIENDA'] if 'PROVINCIA' in df_tf.columns else [transferidor_col, 'TIENDA']
+    df_cruce_transf = df_tf.groupby(cols_group).agg(
+        Prendas=('PRENDAS', 'sum'),
+        Fundas=('FUNDAS', 'sum'),
+        Transferencias=('SECUENCIAL', 'nunique'),
+        Costo=('COSTO_TOTAL', 'sum')
+    ).reset_index()
+    df_cruce_transf['Total Unidades'] = df_cruce_transf['Prendas'] + df_cruce_transf['Fundas']
+    
+    df_cruce_transf['% Cuota'] = (df_cruce_transf['Total Unidades'] / max(met['total_unidades'], 1)) * 100
+    df_cruce_transf = df_cruce_transf.sort_values('Total Unidades', ascending=False)
+
+    st.dataframe(
+        df_cruce_transf.rename(columns={
+            transferidor_col: 'Transferidor / Despachador',
+            'PROVINCIA': 'Provincia Destino',
+            'CANTON': 'Cantón',
+            'TIENDA': 'Tienda Recibe',
+            'Transferencias': 'N° Guías',
+            'Costo': 'Costo Total ($)'
+        }),
+        column_config={
+            "% Cuota": st.column_config.ProgressColumn(
+                "% del Total Distribuido",
+                format="%.2f %%",
+                min_value=0,
+                max_value=100
+            ),
+            "Costo Total ($)": st.column_config.NumberColumn(
+                "Costo ($)",
+                format="$ %.2f"
+            )
+        },
+        use_container_width=True,
+        height=450,
+        hide_index=True
+    )
 
 
 # =============================================================================

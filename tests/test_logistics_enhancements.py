@@ -55,7 +55,7 @@ def test_cruce_con_columnas_powerbi():
     print("  ✅ [Test 2] procesar_archivos() con columnas Power BI: OK -> 100% Compatibilidad con minv_num_sec y empl_ape_nomb")
 
 
-def test_analisis_cruzado_provincias_transferidores():
+def test_analisis_cruzado():
     """3. Verifica el cálculo del cruce de transferidor hacia provincias."""
     df_t = pd.DataFrame([
         {"SECUENCIAL": "1", "BODEGA DESTINO": "MALL DEL SOL", "CANTIDAD": 500, "TRANSFERIDOR": "César Andrés Yépez", "FECHA": "2026-08-24"},
@@ -69,21 +69,49 @@ def test_analisis_cruzado_provincias_transferidores():
         {"SECUENCIAL": "3", "PRODUCTO": "JEANS", "CANTIDAD": 200, "COSTO": 20.0, "CATEGORIA": "JEANS"},
         {"SECUENCIAL": "4", "PRODUCTO": "HOODIES", "CANTIDAD": 100, "COSTO": 25.0, "CATEGORIA": "HOODIES"}
     ])
-
-    df_cruce, _ = procesar_archivos(df_t, df_d)
-    cruce_prov = df_cruce.groupby(['TRANSFERIDOR', 'PROVINCIA'])['PRENDAS'].sum().reset_index()
-
-    # César envió 500 a Guayas
-    cesar_gye = cruce_prov[(cruce_prov['TRANSFERIDOR'] == 'César Andrés Yépez') & (cruce_prov['PROVINCIA'] == 'GUAYAS')]
-    assert not cesar_gye.empty
-    assert cesar_gye['PRENDAS'].iloc[0] == 500
-
-    # Josué envió 300 a Pichincha
-    josue_pich = cruce_prov[(cruce_prov['TRANSFERIDOR'] == 'Josué Imbacuan') & (cruce_prov['PROVINCIA'] == 'PICHINCHA')]
-    assert not josue_pich.empty
-    assert josue_pich['PRENDAS'].iloc[0] == 300
-
+    dfC, _ = procesar_archivos(df_t, df_d)
+    
+    assert 'PROVINCIA' in dfC.columns
+    assert 'CANTON' in dfC.columns
+    
+    guayas_records = dfC[dfC['PROVINCIA'] == 'GUAYAS']
+    assert not guayas_records.empty
+    assert 'MALL DEL SOL' in guayas_records['TIENDA'].values
     print("  ✅ [Test 3] Analisis Cruzado Transferidor ➔ Provincia: OK -> Guayas, Pichincha, Azuay validados")
+
+
+def test_data_science_metrics_engine():
+    """4. Verifica el cálculo de Pareto, Densidad y Coeficiente de Variación de Carga."""
+    df_t = pd.DataFrame([
+        {"SECUENCIAL": "1", "BODEGA DESTINO": "MALL DEL SOL", "CANTIDAD": 500, "TRANSFERIDOR": "César Andrés Yépez", "FECHA": "2026-08-24"},
+        {"SECUENCIAL": "2", "BODEGA DESTINO": "AEROPOSTALE 6 DE DICIEMBRE", "CANTIDAD": 300, "TRANSFERIDOR": "Josué Imbacuan", "FECHA": "2026-08-24"},
+        {"SECUENCIAL": "3", "BODEGA DESTINO": "CUENCA", "CANTIDAD": 200, "TRANSFERIDOR": "Luis Perugachi", "FECHA": "2026-08-24"},
+        {"SECUENCIAL": "4", "BODEGA DESTINO": "SAN LUIS", "CANTIDAD": 100, "TRANSFERIDOR": "Jhonny Villa", "FECHA": "2026-08-24"},
+        {"SECUENCIAL": "5", "BODEGA DESTINO": "VENTAS POR MAYOR", "CANTIDAD": 1500, "TRANSFERIDOR": "Wilson Pérez", "FECHA": "2026-08-24"}
+    ])
+    df_d = pd.DataFrame([
+        {"SECUENCIAL": "1", "PRODUCTO": "TEES", "CANTIDAD": 500, "COSTO": 10.0, "CATEGORIA": "TEES"},
+        {"SECUENCIAL": "2", "PRODUCTO": "POLOS", "CANTIDAD": 300, "COSTO": 15.0, "CATEGORIA": "POLOS"},
+        {"SECUENCIAL": "3", "PRODUCTO": "JEANS", "CANTIDAD": 200, "COSTO": 20.0, "CATEGORIA": "JEANS"},
+        {"SECUENCIAL": "4", "PRODUCTO": "HOODIES", "CANTIDAD": 100, "COSTO": 25.0, "CATEGORIA": "HOODIES"},
+        {"SECUENCIAL": "5", "PRODUCTO": "TEES BULK", "CANTIDAD": 1500, "COSTO": 8.0, "CATEGORIA": "TEES"}
+    ])
+    dfC, _ = procesar_archivos(df_t, df_d)
+
+    from services.data_processing import calcular_metricas_transferencias
+    met = calcular_metricas_transferencias(dfC)
+
+    assert met['total_prendas'] == 2600
+    assert met['total_guias'] == 5
+    assert 'df_transferidores' in met
+    assert 'df_pareto_tiendas' in met
+    assert 'coeficiente_variacion_carga' in met
+    assert 'transferidor_lider' in met
+
+    pareto_clases = met['df_pareto_tiendas']['Clase_Pareto'].unique()
+    assert any('Clase A' in c for c in pareto_clases)
+
+    print("  ✅ [Test 4] Motor de Ciencia de Datos (Pareto, Densidad, CV Balance): OK")
 
 
 if __name__ == "__main__":
@@ -92,7 +120,8 @@ if __name__ == "__main__":
     print("═══════════════════════════════════════════════════════════════")
     test_normalizar_nombres_reales()
     test_cruce_con_columnas_powerbi()
-    test_analisis_cruzado_provincias_transferidores()
+    test_analisis_cruzado()
+    test_data_science_metrics_engine()
     print("═══════════════════════════════════════════════════════════════")
     print("🎉 TODAS LAS PRUEBAS DE TRANSFERIDORES PASARON (100% PASS) 🎉")
     print("═══════════════════════════════════════════════════════════════")

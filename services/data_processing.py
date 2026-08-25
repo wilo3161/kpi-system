@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 import re
 import unicodedata
 from typing import Optional, Tuple
@@ -423,4 +424,82 @@ def procesar_archivos(df_transferencias, df_detalle):
     df_det = df_det.merge(df_cruce[['SECUENCIAL', 'CATEGORIA_FINAL', 'TIENDA', 'CANTON', 'PROVINCIA', 'TRANSFERIDOR']], on='SECUENCIAL', how='left')
     
     return df_cruce, df_det
+
+
+def calcular_metricas_transferencias(df_cruce: pd.DataFrame) -> dict:
+    """
+    Motor de Ciencia de Datos y Estadística Logística para Análisis de Transferencias.
+    Calcula:
+    1. Productividad por Transferidor (Volumen, Guías, Densidad, Share %, Cobertura).
+    2. Análisis de Pareto (80/20) por Tiendas y Destinos.
+    3. Detección Estadística de Guías Atípicas (Outliers IQR).
+    4. Balance de Carga del Equipo (Coeficiente de Variación & Equidad).
+    """
+    if df_cruce is None or df_cruce.empty:
+        return {}
+
+    total_prendas = int(df_cruce['PRENDAS'].sum())
+    total_fundas = int(df_cruce['FUNDAS'].sum())
+    total_unidades = total_prendas + total_fundas
+    total_guias = int(df_cruce['SECUENCIAL'].nunique())
+
+    # 1. Productividad por Transferidor
+    t_col = 'TRANSFERIDOR' if 'TRANSFERIDOR' in df_cruce.columns else 'Bodega Central'
+    df_transf = df_cruce.groupby(t_col).agg(
+        Prendas=('PRENDAS', 'sum'),
+        Fundas=('FUNDAS', 'sum'),
+        Guias=('SECUENCIAL', 'nunique'),
+        Tiendas=('TIENDA', 'nunique'),
+        Provincias=('PROVINCIA', 'nunique') if 'PROVINCIA' in df_cruce.columns else ('TIENDA', 'nunique'),
+        Costo_Total=('COSTO_TOTAL', 'sum') if 'COSTO_TOTAL' in df_cruce.columns else ('PRENDAS', 'count')
+    ).reset_index()
+
+    df_transf['Total_Unidades'] = df_transf['Prendas'] + df_transf['Fundas']
+    df_transf['Share_Pct'] = (df_transf['Total_Unidades'] / max(total_unidades, 1)) * 100
+    df_transf['Densidad_x_Guia'] = (df_transf['Total_Unidades'] / df_transf['Guias'].clip(lower=1)).round(1)
+    df_transf['Ranking'] = df_transf['Total_Unidades'].rank(ascending=False, method='min').astype(int)
+    df_transf = df_transf.sort_values('Total_Unidades', ascending=False)
+
+    # 2. Análisis Pareto de Tiendas (80/20)
+    df_tiendas = df_cruce.groupby('TIENDA').agg(
+        Unidades=('PRENDAS', 'sum'),
+        Guias=('SECUENCIAL', 'nunique'),
+        Cantón=('CANTON', 'first') if 'CANTON' in df_cruce.columns else ('TIENDA', 'first'),
+        Provincia=('PROVINCIA', 'first') if 'PROVINCIA' in df_cruce.columns else ('TIENDA', 'first')
+    ).reset_index()
+    df_tiendas = df_tiendas.sort_values('Unidades', ascending=False)
+    df_tiendas['Pct_Individual'] = (df_tiendas['Unidades'] / max(total_prendas, 1)) * 100
+    df_tiendas['Pct_Acumulado'] = df_tiendas['Pct_Individual'].cumsum()
+    df_tiendas['Clase_Pareto'] = df_tiendas['Pct_Acumulado'].apply(
+        lambda p: 'Clase A (Top 80%)' if p <= 80.0 else ('Clase B (80%-95%)' if p <= 95.0 else 'Clase C (Resto 5%)')
+    )
+
+    # 3. Detección Estadística de Outliers (IQR en tamaño de transferencias)
+    unidades_x_guia = df_cruce.groupby('SECUENCIAL')['PRENDAS'].sum()
+    q25 = unidades_x_guia.quantile(0.25)
+    q75 = unidades_x_guia.quantile(0.75)
+    iqr = q75 - q25
+    umbral_outlier = q75 + (1.5 * iqr)
+    
+    guias_atipicas = df_cruce[df_cruce['PRENDAS'] > umbral_outlier].copy()
+
+    # 4. Balance de Carga del Equipo (Coeficiente de Variación)
+    vols = df_transf['Total_Unidades'].values
+    mean_vol = np.mean(vols) if len(vols) > 0 else 0
+    std_vol = np.std(vols) if len(vols) > 0 else 0
+    cv_carga = (std_vol / mean_vol * 100) if mean_vol > 0 else 0
+
+    return {
+        'total_prendas': total_prendas,
+        'total_fundas': total_fundas,
+        'total_unidades': total_unidades,
+        'total_guias': total_guias,
+        'densidad_global': round(total_unidades / max(total_guias, 1), 1),
+        'df_transferidores': df_transf,
+        'df_pareto_tiendas': df_tiendas,
+        'umbral_outlier': round(umbral_outlier, 1),
+        'guias_atipicas': guias_atipicas,
+        'coeficiente_variacion_carga': round(cv_carga, 1),
+        'transferidor_lider': df_transf.iloc[0].to_dict() if not df_transf.empty else {}
+    }
 
