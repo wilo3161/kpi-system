@@ -150,6 +150,112 @@ def renderizar_grafico_ux(df, categoria, titulo, color_base="#1f77b4"):
     fig.update_layout(template="plotly_dark", margin=dict(t=40, l=10, r=10, b=10))
     return fig
 
+def _crear_mapa_geoespacial_seguro(
+    df, lat_col='Lat', lon_col='Lon', size_col='Total_Unidades',
+    color_col='Total_Unidades', hover_name='CANTON', hover_data=None,
+    color_scale=None, size_max=36, zoom=6.1, center=None, height=480
+):
+    """
+    Construye un mapa interactivo compatible con todas las versiones de Plotly
+    (scatter_mapbox en Plotly <6, scatter_map en Plotly 6+, scatter_geo o gráfico de barras como fallback).
+    """
+    if center is None:
+        center = {"lat": -1.35, "lon": -78.65}
+    if color_scale is None:
+        color_scale = [
+            [0.0, '#38bdf8'],
+            [0.3, '#3b82f6'],
+            [0.6, '#8b5cf6'],
+            [0.85, '#ec4899'],
+            [1.0, '#f43f5e']
+        ]
+
+    # 1. Intentar con scatter_mapbox (Plotly standard / v5)
+    if hasattr(px, 'scatter_mapbox'):
+        try:
+            fig = px.scatter_mapbox(
+                df,
+                lat=lat_col,
+                lon=lon_col,
+                size=size_col,
+                color=color_col,
+                hover_name=hover_name,
+                hover_data=hover_data,
+                color_continuous_scale=color_scale,
+                size_max=size_max,
+                zoom=zoom,
+                center=center
+            )
+            fig.update_layout(
+                mapbox_style="carto-darkmatter",
+                margin={"r": 0, "t": 0, "l": 0, "b": 0},
+                height=height,
+                coloraxis_colorbar=dict(
+                    title="Unidades",
+                    thickness=12,
+                    len=0.7,
+                    tickfont=dict(color="#94a3b8")
+                )
+            )
+            return fig
+        except Exception:
+            pass
+
+    # 2. Intentar con scatter_map (Plotly v6+)
+    if hasattr(px, 'scatter_map'):
+        try:
+            fig = px.scatter_map(
+                df,
+                lat=lat_col,
+                lon=lon_col,
+                size=size_col,
+                color=color_col,
+                hover_name=hover_name,
+                hover_data=hover_data,
+                color_continuous_scale=color_scale,
+                size_max=size_max,
+                zoom=zoom,
+                center=center
+            )
+            fig.update_layout(
+                map_style="carto-darkmatter",
+                margin={"r": 0, "t": 0, "l": 0, "b": 0},
+                height=height,
+                coloraxis_colorbar=dict(
+                    title="Unidades",
+                    thickness=12,
+                    len=0.7,
+                    tickfont=dict(color="#94a3b8")
+                )
+            )
+            return fig
+        except Exception:
+            pass
+
+    # 3. Fallback con scatter_geo
+    try:
+        fig = px.scatter_geo(
+            df,
+            lat=lat_col,
+            lon=lon_col,
+            size=size_col,
+            color=color_col,
+            hover_name=hover_name,
+            color_continuous_scale=color_scale,
+            size_max=size_max
+        )
+        fig.update_layout(
+            template="plotly_dark",
+            margin={"r": 0, "t": 0, "l": 0, "b": 0},
+            height=height
+        )
+        return fig
+    except Exception:
+        # Fallback a barras si el entorno no tiene librerías cartográficas
+        fig = px.bar(df, x=hover_name, y=size_col, color=color_col, color_continuous_scale=color_scale)
+        fig.update_layout(template="plotly_dark", height=height)
+        return fig
+
 @st.cache_data(show_spinner=False)
 def clasificar_producto_avanzado(nombre_producto, codigo_producto=None):
     if pd.isna(nombre_producto) or not isinstance(nombre_producto, str):
@@ -554,13 +660,12 @@ def _render_tab_ubicacion(dfC, dfDE):
         with cG1:
             st.markdown("#### 🗺️ Mapa de Distribución Geoespacial (Power BI Style)")
             
-            # Scatter Mapbox con estilo Carto Darkmatter de alta definición
-            fig_map = px.scatter_mapbox(
+            fig_map = _crear_mapa_geoespacial_seguro(
                 df_canton,
-                lat='Lat',
-                lon='Lon',
-                size='Total_Unidades',
-                color='Total_Unidades',
+                lat_col='Lat',
+                lon_col='Lon',
+                size_col='Total_Unidades',
+                color_col='Total_Unidades',
                 hover_name='CANTON',
                 hover_data={
                     'PROVINCIA': True,
@@ -570,27 +675,7 @@ def _render_tab_ubicacion(dfC, dfDE):
                     'Lat': False,
                     'Lon': False
                 },
-                color_continuous_scale=[
-                    [0.0, '#38bdf8'],
-                    [0.3, '#3b82f6'],
-                    [0.6, '#8b5cf6'],
-                    [0.85, '#ec4899'],
-                    [1.0, '#f43f5e']
-                ],
-                size_max=36,
-                zoom=6.1,
-                center={"lat": -1.35, "lon": -78.65}
-            )
-            fig_map.update_layout(
-                mapbox_style="carto-darkmatter",
-                margin={"r": 0, "t": 0, "l": 0, "b": 0},
-                height=480,
-                coloraxis_colorbar=dict(
-                    title="Unidades",
-                    thickness=12,
-                    len=0.7,
-                    tickfont=dict(color="#94a3b8")
-                )
+                height=480
             )
             st.plotly_chart(fig_map, use_container_width=True)
 
@@ -891,22 +976,16 @@ def _render_tab_transferidores(dfC):
             Lon=('LON', 'first')
         ).reset_index()
 
-        fig_map_user = px.scatter_mapbox(
+        fig_map_user = _crear_mapa_geoespacial_seguro(
             df_map_transf,
-            lat='Lat',
-            lon='Lon',
-            size='Total_Unidades',
-            color='Total_Unidades',
+            lat_col='Lat',
+            lon_col='Lon',
+            size_col='Total_Unidades',
+            color_col='Total_Unidades',
             hover_name='CANTON',
             hover_data={'PROVINCIA': True, 'Total_Unidades': ':,', 'Tiendas': True, 'Lat': False, 'Lon': False},
-            color_continuous_scale='Viridis',
+            color_scale='Viridis',
             size_max=32,
-            zoom=6.1,
-            center={"lat": -1.35, "lon": -78.65}
-        )
-        fig_map_user.update_layout(
-            mapbox_style="carto-darkmatter",
-            margin={"r": 0, "t": 0, "l": 0, "b": 0},
             height=380
         )
         st.plotly_chart(fig_map_user, use_container_width=True)
