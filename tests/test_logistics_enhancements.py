@@ -114,6 +114,37 @@ def test_data_science_metrics_engine():
     print("  ✅ [Test 4] Motor de Ciencia de Datos (Pareto, Densidad, CV Balance): OK")
 
 
+def test_fact_transferencias_upsert_and_standards():
+    """5. Verifica el mecanismo de Upsert atómico en fact_transferencias y estándares textiles."""
+    from database.manager import (
+        upsert_fact_transferencias, consultar_fact_transferencias,
+        obtener_estandares_textiles, guardar_estandar_textil
+    )
+    from core.data_auditor import DataAuditor
+
+    # Probar Auditor
+    h1 = DataAuditor.generar_hash_transferencia("00072348", "2026-08-25", "MALL DEL SOL", "César Andrés Yépez")
+    h2 = DataAuditor.generar_hash_transferencia("00072348", "2026-08-25", "MALL DEL SOL", "César Andrés Yépez")
+    assert h1 == h2, "El hash debe ser estrictamente determinístico e idempotente"
+
+    # Probar Upsert
+    df_test = pd.DataFrame([
+        {"SECUENCIAL": "00072348", "TIENDA": "MALL DEL SOL", "PRENDAS": 500, "FUNDAS": 10, "TRANSFERIDOR": "César Andrés Yépez", "FECHA": "2026-08-25", "COSTO_TOTAL": 5000.0, "CANTON": "GUAYAQUIL", "PROVINCIA": "GUAYAS"},
+        {"SECUENCIAL": "00072349", "TIENDA": "AEROPOSTALE 6 DE DICIEMBRE", "PRENDAS": 300, "FUNDAS": 5, "TRANSFERIDOR": "Josué Imbacuan", "FECHA": "2026-08-25", "COSTO_TOTAL": 3000.0, "CANTON": "QUITO", "PROVINCIA": "PICHINCHA"}
+    ])
+
+    ins, act = upsert_fact_transferencias(df_test, fuente_origen="UNIT_TEST")
+    assert ins + act == 2
+
+    # Probar Estándares Textiles
+    guardar_estandar_textil("JEANS", 85, "prendas/hora")
+    est = obtener_estandares_textiles()
+    assert "JEANS" in est
+    assert est["JEANS"]["estandar_hora"] == 85
+
+    print("  ✅ [Test 5] Fact_Transferencias (Upsert, Hash Idempotente) & Estándares Textiles: OK")
+
+
 if __name__ == "__main__":
     print("═══════════════════════════════════════════════════════════════")
     print("🧪 PRUEBAS UNITARIAS: TRANSFERIDORES REALES & MATRIZ PROVINCIAL")
@@ -122,6 +153,7 @@ if __name__ == "__main__":
     test_cruce_con_columnas_powerbi()
     test_analisis_cruzado()
     test_data_science_metrics_engine()
+    test_fact_transferencias_upsert_and_standards()
     print("═══════════════════════════════════════════════════════════════")
     print("🎉 TODAS LAS PRUEBAS DE TRANSFERIDORES PASARON (100% PASS) 🎉")
     print("═══════════════════════════════════════════════════════════════")

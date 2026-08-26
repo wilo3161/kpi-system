@@ -92,7 +92,7 @@ else:
     MetricasModel = None; HistoricoModel = None; ValidationError = Exception
 
 class MongoDBAtlas:
-    COLLECTIONS = ["users", "kpis", "historico", "guias", "transferencias", "inventario", "correos", "telegram_log", "whatsapp_log", "reconciliacion", "ml_predictions", "notificaciones", "auditoria", "config", "equipo_logistico", "secuencia_guias", "kpi_analytics", "manifiesto", "contadores", "stock_consolidado", "mensajes_internos"]
+    COLLECTIONS = ["users", "kpis", "historico", "guias", "transferencias", "fact_transferencias", "config_estandares", "inventario", "correos", "telegram_log", "whatsapp_log", "reconciliacion", "ml_predictions", "notificaciones", "auditoria", "config", "equipo_logistico", "secuencia_guias", "kpi_analytics", "manifiesto", "contadores", "stock_consolidado", "mensajes_internos"]
     
     def __init__(self):
         self.connected = False
@@ -137,6 +137,11 @@ class MongoDBAtlas:
             self.db["guias"].create_index("tienda_destino")
             self.db["guias"].create_index("recepcion.fecha_recepcion")
             self.db["historico"].create_index([("modulo", ASCENDING), ("pestaña", ASCENDING), ("fecha_archivo", DESCENDING)])
+            self.db["fact_transferencias"].create_index("hash_registro", unique=True)
+            self.db["fact_transferencias"].create_index([("fecha_transferencia", ASCENDING), ("transferidor", ASCENDING)])
+            self.db["fact_transferencias"].create_index("tienda")
+            self.db["fact_transferencias"].create_index("numero_transferencia")
+            self.db["config_estandares"].create_index("categoria", unique=True)
             self.db["contadores"].create_index("nombre", unique=True)
             self.db["users"].create_index("username", unique=True)
             self.db["stock_consolidado"].create_index("codigo")
@@ -661,3 +666,170 @@ def registrar_auditoria(accion, modulo, detalle):
     db = get_db_v2()
     doc = {"timestamp": datetime.utcnow(), "usuario": st.session_state.get("username", "sistema"), "accion": accion, "modulo": modulo, "detalle": detalle}
     db.insert("auditoria", doc)
+
+
+# ============================================================================
+# ESTÁNDARES TEXTILES Y FACT_TRANSFERENCIAS ATÓMICAS (Centro de Control)
+# ============================================================================
+ESTANDARES_TEXTIL_DEFAULT = {
+    'TEES': {'estandar_hora': 120, 'unidad': 'prendas/hora', 'nombre': 'Camisetas (Tees)'},
+    'POLOS': {'estandar_hora': 100, 'unidad': 'prendas/hora', 'nombre': 'Polos'},
+    'JEANS': {'estandar_hora': 75, 'unidad': 'prendas/hora', 'nombre': 'Jeans / Denim'},
+    'PANTS': {'estandar_hora': 80, 'unidad': 'prendas/hora', 'nombre': 'Pantalones / Joggers'},
+    'SHORTS': {'estandar_hora': 110, 'unidad': 'prendas/hora', 'nombre': 'Shorts'},
+    'HOODIES': {'estandar_hora': 60, 'unidad': 'prendas/hora', 'nombre': 'Buzos / Hoodies'},
+    'JACKETS': {'estandar_hora': 50, 'unidad': 'prendas/hora', 'nombre': 'Chaquetas / Coats'},
+    'SWEATERS': {'estandar_hora': 70, 'unidad': 'prendas/hora', 'nombre': 'Suéteres'},
+    'DRESSES': {'estandar_hora': 85, 'unidad': 'prendas/hora', 'nombre': 'Vestidos / Faldas'},
+    'WOVENS': {'estandar_hora': 90, 'unidad': 'prendas/hora', 'nombre': 'Camisas (Wovens)'},
+    'ACCESSORIES': {'estandar_hora': 150, 'unidad': 'prendas/hora', 'nombre': 'Accesorios / Mochilas'},
+    'FUNDAS': {'estandar_hora': 300, 'unidad': 'fundas/hora', 'nombre': 'Fundas / Embalaje'},
+    'OTROS': {'estandar_hora': 90, 'unidad': 'prendas/hora', 'nombre': 'General / Otros'}
+}
+
+def obtener_estandares_textiles() -> dict:
+    """Obtiene los estándares de productividad parametrizables desde la base de datos o defaults."""
+    db = get_db_v2()
+    docs = db.find("config_estandares", {})
+    if not docs:
+        return ESTANDARES_TEXTIL_DEFAULT
+    estandares = dict(ESTANDARES_TEXTIL_DEFAULT)
+    for doc in docs:
+        cat = doc.get("categoria", "").upper()
+        if cat:
+            estandares[cat] = {
+                "estandar_hora": int(doc.get("estandar_hora", 90)),
+                "unidad": doc.get("unidad", "prendas/hora"),
+                "nombre": doc.get("nombre", cat)
+            }
+    return estandares
+
+def guardar_estandar_textil(categoria: str, estandar_hora: int, unidad: str = "prendas/hora", nombre: str = None) -> bool:
+    """Actualiza o inserta un estándar de productividad para una categoría textil."""
+    db = get_db_v2()
+    cat_upper = categoria.strip().upper()
+    doc = {
+        "categoria": cat_upper,
+        "estandar_hora": int(estandar_hora),
+        "unidad": unidad,
+        "nombre": nombre or cat_upper,
+        "actualizado_en": datetime.utcnow(),
+        "usuario": st.session_state.get("username", "admin")
+    }
+    db.update("config_estandares", {"categoria": cat_upper}, doc, upsert=True)
+    return True
+
+def upsert_fact_transferencias(df_cruce: pd.DataFrame, fuente_origen: str = "EXCEL_HISTORICO", usuario: str = "admin") -> tuple[int, int]:
+    """
+    Inserta o actualiza registros atómicos en 'fact_transferencias' con hash único (mecanismo Upsert).
+    Retorna (insertados, actualizados).
+    """
+    if df_cruce is None or df_cruce.empty:
+        return 0, 0
+
+    from core.data_auditor import DataAuditor
+    db = get_db_v2()
+    df_audit, errores = DataAuditor.auditar_dataset_transferencias(df_cruce)
+    if df_audit.empty:
+        return 0, 0
+
+    insertados = 0
+    actualizados = 0
+    ahora = datetime.utcnow()
+
+    for _, row in df_audit.iterrows():
+        sec = str(row.get('SECUENCIAL', '')).strip()
+        fecha_val = row.get('FECHA', None)
+        f_date = _safe_to_date(fecha_val) or date.today()
+        f_dt = datetime(f_date.year, f_date.month, f_date.day)
+        
+        tienda = str(row.get('TIENDA', '')).strip()
+        transf = str(row.get('TRANSFERIDOR', 'Bodega Central')).strip()
+        prendas = int(row.get('PRENDAS', row.get('CANTIDAD', 0)))
+        fundas = int(row.get('FUNDAS', 0))
+        costo = float(row.get('COSTO_TOTAL', row.get('COSTO', 0.0)))
+        canton = str(row.get('CANTON', 'GENERAL')).strip()
+        provincia = str(row.get('PROVINCIA', 'GENERAL')).strip()
+        hash_reg = row.get('hash_registro', DataAuditor.generar_hash_transferencia(sec, f_date, tienda, transf))
+
+        doc = {
+            "hash_registro": hash_reg,
+            "numero_transferencia": sec,
+            "fecha_transferencia": f_dt,
+            "fecha_str": f_date.strftime("%Y-%m-%d"),
+            "anio": f_date.year,
+            "mes": f_date.month,
+            "semana_anio": int(f_date.strftime("%W")),
+            "dia_semana": f_date.strftime("%A"),
+            "transferidor": transf,
+            "tienda": tienda,
+            "canton": canton,
+            "provincia": provincia,
+            "prendas": prendas,
+            "fundas": fundas,
+            "total_unidades": prendas + fundas,
+            "costo_total": costo,
+            "fuente_origen": fuente_origen,
+            "usuario_carga": usuario,
+            "fecha_actualizacion": ahora
+        }
+
+        # Verificamos si ya existe para contabilizar inserción o actualización
+        existente = db.find_one("fact_transferencias", {"hash_registro": hash_reg})
+        if existente:
+            db.update("fact_transferencias", {"hash_registro": hash_reg}, doc, upsert=True)
+            actualizados += 1
+        else:
+            doc["fecha_creacion"] = ahora
+            db.update("fact_transferencias", {"hash_registro": hash_reg}, doc, upsert=True)
+            insertados += 1
+
+    return insertados, actualizados
+
+def consultar_fact_transferencias(fecha_inicio=None, fecha_fin=None, transferidor=None, tienda=None, provincia=None) -> pd.DataFrame:
+    """
+    Consulta transferencias atómicas indexadas desde 'fact_transferencias' con filtros multidimensionales.
+    """
+    db = get_db_v2()
+    query = {}
+
+    if fecha_inicio or fecha_fin:
+        f_query = {}
+        if fecha_inicio:
+            d_ini = _safe_to_date(fecha_inicio)
+            f_query["$gte"] = datetime(d_ini.year, d_ini.month, d_ini.day, 0, 0, 0)
+        if fecha_fin:
+            d_fin = _safe_to_date(fecha_fin)
+            f_query["$lte"] = datetime(d_fin.year, d_fin.month, d_fin.day, 23, 59, 59)
+        query["fecha_transferencia"] = f_query
+
+    if transferidor and transferidor != "Todos los Transferidores":
+        query["transferidor"] = transferidor
+    if tienda and tienda != "Todas las Tiendas":
+        query["tienda"] = tienda
+    if provincia and provincia != "Todas las Provincias":
+        query["provincia"] = provincia
+
+    docs = db.find("fact_transferencias", query, sort=[("fecha_transferencia", DESCENDING)])
+    if not docs:
+        return pd.DataFrame()
+
+    df = pd.DataFrame(docs)
+    # Estandarizar nombres de columnas para interoperabilidad
+    rename_dict = {
+        'numero_transferencia': 'SECUENCIAL',
+        'fecha_str': 'FECHA_STR',
+        'transferidor': 'TRANSFERIDOR',
+        'tienda': 'TIENDA',
+        'canton': 'CANTON',
+        'provincia': 'PROVINCIA',
+        'prendas': 'PRENDAS',
+        'fundas': 'FUNDAS',
+        'total_unidades': 'CANTIDAD_TRANS',
+        'costo_total': 'COSTO_TOTAL'
+    }
+    df = df.rename(columns={k: v for k, v in rename_dict.items() if k in df.columns})
+    if 'fecha_transferencia' in df.columns:
+        df['FECHA'] = pd.to_datetime(df['fecha_transferencia']).dt.date
+    return df
+

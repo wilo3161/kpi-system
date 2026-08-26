@@ -13,7 +13,9 @@ import logging
 from utils.backgrounds import set_module_background
 from database.manager import (
     local_db, guardar_historico, consultar_historico,
-    existe_historico_dia, fusionar_historico_dia
+    existe_historico_dia, fusionar_historico_dia,
+    upsert_fact_transferencias, consultar_fact_transferencias,
+    obtener_estandares_textiles, guardar_estandar_textil
 )
 from utils.common import extraer_entero, sanitize_for_mongo
 from utils.ui import add_back_button, show_module_header
@@ -24,6 +26,7 @@ from config.stores_data import (
     VENTAS_POR_MAYOR, TIENDA_WEB, FALLAS, COLORS, GRADIENTS, COLOR_KEYS
 )
 from services.data_processing import procesar_archivos, calcular_metricas_transferencias
+from core.data_auditor import DataAuditor
 
 logger = logging.getLogger(__name__)
 
@@ -1052,22 +1055,300 @@ def _render_tab_transferidores(dfC):
 
 
 # =============================================================================
+# VISTA OPERATIVA: PANTALLA DE BODEGA TV (HUD EN VIVO)
+# =============================================================================
+def _render_tab_tv(dfC):
+    """Pantalla de alta visibilidad para monitores de Centro de Distribución y TVs."""
+    from datetime import datetime
+    ahora_str = datetime.now().strftime("%H:%M:%S • %d/%m/%Y")
+
+    met = calcular_metricas_transferencias(dfC)
+    if not met:
+        st.info("ℹ️ Cargue o sincronice datos para proyectar en la Pantalla de Bodega.")
+        return
+
+    df_transf = met['df_transferidores']
+    total_prendas = met['total_prendas']
+    total_guias = met['total_guias']
+    densidad = met['densidad_global']
+    
+    # Meta diaria parametrizada (ej. 80,000 prendas/día)
+    meta_dia = 80000
+    pct_meta = min(100.0, (total_prendas / meta_dia) * 100)
+
+    st.markdown(f"""
+    <div style="background: linear-gradient(135deg, #0b0f19 0%, #1e1b4b 100%); padding: 28px; border-radius: 20px; border: 2px solid #38bdf850; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.8); margin-bottom: 24px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
+            <div>
+                <span style="background: #ef4444; color: white; padding: 6px 14px; border-radius: 9999px; font-size: 13px; font-weight: 800; letter-spacing: 1.5px;">🔴 EN VIVO • CENTRO DE CONTROL LOGÍSTICO CD</span>
+                <h1 style="color: #ffffff; font-size: 42px; font-weight: 900; margin: 10px 0 4px 0; letter-spacing: -1.5px;">MONITOREO DE DESPACHOS Y TRANSFERIDORES</h1>
+                <div style="color: #94a3b8; font-size: 15px;">Operación Continua en Bodega Matriz • Retail Textil</div>
+            </div>
+            <div style="text-align: right; background: rgba(15,23,42,0.6); padding: 14px 22px; border-radius: 14px; border: 1px solid rgba(255,255,255,0.1);">
+                <div style="font-size: 12px; color: #94a3b8; letter-spacing: 1px; font-weight: 600;">ÚLTIMA ACTUALIZACIÓN</div>
+                <div style="font-size: 24px; font-weight: 900; color: #38bdf8; font-family: monospace;">{ahora_str}</div>
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # ── METRICAS GIGANTES DE ALTA VISIBILIDAD (HUD TV) ──
+    h1, h2, h3, h4 = st.columns(4)
+    with h1:
+        st.markdown(f"""
+        <div style="background: rgba(15,23,42,0.85); border-top: 6px solid #38bdf8; padding: 22px; border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.4);">
+            <div style="font-size: 13px; color: #94a3b8; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;">📦 PRENDAS PROCESADAS</div>
+            <div style="font-size: 46px; font-weight: 900; color: #ffffff; margin: 8px 0;">{total_prendas:,.0f}</div>
+            <div style="font-size: 13px; color: #38bdf8; font-weight: 600;">{met['total_fundas']:,} fundas de embalaje</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with h2:
+        st.markdown(f"""
+        <div style="background: rgba(15,23,42,0.85); border-top: 6px solid #10b981; padding: 22px; border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.4);">
+            <div style="font-size: 13px; color: #94a3b8; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;">🚚 TRANSFERENCIAS (GUÍAS)</div>
+            <div style="font-size: 46px; font-weight: 900; color: #ffffff; margin: 8px 0;">{total_guias:,.0f}</div>
+            <div style="font-size: 13px; color: #10b981; font-weight: 600;">100% despachadas sin atascos</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with h3:
+        st.markdown(f"""
+        <div style="background: rgba(15,23,42,0.85); border-top: 6px solid #f59e0b; padding: 22px; border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.4);">
+            <div style="font-size: 13px; color: #94a3b8; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;">⚡ DENSIDAD PROMEDIO</div>
+            <div style="font-size: 46px; font-weight: 900; color: #ffffff; margin: 8px 0;">{densidad:,.0f}</div>
+            <div style="font-size: 13px; color: #f59e0b; font-weight: 600;">prendas por cada guía</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with h4:
+        st.markdown(f"""
+        <div style="background: rgba(15,23,42,0.85); border-top: 6px solid #ec4899; padding: 22px; border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.4);">
+            <div style="font-size: 13px; color: #94a3b8; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;">🎯 AVANCE DE META DIARIA</div>
+            <div style="font-size: 46px; font-weight: 900; color: #ffffff; margin: 8px 0;">{pct_meta:.1f}%</div>
+            <div style="font-size: 13px; color: #ec4899; font-weight: 600;">Meta base: {meta_dia:,} prendas</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    st.markdown("<div style='margin: 20px 0;'></div>", unsafe_allow_html=True)
+
+    # ── TABLA RANKING EN VIVO DEL EQUIPO ──
+    col_tv1, col_tv2 = st.columns([3.5, 2.5])
+    with col_tv1:
+        st.markdown("### 🏆 Ranking de Productividad del Equipo en Vivo")
+        
+        t_col = 'TRANSFERIDOR' if 'TRANSFERIDOR' in df_transf.columns else 'Bodega Central'
+        fig_rank = px.bar(
+            df_transf.sort_values('Total_Unidades', ascending=True),
+            x='Total_Unidades',
+            y=t_col,
+            orientation='h',
+            text=df_transf.sort_values('Total_Unidades', ascending=True)['Total_Unidades'].apply(lambda x: f"  {x:,.0f} prendas"),
+            color='Total_Unidades',
+            color_continuous_scale=['#0ea5e9', '#38bdf8', '#818cf8', '#c084fc', '#f43f5e']
+        )
+        fig_rank.update_traces(
+            textposition='inside',
+            textfont=dict(size=15, color='#ffffff', weight='bold')
+        )
+        fig_rank.update_layout(
+            template="plotly_dark",
+            height=380,
+            margin=dict(t=10, l=10, r=20, b=10),
+            xaxis=dict(title="Prendas Transferidas", showgrid=True, gridcolor="rgba(255,255,255,0.05)"),
+            yaxis=dict(title="", tickfont=dict(size=14, color='#ffffff', weight='bold')),
+            coloraxis_showscale=False
+        )
+        st.plotly_chart(fig_rank, use_container_width=True)
+
+    with col_tv2:
+        st.markdown("### 📊 Tablero de Posiciones")
+        for i, row in df_transf.iterrows():
+            medalla = "🥇" if i == 0 else ("🥈" if i == 1 else ("🥉" if i == 2 else f"#{i+1}"))
+            sh = row['Share_Pct']
+            st.markdown(f"""
+            <div style="background: rgba(15,23,42,0.7); padding: 14px 18px; border-radius: 12px; margin-bottom: 10px; border-left: 4px solid {'#10b981' if i==0 else '#38bdf8'}; display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <span style="font-size: 16px; font-weight: 800; color: #ffffff;">{medalla} {row[t_col]}</span>
+                    <div style="font-size: 12px; color: #94a3b8;">{row['Guias']} guías • {row['Tiendas']} tiendas atendidas</div>
+                </div>
+                <div style="text-align: right;">
+                    <div style="font-size: 18px; font-weight: 900; color: #38bdf8;">{row['Total_Unidades']:,.0f} <span style="font-size: 12px; color: #64748b;">und</span></div>
+                    <div style="font-size: 12px; font-weight: 700; color: #10b981;">{sh:.1f}% cuota</div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+
+# =============================================================================
+# VISTA EXPLORADOR HISTÓRICO MULTI-PERÍODO (DESDE ENERO 2026)
+# =============================================================================
+def _render_tab_historico_multi_periodo(dfC_actual=None):
+    """Explorador histórico multidimensional (Día, Semana W01..W52, Mes o Rango)."""
+    st.markdown("## 📅 Explorador Histórico Multi-Período (Desde Enero 2026)")
+    st.caption("Consulte la productividad de cualquier fecha, semana del año o mes desde enero de 2026.")
+
+    # 1. Selector de Tipo de Período
+    col_sel1, col_sel2 = st.columns([2, 3])
+    with col_sel1:
+        tipo_periodo = st.radio(
+            "Seleccionar Filtro Temporal:",
+            ["Todo el Histórico", "Por Día", "Por Semana (W01..W52)", "Por Mes", "Rango Personalizado"],
+            horizontal=False
+        )
+
+    f_ini, f_fin = None, None
+    hoy = date.today()
+
+    with col_sel2:
+        if tipo_periodo == "Por Día":
+            f_sel = st.date_input("Seleccionar Día:", value=hoy, min_value=date(2026, 1, 1), max_value=hoy)
+            f_ini, f_fin = f_sel, f_sel
+        elif tipo_periodo == "Por Semana (W01..W52)":
+            semana_num = st.slider("Semana del Año 2026 (W):", min_value=1, max_value=52, value=int(hoy.strftime("%W")) or 1)
+            # Calcular fecha inicio y fin de esa semana
+            f_ini = date.fromisocalendar(2026, semana_num, 1)
+            f_fin = date.fromisocalendar(2026, semana_num, 7)
+            st.info(f"Semana W{semana_num:02d}: Desde **{f_ini.strftime('%d/%m/%Y')}** hasta **{f_fin.strftime('%d/%m/%Y')}**")
+        elif tipo_periodo == "Por Mes":
+            meses_dict = {
+                1: "Enero 2026", 2: "Febrero 2026", 3: "Marzo 2026", 4: "Abril 2026",
+                5: "Mayo 2026", 6: "Junio 2026", 7: "Julio 2026", 8: "Agosto 2026",
+                9: "Septiembre 2026", 10: "Octubre 2026", 11: "Noviembre 2026", 12: "Diciembre 2026"
+            }
+            mes_sel = st.selectbox("Seleccionar Mes:", list(meses_dict.keys()), format_func=lambda x: meses_dict[x], index=min(hoy.month-1, 7))
+            import calendar
+            ultimo_dia = calendar.monthrange(2026, mes_sel)[1]
+            f_ini = date(2026, mes_sel, 1)
+            f_fin = date(2026, mes_sel, ultimo_dia)
+            st.info(f"Mes Seleccionado: **{meses_dict[mes_sel]}** ({f_ini.strftime('%d/%m')} al {f_fin.strftime('%d/%m')})")
+        elif tipo_periodo == "Rango Personalizado":
+            c_r1, c_r2 = st.columns(2)
+            with c_r1:
+                f_ini = st.date_input("Fecha Inicial:", value=date(2026, 1, 1), min_value=date(2026, 1, 1), max_value=hoy)
+            with c_r2:
+                f_fin = st.date_input("Fecha Final:", value=hoy, min_value=date(2026, 1, 1), max_value=hoy)
+        else:
+            f_ini = date(2026, 1, 1)
+            f_fin = hoy
+
+    st.markdown("---")
+
+    # 2. Consultar Fact_Transferencias en BD
+    df_hist = consultar_fact_transferencias(fecha_inicio=f_ini, fecha_fin=f_fin)
+    
+    # Si no hay en BD pero hay dataset cargado en sesión, usar el de sesión
+    if df_hist.empty and dfC_actual is not None and not dfC_actual.empty:
+        df_hist = dfC_actual.copy()
+        st.info("ℹ️ Mostrando datos de la sesión actual en memoria (no persistidos en BD).")
+
+    if df_hist.empty:
+        st.warning("⚠️ No se encontraron registros de transferencias para el período seleccionado.")
+        return
+
+    # Calcular KPIs para el período consultado
+    met_h = calcular_metricas_transferencias(df_hist)
+    
+    # ── SCORECARDS DEL PERÍODO ──
+    h_c1, h_c2, h_c3, h_c4 = st.columns(4)
+    h_c1.metric("Prendas en el Período", f"{met_h['total_prendas']:,}")
+    h_c2.metric("Guías Despachadas", f"{met_h['total_guias']:,}")
+    h_c3.metric("Densidad Media", f"{met_h['densidad_global']:.0f} und/guía")
+    h_c4.metric("Transferidores Activos", f"{len(met_h['df_transferidores'])}")
+
+    # ── GRÁFICO HISTÓRICO Y COMPARATIVO ──
+    st.markdown("### 📈 Evolución y Distribución del Período")
+    col_gh1, col_gh2 = st.columns([3.5, 2.5])
+    with col_gh1:
+        if 'FECHA' in df_hist.columns:
+            df_dia = df_hist.groupby('FECHA').agg(
+                Prendas=('PRENDAS', 'sum'),
+                Guias=('SECUENCIAL', 'nunique')
+            ).reset_index().sort_values('FECHA')
+            
+            fig_evol = px.line(
+                df_dia, x='FECHA', y='Prendas',
+                title="Volumen Diario de Prendas Transferidas",
+                markers=True, line_shape='spline'
+            )
+            fig_evol.update_traces(line_color='#38bdf8', line_width=3, marker=dict(size=8, color='#f43f5e'))
+            fig_evol.update_layout(template="plotly_dark", height=380)
+            st.plotly_chart(fig_evol, use_container_width=True)
+        else:
+            st.info("Sin desglose diario disponible.")
+
+    with col_gh2:
+        t_col = 'TRANSFERIDOR' if 'TRANSFERIDOR' in met_h['df_transferidores'].columns else 'Bodega Central'
+        fig_pie_h = px.pie(
+            met_h['df_transferidores'],
+            names=t_col,
+            values='Total_Unidades',
+            title="Participación de Colaboradores",
+            hole=0.45,
+            color_discrete_sequence=['#38bdf8', '#818cf8', '#c084fc', '#f472b6', '#fb7185']
+        )
+        fig_pie_h.update_layout(template="plotly_dark", height=380)
+        st.plotly_chart(fig_pie_h, use_container_width=True)
+
+
+# =============================================================================
+# VISTA GESTOR DE ESTÁNDARES TEXTILES PARAMETRIZABLES
+# =============================================================================
+def _render_tab_estandares():
+    """Gestor de estándares de productividad parametrizables para retail textil."""
+    st.markdown("## ⚙️ Estándares de Productividad Textil Parametrizables")
+    st.caption("Ajuste los estándares esperados de prendas/hora por categoría textil para calibrar el % de cumplimiento del equipo.")
+
+    estandares = obtener_estandares_textiles()
+
+    st.markdown("### 📋 Tabla de Parámetros de Rendimiento Textil")
+    
+    col_e1, col_e2 = st.columns([3, 2])
+    with col_e1:
+        lista_std = []
+        for cat_k, v in estandares.items():
+            lista_std.append({
+                "Categoría": cat_k,
+                "Nombre": v.get("nombre", cat_k),
+                "Estándar Esperado": v.get("estandar_hora", 90),
+                "Unidad": v.get("unidad", "prendas/hora")
+            })
+        df_std = pd.DataFrame(lista_std)
+        st.dataframe(df_std, use_container_width=True, hide_index=True)
+
+    with col_e2:
+        st.markdown("#### ✏️ Modificar Estándar de Categoría")
+        with st.form("form_editar_estandar"):
+            cat_mod = st.selectbox("Seleccionar Categoría:", list(estandares.keys()))
+            std_val_actual = estandares[cat_mod].get("estandar_hora", 90)
+            nuevo_std = st.number_input("Nuevo Estándar (Prendas / Hora):", min_value=10, max_value=1000, value=int(std_val_actual), step=5)
+            guardar_btn = st.form_submit_button("💾 Guardar Estándar", type="primary", use_container_width=True)
+            
+            if guardar_btn:
+                guardar_estandar_textil(cat_mod, nuevo_std)
+                st.success(f"✅ Estándar para **{cat_mod}** actualizado a **{nuevo_std} prendas/hora**.")
+                st.rerun()
+
+
+# =============================================================================
 # INTERFAZ PRINCIPAL CORREGIDA (FileUploader en formulario)
 # =============================================================================
 def mostrar_dashboard_transferencias():
     from utils.ui import inject_acumatica_css, acu_metric
     try:
         inject_acumatica_css()
-        st.markdown("<div class='main-header'><h1 class='header-title'>🚚 Dashboard de Logística & Transferencias</h1><div class='header-subtitle'>Análisis inteligente de distribución geográfica y transferidores</div></div>", unsafe_allow_html=True)
+        st.markdown("<div class='main-header'><h1 class='header-title'>🚚 Dashboard de Logística & Transferencias</h1><div class='header-subtitle'>Centro de Control Operativo Logístico y Distribución Textil</div></div>", unsafe_allow_html=True)
 
-        tab1, tab_ubi, tab_transf, tab2, tab3, tab4, tab5 = st.tabs([
-            "📂 Carga y Cruce",
-            "📍 Transferencias por Ubicación",
-            "👤 Desempeño Transferidores",
+        tab1, tab_tv, tab_hist, tab_ubi, tab_transf, tab2, tab3, tab4, tab_std = st.tabs([
+            "📂 Ingesta & Carga",
+            "🖥️ Pantalla Bodega TV",
+            "📅 Histórico Multi-Período",
+            "📍 Ubicación y Destinos",
+            "👤 Rendimiento Transferidores",
             "📈 KPIs por Categoría",
             "🏪 Desglose por Tienda",
             "🎽 Análisis de Productos",
-            "📅 Histórico + Forecast"
+            "⚙️ Estándares Textiles"
         ])
 
         # ==================== TAB 1 (CARGA Y CRUCE) ====================
@@ -1251,7 +1532,12 @@ def mostrar_dashboard_transferencias():
                     st.error(f"Error procesando datos: {e}")
 
             if st.session_state.get('es_modo_consulta_pbi'):
-                st.info("🔍 **Modo Solo Consulta:** Los datos se encuentran activos en memoria para análisis en las pestañas. **No se han guardado en la base de datos.**")
+                st.info("🔍 **Modo Solo Consulta:** Los datos se encuentran activos en memoria para análisis en las pestañas.")
+                col_save_pbi, _ = st.columns([2, 3])
+                with col_save_pbi:
+                    if st.button("💾 Guardar este Lote en Histórico Atómico (Fact Table)", type="secondary"):
+                        ins, act = upsert_fact_transferencias(st.session_state.df_cruce, fuente_origen="POWERBI_EXTRACT", usuario=st.session_state.get("username", "admin"))
+                        st.success(f"✅ Histórico actualizado con éxito: {ins} nuevos registros insertados, {act} actualizados.")
             elif st.session_state.get('procesado_archivos_logistica'):
                 fechas = st.session_state.df_cruce['FECHA'].unique() if 'FECHA' in st.session_state.df_cruce.columns and not st.session_state.df_cruce['FECHA'].isna().all() else [st.session_state.fecha_d_logistica]
                 fechas_existentes = [f for f in fechas if existe_historico_dia(f, "Transferencias Diarias")]
@@ -1262,11 +1548,14 @@ def mostrar_dashboard_transferencias():
                     if st.button("Confirmar guardado", type="primary"):
                         ac = "reemplazar" if "Reemplazar" in acc else ("eliminar" if "Eliminar" in acc else "fusionar")
                         _, _, estado = guardar_historico_diario(st.session_state.df_cruce, st.session_state.df_detalle_enr, st.session_state.archT_name, st.session_state.get("username", "admin"), accion=ac)
-                        st.success(f"✅ Datos guardados/actualizados correctamente ({len(fechas)} días procesados).")
+                        # También guardar en la tabla atómica Fact Table
+                        upsert_fact_transferencias(st.session_state.df_cruce, fuente_origen="EXCEL_HISTORICO", usuario=st.session_state.get("username", "admin"))
+                        st.success(f"✅ Datos guardados y sincronizados en Histórico Atómico ({len(fechas)} días procesados).")
                         st.session_state.procesado_archivos_logistica = False
                 else:
                     guardar_historico_diario(st.session_state.df_cruce, st.session_state.df_detalle_enr, st.session_state.archT_name, st.session_state.get("username", "admin"))
-                    st.success(f"✅ Procesado y guardado correctamente ({len(fechas)} días procesados).")
+                    upsert_fact_transferencias(st.session_state.df_cruce, fuente_origen="EXCEL_HISTORICO", usuario=st.session_state.get("username", "admin"))
+                    st.success(f"✅ Procesado y guardado en Histórico Atómico ({len(fechas)} días procesados).")
                     st.session_state.procesado_archivos_logistica = False
 
             if 'df_cruce' in st.session_state:
@@ -1278,6 +1567,17 @@ def mostrar_dashboard_transferencias():
                 c2.metric("Prendas", f"{df['PRENDAS'].sum()}")
                 c3.metric("Fundas", f"{df['FUNDAS'].sum()}")
                 c4.metric("Transferencias", df['SECUENCIAL'].nunique())
+
+        # ==================== TAB PANTALLA BODEGA TV ====================
+        with tab_tv:
+            if 'df_cruce' not in st.session_state:
+                st.info("🔄 Carga o sincroniza datos en la Pestaña 1 primero para proyectar en la Pantalla de Bodega TV.")
+            else:
+                _render_tab_tv(st.session_state['df_cruce'])
+
+        # ==================== TAB HISTÓRICO MULTI-PERÍODO ====================
+        with tab_hist:
+            _render_tab_historico_multi_periodo(st.session_state.get('df_cruce'))
 
         # ==================== TAB UBICACIÓN ====================
         with tab_ubi:
@@ -1827,7 +2127,9 @@ def mostrar_dashboard_transferencias():
                     st.dataframe(fc.rename(columns={'ds':'Fecha','yhat':'Predicción','yhat_lower':'Límite inf','yhat_upper':'Límite sup'}))
                 else: st.info("Datos insuficientes (<10 registros)." + (" Instala Prophet" if not PROPHET_AVAILABLE else ""))
 
-
+        # ==================== TAB ESTÁNDARES TEXTILES ====================
+        with tab_std:
+            _render_tab_estandares()
 
     except Exception as e:
         st.error(f"Error general en el dashboard logístico: {e}")
