@@ -1339,7 +1339,7 @@ def mostrar_dashboard_transferencias():
         inject_acumatica_css()
         st.markdown("<div class='main-header'><h1 class='header-title'>🚚 Dashboard de Logística & Transferencias</h1><div class='header-subtitle'>Centro de Control Operativo Logístico y Distribución Textil</div></div>", unsafe_allow_html=True)
 
-        tab1, tab_tv, tab_hist, tab_ubi, tab_transf, tab2, tab3, tab4, tab_std = st.tabs([
+        tab1, tab_tv, tab_hist, tab_ubi, tab_transf, tab2, tab3, tab4, tab5, tab_std = st.tabs([
             "📂 Ingesta & Carga",
             "🖥️ Pantalla Bodega TV",
             "📅 Histórico Multi-Período",
@@ -1348,6 +1348,7 @@ def mostrar_dashboard_transferencias():
             "📈 KPIs por Categoría",
             "🏪 Desglose por Tienda",
             "🎽 Análisis de Productos",
+            "🔮 Historial Diario & Forecast",
             "⚙️ Estándares Textiles"
         ])
 
