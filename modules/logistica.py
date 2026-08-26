@@ -1358,7 +1358,7 @@ def mostrar_dashboard_transferencias():
             
             tipo_carga = st.radio(
                 "Método de Carga:",
-                ["Subida Manual", "Google Drive", "Power BI (Solo Consulta)"],
+                ["Subida Manual", "Google Drive", "Power BI (Solo Consulta)", "JirehWEB ERP (Playwright en Vivo)"],
                 horizontal=True
             )
             
@@ -1366,7 +1366,40 @@ def mostrar_dashboard_transferencias():
             nombre_archivo = "Desconocido"
             es_consulta_pbi = (tipo_carga == "Power BI (Solo Consulta)")
 
-            if tipo_carga == "Power BI (Solo Consulta)":
+            if tipo_carga == "JirehWEB ERP (Playwright en Vivo)":
+                st.subheader("🤖 Sincronización Oficial desde JirehWEB ERP (Playwright)")
+                st.info("Conéctate directamente a **https://fashion.sisconti.com/** para extraer el reporte oficial de transferencias en tiempo real.")
+                
+                cj1, cj2 = st.columns(2)
+                with cj1:
+                    j_user = st.text_input("Usuario JirehWEB:", value=os.getenv("JIREHWEB_USER", "wperez"), key="jireh_u")
+                    j_ini = st.date_input("Fecha Inicio Reporte:", value=date.today(), key="jireh_d_ini")
+                with cj2:
+                    j_pass = st.text_input("Contraseña JirehWEB:", value=os.getenv("JIREHWEB_PASS", "Wilo3161*"), type="password", key="jireh_p")
+                    j_fin = st.date_input("Fecha Fin Reporte:", value=date.today(), key="jireh_d_fin")
+                
+                if st.button("🚀 Extraer Reporte Real con Playwright", type="primary", use_container_width=True):
+                    from services.jireh_extractor import extraer_transferencias_jireh
+                    with st.spinner("🤖 Playwright ingresando a Sisconti JirehWEB y extrayendo reporte..."):
+                        df_jireh, msg = extraer_transferencias_jireh(
+                            fecha_inicio=j_ini.strftime("%Y-%m-%d"),
+                            fecha_fin=j_fin.strftime("%Y-%m-%d"),
+                            usuario=j_user,
+                            password=j_pass,
+                            headless=True
+                        )
+                        if not df_jireh.empty:
+                            st.success(f"✅ {msg}")
+                            dfT = df_jireh.copy()
+                            dfD = df_jireh.copy()
+                            dfD["PRODUCTO"] = "PRENDAS AEROPOSTALE"
+                            dfD["CATEGORIA"] = "TEES"
+                            dfD["COSTO"] = 15.0
+                            nombre_archivo = f"JirehWEB_{j_ini.strftime('%Y%m%d')}_{j_fin.strftime('%Y%m%d')}"
+                        else:
+                            st.error(f"❌ {msg}")
+
+            elif tipo_carga == "Power BI (Solo Consulta)":
                 st.info("🔍 **Modo Consulta Power BI**: Visualiza y analiza los datos de Power BI bajo demanda. **No se guardará en la base de datos** del módulo hasta que organices la información.")
                 
                 tabla_pbi_sel = st.selectbox(
