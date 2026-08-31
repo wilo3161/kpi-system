@@ -1,3 +1,5 @@
+from __future__ import annotations
+from typing import Any, Optional, Union, Dict, List, Tuple
 # modules/logistica.py
 # ============================================================================
 # DASHBOARD LOGÍSTICO - TRANSFERENCIAS Y DISTRIBUCIÓN
