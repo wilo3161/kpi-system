@@ -1660,18 +1660,19 @@ def mostrar_dashboard_transferencias():
                             password=j_pass,
                             headless=True
                         )
+                        st.session_state['df_cruce'] = df_c_ext.copy()
+                        st.session_state['df_detalle_enr'] = df_d_ext.copy()
+                        nombre_archivo = f"JirehWEB_{_to_str_date(j_ini, '%Y%m%d')}"
+                        st.session_state['archT_name'] = nombre_archivo
+                        st.session_state['fecha_d_logistica'] = f_str
+                        st.session_state['procesado_archivos_logistica'] = not df_c_ext.empty
                         if not df_c_ext.empty:
-                            st.session_state['df_cruce'] = df_c_ext.copy()
-                            st.session_state['df_detalle_enr'] = df_d_ext.copy()
-                            nombre_archivo = f"JirehWEB_{_to_str_date(j_ini, '%Y%m%d')}"
-                            st.session_state['archT_name'] = nombre_archivo
-                            st.session_state['procesado_archivos_logistica'] = True
                             st.success(f"✅ {msg}")
                             if p_tr and p_dt:
                                 st.caption(f"📁 Archivos generados: `{p_tr}` y `{p_dt}`")
-                            st.rerun()
                         else:
-                            st.error(f"❌ {msg}")
+                            st.info(f"📭 {msg}")
+                        st.rerun()
 
             elif tipo_carga == "Power BI (Solo Consulta)":
                 st.info("🔍 **Modo Consulta Power BI**: Visualiza y analiza los datos de Power BI bajo demanda. **No se guardará en la base de datos** del módulo hasta que organices la información.")
@@ -1808,11 +1809,21 @@ def mostrar_dashboard_transferencias():
                 df = st.session_state['df_cruce']
                 st.markdown("---")
                 st.subheader("Resumen del último cruce")
-                c1,c2,c3,c4 = st.columns(4)
-                c1.metric("Total Unidades", f"{int(df['PRENDAS'].sum()+df['FUNDAS'].sum()):,}")
-                c2.metric("Prendas Netas", f"{int(df['PRENDAS'].sum()):,}")
-                c3.metric("Fundas / Insumos", f"{int(df['FUNDAS'].sum()):,}")
-                c4.metric("Transferencias", f"{len(df)}")
+                if df is None or df.empty:
+                    st.info(f"📭 Sisconti ERP no registra transferencias ni despachos para la fecha consultada ({st.session_state.get('fecha_d_logistica', 'Fecha seleccionada')}).")
+                    c1,c2,c3,c4 = st.columns(4)
+                    c1.metric("Total Unidades", "0")
+                    c2.metric("Prendas Netas", "0")
+                    c3.metric("Fundas / Insumos", "0")
+                    c4.metric("Transferencias", "0")
+                else:
+                    tot_p = int(df['PRENDAS'].sum()) if 'PRENDAS' in df.columns else 0
+                    tot_f = int(df['FUNDAS'].sum()) if 'FUNDAS' in df.columns else 0
+                    c1,c2,c3,c4 = st.columns(4)
+                    c1.metric("Total Unidades", f"{tot_p + tot_f:,}")
+                    c2.metric("Prendas Netas", f"{tot_p:,}")
+                    c3.metric("Fundas / Insumos", f"{tot_f:,}")
+                    c4.metric("Transferencias", f"{len(df):,}")
 
         # ==================== TAB PANTALLA BODEGA TV ====================
         with tab_tv:

@@ -86,22 +86,27 @@ class PowerBITransferenciasService:
         """
         Realiza la comprobación y conciliación de cantidades entre Power BI y JirehWEB Sisconti.
         """
-        if df_jirehweb is None or df_jirehweb.empty:
+        if df_jirehweb is None:
             from core.realtime_transferencias import obtener_dataset_oficial_sisconti
             df_jirehweb, _ = obtener_dataset_oficial_sisconti()
 
-        total_pbi_unidades = float(df_powerbi['Trans_ Can'].sum()) if 'Trans_ Can' in df_powerbi.columns else 0.0
-        total_pbi_guias = int(df_powerbi['minv_num_sec'].nunique()) if 'minv_num_sec' in df_powerbi.columns else len(df_powerbi)
+        total_pbi_unidades = float(df_powerbi['Trans_ Can'].sum()) if (df_powerbi is not None and not df_powerbi.empty and 'Trans_ Can' in df_powerbi.columns) else 0.0
+        total_pbi_guias = int(df_powerbi['minv_num_sec'].nunique()) if (df_powerbi is not None and not df_powerbi.empty and 'minv_num_sec' in df_powerbi.columns) else (len(df_powerbi) if df_powerbi is not None else 0)
 
-        if 'PRENDAS' in df_jirehweb.columns:
+        if df_jirehweb is None or df_jirehweb.empty:
+            total_jireh_unidades = 0.0
+            total_jireh_guias = 0
+        elif 'PRENDAS' in df_jirehweb.columns:
             total_jireh_unidades = float(df_jirehweb['PRENDAS'].sum() + (df_jirehweb['FUNDAS'].sum() if 'FUNDAS' in df_jirehweb.columns else 0))
+            sec_col_j = 'SECUENCIAL' if 'SECUENCIAL' in df_jirehweb.columns else ('Secuencial' if 'Secuencial' in df_jirehweb.columns else df_jirehweb.columns[0])
+            total_jireh_guias = int(df_jirehweb[sec_col_j].nunique()) if sec_col_j in df_jirehweb.columns else len(df_jirehweb)
         elif 'CANTIDAD' in df_jirehweb.columns:
             total_jireh_unidades = float(df_jirehweb['CANTIDAD'].sum())
+            sec_col_j = 'SECUENCIAL' if 'SECUENCIAL' in df_jirehweb.columns else ('Secuencial' if 'Secuencial' in df_jirehweb.columns else df_jirehweb.columns[0])
+            total_jireh_guias = int(df_jirehweb[sec_col_j].nunique()) if sec_col_j in df_jirehweb.columns else len(df_jirehweb)
         else:
-            total_jireh_unidades = float(df_jirehweb.iloc[:, 0].sum())
-
-        sec_col_j = 'SECUENCIAL' if 'SECUENCIAL' in df_jirehweb.columns else ('Secuencial' if 'Secuencial' in df_jirehweb.columns else df_jirehweb.columns[0])
-        total_jireh_guias = int(df_jirehweb[sec_col_j].nunique()) if sec_col_j in df_jirehweb.columns else len(df_jirehweb)
+            total_jireh_unidades = float(df_jirehweb.iloc[:, 0].sum()) if not df_jirehweb.empty else 0.0
+            total_jireh_guias = len(df_jirehweb)
 
         diff_unidades = round(total_pbi_unidades - total_jireh_unidades, 2)
         diff_guias = total_pbi_guias - total_jireh_guias
@@ -109,42 +114,43 @@ class PowerBITransferenciasService:
         conciliado_100 = (abs(diff_unidades) < 0.01)
 
         # Mapeo por colaborador de Power BI
-        col_pers = 'empl_ape_nomb' if 'empl_ape_nomb' in df_powerbi.columns else df_powerbi.columns[1]
         ranking_pbi = []
+        if df_powerbi is not None and not df_powerbi.empty:
+            col_pers = 'empl_ape_nomb' if 'empl_ape_nomb' in df_powerbi.columns else (df_powerbi.columns[1] if len(df_powerbi.columns) > 1 else df_powerbi.columns[0])
+            for persona_raw, grp in df_powerbi.groupby(col_pers):
+                p_oficial = identificar_transferidor(persona_raw)
+                total_u = float(grp['Trans_ Can'].sum()) if 'Trans_ Can' in grp.columns else 0.0
+                n_transf = int(grp['minv_num_sec'].nunique()) if 'minv_num_sec' in grp.columns else len(grp)
+                
+                # Discriminación de fundas en base a items
+                prendas_netas, fundas_netas = 0, 0
+                for _, item in grp.iterrows():
+                    c_val = item.get('Trans_ Can', 0)
+                    cost_val = item.get('Costo_Trans', 0.0)
+                    p, f = discriminar_fundas_sisconti(c_val, cost_val)
+                    prendas_netas += p
+                    fundas_netas += f
 
-        for persona_raw, grp in df_powerbi.groupby(col_pers):
-            p_oficial = identificar_transferidor(persona_raw)
-            total_u = float(grp['Trans_ Can'].sum())
-            n_transf = int(grp['minv_num_sec'].nunique())
-            
-            # Discriminación de fundas en base a items
-            prendas_netas, fundas_netas = 0, 0
-            for _, item in grp.iterrows():
-                c_val = item.get('Trans_ Can', 0)
-                cost_val = item.get('Costo_Trans', 0.0)
-                p, f = discriminar_fundas_sisconti(c_val, cost_val)
-                prendas_netas += p
-                fundas_netas += f
+                # Tiendas atendidas
+                tiendas_dict = {}
+                if 'Nombre Bode.' in grp.columns:
+                    for t_name, t_grp in grp.groupby('Nombre Bode.'):
+                        tiendas_dict[t_name] = {
+                            "prendas": int(t_grp['Trans_ Can'].sum()) if 'Trans_ Can' in t_grp.columns else 0,
+                            "secuenciales": sorted(list(t_grp['minv_num_sec'].astype(str).unique())) if 'minv_num_sec' in t_grp.columns else []
+                        }
 
-            # Tiendas atendidas
-            tiendas_dict = {}
-            for t_name, t_grp in grp.groupby('Nombre Bode.'):
-                tiendas_dict[t_name] = {
-                    "prendas": int(t_grp['Trans_ Can'].sum()),
-                    "secuenciales": sorted(list(t_grp['minv_num_sec'].astype(str).unique()))
-                }
-
-            ranking_pbi.append({
-                "transferidor": p_oficial,
-                "nombre_pbi": persona_raw,
-                "total_unidades": int(total_u),
-                "prendas_netas": prendas_netas,
-                "fundas": fundas_netas,
-                "transferencias_count": n_transf,
-                "porcentaje_aporte": round((prendas_netas / max(1.0, total_pbi_unidades - fundas_netas)) * 100, 1),
-                "tiendas": tiendas_dict,
-                "secuenciales": sorted(list(grp['minv_num_sec'].astype(str).unique()))
-            })
+                ranking_pbi.append({
+                    "transferidor": p_oficial,
+                    "nombre_pbi": persona_raw,
+                    "total_unidades": int(total_u),
+                    "prendas_netas": prendas_netas,
+                    "fundas_netas": fundas_netas,
+                    "transferencias_count": n_transf,
+                    "porcentaje_aporte": round((prendas_netas / max(1.0, total_pbi_unidades - fundas_netas)) * 100, 1),
+                    "tiendas": tiendas_dict,
+                    "secuenciales": sorted(list(grp['minv_num_sec'].astype(str).unique())) if 'minv_num_sec' in grp.columns else []
+                })
 
         ranking_pbi.sort(key=lambda x: x["prendas_netas"], reverse=True)
 

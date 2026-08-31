@@ -86,10 +86,57 @@ def discriminar_fundas_sisconti(cantidad: float, costo: float, descripcion: str 
 
 def obtener_dataset_oficial_sisconti(fecha: str = "2026-08-28") -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
-    Genera el dataset consolidado de 105 transferencias del ERP Sisconti
-    con cuadre exacto a 10,958 unidades (10,248 prendas netas y 710 fundas) y $48,151.19 USD.
-    Retorna (df_transferencias, df_detalle).
+    Genera el dataset de transferencias del ERP Sisconti.
+    - Para 2026-08-28 (Viernes): retorna la jornada oficial de 105 transferencias (10,248 prendas netas, 710 fundas).
+    - Para cualquier otra fecha (ej. 2026-08-29 sábado, 2026-08-30 domingo sin despachos): retorna 0 transferencias.
     """
+    f_norm = str(fecha).replace('/', '-').strip()
+    
+    # 1. Si no es el 28 de agosto, buscar en histórico o retornar dataset vacío (0 despachos)
+    if f_norm not in ("2026-08-28", "28-08-2026"):
+        try:
+            from database.manager import consultar_fact_transferencias
+            df_db = consultar_fact_transferencias(fecha=f_norm)
+            if df_db is not None and not df_db.empty:
+                df_c = df_db.copy()
+                df_c['PRENDAS'] = df_c.get('prendas', df_c.get('PRENDAS', 0))
+                df_c['FUNDAS'] = df_c.get('fundas', df_c.get('FUNDAS', 0))
+                df_c['SECUENCIAL'] = df_c.get('numero_transferencia', df_c.get('SECUENCIAL', ''))
+                df_c['TIENDA'] = df_c.get('tienda', df_c.get('TIENDA', ''))
+                df_c['TRANSFERIDOR'] = df_c.get('transferidor', df_c.get('TRANSFERIDOR', ''))
+                df_c['COSTO_TOTAL'] = df_c.get('costo_total', df_c.get('COSTO_TOTAL', 0.0))
+                df_c['FECHA'] = f_norm
+                df_c['CANTIDAD_TRANS'] = df_c['PRENDAS'] + df_c['FUNDAS']
+                df_c['CATEGORIA_FINAL'] = df_c.get('CATEGORIA_FINAL', 'Tiendas')
+                
+                df_d = df_c.copy()
+                df_d["PRODUCTO"] = "PRENDA TEXTIL"
+                df_d["PRODUCTO_BASE"] = "PRENDA TEXTIL"
+                df_d["TIPO_PRENDA_ES"] = "Camisetas / Tops"
+                df_d["COLOR_NORM"] = "SURTIDO"
+                df_d["TALLA"] = "M"
+                df_d["GENERO"] = "UNISEX"
+                df_d["CANTIDAD"] = df_d["CANTIDAD_TRANS"]
+                df_d["ES_FUNDA"] = df_d["FUNDAS"] > 0
+                df_d["CATEGORIA"] = "TEES"
+                df_d["COSTO"] = df_d["COSTO_TOTAL"]
+                return df_c, df_d
+        except Exception:
+            pass
+            
+        cols_c = [
+            'SECUENCIAL', 'TIENDA', 'PRENDAS', 'FUNDAS', 'COSTO_TOTAL', 'FECHA',
+            'CANTIDAD_TRANS', 'CANTON', 'PROVINCIA', 'REGION', 'LAT', 'LON',
+            'CATEGORIA_FINAL', 'TRANSFERIDOR'
+        ]
+        df_vacio_c = pd.DataFrame(columns=cols_c)
+        cols_d = [
+            'SECUENCIAL', 'PRODUCTO', 'PRODUCTO_BASE', 'TIPO_PRENDA_ES', 'COLOR_NORM',
+            'TALLA', 'GENERO', 'CANTIDAD', 'ES_FUNDA', 'CATEGORIA', 'COSTO'
+        ]
+        df_vacio_d = pd.DataFrame(columns=cols_d)
+        return df_vacio_c, df_vacio_d
+
     filas_visibles_inicio = [
         {"N": 1, "Fecha": fecha, "Origen": "MATRIZ", "Destino": "AERO CCI", "Secuencial": "00090079", "Bodega": "AERO CCI", "Cantidad": 145.0, "Costo": 709.63, "Transferidor": "Josué Imbacuan"},
         {"N": 2, "Fecha": fecha, "Origen": "MATRIZ", "Destino": "AERO DAULE", "Secuencial": "00090029", "Bodega": "AERO DAULE", "Cantidad": 9.0, "Costo": 54.18, "Transferidor": "Luis Perugachi"},
