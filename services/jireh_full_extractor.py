@@ -159,12 +159,15 @@ def ejecutar_extraccion_completa_jireh(
             page.on("dialog", lambda d: d.accept())
 
             # ── 1. LOGIN JIREHWEB ──
-            logger.info("Iniciando sesión en Sisconti Fashion JirehWEB...")
-            page.goto(JIREHWEB_URL, wait_until="networkidle", timeout=40000)
-            if page.locator("input[name='user'], input[id='user'], input[name='usuario']").count() > 0:
-                page.get_by_role("textbox", name="Usuario / Identificacion").fill(user)
-                page.get_by_role("textbox", name="Contraseña").fill(pwd)
-                page.get_by_role("button", name=" Ingresar").click()
+            logger.info(f"Iniciando sesión en Sisconti Fashion JirehWEB para usuario {user}...")
+            page.goto(JIREHWEB_URL, wait_until="networkidle", timeout=45000)
+            page.wait_for_timeout(1500)
+
+            # Llenar credenciales con selectores universales
+            if page.locator("input[name='usuario'], input[name='user'], input[id='usuario'], input[id='user'], input[type='text']").count() > 0:
+                page.locator("input[name='usuario'], input[name='user'], input[id='usuario'], input[id='user'], input[type='text']").first.fill(user)
+                page.locator("input[name='password'], input[name='pass'], input[id='password'], input[id='pass'], input[type='password']").first.fill(pwd)
+                page.locator("button:has-text('Ingresar'), input[value='Ingresar'], button[type='submit'], text='Ingresar'").first.click()
                 page.wait_for_timeout(4000)
 
             # Localizar iframe principal de escritorio

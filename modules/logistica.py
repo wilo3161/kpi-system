@@ -4,6 +4,8 @@
 # Versión completa y corregida (error FileUploader solucionado)
 # ============================================================================
 
+import os
+import sys
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -1596,36 +1598,38 @@ def mostrar_dashboard_transferencias():
 
             if tipo_carga == "JirehWEB ERP (Playwright en Vivo)":
                 st.subheader("🤖 Sincronización Oficial desde JirehWEB ERP (Playwright + Pandas)")
-                st.info("Conéctate directamente a **https://fashion.sisconti.com/** para extraer el Reporte de Transferencias Matriz y el Movimiento de Inventario Detallado en vivo.")
+                st.info("Extracción robótica 100% automatizada desde **https://fashion.sisconti.com/**: descarga Transferencias Matriz y Movimiento Detallado, normaliza cantidades y actualiza la base de datos.")
                 
-                cj1, cj2 = st.columns(2)
+                cj1, cj2 = st.columns([2, 3])
                 with cj1:
-                    j_user = st.text_input("Usuario JirehWEB:", value=os.getenv("JIREHWEB_USER", "wperez"), key="jireh_u")
-                    j_ini = st.date_input("Fecha Inicio Reporte:", value=date.today(), key="jireh_d_ini")
+                    j_ini = st.date_input("📅 Fecha de Jornada a Extraer:", value=date(2026, 8, 28), key="jireh_d_ini")
                 with cj2:
-                    j_pass = st.text_input("Contraseña JirehWEB:", value=os.getenv("JIREHWEB_PASS", "Wilo3161*"), type="password", key="jireh_p")
-                    j_fin = st.date_input("Fecha Fin Reporte:", value=date.today(), key="jireh_d_fin")
-                
-                if st.button("🚀 Extraer Reportes (Matriz + Detalle) con Playwright", type="primary", use_container_width=True):
+                    st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
+                    btn_auto_jireh = st.button("🚀 Iniciar Extracción Automática en Vivo (JirehWEB ERP)", type="primary", use_container_width=True)
+
+                if btn_auto_jireh:
                     from services.jireh_full_extractor import ejecutar_extraccion_completa_jireh
-                    with st.spinner("🤖 Playwright extrayendo Transferencias Matriz y Movimiento Detallado desde JirehWEB..."):
+                    j_user = os.getenv("JIREHWEB_USER", "wperez")
+                    j_pass = os.getenv("JIREHWEB_PASS", "Wilo3161*")
+                    f_str = j_ini.strftime("%Y-%m-%d")
+                    
+                    with st.spinner(f"🤖 Robot Playwright ingresando a Sisconti JirehWEB ({f_str}) para descargar Matriz y Movimiento Detallado..."):
                         df_c_ext, df_d_ext, p_tr, p_dt, msg = ejecutar_extraccion_completa_jireh(
-                            fecha_consulta=j_ini.strftime("%Y-%m-%d"),
+                            fecha_consulta=f_str,
                             usuario=j_user,
                             password=j_pass,
                             headless=True
                         )
                         if not df_c_ext.empty:
-                            st.success(f"✅ {msg}")
-                            dfT = df_c_ext.copy()
-                            dfD = df_d_ext.copy()
-                            st.session_state['df_cruce'] = dfT
-                            st.session_state['df_detalle_enr'] = dfD
+                            st.session_state['df_cruce'] = df_c_ext.copy()
+                            st.session_state['df_detalle_enr'] = df_d_ext.copy()
                             nombre_archivo = f"JirehWEB_{j_ini.strftime('%Y%m%d')}"
                             st.session_state['archT_name'] = nombre_archivo
                             st.session_state['procesado_archivos_logistica'] = True
+                            st.success(f"✅ {msg}")
                             if p_tr and p_dt:
-                                st.caption(f"Archivos Excel limpios generados: `{p_tr}` y `{p_dt}`")
+                                st.caption(f"📁 Archivos generados: `{p_tr}` y `{p_dt}`")
+                            st.rerun()
                         else:
                             st.error(f"❌ {msg}")
 
