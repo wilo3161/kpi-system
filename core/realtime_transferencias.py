@@ -226,6 +226,7 @@ def obtener_dataset_oficial_sisconti(fecha: str = "2026-08-28") -> Tuple[pd.Data
     df_d["TIPO_PRENDA_ES"] = "Camisetas / Tops"
     df_d["COLOR_NORM"] = "SURTIDO"
     df_d["TALLA"] = "M"
+    df_d["GENERO"] = "UNISEX"
     df_d["CANTIDAD"] = df_d["Cantidad"]
     df_d["ES_FUNDA"] = df_d["FUNDAS"] > 0
     df_d["CATEGORIA"] = "TEES"

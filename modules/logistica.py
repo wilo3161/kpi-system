@@ -438,9 +438,22 @@ def guardar_historico_diario(df_cruce, df_det, archivo_nombre, usuario, accion="
             dia = orig_dia
             df_cruce_dia = df_cruce[df_cruce['FECHA'] == orig_dia] if 'FECHA' in df_cruce.columns else df_cruce
             
-        secs = df_cruce_dia['SECUENCIAL'].unique()
-        det_dia = df_det[df_det['SECUENCIAL'].isin(secs)]
-        prendas = det_dia[~det_dia['ES_FUNDA']]
+        secs = df_cruce_dia['SECUENCIAL'].unique() if 'SECUENCIAL' in df_cruce_dia.columns else []
+        det_dia = df_det[df_det['SECUENCIAL'].isin(secs)] if (df_det is not None and not df_det.empty and 'SECUENCIAL' in df_det.columns) else pd.DataFrame()
+        prendas = det_dia[~det_dia['ES_FUNDA']].copy() if ('ES_FUNDA' in det_dia.columns and not det_dia.empty) else det_dia.copy()
+        
+        # Blindaje de columnas para métricas de prendas
+        cols_prendas_needed = {
+            'TIPO_PRENDA_ES': 'Camisetas / Tops',
+            'COLOR_NORM': 'SURTIDO',
+            'TALLA': 'M',
+            'GENERO': 'UNISEX',
+            'CANTIDAD': 1
+        }
+        for c_req, def_v in cols_prendas_needed.items():
+            if c_req not in prendas.columns:
+                prendas[c_req] = def_v
+
         met = {
             "total_unidades": _safe_int(df_cruce_dia['PRENDAS'].sum() + df_cruce_dia['FUNDAS'].sum()),
             "total_prendas": _safe_int(df_cruce_dia['PRENDAS'].sum()),
