@@ -264,7 +264,8 @@ class RealtimeTransferenciasService:
         df['COSTO_VAL'] = df[col_costo].astype(float) if col_costo in df.columns else 0.0
 
         # ── TOTALES GENERALES ──
-        total_transf = len(df[col_sec].unique())
+        total_transf = len(df)  # 105 registros de transferencia de la grilla
+        secuenciales_unicos = len(df[col_sec].unique())
         total_prendas = int(df['PRENDAS'].sum())
         total_fundas = int(df['FUNDAS'].sum())
         total_unidades = total_prendas + total_fundas
