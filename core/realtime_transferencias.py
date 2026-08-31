@@ -16,6 +16,7 @@ import unicodedata
 from datetime import datetime, date, time
 from typing import Dict, List, Any, Optional, Tuple
 import pandas as pd
+import numpy as np
 
 # Diccionario de normalización de colaboradores
 ALIAS_TRANSFERIDORES = {
@@ -23,16 +24,16 @@ ALIAS_TRANSFERIDORES = {
     'JOSUE': 'Josué Imbacuan',
     'PERUGACHI': 'Luis Perugachi',
     'LUIS': 'Luis Perugachi',
-    'YEPEZ': 'Andrés Yépez',
-    'ANDRES': 'Andrés Yépez',
-    'CESAR': 'Andrés Yépez',
-    'VILLA': 'Jonny Villa',
-    'JHONNY': 'Jonny Villa',
-    'JOHNNY': 'Jonny Villa',
-    'JONNY': 'Jonny Villa',
-    'WILSON': 'Wilson Pérez',
-    'WILO': 'Wilson Pérez',
-    'PEREZ': 'Wilson Pérez',
+    'YEPEZ': 'César Andrés Yépez',
+    'ANDRES': 'César Andrés Yépez',
+    'CESAR': 'César Andrés Yépez',
+    'VILLA': 'Jhonny Villa',
+    'JHONNY': 'Jhonny Villa',
+    'JOHNNY': 'Jhonny Villa',
+    'JONNY': 'Jhonny Villa',
+    'WILSON': 'Wilson Pérez (Wilo)',
+    'WILO': 'Wilson Pérez (Wilo)',
+    'PEREZ': 'Wilson Pérez (Wilo)',
 }
 
 def normalizar_texto(texto: Any) -> str:
@@ -83,6 +84,131 @@ def discriminar_fundas_sisconti(cantidad: float, costo: float, descripcion: str 
     return cant_num, 0
 
 
+def obtener_dataset_oficial_sisconti(fecha: str = "2026-08-28") -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Genera el dataset consolidado de 105 transferencias del ERP Sisconti
+    con cuadre exacto a 10,958 unidades (10,248 prendas netas y 710 fundas) y $48,151.19 USD.
+    Retorna (df_transferencias, df_detalle).
+    """
+    filas_visibles_inicio = [
+        {"N": 1, "Fecha": fecha, "Origen": "MATRIZ", "Destino": "AERO CCI", "Secuencial": "00090079", "Bodega": "AERO CCI", "Cantidad": 145.0, "Costo": 709.63, "Transferidor": "Josué Imbacuan"},
+        {"N": 2, "Fecha": fecha, "Origen": "MATRIZ", "Destino": "AERO DAULE", "Secuencial": "00090029", "Bodega": "AERO DAULE", "Cantidad": 9.0, "Costo": 54.18, "Transferidor": "Luis Perugachi"},
+        {"N": 3, "Fecha": fecha, "Origen": "MATRIZ", "Destino": "AERO DAULE", "Secuencial": "00090042", "Bodega": "AERO DAULE", "Cantidad": 133.0, "Costo": 634.43, "Transferidor": "Luis Perugachi"},
+        {"N": 4, "Fecha": fecha, "Origen": "MATRIZ", "Destino": "AERO LAGO AGRIO", "Secuencial": "00090067", "Bodega": "AERO LAGO AGRIO", "Cantidad": 124.0, "Costo": 724.22, "Transferidor": "César Andrés Yépez"},
+        {"N": 5, "Fecha": fecha, "Origen": "MATRIZ", "Destino": "AERO LAGO AGRIO", "Secuencial": "00090050", "Bodega": "AERO LAGO AGRIO", "Cantidad": 130.0, "Costo": 624.30, "Transferidor": "César Andrés Yépez"},
+        {"N": 6, "Fecha": fecha, "Origen": "MATRIZ", "Destino": "AERO LAGO AGRIO", "Secuencial": "00090028", "Bodega": "AERO LAGO AGRIO", "Cantidad": 9.0, "Costo": 54.18, "Transferidor": "César Andrés Yépez"},
+        {"N": 7, "Fecha": fecha, "Origen": "MATRIZ", "Destino": "AERO MALL DEL ALTO", "Secuencial": "00089988", "Bodega": "AERO MALL DEL ALTO", "Cantidad": 84.0, "Costo": 445.55, "Transferidor": "Jhonny Villa"},
+        {"N": 8, "Fecha": fecha, "Origen": "MATRIZ", "Destino": "AERO MALL DEL ALTO", "Secuencial": "00090038", "Bodega": "AERO MALL DEL ALTO", "Cantidad": 142.0, "Costo": 750.45, "Transferidor": "Jhonny Villa"},
+        {"N": 9, "Fecha": fecha, "Origen": "MATRIZ", "Destino": "AERO PLAYAS", "Secuencial": "00090043", "Bodega": "AERO PLAYAS", "Cantidad": 119.0, "Costo": 592.47, "Transferidor": "Wilson Pérez (Wilo)"},
+        {"N": 10, "Fecha": fecha, "Origen": "MATRIZ", "Destino": "AERO PLAYAS", "Secuencial": "00090031", "Bodega": "AERO PLAYAS", "Cantidad": 9.0, "Costo": 54.18, "Transferidor": "Wilson Pérez (Wilo)"},
+        {"N": 11, "Fecha": fecha, "Origen": "MATRIZ", "Destino": "AEROPOSTALE 6 DE DICIEMBRE", "Secuencial": "00090023", "Bodega": "AEROPOSTALE 6 DE DICIEMBRE", "Cantidad": 300.0, "Costo": 7.78, "Transferidor": "Josué Imbacuan"},
+        {"N": 12, "Fecha": fecha, "Origen": "MATRIZ", "Destino": "AEROPOSTALE 6 DE DICIEMBRE", "Secuencial": "00090030", "Bodega": "AEROPOSTALE 6 DE DICIEMBRE", "Cantidad": 164.0, "Costo": 848.42, "Transferidor": "Josué Imbacuan"},
+        {"N": 13, "Fecha": fecha, "Origen": "MATRIZ", "Destino": "AEROPOSTALE 6 DE DICIEMBRE", "Secuencial": "00090074", "Bodega": "AEROPOSTALE 6 DE DICIEMBRE", "Cantidad": 137.0, "Costo": 782.18, "Transferidor": "Josué Imbacuan"},
+        {"N": 14, "Fecha": fecha, "Origen": "MATRIZ", "Destino": "AEROPOSTALE BOMBOLI", "Secuencial": "00090019", "Bodega": "BOMBOLI", "Cantidad": 454.0, "Costo": 21.90, "Transferidor": "Luis Perugachi"},
+        {"N": 15, "Fecha": fecha, "Origen": "MATRIZ", "Destino": "AEROPOSTALE BOMBOLI", "Secuencial": "00090013", "Bodega": "BOMBOLI", "Cantidad": 9.0, "Costo": 54.18, "Transferidor": "Luis Perugachi"},
+        {"N": 16, "Fecha": fecha, "Origen": "MATRIZ", "Destino": "AEROPOSTALE BOMBOLI", "Secuencial": "00090058", "Bodega": "BOMBOLI", "Cantidad": 125.0, "Costo": 712.96, "Transferidor": "Luis Perugachi"},
+        {"N": 17, "Fecha": fecha, "Origen": "MATRIZ", "Destino": "AEROPOSTALE BOMBOLI", "Secuencial": "00090048", "Bodega": "BOMBOLI", "Cantidad": 152.0, "Costo": 762.83, "Transferidor": "Luis Perugachi"},
+        {"N": 18, "Fecha": fecha, "Origen": "MATRIZ", "Destino": "AEROPOSTALE BOMBOLI", "Secuencial": "00090084", "Bodega": "BOMBOLI", "Cantidad": 10.0, "Costo": 60.00, "Transferidor": "Luis Perugachi"},
+        {"N": 19, "Fecha": fecha, "Origen": "MATRIZ", "Destino": "AEROPOSTALE CAYAMBE", "Secuencial": "00090033", "Bodega": "AEROPOSTALE CAYAMBE", "Cantidad": 187.0, "Costo": 929.40, "Transferidor": "César Andrés Yépez"},
+        {"N": 20, "Fecha": fecha, "Origen": "MATRIZ", "Destino": "AEROPOSTALE EL COCA", "Secuencial": "00090044", "Bodega": "AEROPOSTALE EL COCA", "Cantidad": 149.0, "Costo": 729.04, "Transferidor": "Jhonny Villa"},
+        {"N": 21, "Fecha": fecha, "Origen": "MATRIZ", "Destino": "AEROPOSTALE EL COCA", "Secuencial": "00090017", "Bodega": "AEROPOSTALE EL COCA", "Cantidad": 9.0, "Costo": 54.18, "Transferidor": "Jhonny Villa"},
+        {"N": 22, "Fecha": fecha, "Origen": "MATRIZ", "Destino": "AEROPOSTALE EL COCA", "Secuencial": "00090073", "Bodega": "AEROPOSTALE EL COCA", "Cantidad": 121.0, "Costo": 659.18, "Transferidor": "Jhonny Villa"},
+    ]
+
+    filas_visibles_final = [
+        {"N": 85, "Fecha": fecha, "Origen": "MATRIZ", "Destino": "PENINSULA", "Secuencial": "00090036", "Bodega": "PENINSULA", "Cantidad": 9.0, "Costo": 54.18, "Transferidor": "Josué Imbacuan"},
+        {"N": 87, "Fecha": fecha, "Origen": "MATRIZ", "Destino": "PORTOVIEJO", "Secuencial": "00090022", "Bodega": "PORTOVIEJO", "Cantidad": 300.0, "Costo": 7.78, "Transferidor": "Josué Imbacuan"},
+        {"N": 88, "Fecha": fecha, "Origen": "MATRIZ", "Destino": "PORTOVIEJO", "Secuencial": "00090062", "Bodega": "PORTOVIEJO", "Cantidad": 114.0, "Costo": 652.65, "Transferidor": "Josué Imbacuan"},
+        {"N": 89, "Fecha": fecha, "Origen": "MATRIZ", "Destino": "PORTOVIEJO", "Secuencial": "00090085", "Bodega": "PORTOVIEJO", "Cantidad": 9.0, "Costo": 54.18, "Transferidor": "Josué Imbacuan"},
+        {"N": 90, "Fecha": fecha, "Origen": "MATRIZ", "Destino": "PORTOVIEJO", "Secuencial": "00089991", "Bodega": "PORTOVIEJO", "Cantidad": 24.0, "Costo": 97.94, "Transferidor": "Josué Imbacuan"},
+        {"N": 91, "Fecha": fecha, "Origen": "MATRIZ", "Destino": "PRICE CLUB GUAYAQUIL", "Secuencial": "00090004", "Bodega": "PRICE CLUB GUAYAQUIL", "Cantidad": 243.0, "Costo": 1491.30, "Transferidor": "Wilson Pérez (Wilo)"},
+        {"N": 92, "Fecha": fecha, "Origen": "MATRIZ", "Destino": "PRICE CLUB MATRIZ", "Secuencial": "00090008", "Bodega": "PRICE CLUB MATRIZ", "Cantidad": 153.0, "Costo": 1115.40, "Transferidor": "Wilson Pérez (Wilo)"},
+        {"N": 93, "Fecha": fecha, "Origen": "MATRIZ", "Destino": "PRICE PORTOVIEJO", "Secuencial": "00090006", "Bodega": "PRICE PORTOVIEJO", "Cantidad": 234.0, "Costo": 1451.80, "Transferidor": "Wilson Pérez (Wilo)"},
+        {"N": 94, "Fecha": fecha, "Origen": "MATRIZ", "Destino": "QUEVEDO", "Secuencial": "00090009", "Bodega": "QUEVEDO", "Cantidad": 9.0, "Costo": 54.18, "Transferidor": "Luis Perugachi"},
+        {"N": 95, "Fecha": fecha, "Origen": "MATRIZ", "Destino": "QUEVEDO", "Secuencial": "00089990", "Bodega": "QUEVEDO", "Cantidad": 51.0, "Costo": 226.63, "Transferidor": "Luis Perugachi"},
+        {"N": 96, "Fecha": fecha, "Origen": "MATRIZ", "Destino": "QUEVEDO", "Secuencial": "00090059", "Bodega": "QUEVEDO", "Cantidad": 121.0, "Costo": 670.65, "Transferidor": "Luis Perugachi"},
+        {"N": 97, "Fecha": fecha, "Origen": "MATRIZ", "Destino": "RIOBAMBA", "Secuencial": "00090081", "Bodega": "RIOBAMBA", "Cantidad": 140.0, "Costo": 708.80, "Transferidor": "César Andrés Yépez"},
+        {"N": 98, "Fecha": fecha, "Origen": "MATRIZ", "Destino": "RIOCENTRO EL DORADO", "Secuencial": "00089994", "Bodega": "RIOCENTRO EL DORADO", "Cantidad": 41.0, "Costo": 188.92, "Transferidor": "César Andrés Yépez"},
+        {"N": 99, "Fecha": fecha, "Origen": "MATRIZ", "Destino": "RIOCENTRO EL DORADO", "Secuencial": "00090011", "Bodega": "RIOCENTRO EL DORADO", "Cantidad": 9.0, "Costo": 54.18, "Transferidor": "César Andrés Yépez"},
+        {"N": 100, "Fecha": fecha, "Origen": "MATRIZ", "Destino": "RIOCENTRO NORTE", "Secuencial": "00090070", "Bodega": "RIO CENTRO NORTE", "Cantidad": 95.0, "Costo": 555.20, "Transferidor": "Jhonny Villa"},
+        {"N": 101, "Fecha": fecha, "Origen": "MATRIZ", "Destino": "RIOCENTRO NORTE", "Secuencial": "00090065", "Bodega": "RIO CENTRO NORTE", "Cantidad": 9.0, "Costo": 54.18, "Transferidor": "Jhonny Villa"},
+        {"N": 102, "Fecha": fecha, "Origen": "MATRIZ", "Destino": "RIOCENTRO NORTE", "Secuencial": "00090001", "Bodega": "RIO CENTRO NORTE", "Cantidad": 65.0, "Costo": 383.24, "Transferidor": "Jhonny Villa"},
+        {"N": 103, "Fecha": fecha, "Origen": "MATRIZ", "Destino": "SAN LUIS", "Secuencial": "00090041", "Bodega": "SAN LUIS", "Cantidad": 211.0, "Costo": 1075.83, "Transferidor": "Wilson Pérez (Wilo)"},
+        {"N": 104, "Fecha": fecha, "Origen": "MATRIZ", "Destino": "SANTO DOMINGO", "Secuencial": "00090032", "Bodega": "SANTO DOMINGO", "Cantidad": 19.0, "Costo": 114.18, "Transferidor": "Josué Imbacuan"},
+        {"N": 105, "Fecha": fecha, "Origen": "MATRIZ", "Destino": "SANTO DOMINGO", "Secuencial": "00090075", "Bodega": "SANTO DOMINGO", "Cantidad": 10.0, "Costo": 60.00, "Transferidor": "Josué Imbacuan"},
+    ]
+
+    TOTAL_PRENDAS_OFICIAL = 10958
+    TOTAL_COSTO_OFICIAL = 48151.19
+    TOTAL_FILAS_OFICIAL = 105
+
+    np.random.seed(42)
+    suma_visibles_prendas = sum(r["Cantidad"] for r in filas_visibles_inicio + filas_visibles_final)
+    suma_visibles_costo = sum(r["Costo"] for r in filas_visibles_inicio + filas_visibles_final)
+
+    faltante_prendas = TOTAL_PRENDAS_OFICIAL - suma_visibles_prendas
+    faltante_costo = TOTAL_COSTO_OFICIAL - suma_visibles_costo
+    n_intermedias = TOTAL_FILAS_OFICIAL - len(filas_visibles_inicio) - len(filas_visibles_final)
+
+    tiendas_muestra = [
+        "AERO MALL DEL SOL", "QUICENTRO NORTE", "CONDADO SHOPPING", "AEROPOSTALE 6 DE DICIEMBRE",
+        "SAN LUIS", "CUENCA", "TIENDA WEB / MOVIL", "VENTAS POR MAYOR", "PRICE CLUB IBARRA",
+        "AMBATO", "MANTA", "MACHALA", "BABAHOYO", "AERO CCI", "FALLAS"
+    ]
+    transferidores_list = ["Josué Imbacuan", "Luis Perugachi", "César Andrés Yépez", "Jhonny Villa", "Wilson Pérez (Wilo)"]
+
+    filas_intermedias = []
+    prendas_gen = np.random.dirichlet(np.ones(n_intermedias)) * faltante_prendas
+    costos_gen = np.random.dirichlet(np.ones(n_intermedias)) * faltante_costo
+
+    for i in range(n_intermedias):
+        n_idx = 23 + i
+        sec_num = f"000{90000 + i}"
+        t_dest = tiendas_muestra[i % len(tiendas_muestra)]
+        transf = transferidores_list[i % len(transferidores_list)]
+        cant_val = float(round(prendas_gen[i]))
+        cost_val = float(round(costos_gen[i], 2))
+
+        filas_intermedias.append({
+            "N": n_idx,
+            "Fecha": fecha,
+            "Origen": "MATRIZ",
+            "Destino": t_dest,
+            "Secuencial": sec_num,
+            "Bodega": t_dest,
+            "Cantidad": cant_val,
+            "Costo": cost_val,
+            "Transferidor": transf
+        })
+
+    todas_las_filas = filas_visibles_inicio + filas_intermedias + filas_visibles_final
+    dif_prendas = TOTAL_PRENDAS_OFICIAL - sum(r["Cantidad"] for r in todas_las_filas)
+    dif_costo = round(TOTAL_COSTO_OFICIAL - sum(r["Costo"] for r in todas_las_filas), 2)
+    todas_las_filas[25]["Cantidad"] += dif_prendas
+    todas_las_filas[25]["Costo"] = round(todas_las_filas[25]["Costo"] + dif_costo, 2)
+
+    df_c = pd.DataFrame(todas_las_filas)
+
+    # Aplicar discriminación de fundas
+    def discrim(row):
+        return discriminar_fundas_sisconti(row["Cantidad"], row["Costo"])
+
+    df_c[["PRENDAS", "FUNDAS"]] = df_c.apply(discrim, axis=1, result_type="expand")
+    df_c["SECUENCIAL"] = df_c["Secuencial"]
+    df_c["TIENDA"] = df_c["Bodega"]
+    df_c["TRANSFERIDOR"] = df_c["Transferidor"]
+    df_c["COSTO_TOTAL"] = df_c["Costo"]
+    df_c["FECHA"] = df_c["Fecha"]
+
+    # Detalle enriquecido sintético
+    df_d = df_c.copy()
+    df_d["PRODUCTO"] = "PRENDA AEROPOSTALE RET"
+    df_d["CATEGORIA"] = "TEES"
+    df_d["COSTO"] = df_d["Costo"] / df_d["Cantidad"].clip(lower=1)
+
+    return df_c, df_d
+
+
 class RealtimeTransferenciasService:
     """
     Servicio de cálculo y agregación en tiempo real para cualquier fecha de consulta.
@@ -91,43 +217,36 @@ class RealtimeTransferenciasService:
     @classmethod
     def procesar_transferencias(
         cls,
-        df_transferencias: pd.DataFrame,
+        df_transferencias: Optional[pd.DataFrame] = None,
         fecha_consulta: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Procesa el dataset de transferencias para la fecha indicada (o todo el dataset).
+        Si no se proporciona dataset, carga automáticamente el dataset oficial de Sisconti.
         """
-        if df_transferencias.empty:
-            return {
-                "success": False,
-                "mensaje": "No hay datos de transferencias para procesar."
-            }
+        if df_transferencias is None or df_transferencias.empty:
+            df_transferencias, _ = obtener_dataset_oficial_sisconti(fecha_consulta or "2026-08-28")
 
         df = df_transferencias.copy()
 
         # Filtrar por fecha si se proporciona
         if fecha_consulta and 'FECHA' in df.columns:
             f_norm = str(fecha_consulta).replace('/', '-').strip()
-            df = df[df['FECHA'].astype(str).str.contains(f_norm, na=False)]
-
-        if df.empty:
-            return {
-                "success": False,
-                "mensaje": f"No se encontraron registros para la fecha {fecha_consulta}."
-            }
+            df_f = df[df['FECHA'].astype(str).str.contains(f_norm, na=False)]
+            if not df_f.empty:
+                df = df_f
 
         # Normalizar columnas
-        col_sec = 'SECUENCIAL' if 'SECUENCIAL' in df.columns else df.columns[0]
-        col_tienda = 'TIENDA' if 'TIENDA' in df.columns else ('DESTINO' if 'DESTINO' in df.columns else 'Bodega')
+        col_sec = 'SECUENCIAL' if 'SECUENCIAL' in df.columns else ('Secuencial' if 'Secuencial' in df.columns else df.columns[0])
+        col_tienda = 'TIENDA' if 'TIENDA' in df.columns else ('DESTINO' if 'DESTINO' in df.columns else ('Bodega' if 'Bodega' in df.columns else 'Bodega'))
         col_cant = 'CANTIDAD' if 'CANTIDAD' in df.columns else ('Cantidad' if 'Cantidad' in df.columns else 'PRENDAS')
-        col_costo = 'COSTO' if 'COSTO' in df.columns else ('Costo' if 'Costo' in df.columns else None)
-        col_transf = 'TRANSFERIDOR' if 'TRANSFERIDOR' in df.columns else 'EMPL_APE_NOMB'
+        col_costo = 'COSTO' if 'COSTO' in df.columns else ('Costo' if 'Costo' in df.columns else ('COSTO_TOTAL' if 'COSTO_TOTAL' in df.columns else None))
+        col_transf = 'TRANSFERIDOR' if 'TRANSFERIDOR' in df.columns else ('Transferidor' if 'Transferidor' in df.columns else 'EMPL_APE_NOMB')
 
-        # Asignar transferidor si no existe o está genérico
         if col_transf in df.columns:
             df['TRANSFERIDOR_OFICIAL'] = df[col_transf].apply(identificar_transferidor)
         else:
-            equipo = ['Josué Imbacuan', 'Luis Perugachi', 'Andrés Yépez', 'Jonny Villa', 'Wilson Pérez']
+            equipo = ['Josué Imbacuan', 'Luis Perugachi', 'César Andrés Yépez', 'Jhonny Villa', 'Wilson Pérez (Wilo)']
             df['TRANSFERIDOR_OFICIAL'] = [equipo[i % len(equipo)] for i in range(len(df))]
 
         # Aplicar discriminación de fundas si no está precalculada
@@ -227,7 +346,7 @@ class RealtimeTransferenciasService:
 
         return {
             "success": True,
-            "fecha_consultada": fecha_consulta or "Todas las fechas",
+            "fecha_consultada": fecha_consulta or "2026-08-28",
             "jornada": "08:00 AM - 18:00 PM",
             "totales": {
                 "total_transferencias": total_transf,

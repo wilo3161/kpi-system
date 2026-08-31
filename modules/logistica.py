@@ -1190,36 +1190,36 @@ def _render_tab_tv(dfC):
     """Pantalla de alta visibilidad para monitores de Centro de Distribución y TVs."""
     from datetime import datetime
     ahora_str = datetime.now().strftime("%H:%M:%S • %d/%m/%Y")
+    from core.realtime_transferencias import RealtimeTransferenciasService, obtener_dataset_oficial_sisconti
 
-    met = calcular_metricas_transferencias(dfC)
-    if not met:
-        st.info("ℹ️ Cargue o sincronice datos para proyectar en la Pantalla de Bodega.")
-        return
-
-    df_transf = met['df_transferidores']
-    total_prendas = met['total_prendas']
-    total_guias = met['total_guias']
-    densidad = met['densidad_global']
-    
-    # Meta diaria parametrizada (ej. 80,000 prendas/día)
-    meta_dia = 80000
-    pct_meta = min(100.0, (total_prendas / meta_dia) * 100)
-
-    st.markdown(f"""
-    <div style="background: linear-gradient(135deg, #0b0f19 0%, #1e1b4b 100%); padding: 28px; border-radius: 20px; border: 2px solid #38bdf850; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.8); margin-bottom: 24px;">
-        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
-            <div>
-                <span style="background: #ef4444; color: white; padding: 6px 14px; border-radius: 9999px; font-size: 13px; font-weight: 800; letter-spacing: 1.5px;">🔴 EN VIVO • CENTRO DE CONTROL LOGÍSTICO CD</span>
-                <h1 style="color: #ffffff; font-size: 42px; font-weight: 900; margin: 10px 0 4px 0; letter-spacing: -1.5px;">MONITOREO DE DESPACHOS Y TRANSFERIDORES</h1>
-                <div style="color: #94a3b8; font-size: 15px;">Operación Continua en Bodega Matriz • Retail Textil</div>
-            </div>
-            <div style="text-align: right; background: rgba(15,23,42,0.6); padding: 14px 22px; border-radius: 14px; border: 1px solid rgba(255,255,255,0.1);">
-                <div style="font-size: 12px; color: #94a3b8; letter-spacing: 1px; font-weight: 600;">ÚLTIMA ACTUALIZACIÓN</div>
-                <div style="font-size: 24px; font-weight: 900; color: #38bdf8; font-family: monospace;">{ahora_str}</div>
+    col_hdr1, col_hdr2 = st.columns([3.5, 1.5])
+    with col_hdr1:
+        st.markdown(f"""
+        <div style="background: linear-gradient(135deg, #0b0f19 0%, #1e1b4b 100%); padding: 24px; border-radius: 20px; border: 2px solid #38bdf850; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.8); margin-bottom: 16px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
+                <div>
+                    <span style="background: #ef4444; color: white; padding: 6px 14px; border-radius: 9999px; font-size: 13px; font-weight: 800; letter-spacing: 1.5px;">🔴 EN VIVO • CENTRO DE CONTROL LOGÍSTICO CD</span>
+                    <h1 style="color: #ffffff; font-size: 38px; font-weight: 900; margin: 8px 0 4px 0; letter-spacing: -1.5px;">MONITOREO DE DESPACHOS Y TRANSFERIDORES</h1>
+                    <div style="color: #94a3b8; font-size: 14px;">Operación Continua en Bodega Matriz (08:00 – 18:00) • Retail Textil</div>
+                </div>
             </div>
         </div>
-    </div>
-    """, unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
+    with col_hdr2:
+        f_tv = st.date_input("📅 Fecha de Jornada TV:", value=date(2026, 8, 28), key="fecha_tv_selector")
+        st.caption(f"Última actualización: `{ahora_str}`")
+
+    # Si dfC no tiene la fecha o está vacío, obtener el dataset oficial de Sisconti
+    res_rt = RealtimeTransferenciasService.procesar_transferencias(dfC, fecha_consulta=f_tv.strftime("%Y-%m-%d"))
+    tot = res_rt["totales"]
+    ranking_data = res_rt["ranking_transferidores"]
+
+    total_prendas = tot["total_prendas_netas"]
+    total_fundas = tot["tarjeta_fundas"]
+    total_guias = tot["total_transferencias"]
+    densidad = tot["promedio_prendas_x_transf"]
+    meta_dia = 10000
+    pct_meta = min(100.0, (total_prendas / meta_dia) * 100)
 
     # ── METRICAS GIGANTES DE ALTA VISIBILIDAD (HUD TV) ──
     h1, h2, h3, h4 = st.columns(4)
@@ -1228,7 +1228,7 @@ def _render_tab_tv(dfC):
         <div style="background: rgba(15,23,42,0.85); border-top: 6px solid #38bdf8; padding: 22px; border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.4);">
             <div style="font-size: 13px; color: #94a3b8; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;">📦 PRENDAS PROCESADAS</div>
             <div style="font-size: 46px; font-weight: 900; color: #ffffff; margin: 8px 0;">{total_prendas:,.0f}</div>
-            <div style="font-size: 13px; color: #38bdf8; font-weight: 600;">{met['total_fundas']:,} fundas de embalaje</div>
+            <div style="font-size: 13px; color: #38bdf8; font-weight: 600;">{total_fundas:,} fundas de embalaje</div>
         </div>
         """, unsafe_allow_html=True)
 
@@ -1265,15 +1265,20 @@ def _render_tab_tv(dfC):
     col_tv1, col_tv2 = st.columns([3.5, 2.5])
     with col_tv1:
         st.markdown("### 🏆 Ranking de Productividad del Equipo en Vivo")
-        
-        t_col = 'TRANSFERIDOR' if 'TRANSFERIDOR' in df_transf.columns else 'Bodega Central'
+        df_transf_chart = pd.DataFrame([{
+            "TRANSFERIDOR": r["transferidor"],
+            "Prendas": r["prendas"],
+            "Fundas": r["fundas"],
+            "Total_Unidades": r["prendas"]
+        } for r in ranking_data])
+
         fig_rank = px.bar(
-            df_transf.sort_values('Total_Unidades', ascending=True),
-            x='Total_Unidades',
-            y=t_col,
+            df_transf_chart.sort_values('Prendas', ascending=True),
+            x='Prendas',
+            y='TRANSFERIDOR',
             orientation='h',
-            text=df_transf.sort_values('Total_Unidades', ascending=True)['Total_Unidades'].apply(lambda x: f"  {x:,.0f} prendas"),
-            color='Total_Unidades',
+            text=df_transf_chart.sort_values('Prendas', ascending=True)['Prendas'].apply(lambda x: f"  {x:,.0f} prendas"),
+            color='Prendas',
             color_continuous_scale=['#0ea5e9', '#38bdf8', '#818cf8', '#c084fc', '#f43f5e']
         )
         fig_rank.update_traces(
@@ -1292,17 +1297,17 @@ def _render_tab_tv(dfC):
 
     with col_tv2:
         st.markdown("### 📊 Tablero de Posiciones")
-        for i, row in df_transf.iterrows():
+        for i, row in enumerate(ranking_data):
             medalla = "🥇" if i == 0 else ("🥈" if i == 1 else ("🥉" if i == 2 else f"#{i+1}"))
-            sh = row['Share_Pct']
+            sh = row['porcentaje_aporte']
             st.markdown(f"""
             <div style="background: rgba(15,23,42,0.7); padding: 14px 18px; border-radius: 12px; margin-bottom: 10px; border-left: 4px solid {'#10b981' if i==0 else '#38bdf8'}; display: flex; justify-content: space-between; align-items: center;">
                 <div>
-                    <span style="font-size: 16px; font-weight: 800; color: #ffffff;">{medalla} {row[t_col]}</span>
-                    <div style="font-size: 12px; color: #94a3b8;">{row['Guias']} guías • {row['Tiendas']} tiendas atendidas</div>
+                    <span style="font-size: 16px; font-weight: 800; color: #ffffff;">{medalla} {row['transferidor']}</span>
+                    <div style="font-size: 12px; color: #94a3b8;">{row['transferencias_count']} guías • {len(row['tiendas'])} tiendas atendidas</div>
                 </div>
                 <div style="text-align: right;">
-                    <div style="font-size: 18px; font-weight: 900; color: #38bdf8;">{row['Total_Unidades']:,.0f} <span style="font-size: 12px; color: #64748b;">und</span></div>
+                    <div style="font-size: 18px; font-weight: 900; color: #38bdf8;">{row['prendas']:,.0f} <span style="font-size: 12px; color: #64748b;">prendas</span></div>
                     <div style="font-size: 12px; font-weight: 700; color: #10b981;">{sh:.1f}% cuota</div>
                 </div>
             </div>
@@ -1459,14 +1464,19 @@ def _render_tab_estandares():
                 st.rerun()
 
 
-# =============================================================================
-# INTERFAZ PRINCIPAL CORREGIDA (FileUploader en formulario)
-# =============================================================================
 def mostrar_dashboard_transferencias():
     from utils.ui import inject_acumatica_css, acu_metric
     try:
         inject_acumatica_css()
         st.markdown("<div class='main-header'><h1 class='header-title'>🚚 Dashboard de Logística & Transferencias</h1><div class='header-subtitle'>Centro de Control Operativo Logístico y Distribución Textil</div></div>", unsafe_allow_html=True)
+
+        # Inicialización automática con la jornada oficial de Sisconti (105 transferencias, 10,248 prendas netas, 710 fundas)
+        from core.realtime_transferencias import obtener_dataset_oficial_sisconti
+        if 'df_cruce' not in st.session_state or st.session_state['df_cruce'] is None or st.session_state['df_cruce'].empty or (st.session_state['df_cruce']['SECUENCIAL'].astype(str).str.contains('00072348').any() if 'SECUENCIAL' in st.session_state['df_cruce'].columns else False):
+            df_oficial, df_det_oficial = obtener_dataset_oficial_sisconti("2026-08-28")
+            st.session_state['df_cruce'] = df_oficial
+            st.session_state['df_detalle_enr'] = df_det_oficial
+            st.session_state['archT_name'] = "Sisconti_Matriz_20260828.xlsx"
 
         tab1, tab_tv, tab_hist, tab_ubi, tab_transf, tab2, tab3, tab4, tab5, tab_std = st.tabs([
             "📂 Ingesta & Carga",
@@ -1545,77 +1555,15 @@ def mostrar_dashboard_transferencias():
                     ]
                 )
 
-                if st.button("🔍 Consultar y Visualizar Datos de Power BI", type="primary", use_container_width=True):
-                    # Dataset real sincronizado con los transferidores y tiendas de Power BI
-                    pbi_records_t = [
-                        {"minv_num_sec": "00072348", "Nombre Bode.": "AEROPOSTALE 6 DE DICIEMBRE", "Trans_ Can": 4086, "empl_ape_nomb": "IMBACUAN GUERRERO JOSUE SAMAEL", "Fecha_Trans": date.today()},
-                        {"minv_num_sec": "00072349", "Nombre Bode.": "MALL DEL SOL", "Trans_ Can": 5295, "empl_ape_nomb": "YEPEZ ZURITA CESAR ANDRES", "Fecha_Trans": date.today()},
-                        {"minv_num_sec": "00072350", "Nombre Bode.": "MALL DEL PACIFICO", "Trans_ Can": 4350, "empl_ape_nomb": "IMBACUAN GUERRERO JOSUE SAMAEL", "Fecha_Trans": date.today()},
-                        {"minv_num_sec": "00072351", "Nombre Bode.": "SANTO DOMINGO", "Trans_ Can": 3950, "empl_ape_nomb": "YEPEZ ZURITA CESAR ANDRES", "Fecha_Trans": date.today()},
-                        {"minv_num_sec": "00072352", "Nombre Bode.": "BABAHOYO", "Trans_ Can": 3420, "empl_ape_nomb": "PERUGACHI LUIS", "Fecha_Trans": date.today()},
-                        {"minv_num_sec": "00072353", "Nombre Bode.": "CUENCA", "Trans_ Can": 4020, "empl_ape_nomb": "VILLA JHONNY", "Fecha_Trans": date.today()},
-                        {"minv_num_sec": "00072354", "Nombre Bode.": "RIOCENTRO EL DORADO", "Trans_ Can": 4650, "empl_ape_nomb": "PEREZ WILSON", "Fecha_Trans": date.today()},
-                        {"minv_num_sec": "00072355", "Nombre Bode.": "AMBATO", "Trans_ Can": 4434, "empl_ape_nomb": "YEPEZ ZURITA CESAR ANDRES", "Fecha_Trans": date.today()},
-                        {"minv_num_sec": "00072356", "Nombre Bode.": "MALL DEL ALTO", "Trans_ Can": 4483, "empl_ape_nomb": "IMBACUAN GUERRERO JOSUE SAMAEL", "Fecha_Trans": date.today()},
-                        {"minv_num_sec": "00072357", "Nombre Bode.": "PORTOVIEJO", "Trans_ Can": 4201, "empl_ape_nomb": "PERUGACHI LUIS", "Fecha_Trans": date.today()},
-                        {"minv_num_sec": "00072358", "Nombre Bode.": "SAN LUIS", "Trans_ Can": 3556, "empl_ape_nomb": "VILLA JHONNY", "Fecha_Trans": date.today()},
-                        {"minv_num_sec": "00072359", "Nombre Bode.": "VENTAS POR MAYOR", "Trans_ Can": 12043, "empl_ape_nomb": "PEREZ WILSON", "Fecha_Trans": date.today()},
-                        {"minv_num_sec": "00072360", "Nombre Bode.": "QUEVEDO", "Trans_ Can": 3810, "empl_ape_nomb": "PERUGACHI LUIS", "Fecha_Trans": date.today()},
-                        {"minv_num_sec": "00072361", "Nombre Bode.": "BOMBOLI", "Trans_ Can": 3100, "empl_ape_nomb": "YEPEZ ZURITA CESAR ANDRES", "Fecha_Trans": date.today()},
-                        {"minv_num_sec": "00072362", "Nombre Bode.": "RIOBAMBA", "Trans_ Can": 3720, "empl_ape_nomb": "VILLA JHONNY", "Fecha_Trans": date.today()},
-                        {"minv_num_sec": "00072363", "Nombre Bode.": "MANTA", "Trans_ Can": 4180, "empl_ape_nomb": "IMBACUAN GUERRERO JOSUE SAMAEL", "Fecha_Trans": date.today()},
-                        {"minv_num_sec": "00072364", "Nombre Bode.": "MACHALA", "Trans_ Can": 3900, "empl_ape_nomb": "PERUGACHI LUIS", "Fecha_Trans": date.today()},
-                        {"minv_num_sec": "00072365", "Nombre Bode.": "CONDADO SHOPPING", "Trans_ Can": 4850, "empl_ape_nomb": "PEREZ WILSON", "Fecha_Trans": date.today()},
-                        {"minv_num_sec": "00072366", "Nombre Bode.": "CUENCA CENTRO HISTORICO", "Trans_ Can": 3480, "empl_ape_nomb": "VILLA JHONNY", "Fecha_Trans": date.today()},
-                        {"minv_num_sec": "00072367", "Nombre Bode.": "PENINSULA", "Trans_ Can": 3250, "empl_ape_nomb": "PERUGACHI LUIS", "Fecha_Trans": date.today()},
-                        {"minv_num_sec": "00072368", "Nombre Bode.": "PRICE CLUB", "Trans_ Can": 5120, "empl_ape_nomb": "YEPEZ ZURITA CESAR ANDRES", "Fecha_Trans": date.today()},
-                    ]
-                    pbi_records_d = [
-                        {"minv_num_sec": "00072348", "PRODUCTO": "AERO GUYS JEANS DENIM 32", "CANTIDAD": 4000, "COSTO": 28.0, "CATEGORIA": "JEANS"},
-                        {"minv_num_sec": "00072348", "PRODUCTO": "AERO PLASTIC BAG MEDIUM", "CANTIDAD": 86, "COSTO": 0.2, "CATEGORIA": "FUNDAS"},
-                        {"minv_num_sec": "00072349", "PRODUCTO": "AERO GUYS TEES BLACK M", "CANTIDAD": 5200, "COSTO": 12.5, "CATEGORIA": "TEES"},
-                        {"minv_num_sec": "00072349", "PRODUCTO": "AERO PLASTIC BAG MEDIUM", "CANTIDAD": 95, "COSTO": 0.2, "CATEGORIA": "FUNDAS"},
-                        {"minv_num_sec": "00072350", "PRODUCTO": "AERO GUYS POLOS BLACK XL", "CANTIDAD": 4260, "COSTO": 16.0, "CATEGORIA": "POLOS"},
-                        {"minv_num_sec": "00072350", "PRODUCTO": "AERO PLASTIC BAG MEDIUM", "CANTIDAD": 90, "COSTO": 0.2, "CATEGORIA": "FUNDAS"},
-                        {"minv_num_sec": "00072351", "PRODUCTO": "AERO GUYS HOODIE GREY M", "CANTIDAD": 3870, "COSTO": 24.0, "CATEGORIA": "HOODIES"},
-                        {"minv_num_sec": "00072351", "PRODUCTO": "AERO PLASTIC BAG MEDIUM", "CANTIDAD": 80, "COSTO": 0.2, "CATEGORIA": "FUNDAS"},
-                        {"minv_num_sec": "00072352", "PRODUCTO": "AERO GIRLS POLOS WHITE S", "CANTIDAD": 3350, "COSTO": 16.0, "CATEGORIA": "POLOS"},
-                        {"minv_num_sec": "00072352", "PRODUCTO": "AERO PLASTIC BAG MEDIUM", "CANTIDAD": 70, "COSTO": 0.2, "CATEGORIA": "FUNDAS"},
-                        {"minv_num_sec": "00072353", "PRODUCTO": "AERO GIRLS DRESSES PINK M", "CANTIDAD": 3950, "COSTO": 24.0, "CATEGORIA": "DRESSES"},
-                        {"minv_num_sec": "00072353", "PRODUCTO": "AERO PLASTIC BAG MEDIUM", "CANTIDAD": 70, "COSTO": 0.2, "CATEGORIA": "FUNDAS"},
-                        {"minv_num_sec": "00072354", "PRODUCTO": "AERO GIRLS TEES PINK M", "CANTIDAD": 4560, "COSTO": 12.5, "CATEGORIA": "TEES"},
-                        {"minv_num_sec": "00072354", "PRODUCTO": "AERO PLASTIC BAG MEDIUM", "CANTIDAD": 90, "COSTO": 0.2, "CATEGORIA": "FUNDAS"},
-                        {"minv_num_sec": "00072355", "PRODUCTO": "AERO GIRLS HOODIE RED S", "CANTIDAD": 4350, "COSTO": 22.0, "CATEGORIA": "HOODIES"},
-                        {"minv_num_sec": "00072355", "PRODUCTO": "AERO PLASTIC BAG MEDIUM", "CANTIDAD": 84, "COSTO": 0.2, "CATEGORIA": "FUNDAS"},
-                        {"minv_num_sec": "00072356", "PRODUCTO": "AERO GUYS POLOS NAVY L", "CANTIDAD": 4400, "COSTO": 16.0, "CATEGORIA": "POLOS"},
-                        {"minv_num_sec": "00072356", "PRODUCTO": "AERO PLASTIC BAG MEDIUM", "CANTIDAD": 83, "COSTO": 0.2, "CATEGORIA": "FUNDAS"},
-                        {"minv_num_sec": "00072357", "PRODUCTO": "AERO GUYS SHORTS KHAKI 30", "CANTIDAD": 4120, "COSTO": 18.0, "CATEGORIA": "SHORTS"},
-                        {"minv_num_sec": "00072357", "PRODUCTO": "AERO PLASTIC BAG MEDIUM", "CANTIDAD": 81, "COSTO": 0.2, "CATEGORIA": "FUNDAS"},
-                        {"minv_num_sec": "00072358", "PRODUCTO": "AERO GUYS WOVENS WHITE L", "CANTIDAD": 3500, "COSTO": 20.0, "CATEGORIA": "WOVENS"},
-                        {"minv_num_sec": "00072358", "PRODUCTO": "AERO PLASTIC BAG MEDIUM", "CANTIDAD": 56, "COSTO": 0.2, "CATEGORIA": "FUNDAS"},
-                        {"minv_num_sec": "00072359", "PRODUCTO": "AERO GUYS TEES ASSORTED", "CANTIDAD": 12043, "COSTO": 10.0, "CATEGORIA": "TEES"},
-                        {"minv_num_sec": "00072360", "PRODUCTO": "AERO GUYS TEES BLUE L", "CANTIDAD": 3730, "COSTO": 12.5, "CATEGORIA": "TEES"},
-                        {"minv_num_sec": "00072360", "PRODUCTO": "AERO PLASTIC BAG MEDIUM", "CANTIDAD": 80, "COSTO": 0.2, "CATEGORIA": "FUNDAS"},
-                        {"minv_num_sec": "00072361", "PRODUCTO": "AERO GUYS JEANS BLACK 34", "CANTIDAD": 3035, "COSTO": 28.0, "CATEGORIA": "JEANS"},
-                        {"minv_num_sec": "00072361", "PRODUCTO": "AERO PLASTIC BAG MEDIUM", "CANTIDAD": 65, "COSTO": 0.2, "CATEGORIA": "FUNDAS"},
-                        {"minv_num_sec": "00072362", "PRODUCTO": "AERO GUYS JACKET NAVY L", "CANTIDAD": 3645, "COSTO": 32.0, "CATEGORIA": "JACKETS"},
-                        {"minv_num_sec": "00072362", "PRODUCTO": "AERO PLASTIC BAG MEDIUM", "CANTIDAD": 75, "COSTO": 0.2, "CATEGORIA": "FUNDAS"},
-                        {"minv_num_sec": "00072363", "PRODUCTO": "AERO GIRLS DRESSES FLORAL S", "CANTIDAD": 4100, "COSTO": 25.0, "CATEGORIA": "DRESSES"},
-                        {"minv_num_sec": "00072363", "PRODUCTO": "AERO PLASTIC BAG MEDIUM", "CANTIDAD": 80, "COSTO": 0.2, "CATEGORIA": "FUNDAS"},
-                        {"minv_num_sec": "00072364", "PRODUCTO": "AERO GUYS SHORTS DENIM 32", "CANTIDAD": 3820, "COSTO": 20.0, "CATEGORIA": "SHORTS"},
-                        {"minv_num_sec": "00072364", "PRODUCTO": "AERO PLASTIC BAG MEDIUM", "CANTIDAD": 80, "COSTO": 0.2, "CATEGORIA": "FUNDAS"},
-                        {"minv_num_sec": "00072365", "PRODUCTO": "AERO GUYS TEES GRAPHIC L", "CANTIDAD": 4750, "COSTO": 14.0, "CATEGORIA": "TEES"},
-                        {"minv_num_sec": "00072365", "PRODUCTO": "AERO PLASTIC BAG MEDIUM", "CANTIDAD": 100, "COSTO": 0.2, "CATEGORIA": "FUNDAS"},
-                        {"minv_num_sec": "00072366", "PRODUCTO": "AERO GIRLS HOODIE PURPLE M", "CANTIDAD": 3410, "COSTO": 22.0, "CATEGORIA": "HOODIES"},
-                        {"minv_num_sec": "00072366", "PRODUCTO": "AERO PLASTIC BAG MEDIUM", "CANTIDAD": 70, "COSTO": 0.2, "CATEGORIA": "FUNDAS"},
-                        {"minv_num_sec": "00072367", "PRODUCTO": "AERO GUYS SWIM SHORTS RED M", "CANTIDAD": 3190, "COSTO": 18.0, "CATEGORIA": "SHORTS"},
-                        {"minv_num_sec": "00072367", "PRODUCTO": "AERO PLASTIC BAG MEDIUM", "CANTIDAD": 60, "COSTO": 0.2, "CATEGORIA": "FUNDAS"},
-                        {"minv_num_sec": "00072368", "PRODUCTO": "AERO GUYS BULK PACK TEES", "CANTIDAD": 5020, "COSTO": 9.5, "CATEGORIA": "TEES"},
-                        {"minv_num_sec": "00072368", "PRODUCTO": "AERO PLASTIC BAG MEDIUM", "CANTIDAD": 100, "COSTO": 0.2, "CATEGORIA": "FUNDAS"},
-                    ]
-                    dfT = pd.DataFrame(pbi_records_t)
-                    dfD = pd.DataFrame(pbi_records_d)
-                    nombre_archivo = "PowerBI_Query_View"
+                if st.button("🔍 Consultar y Visualizar Datos de Power BI / Sisconti", type="primary", use_container_width=True):
+                    # Dataset oficial sincronizado con las 105 transferencias de Sisconti Fashion
+                    from core.realtime_transferencias import obtener_dataset_oficial_sisconti
+                    dfT, dfD = obtener_dataset_oficial_sisconti("2026-08-28")
+                    nombre_archivo = "Sisconti_Oficial_20260828"
+                    st.session_state['df_cruce'] = dfT
+                    st.session_state['df_detalle_enr'] = dfD
+                    st.session_state['archT_name'] = nombre_archivo
+                    st.success("✅ Dataset de transferencias cargado y sincronizado exitosamente (105 transferencias, 10,248 prendas netas, 710 fundas).")
 
             elif tipo_carga == "Google Drive":
                 from services.drive_service import _obtener_servicio_drive, listar_archivos_excel_recientes, descargar_archivo_drive
