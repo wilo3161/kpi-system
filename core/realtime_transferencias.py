@@ -199,6 +199,25 @@ def obtener_dataset_oficial_sisconti(fecha: str = "2026-08-28") -> Tuple[pd.Data
     df_c["TRANSFERIDOR"] = df_c["Transferidor"]
     df_c["COSTO_TOTAL"] = df_c["Costo"]
     df_c["FECHA"] = df_c["Fecha"]
+    df_c["CANTIDAD_TRANS"] = df_c["PRENDAS"] + df_c["FUNDAS"]
+
+    # Enriquecimiento geográfico para Ecuador
+    try:
+        from services.data_processing import obtener_geo_tienda, clasificar_categoria
+        geo_series = df_c["TIENDA"].apply(obtener_geo_tienda)
+        df_c["CANTON"] = [g.get("canton", "QUITO") for g in geo_series]
+        df_c["PROVINCIA"] = [g.get("provincia", "PICHINCHA") for g in geo_series]
+        df_c["REGION"] = [g.get("region", "Sierra") for g in geo_series]
+        df_c["LAT"] = [g.get("lat", -0.22) for g in geo_series]
+        df_c["LON"] = [g.get("lon", -78.51) for g in geo_series]
+        df_c["CATEGORIA_FINAL"] = df_c["TIENDA"].apply(lambda t: clasificar_categoria(t))
+    except Exception:
+        df_c["CANTON"] = "QUITO"
+        df_c["PROVINCIA"] = "PICHINCHA"
+        df_c["REGION"] = "Sierra"
+        df_c["LAT"] = -0.22
+        df_c["LON"] = -78.51
+        df_c["CATEGORIA_FINAL"] = "Tiendas"
 
     # Detalle enriquecido sintético
     df_d = df_c.copy()

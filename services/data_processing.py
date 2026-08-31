@@ -438,6 +438,23 @@ def calcular_metricas_transferencias(df_cruce: pd.DataFrame) -> dict:
     if df_cruce is None or df_cruce.empty:
         return {}
 
+    # Garantizar columnas de geografía
+    if 'PROVINCIA' not in df_cruce.columns or 'CANTON' not in df_cruce.columns:
+        t_col_g = 'TIENDA' if 'TIENDA' in df_cruce.columns else ('Bodega' if 'Bodega' in df_cruce.columns else 'DESTINO')
+        if t_col_g in df_cruce.columns:
+            geo_s = df_cruce[t_col_g].apply(obtener_geo_tienda)
+            df_cruce['CANTON'] = [g.get('canton', 'QUITO') for g in geo_s]
+            df_cruce['PROVINCIA'] = [g.get('provincia', 'PICHINCHA') for g in geo_s]
+            df_cruce['REGION'] = [g.get('region', 'Sierra') for g in geo_s]
+            df_cruce['LAT'] = [g.get('lat', -0.22) for g in geo_s]
+            df_cruce['LON'] = [g.get('lon', -78.51) for g in geo_s]
+        else:
+            df_cruce['CANTON'] = 'QUITO'
+            df_cruce['PROVINCIA'] = 'PICHINCHA'
+            df_cruce['REGION'] = 'Sierra'
+            df_cruce['LAT'] = -0.22
+            df_cruce['LON'] = -78.51
+
     total_prendas = int(df_cruce['PRENDAS'].sum())
     total_fundas = int(df_cruce['FUNDAS'].sum())
     total_unidades = total_prendas + total_fundas

@@ -571,24 +571,48 @@ def _render_tab_ubicacion(dfC, dfDE):
     st.markdown("## 📍 Análisis de Transferencias por Ubicación (Ecuador)")
     st.caption("Visión geoespacial de distribución diaria, cuota de participación por cantón y trazabilidad intertienda.")
 
+    if dfC is None or dfC.empty:
+        st.info("ℹ️ Cargue o sincronice datos para visualizar el análisis geoespacial.")
+        return
+
+    # Auto-enriquecimiento de geografía si falta PROVINCIA o CANTON
+    if 'PROVINCIA' not in dfC.columns or 'CANTON' not in dfC.columns or 'LAT' not in dfC.columns:
+        from services.data_processing import obtener_geo_tienda
+        t_col = 'TIENDA' if 'TIENDA' in dfC.columns else ('Bodega' if 'Bodega' in dfC.columns else 'DESTINO')
+        if t_col in dfC.columns:
+            geo_s = dfC[t_col].apply(obtener_geo_tienda)
+            dfC['CANTON'] = [g.get('canton', 'QUITO') for g in geo_s]
+            dfC['PROVINCIA'] = [g.get('provincia', 'PICHINCHA') for g in geo_s]
+            dfC['REGION'] = [g.get('region', 'Sierra') for g in geo_s]
+            dfC['LAT'] = [g.get('lat', -0.22) for g in geo_s]
+            dfC['LON'] = [g.get('lon', -78.51) for g in geo_s]
+        else:
+            dfC['CANTON'] = 'QUITO'
+            dfC['PROVINCIA'] = 'PICHINCHA'
+            dfC['REGION'] = 'Sierra'
+            dfC['LAT'] = -0.22
+            dfC['LON'] = -78.51
+
+    if 'COSTO_TOTAL' not in dfC.columns:
+        dfC['COSTO_TOTAL'] = dfC.get('COSTO', 0.0)
+    if 'CANTIDAD_TRANS' not in dfC.columns:
+        dfC['CANTIDAD_TRANS'] = dfC['PRENDAS'] + dfC.get('FUNDAS', 0)
+
     total_unidades = dfC['PRENDAS'].sum() + dfC['FUNDAS'].sum()
     total_trans = dfC['SECUENCIAL'].nunique()
     total_costo = dfC['COSTO_TOTAL'].sum()
     cantones_count = dfC['CANTON'].nunique() if 'CANTON' in dfC.columns else 1
 
     # Agrupación cantonal enriquecida
-    if 'CANTON' in dfC.columns:
-        df_canton = dfC.groupby(['CANTON', 'PROVINCIA']).agg(
-            Prendas=('PRENDAS', 'sum'),
-            Fundas=('FUNDAS', 'sum'),
-            Transferencias=('SECUENCIAL', 'nunique'),
-            Tiendas=('TIENDA', 'nunique'),
-            Costo_Total=('COSTO_TOTAL', 'sum'),
-            Lat=('LAT', 'first'),
-            Lon=('LON', 'first')
-        ).reset_index()
-    else:
-        df_canton = pd.DataFrame()
+    df_canton = dfC.groupby(['CANTON', 'PROVINCIA']).agg(
+        Prendas=('PRENDAS', 'sum'),
+        Fundas=('FUNDAS', 'sum'),
+        Transferencias=('SECUENCIAL', 'nunique'),
+        Tiendas=('TIENDA', 'nunique'),
+        Costo_Total=('COSTO_TOTAL', 'sum'),
+        Lat=('LAT', 'first'),
+        Lon=('LON', 'first')
+    ).reset_index()
 
     if not df_canton.empty:
         df_canton['Total_Unidades'] = df_canton['Prendas'] + df_canton['Fundas']
@@ -778,6 +802,33 @@ def _render_tab_ubicacion(dfC, dfDE):
 def _render_tab_transferidores(dfC):
     st.markdown("## 👤 Rendimiento y Trazabilidad por Transferidor en Tiempo Real")
     st.caption("Horario Operativo de Jornada: **08:00 AM – 18:00 PM** • Discriminación de Fundas/Insumos • Vinculación de Secuenciales a Transferidores.")
+
+    if dfC is None or dfC.empty:
+        st.info("ℹ️ Cargue o sincronice datos para visualizar el rendimiento de los transferidores.")
+        return
+
+    # Auto-enriquecimiento de geografía si falta PROVINCIA o CANTON
+    if 'PROVINCIA' not in dfC.columns or 'CANTON' not in dfC.columns:
+        from services.data_processing import obtener_geo_tienda
+        t_col_g = 'TIENDA' if 'TIENDA' in dfC.columns else ('Bodega' if 'Bodega' in dfC.columns else 'DESTINO')
+        if t_col_g in dfC.columns:
+            geo_s = dfC[t_col_g].apply(obtener_geo_tienda)
+            dfC['CANTON'] = [g.get('canton', 'QUITO') for g in geo_s]
+            dfC['PROVINCIA'] = [g.get('provincia', 'PICHINCHA') for g in geo_s]
+            dfC['REGION'] = [g.get('region', 'Sierra') for g in geo_s]
+            dfC['LAT'] = [g.get('lat', -0.22) for g in geo_s]
+            dfC['LON'] = [g.get('lon', -78.51) for g in geo_s]
+        else:
+            dfC['CANTON'] = 'QUITO'
+            dfC['PROVINCIA'] = 'PICHINCHA'
+            dfC['REGION'] = 'Sierra'
+            dfC['LAT'] = -0.22
+            dfC['LON'] = -78.51
+
+    if 'CANTIDAD_TRANS' not in dfC.columns:
+        dfC['CANTIDAD_TRANS'] = dfC['PRENDAS'] + dfC.get('FUNDAS', 0)
+    if 'COSTO_TOTAL' not in dfC.columns:
+        dfC['COSTO_TOTAL'] = dfC.get('COSTO', 0.0)
 
     from core.realtime_transferencias import RealtimeTransferenciasService
 
@@ -1674,10 +1725,10 @@ def mostrar_dashboard_transferencias():
                 st.markdown("---")
                 st.subheader("Resumen del último cruce")
                 c1,c2,c3,c4 = st.columns(4)
-                c1.metric("Total Unidades", f"{df['PRENDAS'].sum()+df['FUNDAS'].sum()}")
-                c2.metric("Prendas", f"{df['PRENDAS'].sum()}")
-                c3.metric("Fundas", f"{df['FUNDAS'].sum()}")
-                c4.metric("Transferencias", df['SECUENCIAL'].nunique())
+                c1.metric("Total Unidades", f"{int(df['PRENDAS'].sum()+df['FUNDAS'].sum()):,}")
+                c2.metric("Prendas Netas", f"{int(df['PRENDAS'].sum()):,}")
+                c3.metric("Fundas / Insumos", f"{int(df['FUNDAS'].sum()):,}")
+                c4.metric("Transferencias", f"{len(df)}")
 
         # ==================== TAB PANTALLA BODEGA TV ====================
         with tab_tv:
