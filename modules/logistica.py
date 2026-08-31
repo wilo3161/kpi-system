@@ -776,20 +776,149 @@ def _render_tab_ubicacion(dfC, dfDE):
 
 
 def _render_tab_transferidores(dfC):
-    st.markdown("## 👤 Rendimiento y Trazabilidad por Transferidor")
-    st.caption("Analítica de Ciencia de Datos: Productividad individual, Pareto 80/20 de destinos, balance de carga y auditoría de transferencias.")
+    st.markdown("## 👤 Rendimiento y Trazabilidad por Transferidor en Tiempo Real")
+    st.caption("Horario Operativo de Jornada: **08:00 AM – 18:00 PM** • Discriminación de Fundas/Insumos • Vinculación de Secuenciales a Transferidores.")
 
-    # Calcular métricas avanzadas
+    from core.realtime_transferencias import RealtimeTransferenciasService
+
+    # ── SELECTOR DINÁMICO DE FECHA DE JORNADA ──
+    col_f1, col_f2, col_f3 = st.columns([2, 2, 2])
+    with col_f1:
+        f_jornada = st.date_input("📅 Fecha de Consulta:", value=date(2026, 8, 28), key="fecha_jornada_kpi")
+    with col_f2:
+        btn_recalc = st.button("🔄 Recalcular KPIs de Fecha", type="primary", use_container_width=True)
+    with col_f3:
+        btn_live_sis = st.button("🤖 Extraer en Vivo de Sisconti", use_container_width=True)
+
+    f_jornada_str = f_jornada.strftime("%Y-%m-%d")
+
+    # Si el usuario solicita extracción en vivo de Sisconti para esa fecha
+    if btn_live_sis:
+        from services.jireh_extractor import extraer_transferencias_jireh
+        with st.spinner(f"🤖 Consultando Sisconti JirehWEB para la fecha {f_jornada_str}..."):
+            df_sis, msg = extraer_transferencias_jireh(fecha_inicio=f_jornada_str, fecha_fin=f_jornada_str, headless=True)
+            if not df_sis.empty:
+                st.session_state.df_cruce = df_sis
+                dfC = df_sis
+                st.success(f"✅ {msg}")
+            else:
+                st.warning(f"⚠️ {msg} (Utilizando datos en memoria/BD local)")
+
+    # Procesar con el motor de KPIs en tiempo real
+    res_rt = RealtimeTransferenciasService.procesar_transferencias(dfC, fecha_consulta=f_jornada_str if ('FECHA' in dfC.columns and f_jornada_str in dfC['FECHA'].astype(str).values) else None)
+    
+    if res_rt.get("success"):
+        tot = res_rt["totales"]
+
+        # ── 1. SCORECARD DE TOTALES DE LA JORNADA ──
+        st.markdown(f"### 📊 Balance Operativo del Día ({f_jornada.strftime('%d/%m/%Y')} • 08:00 - 18:00)")
+        k1, k2, k3, k4 = st.columns(4)
+        with k1:
+            st.markdown(f"""
+            <div class="pbi-card" style="border-left: 4px solid #38bdf8;">
+                <div class="pbi-card-title">👕 PRENDAS TEXTILES <span class="pbi-badge-blue">NETAS</span></div>
+                <div class="pbi-card-val">{tot['total_prendas_netas']:,}</div>
+                <div style="font-size: 12px; color: #38bdf8; margin-top: 4px;">Prendas listas para venta</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        with k2:
+            st.markdown(f"""
+            <div class="pbi-card" style="border-left: 4px solid #ec4899;">
+                <div class="pbi-card-title">🛍️ TARJETA FUNDAS <span class="pbi-badge-purple">INSUMOS</span></div>
+                <div class="pbi-card-val" style="color: #ec4899;">{tot['tarjeta_fundas']:,}</div>
+                <div style="font-size: 12px; color: #94a3b8; margin-top: 4px;">Plastic Bags y embalaje</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        with k3:
+            st.markdown(f"""
+            <div class="pbi-card" style="border-left: 4px solid #10b981;">
+                <div class="pbi-card-title">📦 TRANSFERENCIAS <span class="pbi-badge-green">DOCS</span></div>
+                <div class="pbi-card-val">{tot['total_transferencias']}</div>
+                <div style="font-size: 12px; color: #10b981; margin-top: 4px;">Secuenciales emitidos</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        with k4:
+            st.markdown(f"""
+            <div class="pbi-card" style="border-left: 4px solid #f59e0b;">
+                <div class="pbi-card-title">💰 COSTO MERCADERÍA <span class="pbi-badge-orange">USD</span></div>
+                <div class="pbi-card-val" style="font-size: 24px;">${tot['costo_total_usd']:,.2f}</div>
+                <div style="font-size: 12px; color: #94a3b8; margin-top: 4px;">Total valorizado en ERP</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        st.markdown("---")
+
+        # ── 2. RANKING DE PRODUCTIVIDAD Y TABLA DE TRANSFERIDORES ──
+        st.markdown("### 🏆 Rendimiento Acumulado por Transferidor")
+        col_rk1, col_rk2 = st.columns([3.5, 2.5])
+
+        with col_rk1:
+            df_rk_show = pd.DataFrame([{
+                "Transferidor": r["transferidor"],
+                "Prendas": r["prendas"],
+                "Fundas": r["fundas"],
+                "N° Transf.": r["transferencias_count"],
+                "% Aporte": f"{r['porcentaje_aporte']:.1f}%",
+                "Costo Total ($)": f"${r['costo_total']:,.2f}"
+            } for r in res_rt["ranking_transferidores"]])
+
+            st.dataframe(
+                df_rk_show,
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "Prendas": st.column_config.NumberColumn(format="%d"),
+                    "Fundas": st.column_config.NumberColumn(format="%d"),
+                }
+            )
+
+        with col_rk2:
+            # Gráfico de participación
+            fig_pie_t = px.pie(
+                df_rk_show,
+                names="Transferidor",
+                values="Prendas",
+                title="Participación de Prendas por Transferidor",
+                hole=0.4,
+                color_discrete_sequence=['#38bdf8', '#818cf8', '#c084fc', '#f472b6', '#fb7185']
+            )
+            fig_pie_t.update_layout(template="plotly_dark", height=320, margin=dict(t=30, b=10, l=10, r=10))
+            st.plotly_chart(fig_pie_t, use_container_width=True)
+
+        # ── 3. AUDITORÍA Y BÚSQUEDA INTERACTIVA DE SECUENCIALES ──
+        st.markdown("### 🔍 Búsqueda Rápida de Secuencial / Transferencia")
+        sec_buscado = st.text_input("Ingrese Secuencial (ej. 00090079 o TR-XXXX):", key="busc_sec_rt").strip()
+        if sec_buscado:
+            df_proc = res_rt["df_procesado"]
+            col_s = 'SECUENCIAL' if 'SECUENCIAL' in df_proc.columns else df_proc.columns[0]
+            match = df_proc[df_proc[col_s].astype(str).str.contains(sec_buscado, case=False, na=False)]
+            if not match.empty:
+                st.success(f"🎯 Se encontraron {len(match)} registro(s) para el secuencial `{sec_buscado}`:")
+                st.dataframe(match[['SECUENCIAL', 'FECHA', 'TIENDA', 'PRENDAS', 'FUNDAS', 'TRANSFERIDOR_OFICIAL', 'COSTO_VAL']], use_container_width=True, hide_index=True)
+            else:
+                st.warning(f"No se encontró el secuencial `{sec_buscado}` en esta jornada.")
+
+        # ── 4. MATRIZ DE DESTINOS / TIENDAS ──
+        with st.expander("🏬 Ver Desglose Completo por Tienda y Canal (Quién transfirió a cada una)", expanded=False):
+            for t_info in res_rt["desglose_tiendas"]:
+                st.markdown(f"**📍 {t_info['tienda']}** ({t_info['canal']}) — **{t_info['prendas']:,} prendas** | {t_info['fundas']} fundas | {t_info['transferencias_count']} transferencias (`{', '.join(t_info['secuenciales'][:5])}`)")
+                for p_name, p_vals in t_info["transferidores"].items():
+                    st.caption(f"&nbsp;&nbsp;&nbsp;&nbsp;• **{p_name}**: {p_vals['prendas']} prendas ({p_vals['fundas']} fundas) vía `{', '.join(p_vals['secuenciales'])}`")
+
+    st.markdown("---")
+    # Continuar con el análisis de Pareto y Balance de Carga histórico
     met = calcular_metricas_transferencias(dfC)
     if not met:
-        st.warning("No hay datos disponibles para calcular métricas de transferidores.")
         return
 
     df_transf = met['df_transferidores']
     top_user = met['transferidor_lider']
     transferidor_col = 'TRANSFERIDOR' if 'TRANSFERIDOR' in dfC.columns else None
 
-    # ── 1. SCORECARD DE CIENCIA DE DATOS Y RENDIMIENTO OPERATIVO ──
+    # ── SCORECARDS DE CIENCIA DE DATOS ──
     k1, k2, k3, k4 = st.columns(4)
     with k1:
         st.markdown(f"""

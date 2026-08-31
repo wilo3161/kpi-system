@@ -109,29 +109,57 @@ def extraer_transferencias_jireh(
 
                 tds = row.locator("td")
                 td_count = tds.count()
-                if td_count >= 6:
+                if td_count >= 7:
                     n_val = tds.nth(0).inner_text().strip()
                     if not n_val.isdigit():
                         continue
 
-                    # Extraer columnas clave
-                    sec_transf = tds.nth(1).inner_text().strip() if td_count > 1 else str(idx+1)
-                    bodega_destino = tds.nth(5).inner_text().strip() if td_count > 5 else "MATRIZ"
-                    cantidad_txt = tds.nth(6).inner_text().strip() if td_count > 6 else "0"
-                    
-                    # Limpiar cantidad
-                    cant_limpia = re.sub(r'[^\d]', '', cantidad_txt)
-                    cant_num = int(cant_limpia) if cant_limpia else 0
+                    # Extraer columnas exactas según la grilla de Sisconti Fashion
+                    fecha_row = tds.nth(1).inner_text().strip().replace('/', '')
+                    sucursal_orig = tds.nth(2).inner_text().strip()
+                    sucursal_dest = tds.nth(3).inner_text().strip()
+                    sec_transf = tds.nth(4).inner_text().strip()
+                    bodega_destino = tds.nth(5).inner_text().strip() or sucursal_dest
+                    cantidad_txt = tds.nth(6).inner_text().strip()
+                    costo_txt = tds.nth(7).inner_text().strip() if td_count > 7 else "0"
+                    estado_row = tds.nth(8).inner_text().strip() if td_count > 8 else "Pendiente"
+
+                    # Parseo numérico preciso de flotante (ej. '145.000000' -> 145)
+                    try:
+                        cant_num = int(round(float(cantidad_txt.replace(',', ''))))
+                    except Exception:
+                        cant_num = 0
+
+                    try:
+                        costo_num = float(costo_txt.replace(',', ''))
+                    except Exception:
+                        costo_num = 0.0
+
+                    # Discriminación de Fundas / Insumos vs Prendas
+                    # 1. Bultos de bolsas plásticas (300 unidades por $7.78)
+                    # 2. Insumos/fundas de tienda (9 o 10 unidades por $54 - $60)
+                    es_funda = False
+                    if cant_num == 300 and costo_num < 15.0:
+                        es_funda = True
+                    elif cant_num in (9, 10) and 50.0 <= costo_num <= 65.0:
+                        es_funda = True
+
+                    prendas_val = 0 if es_funda else cant_num
+                    fundas_val = cant_num if es_funda else 0
 
                     registros.append({
                         "SECUENCIAL": sec_transf,
+                        "FECHA": fecha_row or f_ini,
+                        "ORIGEN": sucursal_orig,
+                        "DESTINO": sucursal_dest,
                         "TIENDA": bodega_destino,
-                        "PRENDAS": cant_num,
-                        "FUNDAS": 0,
+                        "PRENDAS": prendas_val,
+                        "FUNDAS": fundas_val,
                         "CANTIDAD": cant_num,
-                        "FECHA": f_ini,
+                        "COSTO": costo_num,
+                        "ESTADO": estado_row,
                         "TRANSFERIDOR": "Bodega Central",
-                        "FUENTE": "JIREHWEB_REAL"
+                        "FUENTE": "SISCONTI_JIREHWEB"
                     })
 
             browser.close()
@@ -140,7 +168,7 @@ def extraer_transferencias_jireh(
             return pd.DataFrame(), f"No se encontraron transferencias para el rango {f_ini} al {f_fin}."
 
         df_res = pd.DataFrame(registros)
-        return df_res, f"Extracción completada con éxito: {len(df_res)} transferencias extraídas de JirehWEB."
+        return df_res, f"Extracción completada con éxito: {len(df_res)} transferencias extraídas de JirehWEB Sisconti."
 
     except Exception as e:
         logger.error(f"Error en extracción JirehWEB: {e}")
