@@ -1601,13 +1601,14 @@ def mostrar_dashboard_transferencias():
         inject_acumatica_css()
         st.markdown("<div class='main-header'><h1 class='header-title'>🚚 Dashboard de Logística & Transferencias</h1><div class='header-subtitle'>Centro de Control Operativo Logístico y Distribución Textil</div></div>", unsafe_allow_html=True)
 
-        # Inicialización automática con la jornada oficial de Sisconti (105 transferencias, 10,248 prendas netas, 710 fundas)
+        # Inicialización de sesión por única vez (solo si la clave no existe en sesión)
         from core.realtime_transferencias import obtener_dataset_oficial_sisconti
-        if 'df_cruce' not in st.session_state or st.session_state['df_cruce'] is None or st.session_state['df_cruce'].empty or (st.session_state['df_cruce']['SECUENCIAL'].astype(str).str.contains('00072348').any() if 'SECUENCIAL' in st.session_state['df_cruce'].columns else False):
+        if 'df_cruce' not in st.session_state or st.session_state['df_cruce'] is None:
             df_oficial, df_det_oficial = obtener_dataset_oficial_sisconti("2026-08-28")
             st.session_state['df_cruce'] = df_oficial
             st.session_state['df_detalle_enr'] = df_det_oficial
             st.session_state['archT_name'] = "Sisconti_Matriz_20260828.xlsx"
+            st.session_state['fecha_d_logistica'] = "2026-08-28"
 
         tab1, tab_tv, tab_hist, tab_ubi, tab_transf, tab2, tab3, tab4, tab5, tab_std = st.tabs([
             "📂 Ingesta & Carga",
@@ -1785,7 +1786,7 @@ def mostrar_dashboard_transferencias():
                     if st.button("💾 Guardar este Lote en Histórico Atómico (Fact Table)", type="secondary"):
                         ins, act = upsert_fact_transferencias(st.session_state.df_cruce, fuente_origen="POWERBI_EXTRACT", usuario=st.session_state.get("username", "admin"))
                         st.success(f"✅ Histórico actualizado con éxito: {ins} nuevos registros insertados, {act} actualizados.")
-            elif st.session_state.get('procesado_archivos_logistica'):
+            elif st.session_state.get('procesado_archivos_logistica') and ('df_cruce' in st.session_state and st.session_state.df_cruce is not None and not st.session_state.df_cruce.empty):
                 fechas = st.session_state.df_cruce['FECHA'].unique() if 'FECHA' in st.session_state.df_cruce.columns and not st.session_state.df_cruce['FECHA'].isna().all() else [st.session_state.fecha_d_logistica]
                 fechas_existentes = [f for f in fechas if existe_historico_dia(f, "Transferencias Diarias")]
                 
