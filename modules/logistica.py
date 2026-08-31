@@ -859,6 +859,43 @@ def _render_tab_transferidores(dfC):
     # Procesar con el motor de KPIs en tiempo real
     res_rt = RealtimeTransferenciasService.procesar_transferencias(dfC, fecha_consulta=f_jornada_str if ('FECHA' in dfC.columns and f_jornada_str in dfC['FECHA'].astype(str).values) else None)
     
+    # ── LIVE FEED POWER BI & CONCILIACIÓN CON ERP SISCONTI ──
+    from services.powerbi_transferencias_service import PowerBITransferenciasService
+    df_pbi = PowerBITransferenciasService.obtener_feed_powerbi(fecha_consulta=f_jornada_str)
+    conciliacion = PowerBITransferenciasService.conciliar_cantidades(df_pbi, dfC)
+
+    st.markdown("### ⚡ Live Feed Power BI & Conciliación con ERP Sisconti")
+    st.caption("Visualización del rendimiento de transferidores alimentado de **Power BI en tiempo real** (minv_num_sec, empl_ape_nomb, Trans_ Can) y conciliado contra la base oficial de JirehWEB.")
+
+    cp1, cp2, cp3 = st.columns([1.5, 1.5, 2])
+    with cp1:
+        st.markdown(f"""
+        <div style="background: rgba(14,165,233,0.1); border: 1px solid rgba(14,165,233,0.3); border-radius: 12px; padding: 14px 18px;">
+            <div style="font-size: 11px; color: #38bdf8; font-weight: 700; text-transform: uppercase;">📊 POWER BI (OPERATIVO)</div>
+            <div style="font-size: 26px; font-weight: 900; color: #ffffff; margin-top: 4px;">{conciliacion['totales_powerbi']['total_unidades']:,} <span style="font-size: 13px; color: #94a3b8;">und</span></div>
+            <div style="font-size: 12px; color: #94a3b8;">{conciliacion['totales_powerbi']['total_guias']} guías registradas</div>
+        </div>
+        """, unsafe_allow_html=True)
+    with cp2:
+        st.markdown(f"""
+        <div style="background: rgba(16,185,129,0.1); border: 1px solid rgba(16,185,129,0.3); border-radius: 12px; padding: 14px 18px;">
+            <div style="font-size: 11px; color: #10b981; font-weight: 700; text-transform: uppercase;">🏢 JIREHWEB (ERP OFICIAL)</div>
+            <div style="font-size: 26px; font-weight: 900; color: #ffffff; margin-top: 4px;">{conciliacion['totales_jirehweb']['total_unidades']:,} <span style="font-size: 13px; color: #94a3b8;">und</span></div>
+            <div style="font-size: 12px; color: #94a3b8;">{conciliacion['totales_jirehweb']['total_guias']} guías asentadas</div>
+        </div>
+        """, unsafe_allow_html=True)
+    with cp3:
+        color_badge = "#10b981" if conciliacion['conciliado'] else "#f59e0b"
+        st.markdown(f"""
+        <div style="background: rgba(15,23,42,0.8); border: 1px solid {color_badge}50; border-radius: 12px; padding: 14px 18px;">
+            <div style="font-size: 11px; color: #94a3b8; font-weight: 700; text-transform: uppercase;">🎯 ESTADO DE CONCILIACIÓN</div>
+            <div style="font-size: 18px; font-weight: 800; color: {color_badge}; margin-top: 4px;">{conciliacion['estado_semaforo']}</div>
+            <div style="font-size: 12px; color: #64748b;">Discrepancia: {conciliacion['discrepancia']['delta_unidades']:.0f} prendas ({conciliacion['discrepancia']['delta_guias']} guías)</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    st.markdown("---")
+
     if res_rt.get("success"):
         tot = res_rt["totales"]
 
