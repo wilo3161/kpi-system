@@ -845,11 +845,12 @@ def _render_tab_transferidores(dfC):
 
     # Si el usuario solicita extracción en vivo de Sisconti para esa fecha
     if btn_live_sis:
-        from services.jireh_extractor import extraer_transferencias_jireh
+        from services.jireh_full_extractor import ejecutar_extraccion_completa_jireh
         with st.spinner(f"🤖 Consultando Sisconti JirehWEB para la fecha {f_jornada_str}..."):
-            df_sis, msg = extraer_transferencias_jireh(fecha_inicio=f_jornada_str, fecha_fin=f_jornada_str, headless=True)
+            df_sis, df_det_sis, _, _, msg = ejecutar_extraccion_completa_jireh(fecha_consulta=f_jornada_str, headless=True)
             if not df_sis.empty:
                 st.session_state.df_cruce = df_sis
+                st.session_state.df_detalle_enr = df_det_sis
                 dfC = df_sis
                 st.success(f"✅ {msg}")
             else:
@@ -1557,8 +1558,8 @@ def mostrar_dashboard_transferencias():
             es_consulta_pbi = (tipo_carga == "Power BI (Solo Consulta)")
 
             if tipo_carga == "JirehWEB ERP (Playwright en Vivo)":
-                st.subheader("🤖 Sincronización Oficial desde JirehWEB ERP (Playwright)")
-                st.info("Conéctate directamente a **https://fashion.sisconti.com/** para extraer el reporte oficial de transferencias en tiempo real.")
+                st.subheader("🤖 Sincronización Oficial desde JirehWEB ERP (Playwright + Pandas)")
+                st.info("Conéctate directamente a **https://fashion.sisconti.com/** para extraer el Reporte de Transferencias Matriz y el Movimiento de Inventario Detallado en vivo.")
                 
                 cj1, cj2 = st.columns(2)
                 with cj1:
@@ -1568,24 +1569,26 @@ def mostrar_dashboard_transferencias():
                     j_pass = st.text_input("Contraseña JirehWEB:", value=os.getenv("JIREHWEB_PASS", "Wilo3161*"), type="password", key="jireh_p")
                     j_fin = st.date_input("Fecha Fin Reporte:", value=date.today(), key="jireh_d_fin")
                 
-                if st.button("🚀 Extraer Reporte Real con Playwright", type="primary", use_container_width=True):
-                    from services.jireh_extractor import extraer_transferencias_jireh
-                    with st.spinner("🤖 Playwright ingresando a Sisconti JirehWEB y extrayendo reporte..."):
-                        df_jireh, msg = extraer_transferencias_jireh(
-                            fecha_inicio=j_ini.strftime("%Y-%m-%d"),
-                            fecha_fin=j_fin.strftime("%Y-%m-%d"),
+                if st.button("🚀 Extraer Reportes (Matriz + Detalle) con Playwright", type="primary", use_container_width=True):
+                    from services.jireh_full_extractor import ejecutar_extraccion_completa_jireh
+                    with st.spinner("🤖 Playwright extrayendo Transferencias Matriz y Movimiento Detallado desde JirehWEB..."):
+                        df_c_ext, df_d_ext, p_tr, p_dt, msg = ejecutar_extraccion_completa_jireh(
+                            fecha_consulta=j_ini.strftime("%Y-%m-%d"),
                             usuario=j_user,
                             password=j_pass,
                             headless=True
                         )
-                        if not df_jireh.empty:
+                        if not df_c_ext.empty:
                             st.success(f"✅ {msg}")
-                            dfT = df_jireh.copy()
-                            dfD = df_jireh.copy()
-                            dfD["PRODUCTO"] = "PRENDAS AEROPOSTALE"
-                            dfD["CATEGORIA"] = "TEES"
-                            dfD["COSTO"] = 15.0
-                            nombre_archivo = f"JirehWEB_{j_ini.strftime('%Y%m%d')}_{j_fin.strftime('%Y%m%d')}"
+                            dfT = df_c_ext.copy()
+                            dfD = df_d_ext.copy()
+                            st.session_state['df_cruce'] = dfT
+                            st.session_state['df_detalle_enr'] = dfD
+                            nombre_archivo = f"JirehWEB_{j_ini.strftime('%Y%m%d')}"
+                            st.session_state['archT_name'] = nombre_archivo
+                            st.session_state['procesado_archivos_logistica'] = True
+                            if p_tr and p_dt:
+                                st.caption(f"Archivos Excel limpios generados: `{p_tr}` y `{p_dt}`")
                         else:
                             st.error(f"❌ {msg}")
 
