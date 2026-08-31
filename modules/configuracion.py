@@ -1,3 +1,5 @@
+import os
+import sys
 # modules/configuracion.py
 # ============================================================================
 # CONFIGURACIÓN DEL SISTEMA - PERSISTENCIA EN BD Y RECARGA DINÁMICA

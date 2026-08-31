@@ -1,3 +1,5 @@
+import os
+import sys
 # modules/auditoria.py
 # ============================================================================
 # AUDITORÍA DE CORREOS - GESTIÓN DE BANDEJA Y ANÁLISIS CON IA

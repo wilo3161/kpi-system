@@ -1,10 +1,11 @@
+from __future__ import annotations
+import os
+import sys
 # modules/guias.py
 # ============================================================================
 # SISTEMA OPERATIVO LOGÍSTICO — GUÍAS DE REMISIÓN
 # VERSIÓN ROBUSTECIDA: transacciones, validaciones, logging, cache, eliminación de botones redundantes
 # ============================================================================
-
-from __future__ import annotations
 
 import io
 import re

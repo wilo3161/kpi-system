@@ -1,3 +1,5 @@
+import os
+import sys
 # modules/reconciliacion.py
 # ==============================================================================
 # MÓDULO DE RECONCILIACIÓN FINANCIERA - VERSIÓN CORREGIDA (CRUCE DE GUÍAS)

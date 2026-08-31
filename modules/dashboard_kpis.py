@@ -1,3 +1,5 @@
+import os
+import sys
 # modules/dashboard_kpis.py
 # ============================================================================
 # DASHBOARD KPIS - MÓDULO UNIFICADO DE INDICADORES, ANALYTICS Y PREDICCIONES

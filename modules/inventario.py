@@ -1,3 +1,5 @@
+import os
+import sys
 # modules/inventario.py
 # Versión mejorada y robusta + funcionalidades de busca_sku.py
 import streamlit as st
