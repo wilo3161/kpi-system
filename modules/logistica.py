@@ -74,6 +74,31 @@ def _safe_numeric(value, default=0.0):
 def _safe_int(value, default=0):
     return int(_safe_numeric(value, default))
 
+def _to_str_date(d: Any, fmt: str = "%Y-%m-%d") -> str:
+    """Convierte de forma segura datetime, date, str o tuple a string con el formato deseado."""
+    if d is None:
+        return ""
+    if isinstance(d, (list, tuple)) and len(d) > 0:
+        d = d[0]
+    if isinstance(d, str):
+        if fmt in ("%d/%m/%Y", "%d/%m") and "-" in d:
+            try:
+                dt = pd.to_datetime(d)
+                return dt.strftime(fmt)
+            except Exception:
+                return d
+        return str(d)
+    if hasattr(d, "strftime"):
+        try:
+            return d.strftime(fmt)
+        except Exception:
+            return str(d)
+    try:
+        dt = pd.to_datetime(d)
+        return dt.strftime(fmt)
+    except Exception:
+        return str(d)
+
 def _sanitize_metrics(raw_reg):
     if not isinstance(raw_reg, dict): return raw_reg
     met = raw_reg.get('metricas', {})
@@ -843,7 +868,7 @@ def _render_tab_transferidores(dfC):
     with col_f3:
         btn_live_sis = st.button("🤖 Extraer en Vivo de Sisconti", use_container_width=True)
 
-    f_jornada_str = f_jornada.strftime("%Y-%m-%d")
+    f_jornada_str = _to_str_date(f_jornada, "%Y-%m-%d")
 
     # Si el usuario solicita extracción en vivo de Sisconti para esa fecha
     if btn_live_sis:
@@ -902,7 +927,7 @@ def _render_tab_transferidores(dfC):
         tot = res_rt["totales"]
 
         # ── 1. SCORECARD DE TOTALES DE LA JORNADA ──
-        st.markdown(f"### 📊 Balance Operativo del Día ({f_jornada.strftime('%d/%m/%Y')} • 08:00 - 18:00)")
+        st.markdown(f"### 📊 Balance Operativo del Día ({_to_str_date(f_jornada, '%d/%m/%Y')} • 08:00 - 18:00)")
         k1, k2, k3, k4 = st.columns(4)
         with k1:
             st.markdown(f"""
@@ -1301,7 +1326,7 @@ def _render_tab_tv(dfC):
         st.caption(f"Última actualización: `{ahora_str}`")
 
     # Si dfC no tiene la fecha o está vacío, obtener el dataset oficial de Sisconti
-    res_rt = RealtimeTransferenciasService.procesar_transferencias(dfC, fecha_consulta=f_tv.strftime("%Y-%m-%d"))
+    res_rt = RealtimeTransferenciasService.procesar_transferencias(dfC, fecha_consulta=_to_str_date(f_tv, "%Y-%m-%d"))
     tot = res_rt["totales"]
     ranking_data = res_rt["ranking_transferidores"]
 
@@ -1430,11 +1455,11 @@ def _render_tab_historico_multi_periodo(dfC_actual=None):
             f_sel = st.date_input("Seleccionar Día:", value=hoy, min_value=date(2026, 1, 1), max_value=hoy)
             f_ini, f_fin = f_sel, f_sel
         elif tipo_periodo == "Por Semana (W01..W52)":
-            semana_num = st.slider("Semana del Año 2026 (W):", min_value=1, max_value=52, value=int(hoy.strftime("%W")) or 1)
+            semana_num = st.slider("Semana del Año 2026 (W):", min_value=1, max_value=52, value=int(_to_str_date(hoy, "%W")) or 1)
             # Calcular fecha inicio y fin de esa semana
             f_ini = date.fromisocalendar(2026, semana_num, 1)
             f_fin = date.fromisocalendar(2026, semana_num, 7)
-            st.info(f"Semana W{semana_num:02d}: Desde **{f_ini.strftime('%d/%m/%Y')}** hasta **{f_fin.strftime('%d/%m/%Y')}**")
+            st.info(f"Semana W{semana_num:02d}: Desde **{_to_str_date(f_ini, '%d/%m/%Y')}** hasta **{_to_str_date(f_fin, '%d/%m/%Y')}**")
         elif tipo_periodo == "Por Mes":
             meses_dict = {
                 1: "Enero 2026", 2: "Febrero 2026", 3: "Marzo 2026", 4: "Abril 2026",
@@ -1446,7 +1471,7 @@ def _render_tab_historico_multi_periodo(dfC_actual=None):
             ultimo_dia = calendar.monthrange(2026, mes_sel)[1]
             f_ini = date(2026, mes_sel, 1)
             f_fin = date(2026, mes_sel, ultimo_dia)
-            st.info(f"Mes Seleccionado: **{meses_dict[mes_sel]}** ({f_ini.strftime('%d/%m')} al {f_fin.strftime('%d/%m')})")
+            st.info(f"Mes Seleccionado: **{meses_dict[mes_sel]}** ({_to_str_date(f_ini, '%d/%m')} al {_to_str_date(f_fin, '%d/%m')})")
         elif tipo_periodo == "Rango Personalizado":
             c_r1, c_r2 = st.columns(2)
             with c_r1:
@@ -1611,7 +1636,7 @@ def mostrar_dashboard_transferencias():
                     from services.jireh_full_extractor import ejecutar_extraccion_completa_jireh
                     j_user = os.getenv("JIREHWEB_USER", "wperez")
                     j_pass = os.getenv("JIREHWEB_PASS", "Wilo3161*")
-                    f_str = j_ini.strftime("%Y-%m-%d")
+                    f_str = _to_str_date(j_ini, "%Y-%m-%d")
                     
                     with st.spinner(f"🤖 Robot Playwright ingresando a Sisconti JirehWEB ({f_str}) para descargar Matriz y Movimiento Detallado..."):
                         df_c_ext, df_d_ext, p_tr, p_dt, msg = ejecutar_extraccion_completa_jireh(
@@ -1623,7 +1648,7 @@ def mostrar_dashboard_transferencias():
                         if not df_c_ext.empty:
                             st.session_state['df_cruce'] = df_c_ext.copy()
                             st.session_state['df_detalle_enr'] = df_d_ext.copy()
-                            nombre_archivo = f"JirehWEB_{j_ini.strftime('%Y%m%d')}"
+                            nombre_archivo = f"JirehWEB_{_to_str_date(j_ini, '%Y%m%d')}"
                             st.session_state['archT_name'] = nombre_archivo
                             st.session_state['procesado_archivos_logistica'] = True
                             st.success(f"✅ {msg}")
@@ -1749,7 +1774,7 @@ def mostrar_dashboard_transferencias():
                 fechas_existentes = [f for f in fechas if existe_historico_dia(f, "Transferencias Diarias")]
                 
                 if fechas_existentes:
-                    st.warning(f"⚠️ Ya existe información para {len(fechas_existentes)} de los {len(fechas)} días procesados (ej. {fechas_existentes[0].strftime('%Y-%m-%d')})")
+                    st.warning(f"⚠️ Ya existe información para {len(fechas_existentes)} de los {len(fechas)} días procesados (ej. {_to_str_date(fechas_existentes[0], '%Y-%m-%d')})")
                     acc = st.radio("¿Qué deseas hacer con los registros que ya existen?", ["♻️ Reemplazar", "🗑️ Eliminar y guardar nuevo", "➕ Fusionar"], key="accion_guardado")
                     if st.button("Confirmar guardado", type="primary"):
                         ac = "reemplazar" if "Reemplazar" in acc else ("eliminar" if "Eliminar" in acc else "fusionar")
@@ -2225,7 +2250,7 @@ def mostrar_dashboard_transferencias():
                     if not dfH.empty:
                         dfH['periodo'] = dfH['fecha']
                         agg = dfH.groupby('periodo')['und'].sum().reset_index()
-                        st.markdown(f"**{inicio.strftime('%d/%m/%Y')} – {fin.strftime('%d/%m/%Y')}**")
+                        st.markdown(f"**{_to_str_date(inicio, '%d/%m/%Y')} – {_to_str_date(fin, '%d/%m/%Y')}**")
                         figD = px.bar(agg, x='periodo', y='und', text='und', title=f"Despachos por Día")
                         figD.update_traces(texttemplate='%{text}', textposition='outside', marker_color='#f59e0b')
                         figD.update_layout(template="plotly_dark")
