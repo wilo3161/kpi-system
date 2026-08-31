@@ -219,9 +219,15 @@ def obtener_dataset_oficial_sisconti(fecha: str = "2026-08-28") -> Tuple[pd.Data
         df_c["LON"] = -78.51
         df_c["CATEGORIA_FINAL"] = "Tiendas"
 
-    # Detalle enriquecido sintético
+    # Detalle enriquecido sintético con esquema completo
     df_d = df_c.copy()
     df_d["PRODUCTO"] = "PRENDA AEROPOSTALE RET"
+    df_d["PRODUCTO_BASE"] = "PRENDA AEROPOSTALE RET"
+    df_d["TIPO_PRENDA_ES"] = "Camisetas / Tops"
+    df_d["COLOR_NORM"] = "SURTIDO"
+    df_d["TALLA"] = "M"
+    df_d["CANTIDAD"] = df_d["Cantidad"]
+    df_d["ES_FUNDA"] = df_d["FUNDAS"] > 0
     df_d["CATEGORIA"] = "TEES"
     df_d["COSTO"] = df_d["Costo"] / df_d["Cantidad"].clip(lower=1)
 

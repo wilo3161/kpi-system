@@ -1938,13 +1938,36 @@ def mostrar_dashboard_transferencias():
                     transT = dfC[dfC['TIENDA']==tSel]
                     if not transT.empty:
                         st.write(f"### {tSel} ({catS if catS!='Todas' else 'Todas'})")
-                        prodT = dfDE[dfDE['SECUENCIAL'].isin(transT['SECUENCIAL'])][['SECUENCIAL','PRODUCTO_BASE','TIPO_PRENDA_ES','COLOR_NORM','TALLA','CANTIDAD','ES_FUNDA','CATEGORIA']].rename(columns={'SECUENCIAL':'Transferencia','PRODUCTO_BASE':'Producto Base','TIPO_PRENDA_ES':'Tipo','COLOR_NORM':'Color','TALLA':'Talla','CANTIDAD':'Cantidad','ES_FUNDA':'Es Funda','CATEGORIA':'Categoría'})
+                        
+                        dfDE_safe = dfDE.copy() if dfDE is not None and not dfDE.empty else pd.DataFrame()
+                        cols_needed = {
+                            'SECUENCIAL': '00000000',
+                            'PRODUCTO_BASE': 'PRENDA AEROPOSTALE RET',
+                            'TIPO_PRENDA_ES': 'Camisetas / Tops',
+                            'COLOR_NORM': 'SURTIDO',
+                            'TALLA': 'M',
+                            'CANTIDAD': 1,
+                            'ES_FUNDA': False,
+                            'CATEGORIA': 'TEES'
+                        }
+                        for col, default_val in cols_needed.items():
+                            if col not in dfDE_safe.columns:
+                                if col == 'CANTIDAD' and 'Cantidad' in dfDE_safe.columns:
+                                    dfDE_safe['CANTIDAD'] = dfDE_safe['Cantidad']
+                                elif col == 'SECUENCIAL' and 'Secuencial' in dfDE_safe.columns:
+                                    dfDE_safe['SECUENCIAL'] = dfDE_safe['Secuencial']
+                                elif col == 'PRODUCTO_BASE' and 'PRODUCTO' in dfDE_safe.columns:
+                                    dfDE_safe['PRODUCTO_BASE'] = dfDE_safe['PRODUCTO']
+                                else:
+                                    dfDE_safe[col] = default_val
+
+                        prodT = dfDE_safe[dfDE_safe['SECUENCIAL'].isin(transT['SECUENCIAL'])][['SECUENCIAL','PRODUCTO_BASE','TIPO_PRENDA_ES','COLOR_NORM','TALLA','CANTIDAD','ES_FUNDA','CATEGORIA']].rename(columns={'SECUENCIAL':'Transferencia','PRODUCTO_BASE':'Producto Base','TIPO_PRENDA_ES':'Tipo','COLOR_NORM':'Color','TALLA':'Talla','CANTIDAD':'Cantidad','ES_FUNDA':'Es Funda','CATEGORIA':'Categoría'})
                         cM1,cM2 = st.columns(2)
                         cM1.metric("Prendas", f"{_safe_int(transT['PRENDAS'].sum())}")
                         cM2.metric("Fundas", f"{_safe_int(transT['FUNDAS'].sum())}")
                         st.markdown("---")
                         st.markdown("#### 📦 Productos agrupados")
-                        prodAg = dfDE[dfDE['SECUENCIAL'].isin(transT['SECUENCIAL'])].groupby('PRODUCTO_BASE')['CANTIDAD'].sum().sort_values(ascending=False).reset_index()
+                        prodAg = dfDE_safe[dfDE_safe['SECUENCIAL'].isin(transT['SECUENCIAL'])].groupby('PRODUCTO_BASE')['CANTIDAD'].sum().sort_values(ascending=False).reset_index()
                         prodAg.columns = ['Producto Base','Cantidad Total']
                         ca1,ca2 = st.columns([3,2])
                         with ca1: st.dataframe(prodAg, use_container_width=True, height=300)
