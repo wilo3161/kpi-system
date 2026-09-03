@@ -1,5 +1,4 @@
 import logging
-from pythonjsonlogger import jsonlogger
 
 def setup_logging():
     logger = logging.getLogger()
@@ -11,8 +10,14 @@ def setup_logging():
     logger.setLevel(logging.INFO)
     
     logHandler = logging.StreamHandler()
-    formatter = jsonlogger.JsonFormatter(
-        '%(asctime)s %(levelname)s %(name)s %(message)s'
-    )
+    try:
+        from pythonjsonlogger import jsonlogger
+        formatter = jsonlogger.JsonFormatter(
+            '%(asctime)s %(levelname)s %(name)s %(message)s'
+        )
+    except ImportError:
+        formatter = logging.Formatter(
+            '[%(asctime)s] %(levelname)s %(name)s: %(message)s'
+        )
     logHandler.setFormatter(formatter)
     logger.addHandler(logHandler)
