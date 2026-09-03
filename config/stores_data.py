@@ -20,30 +20,59 @@ def reload_stores_data():
     from database.manager import local_db
     
     # Intentar cargar desde la base de datos
-    db_tiendas = local_db.find("tiendas", {})
-    
+    db_tiendas = []
+    try:
+        db_tiendas = local_db.find("tiendas", {})
+    except Exception:
+        db_tiendas = []
+        
     # Auto-migración: Si detecta la data vieja (ej. "Aeropostale Mall del Rio" sin estructura nueva)
     if db_tiendas and any("Aeropostale Mall del Rio" == t.get("Nombre de Tienda") for t in db_tiendas):
         try:
-            local_db.db["tiendas"].drop()
+            if hasattr(local_db, "db") and hasattr(local_db.db, "__getitem__"):
+                local_db.db["tiendas"].drop()
+            else:
+                local_db.delete("tiendas", {})
         except Exception:
             pass
         db_tiendas = []
         
     if db_tiendas:
         TIENDAS_DATA.clear()
-        # Asegurar que se limpian ObjectIds si existen y no son serializables, aunque no es necesario, solo pasamos la data
         TIENDAS_DATA.extend(db_tiendas)
     else:
-        # Si la base de datos está vacía, cargamos desde load_tiendas.py
+        # Fallback 1: load_tiendas.py
+        tiendas_source = []
         try:
             from load_tiendas import tiendas_data
-            for t in tiendas_data:
-                local_db.insert("tiendas", t)
-            TIENDAS_DATA.clear()
-            TIENDAS_DATA.extend(tiendas_data)
+            tiendas_source = list(tiendas_data)
         except Exception:
             pass
+            
+        # Fallback 2: private_data.json
+        if not tiendas_source and _private_data_path.exists():
+            try:
+                with open(_private_data_path, "r", encoding="utf-8-sig") as f:
+                    tiendas_source = json.load(f).get("tiendas", [])
+            except Exception:
+                pass
+                
+        # Fallback 3: automation.tiendas_data
+        if not tiendas_source:
+            try:
+                from automation.tiendas_data import TIENDAS_DATA as auto_tiendas
+                tiendas_source = list(auto_tiendas)
+            except Exception:
+                pass
+
+        if tiendas_source:
+            try:
+                for t in tiendas_source:
+                    local_db.insert("tiendas", t)
+            except Exception:
+                pass
+            TIENDAS_DATA.clear()
+            TIENDAS_DATA.extend(tiendas_source)
                 
     PRICE_CLUBS.clear()
     PRICE_CLUBS.extend([t["Nombre de Tienda"] for t in TIENDAS_DATA if "Price Club" in t.get("Empresa", "")])

@@ -29,11 +29,15 @@ from reportlab.lib.units import cm
 from reportlab.lib.colors import HexColor
 from reportlab.lib.enums import TA_LEFT, TA_CENTER
 
+import os
 import streamlit as st
 import streamlit.components.v1 as components
 
 from utils.ui import add_back_button, show_module_header
-from config.stores_data import TIENDAS_DATA
+from config.stores_data import (
+    TIENDAS_DATA, TIENDAS_DICT, TIENDAS_REGULARES,
+    PRICE_CLUBS, VENTAS_POR_MAYOR
+)
 from services.notifications import TelegramBot
 from database.manager import local_db
 from utils.backgrounds import set_module_background
@@ -857,16 +861,16 @@ def _show_generar_guias_impl():
                                 
                             marca_sel_batch = "Aeropostale"
                             logo_bytes_b = cargar_logo_local(marca_sel_batch)
-                            tienda_info_b = next((t for t in TIENDAS_REGULARES + PRICE_CLUBS + VENTAS_POR_MAYOR if t == tienda_destino), TIENDAS_DATA.get("Tienda A"))
-                            if isinstance(tienda_info_b, str):
-                                tienda_info_b = TIENDAS_DATA.get(tienda_info_b, TIENDAS_DATA["Tienda A"])
+                            tienda_info_b = TIENDAS_DICT.get(tienda_destino, {})
+                            if not tienda_info_b:
+                                tienda_info_b = next((t for t in TIENDAS_DATA if t.get("Nombre de Tienda") == tienda_destino), {})
                                 
                             success, num_guia, pdf_bytes_b, doc_guia_b = generar_guia_backend(
                                 tienda_sel=tienda_destino,
-                                destinatario=tienda_info_b.get("encargado", "ND"),
-                                direccion=tienda_info_b.get("direccion", "ND"),
-                                telefono=tienda_info_b.get("telefono", "ND"),
-                                ciudad=tienda_info_b.get("ciudad", "ND"),
+                                destinatario=tienda_info_b.get("Contacto", tienda_info_b.get("encargado", "ND")),
+                                direccion=tienda_info_b.get("Dirección", tienda_info_b.get("direccion", "ND")),
+                                telefono=tienda_info_b.get("Teléfono", tienda_info_b.get("telefono", "ND")),
+                                ciudad=tienda_info_b.get("Destino", tienda_info_b.get("ciudad", "ND")),
                                 peso_kg=0.0,
                                 bultos=1,
                                 observaciones="Generado en Batch",

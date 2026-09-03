@@ -19,7 +19,14 @@ def inject_css_libraries():
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/hover.css/2.3.1/css/hover-min.css">
     <script>
     (function() {
-        const doc = window.parent.document;
+        let doc = document;
+        try {
+            if (window.parent && window.parent.document) {
+                doc = window.parent.document;
+            }
+        } catch(err) {
+            doc = document;
+        }
         function initAero() {
             if(typeof AOS !== 'undefined') AOS.init({ duration:800, easing:'ease-out-cubic', once:true, offset:80 });
             if(typeof Splitting !== 'undefined') Splitting();
